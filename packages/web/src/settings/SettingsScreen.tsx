@@ -15,13 +15,19 @@ import { UsersTab } from '../people/UsersTab.js';
 import { WorkspacesTab } from '../people/WorkspacesTab.js';
 import { AboutTab } from './AboutTab.js';
 import { AccountTab } from './AccountTab.js';
-import { AuditReport } from './AuditReport.js';
 import { DisplayTab } from './DisplayTab.js';
 import { KnowledgeTab } from './KnowledgeTab.js';
+import { LogsTool } from './LogsTool.js';
+import { PerformanceTool } from './PerformanceTool.js';
 import { PluginsTab } from './PluginsTab.js';
 import { PrivacyTab } from './PrivacyTab.js';
 import { UpdatesTab } from './UpdatesTab.js';
+import { SkillsUsagePage } from './usage/SkillsUsagePage.js';
+import { UsagePage } from './usage/UsagePage.js';
 import { ThemeTool } from './ThemeTool.js';
+import { FilesTool } from '../workspace-files/FilesTool.js';
+import { ThisDeviceTab } from './ThisDeviceTab.js';
+import { TerminalTool } from '../terminal/TerminalTool.js';
 
 /**
  * Which section draws which destination.
@@ -45,11 +51,19 @@ const SECTIONS: Record<string, () => ReactElement> = {
   theme: () => <ThemeTool />,
   webhooks: () => <WebhooksTab />,
   privacy: () => <PrivacyTab />,
-  // The three reports the audit module answers; `skills` is still a 501 and stays a
-  // placeholder, which is what the hub itself says about it.
-  usage: () => <AuditReport kind="usage" />,
-  logs: () => <AuditReport kind="logs" />,
-  performance: () => <AuditReport kind="performance" />,
+  // Desktop and phones only: the web surface has no route to it (navigation.json).
+  this_device: () => <ThisDeviceTab />,
+  // The audit module's reports: Usage and Skills usage are their own pages (decision §50).
+  usage: () => <UsagePage />,
+  skills_usage: () => <SkillsUsagePage />,
+  // Live since contract decision §51: the hub's and Hermes's own lines, and the processes
+  // measured when asked.
+  logs: () => <LogsTool />,
+  performance: () => <PerformanceTool />,
+  // The selected profile's working folder (DECISIONS §65).
+  files: () => <FilesTool />,
+  // The owner's shell on the hub (DECISIONS §70); the emulator itself loads only here.
+  terminal: () => <TerminalTool />,
 };
 
 export function SettingsScreen({ id }: { id: string }) {

@@ -20,7 +20,7 @@ export type TrajectoryStep = Schemas['TrajectoryStep'];
 export type TrajectoryMetrics = Schemas['TrajectoryMetrics'];
 export type TrajectoryLane = Schemas['TrajectoryLane'];
 
-export const LANES: readonly TrajectoryLane[] = ['input', 'model', 'tools'];
+export const LANES: readonly TrajectoryLane[] = ['input', 'model', 'tools', 'subagents'];
 
 /** Longer than this with nothing happening is folded out of the axis. */
 export const IDLE_MS = 3000;

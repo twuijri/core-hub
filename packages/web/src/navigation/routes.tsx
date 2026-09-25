@@ -12,6 +12,7 @@ import { AgentPluginsScreen } from '../agents/AgentPluginsScreen.js';
 import { AgentSkillsScreen } from '../agents/AgentSkillsScreen.js';
 import { SchedulesScreen } from '../schedules/SchedulesScreen.js';
 import { TasksScreen } from '../tasks/TasksScreen.js';
+import { RoomsScreen } from '../rooms/RoomsScreen.js';
 import { ChatScreen } from '../chat/ChatScreen.js';
 import { ModelsScreen } from '../models/ModelsScreen.js';
 import { DeviceConnectionsScreen } from '../screens/DeviceConnectionsScreen.js';
@@ -42,6 +43,7 @@ const SPECIAL: Record<string, () => ReactElement> = {
   agent_jobs: () => <AgentJobsScreen />,
   agent_plugins: () => <AgentPluginsScreen />,
   chat: () => <ChatScreen />,
+  rooms: () => <RoomsScreen />,
   tasks: () => <TasksScreen />,
   schedules: () => <SchedulesScreen />,
   models: () => <ModelsScreen />,

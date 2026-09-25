@@ -65,6 +65,13 @@ export const AGENT_CAPABILITIES = [
   'journey',
   'jobs',
   'tasks',
+  // The composer's `/` commands the agent carries out itself (decision §57).
+  'compress',
+  'steer',
+  'goals',
+  'plans',
+  'learn',
+  'skill_commands',
 ] as const;
 export type AgentCapability = (typeof AGENT_CAPABILITIES)[number];
 
@@ -184,4 +191,47 @@ export const agentSettings = sqliteTable(
     uniqueIndex('agent_settings_workspace_agent_uq').on(t.workspace, t.agentId),
     check('agent_settings_approval_mode_check', inList(t.approvalMode, APPROVAL_MODES)),
   ],
+);
+
+/**
+ * The hub's own tools, per profile (contract decision §67): whether the profile offers them
+ * to its Hermes, which groups are on and which may write, and the hash of the key written
+ * into the profile's `.env` (the key itself is never stored). One row per workspace, made
+ * the first time an admin opens or changes the card; no row means off.
+ */
+export interface HubToolGroupState {
+  enabled: boolean;
+  allowWrites: boolean;
+}
+
+export const hubToolSettings = sqliteTable(
+  'hub_tool_settings',
+  {
+    ...scopedColumns(),
+    enabled: bool('enabled').notNull().default(false),
+    groups: json<Record<string, HubToolGroupState>>('groups').notNull().default(EMPTY_OBJECT),
+    /** SHA-256 of the profile's key; `null` while off. */
+    keyHash: text('key_hash', { length: 64 }),
+  },
+  (t) => [
+    uniqueIndex('hub_tool_settings_workspace_uq').on(t.workspace),
+    uniqueIndex('hub_tool_settings_key_uq').on(t.keyHash),
+  ],
+);
+
+/** The calls made to the hub's own tools, kept short (the newest 200 per profile). */
+export const hubToolCalls = sqliteTable(
+  'hub_tool_calls',
+  {
+    ...scopedColumns(),
+    tool: text('tool', { length: 80 }).notNull(),
+    ok: bool('ok').notNull(),
+    errorCode: text('error_code', { length: 80 }),
+    /** The person the call acted for; `null` when no run was live to act for. */
+    userId: ulid('user_id'),
+    sessionId: ulid('session_id'),
+    runId: ulid('run_id'),
+    durationMs: integer('duration_ms').notNull().default(0),
+  },
+  (t) => [index('hub_tool_calls_workspace_idx').on(t.workspace, t.createdAt)],
 );

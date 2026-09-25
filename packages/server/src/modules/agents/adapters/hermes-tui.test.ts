@@ -7,8 +7,14 @@ import { EventEmitter } from 'node:events';
 import { PassThrough } from 'node:stream';
 import { createInterface } from 'node:readline';
 import { describe, expect, it } from 'vitest';
-import { HermesTuiSession, stdioTuiChannel, type Spawned } from './hermes-tui.js';
+import {
+  HermesTuiSession,
+  parseFallbackNote,
+  stdioTuiChannel,
+  type Spawned,
+} from './hermes-tui.js';
 import type { AgentEvent } from './types.js';
+import { skillUseOf } from '../../sessions/index.js';
 
 type Json = Record<string, unknown>;
 
@@ -249,6 +255,61 @@ describe('Hermes over the TUI gateway', () => {
     });
     expect(events[2]).toMatchObject({ output: '# Core Hub' });
     expect(events[4]).toMatchObject({ inputTokens: 12, outputTokens: 3 });
+  });
+
+  it('carries the skill a skill_view call loads, which is what counts as its use (§50)', async () => {
+    // Frames as tui_gateway/tool_progress.py sends them for Hermes's `skill_view` tool:
+    // the full arguments with `tool.start`, the parsed result with `tool.complete`.
+    const gateway = fakeGateway((method, _params, api) => {
+      if (method === 'session.create') return { session_id: 's', stored_session_id: 'st' };
+      if (method === 'prompt.submit') {
+        setImmediate(() => {
+          api.event('s', 'tool.start', {
+            tool_id: 'k1',
+            name: 'skill_view',
+            context: 'arxiv',
+            args: { name: 'arxiv' },
+          });
+          api.event('s', 'tool.complete', {
+            tool_id: 'k1',
+            name: 'skill_view',
+            args: { name: 'arxiv' },
+            result: { success: true, name: 'arxiv' },
+          });
+          api.event('s', 'tool.start', {
+            tool_id: 'k2',
+            name: 'skill_view',
+            args: { name: 'missing' },
+          });
+          api.event('s', 'tool.complete', {
+            tool_id: 'k2',
+            name: 'skill_view',
+            args: { name: 'missing' },
+            result: { success: false, error: 'Skill not found' },
+          });
+          api.event('s', 'message.complete', { text: '', status: 'complete' });
+        });
+        return { status: 'streaming' };
+      }
+      return {};
+    });
+    const session = await HermesTuiSession.open(channelOver(gateway), null);
+    const reading = collect(session, terminal);
+    await session.send({ text: 'use arxiv' });
+    const events = await reading;
+    const uses = events
+      .filter((e): e is Extract<AgentEvent, { type: 'tool.started' }> => e.type === 'tool.started')
+      .map((started) => {
+        const finished = events.find(
+          (e) => (e.type === 'tool.completed' || e.type === 'tool.failed') && e.id === started.id,
+        );
+        return skillUseOf({
+          name: started.name,
+          input: started.input ?? {},
+          status: finished?.type === 'tool.completed' ? 'succeeded' : 'failed',
+        });
+      });
+    expect(uses).toEqual(['arxiv', null]);
   });
 
   it("records each turn's own tokens, though Hermes reports its session's running total", async () => {
@@ -546,5 +607,310 @@ describe('Hermes over the TUI gateway', () => {
     // Gone for callers at once, even while its last words are still being read.
     expect(channel.alive).toBe(false);
     expect(await reason).toBe('the Hermes TUI gateway exited (code 0: broken stdout pipe)');
+  });
+});
+
+describe('Hermes moving down its fallback chain (contract decision §54)', () => {
+  const chain = [
+    { providerId: 'P2', provider: 'openai-codex', slug: 'openai-codex', model: 'gpt-5.5' },
+  ];
+
+  function answeringOn(model: string, notes: string[]) {
+    return fakeGateway((method, _params, api) => {
+      if (method === 'session.create') return { session_id: 's', stored_session_id: 'st' };
+      if (method === 'prompt.submit') {
+        setImmediate(() => {
+          for (const text of notes) api.event('s', 'status.update', { kind: 'status', text });
+          api.event('s', 'message.delta', { text: 'answered' });
+          api.event('s', 'message.complete', {
+            text: 'answered',
+            status: 'complete',
+            usage: { model, input: 5, output: 1 },
+          });
+        });
+        return { status: 'streaming' };
+      }
+      return {};
+    });
+  }
+
+  it("names the switch in the hub's words, with Hermes's reason", async () => {
+    const gateway = answeringOn('gpt-5.5', [
+      '⚠️ Model fallback: gemini-3.8-flash-high via corehub-proxy unavailable (HTTP 503: auth_unavailable); using gpt-5.5 via openai-codex.',
+    ]);
+    const session = await HermesTuiSession.open(channelOver(gateway), null);
+    const reading = collect(session, terminal);
+    await session.send({
+      text: 'hi',
+      model: 'gemini-3.8-flash-high',
+      modelProvider: 'corehub-proxy',
+      modelProviderSlug: 'proxy',
+      fallbacks: chain,
+    });
+    const events = await reading;
+    const fallback = events.find((e) => e.type === 'model.fallback');
+    expect(fallback).toEqual({
+      type: 'model.fallback',
+      failed: [
+        {
+          model: 'gemini-3.8-flash-high',
+          provider: 'proxy',
+          code: null,
+          error: 'HTTP 503: auth_unavailable',
+        },
+      ],
+      answered: { model: 'gpt-5.5', provider: 'openai-codex' },
+    });
+    // Said before the turn ends, so the run is the answering model's when it does.
+    expect(events.map((e) => e.type).indexOf('model.fallback')).toBeLessThan(
+      events.map((e) => e.type).indexOf('run.completed'),
+    );
+  });
+
+  it('reads a switch from the usage when Hermes said nothing about it', async () => {
+    const gateway = answeringOn('gpt-5.5', []);
+    const session = await HermesTuiSession.open(channelOver(gateway), null);
+    const reading = collect(session, terminal);
+    await session.send({
+      text: 'hi',
+      model: 'primary-model',
+      modelProvider: 'corehub-proxy',
+      modelProviderSlug: 'proxy',
+      fallbacks: chain,
+    });
+    const fallback = (await reading).find((e) => e.type === 'model.fallback');
+    expect(fallback).toMatchObject({
+      failed: [{ model: 'primary-model', provider: 'proxy', code: null, error: null }],
+      answered: { model: 'gpt-5.5', provider: 'openai-codex' },
+    });
+  });
+
+  it('says nothing when the chosen model answered', async () => {
+    const gateway = answeringOn('primary-model', []);
+    const session = await HermesTuiSession.open(channelOver(gateway), null);
+    const reading = collect(session, terminal);
+    await session.send({ text: 'hi', model: 'primary-model', fallbacks: chain });
+    expect((await reading).some((e) => e.type === 'model.fallback')).toBe(false);
+  });
+
+  it("reads Hermes's line back into its parts, and nothing else", () => {
+    expect(
+      parseFallbackNote(
+        '⚠️ Model fallback: a/b-1.5 via openrouter unavailable (rate limit (429)); using c via nous. Primary retry eligible in ~30 s; recovery is not guaranteed.',
+      ),
+    ).toEqual({
+      from: 'a/b-1.5',
+      fromProvider: 'openrouter',
+      reason: 'rate limit (429)',
+      to: 'c',
+      toProvider: 'nous',
+    });
+    expect(parseFallbackNote('✓ Context compression complete')).toBeNull();
+    expect(parseFallbackNote(null)).toBeNull();
+  });
+});
+
+describe('Hermes subagents over the TUI gateway (§56)', () => {
+  it("reports each delegation on the conversation's own channel, not in the turn", async () => {
+    const gateway = fakeGateway((method, _params, api) => {
+      if (method === 'session.create') return { session_id: 's', stored_session_id: 'st' };
+      if (method === 'prompt.submit') {
+        setImmediate(() => {
+          api.event('s', 'tool.start', { tool_id: 'd1', name: 'delegate_task', context: 'x' });
+          // What `tui_gateway/tool_progress.py` `_progress_subagent` sends: identity on every
+          // event, the tool in `tool_name`, how it ended in `status` and `summary`.
+          const who = { subagent_id: 'sa-0-aa', depth: 0, model: 'm1', task_count: 2 };
+          api.event('s', 'subagent.spawn_requested', { goal: 'first', task_index: 0 });
+          api.event('s', 'subagent.start', { ...who, goal: 'first', task_index: 0, tool_count: 0 });
+          api.event('s', 'subagent.start', {
+            subagent_id: 'sa-1-bb',
+            parent_id: null,
+            depth: 0,
+            goal: 'second',
+            task_index: 1,
+            tool_count: 0,
+          });
+          api.event('s', 'subagent.thinking', { ...who, goal: 'first', text: 'hmm' });
+          api.event('s', 'subagent.tool', {
+            ...who,
+            goal: 'first',
+            tool_name: 'read_file',
+            tool_preview: 'README.md',
+            text: 'README.md',
+            tool_count: 1,
+          });
+          api.event('s', 'subagent.progress', { ...who, goal: 'first', text: '🔀 read_file' });
+          api.event('s', 'subagent.complete', {
+            ...who,
+            goal: 'first',
+            status: 'completed',
+            summary: 'done reading',
+            tool_count: 1,
+            duration_seconds: 2.5,
+          });
+          api.event('s', 'subagent.complete', {
+            subagent_id: 'sa-1-bb',
+            goal: 'second',
+            status: 'interrupted',
+            summary: '',
+          });
+          api.event('s', 'tool.complete', {
+            tool_id: 'd1',
+            name: 'delegate_task',
+            result_text: 'ok',
+          });
+          api.event('s', 'message.complete', { text: '', status: 'complete' });
+        });
+        return { status: 'streaming' };
+      }
+      return {};
+    });
+    const session = await HermesTuiSession.open(channelOver(gateway), null);
+    expect(session.subagents.support).toBe('full');
+    const signals: unknown[] = [];
+    session.subagents.watch((signal) => signals.push(signal));
+    const reading = collect(session, terminal);
+    await session.send({ text: 'split it' });
+    const events = await reading;
+    // The turn carries the delegating tool call and nothing of the subagents.
+    expect(events.map((e) => e.type)).toEqual(['tool.started', 'tool.completed', 'run.completed']);
+    expect(signals).toEqual([
+      {
+        phase: 'started',
+        id: 'sa-0-aa',
+        depth: 0,
+        goal: 'first',
+        model: 'm1',
+        toolCount: 0,
+        acceptingSteer: true,
+      },
+      {
+        phase: 'started',
+        id: 'sa-1-bb',
+        parentId: null,
+        depth: 0,
+        goal: 'second',
+        toolCount: 0,
+        acceptingSteer: true,
+      },
+      {
+        phase: 'tool',
+        id: 'sa-0-aa',
+        depth: 0,
+        goal: 'first',
+        model: 'm1',
+        toolCount: 1,
+        toolName: 'read_file',
+        toolPreview: 'README.md',
+      },
+      {
+        phase: 'completed',
+        id: 'sa-0-aa',
+        depth: 0,
+        goal: 'first',
+        model: 'm1',
+        toolCount: 1,
+        status: 'completed',
+        summary: 'done reading',
+        acceptingSteer: false,
+      },
+      {
+        phase: 'completed',
+        id: 'sa-1-bb',
+        goal: 'second',
+        status: 'interrupted',
+        summary: null,
+        acceptingSteer: false,
+      },
+    ]);
+  });
+
+  it("lists, stops, steers and reads a subagent with Hermes's own calls, naming the live session", async () => {
+    const calls: Array<{ method: string; params: Json }> = [];
+    const gateway = fakeGateway((method, params) => {
+      calls.push({ method, params });
+      if (method === 'session.create') return { session_id: 'live', stored_session_id: 'st' };
+      if (method === 'subagent.list') {
+        return {
+          subagents: [
+            {
+              subagent_id: 'sa-0-aa',
+              parent_id: null,
+              depth: 0,
+              goal: 'first',
+              delegation_id: 'd',
+              model: 'm1',
+              started_at: 1790000000.5,
+              status: 'running',
+              tool_count: 3,
+              last_tool: 'terminal',
+              accepting_steer: true,
+            },
+            { not: 'a subagent' },
+          ],
+          delegations: [],
+        };
+      }
+      if (method === 'subagent.interrupt') return { found: true, subagent_id: params.subagent_id };
+      if (method === 'subagent.steer') {
+        return { status: 'queued', subagent_id: params.subagent_id, text: params.text };
+      }
+      if (method === 'subagent.tail') {
+        return { subagent_id: params.subagent_id, available: true, text: 'line', truncated: true };
+      }
+      return {};
+    });
+    const session = await HermesTuiSession.open(channelOver(gateway), null);
+    const control = session.subagents;
+    expect(await control.list!()).toEqual([
+      {
+        id: 'sa-0-aa',
+        parentId: null,
+        depth: 0,
+        goal: 'first',
+        model: 'm1',
+        startedAt: 1790000000500,
+        toolCount: 3,
+        lastTool: 'terminal',
+        acceptingSteer: true,
+      },
+    ]);
+    expect(await control.interrupt!('sa-0-aa')).toBe(true);
+    expect(await control.steer!('sa-0-aa', 'focus on tests')).toBe('queued');
+    expect(await control.tail!('sa-0-aa')).toEqual({
+      available: true,
+      text: 'line',
+      truncated: true,
+    });
+    expect(calls.slice(1)).toEqual([
+      { method: 'subagent.list', params: { session_id: 'live' } },
+      { method: 'subagent.interrupt', params: { session_id: 'live', subagent_id: 'sa-0-aa' } },
+      {
+        method: 'subagent.steer',
+        params: { session_id: 'live', subagent_id: 'sa-0-aa', text: 'focus on tests' },
+      },
+      { method: 'subagent.tail', params: { session_id: 'live', subagent_id: 'sa-0-aa' } },
+    ]);
+  });
+
+  it('ends every running subagent as interrupted when the gateway dies', async () => {
+    const gateway = fakeGateway((method) =>
+      method === 'session.create' ? { session_id: 's', stored_session_id: 'st' } : {},
+    );
+    const session = await HermesTuiSession.open(channelOver(gateway), null);
+    const ended: unknown[] = [];
+    session.subagents.watch((signal) => {
+      if (signal.phase === 'completed') ended.push({ id: signal.id, status: signal.status });
+    });
+    gateway.api.event('s', 'subagent.start', { subagent_id: 'sa-0-aa', goal: 'g' });
+    gateway.api.event('s', 'subagent.start', { subagent_id: 'sa-1-bb', goal: 'h' });
+    gateway.api.event('s', 'subagent.complete', { subagent_id: 'sa-1-bb', status: 'failed' });
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    gateway.api.die();
+    await new Promise((resolve) => setTimeout(resolve, 400));
+    expect(ended).toEqual([
+      { id: 'sa-1-bb', status: 'failed' },
+      { id: 'sa-0-aa', status: 'interrupted' },
+    ]);
   });
 });

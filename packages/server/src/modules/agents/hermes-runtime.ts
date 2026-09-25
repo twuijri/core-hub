@@ -103,6 +103,8 @@ export interface HermesRuntimeOptions {
    * moment with no turn in flight, when it is closed.
    */
   tuiRetireIntervalMs?: number;
+  /** Each line of the TUI gateway's stderr (Hermes's log), for the Logs screen's ring. */
+  tuiLogLine?: (line: string) => void;
   /** Called on every state change (the registry row follows it). */
   onState?: (status: HermesRuntimeStatus) => void;
   /** Injected in tests: a scripted `hermes <argv>` instead of the executable. */
@@ -245,6 +247,40 @@ export class HermesRuntime {
   }
 
   /**
+   * Every Hermes process this hub runs, for the Performance screen: the TUI gateway (and one
+   * being retired, while it finishes a turn) and every messaging gateway. Empty when the hub
+   * does not run Hermes — an external gateway's processes are somebody else's.
+   */
+  processes(): Array<{
+    kind: 'tui_gateway' | 'gateway';
+    profile: string | null;
+    pid: number | null;
+    state: string;
+  }> {
+    if (this.mode !== 'managed') return [];
+    const tuis = [
+      ...(this.tui?.alive ? [{ channel: this.tui, state: 'running' }] : []),
+      ...[...this.retiredTui]
+        .filter((channel) => channel.alive)
+        .map((channel) => ({ channel, state: 'retiring' })),
+    ];
+    return [
+      ...tuis.map(({ channel, state }) => ({
+        kind: 'tui_gateway' as const,
+        profile: null,
+        pid: channel.pid ?? null,
+        state,
+      })),
+      ...this.gateways().map((gateway) => ({
+        kind: 'gateway' as const,
+        profile: gateway.profile,
+        pid: gateway.pid,
+        state: gateway.state,
+      })),
+    ];
+  }
+
+  /**
    * What Hermes itself reports about the gateway serving `profile` — its platforms' states —
    * when that gateway is the one this hub started. `null` otherwise, including for a record a
    * stopped gateway left behind.
@@ -348,6 +384,21 @@ export class HermesRuntime {
   }
 
   /**
+   * Hermes's own settings in `profile` changed (the Settings page, contract decision §58).
+   * Hermes reads them when it builds a session's agent, so the TUI gateway is retired the way a
+   * key change retires it: the next message in any conversation opens a fresh one that reads
+   * them, and a turn already running finishes on the values it started with. A named profile's
+   * messaging gateway is restarted to match now (the channel rule); the default profile's carries
+   * the API server and Hermes's schedulers and waits for Restart, as a channel change there does.
+   */
+  settingsChanged(profile: string): Promise<void> {
+    if (this.mode !== 'managed') return Promise.resolve();
+    if (this.tui) this.retireTui(this.tui);
+    this.tui = null;
+    return this.profileGateways.channelsChanged(profile);
+  }
+
+  /**
    * The Hermes TUI gateway conversations go through (ADR 0013): one `python -m
    * tui_gateway.entry` child, started on first use with this Hermes's home and the shared
    * provider keys, and started again after it exits. `null` when there is no Hermes
@@ -374,6 +425,7 @@ export class HermesRuntime {
       env: this.cliEnv(),
       cwd: home,
       ...(this.options.tuiSpawn ? { spawn: this.options.tuiSpawn } : {}),
+      ...(this.options.tuiLogLine ? { onStderrLine: this.options.tuiLogLine } : {}),
     });
     const channel = this.tui;
     channel.onExit((reason) => {
@@ -435,6 +487,16 @@ export class HermesRuntime {
       throw refuse(why);
     }
     this.log.info({ profile: name }, 'hermes: made a missing profile as a copy of default');
+  }
+
+  /**
+   * The next conversation starts a new TUI gateway, which reads the profiles' MCP servers
+   * afresh (the hub's own tools were switched, contract decision §67). The running one is
+   * retired, not killed, for the reason `setProviderEnv` gives.
+   */
+  refreshTui(): void {
+    if (this.tui) this.retireTui(this.tui);
+    this.tui = null;
   }
 
   private retireTui(channel: TuiChannel): void {

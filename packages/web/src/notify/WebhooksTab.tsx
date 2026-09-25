@@ -1,10 +1,11 @@
 /**
  * Webhooks: addresses the hub calls on its own (admin, `notify`).
  *
- * **What it says is what the hub does.** Today a webhook receives exactly one kind of
- * delivery — the test one sent from here — because nothing in the hub forwards its events
- * to webhooks yet. The events a webhook subscribes to are stored for when that exists, and
- * the page says so in one line instead of letting a checked box imply a delivery.
+ * **What it says is what the hub does.** A webhook receives the events it subscribed to,
+ * from the profiles it names, as they happen (contract decision §59): queued, signed, sent
+ * in the background, retried with backoff and finally given up on. The deliveries table
+ * shows each one's attempts, status, answer and next try, and sends a failed one again.
+ * Message text is left out unless the webhook asks for it.
  *
  * **The secret is on screen once.** It is made here, sent with the save, shown in its own
  * dialog to copy, and never again: the hub answers `[stored]` from then on. Replacing it is
@@ -15,6 +16,7 @@
  * field that caused it rather than as a generic error.
  */
 import { useMemo, useState } from 'react';
+import { useProfiles } from '../hub/queries.js';
 import { HubApiError } from '@corehub/contracts';
 import { describeError } from '../auth/client.js';
 import { useI18n } from '../i18n/context.js';
@@ -42,10 +44,15 @@ import {
 } from '../ui/index.js';
 import { IconCopy, IconTrash } from '../ui/icons.js';
 import {
+  DEFAULT_MAX_RETRIES,
+  MAX_RETRIES_LIMIT,
+  canRedeliver,
+  clampRetries,
   newSigningSecret,
   testOutcomeOf,
   useCreateWebhook,
   useDeleteWebhook,
+  useRedeliver,
   useSendTest,
   useTestJob,
   useUpdateWebhook,
@@ -184,6 +191,20 @@ function WebhookCard({ hook, onEdit }: { hook: Webhook; onEdit: () => void }) {
               : t('webhooks.event_count', { count: hook.events.length })}
           </Badge>
         </li>
+        <li>
+          <Badge testId="webhook-profiles">
+            {hook.profiles.length === 0
+              ? t('webhooks.all_profiles')
+              : t('webhooks.profile_count', { count: hook.profiles.length })}
+          </Badge>
+        </li>
+        {hook.include_content && (
+          <li>
+            <Badge tone="warning" testId="webhook-content">
+              {t('webhooks.with_content')}
+            </Badge>
+          </li>
+        )}
         {hook.allow_private_network && (
           <li>
             <Badge tone="warning">{t('webhooks.private_allowed')}</Badge>
@@ -285,6 +306,7 @@ const STATUS_TONE: Record<DeliveryStatus, BadgeTone> = {
 function Deliveries({ hookId }: { hookId: string }) {
   const { t, language } = useI18n();
   const deliveries = useWebhookDeliveries(hookId, true);
+  const redeliver = useRedeliver();
   if (deliveries.isPending)
     return (
       <SkeletonGroup label={t('common.loading')}>
@@ -308,14 +330,38 @@ function Deliveries({ hookId }: { hookId: string }) {
       key: 'status',
       header: t('webhooks.col_status'),
       cell: (row) => (
-        <Badge tone={STATUS_TONE[row.status]}>{t(`webhooks.delivery.${row.status}`)}</Badge>
+        <Badge tone={STATUS_TONE[row.status]} testId="delivery-status">
+          {t(`webhooks.delivery.${row.status}`)}
+        </Badge>
       ),
+    },
+    {
+      key: 'attempts',
+      header: t('webhooks.col_attempts'),
+      numeric: true,
+      cell: (row) => <span data-testid="delivery-attempts">{row.attempts}</span>,
     },
     {
       key: 'code',
       header: t('webhooks.col_code'),
       numeric: true,
-      cell: (row) => (row.response_status === null ? '—' : String(row.response_status)),
+      cell: (row) => (
+        <span data-testid="delivery-code">
+          {row.response_status === null ? '—' : String(row.response_status)}
+        </span>
+      ),
+    },
+    {
+      key: 'next',
+      header: t('webhooks.col_next'),
+      cell: (row) =>
+        row.next_attempt_at ? (
+          <time dateTime={row.next_attempt_at} data-testid="delivery-next">
+            {formatWhen(row.next_attempt_at, language)}
+          </time>
+        ) : (
+          '—'
+        ),
     },
     {
       key: 'error',
@@ -323,16 +369,40 @@ function Deliveries({ hookId }: { hookId: string }) {
       secondary: true,
       cell: (row) => <span dir="auto">{row.error ?? '—'}</span>,
     },
+    {
+      key: 'actions',
+      header: <span className="sr-only">{t('webhooks.col_actions')}</span>,
+      cell: (row) =>
+        canRedeliver(row) ? (
+          <Button
+            size="sm"
+            variant="ghost"
+            disabled={redeliver.isPending}
+            onClick={() => redeliver.mutate({ webhookId: hookId, deliveryId: row.id })}
+            data-testid="delivery-redeliver"
+          >
+            {t('webhooks.redeliver')}
+          </Button>
+        ) : null,
+    },
   ];
   return (
-    <Table
-      caption={t('webhooks.deliveries')}
-      testId="webhook-deliveries"
-      columns={columns}
-      rows={deliveries.data.items}
-      rowKey={(row) => row.id}
-      empty={<p className="text-xs text-muted">{t('webhooks.no_deliveries')}</p>}
-    />
+    <>
+      <Table
+        caption={t('webhooks.deliveries')}
+        testId="webhook-deliveries"
+        columns={columns}
+        rows={deliveries.data.items}
+        rowKey={(row) => row.id}
+        empty={<p className="text-xs text-muted">{t('webhooks.no_deliveries')}</p>}
+      />
+      {redeliver.isSuccess && (
+        <p className="text-xs text-muted" aria-live="polite" data-testid="delivery-requeued">
+          {t('webhooks.redelivered')}
+        </p>
+      )}
+      {redeliver.isError && <Notice tone="danger">{describeError(redeliver.error, t)}</Notice>}
+    </>
   );
 }
 
@@ -365,13 +435,20 @@ function WebhookDialog({
   onClose: () => void;
   onSecret: (secret: string) => void;
 }) {
-  const { t } = useI18n();
+  const { t, language } = useI18n();
   const create = useCreateWebhook();
   const update = useUpdateWebhook();
   const catalogue = useWebhookEvents();
   const [name, setName] = useState(hook?.name ?? '');
   const [url, setUrl] = useState(hook?.url ?? '');
   const [events, setEvents] = useState<string[]>(hook?.events ?? []);
+  const profiles = useProfiles();
+  const [profileScope, setProfileScope] = useState<'all' | 'some'>(
+    hook && hook.profiles.length > 0 ? 'some' : 'all',
+  );
+  const [chosenProfiles, setChosenProfiles] = useState<string[]>(hook?.profiles ?? []);
+  const [includeContent, setIncludeContent] = useState(hook?.include_content ?? false);
+  const [retries, setRetries] = useState(hook?.max_retries ?? DEFAULT_MAX_RETRIES);
   const [allowPrivate, setAllowPrivate] = useState(hook?.allow_private_network ?? false);
   const [enabled, setEnabled] = useState(hook?.enabled ?? true);
   // A new webhook is signed unless somebody says otherwise: unsigned means the receiver
@@ -383,19 +460,33 @@ function WebhookDialog({
   const save = hook ? update : create;
 
   const badUrl = url.length > 0 && !/^https?:\/\/\S+$/i.test(url);
-  const ready = name.trim().length > 0 && url.length > 0 && !badUrl && !save.isPending;
+  const noProfile = profileScope === 'some' && chosenProfiles.length === 0;
+  const ready =
+    name.trim().length > 0 && url.length > 0 && !badUrl && !noProfile && !save.isPending;
   const refusal = urlRefusal(save.error, t);
 
   const names = useMemo(() => (catalogue.data?.items ?? []).map((e) => e.name), [catalogue.data]);
-  const shown = names.filter((n) => n.toLowerCase().includes(filter.trim().toLowerCase()));
+  const describe = (event: string) => {
+    const found = catalogue.data?.items.find((e) => e.name === event);
+    return found ? (language === 'ar' ? found.description.ar : found.description.en) : event;
+  };
+  const needle = filter.trim().toLowerCase();
+  const shown = names.filter(
+    (n) => n.toLowerCase().includes(needle) || describe(n).toLowerCase().includes(needle),
+  );
 
   const submit = () => {
     const secret = secretChoice === 'new' ? newSigningSecret() : null;
     const body: WebhookWrite = {
       name: name.trim(),
       url,
-      events,
+      // A name the hub no longer sends (saved before the catalogue) is dropped: the hub
+      // refuses a subscription to an event it does not have.
+      events: catalogue.data ? events.filter((event) => names.includes(event)) : events,
+      profiles: profileScope === 'all' ? [] : chosenProfiles,
       enabled,
+      include_content: includeContent,
+      max_retries: clampRetries(retries),
       allow_private_network: allowPrivate,
       ...(secretChoice === 'keep' ? {} : { secret }),
     };
@@ -538,7 +629,14 @@ function WebhookDialog({
                           on ? [...current, event] : current.filter((e) => e !== event),
                         )
                       }
-                      label={<span dir="ltr">{event}</span>}
+                      label={
+                        <span className="inline-flex flex-wrap items-baseline gap-x-2">
+                          <span dir="auto">{describe(event)}</span>
+                          <code className="text-xs text-muted" dir="ltr">
+                            {event}
+                          </code>
+                        </span>
+                      }
                       testId={`webhook-event-${event}`}
                     />
                   ))}
@@ -550,6 +648,65 @@ function WebhookDialog({
             </>
           )}
         </fieldset>
+        <fieldset className="flex flex-col gap-2" data-testid="webhook-profiles-field">
+          <legend className="text-sm font-medium">{t('webhooks.profiles')}</legend>
+          <p className="text-xs text-muted">{t('webhooks.profiles_hint')}</p>
+          <Radio
+            label={t('webhooks.profiles')}
+            value={profileScope}
+            onChange={(value) => setProfileScope(value as 'all' | 'some')}
+            options={[
+              { value: 'all', label: t('webhooks.profiles_all') },
+              { value: 'some', label: t('webhooks.profiles_some') },
+            ]}
+            testId="webhook-profile-scope"
+          />
+          {profileScope === 'some' && (
+            <div className="flex flex-col gap-1 ps-6">
+              {(profiles.data ?? []).map((profile) => (
+                <Checkbox
+                  key={profile.slug}
+                  checked={chosenProfiles.includes(profile.slug)}
+                  onChange={(on) =>
+                    setChosenProfiles((current) =>
+                      on
+                        ? [...current, profile.slug]
+                        : current.filter((slug) => slug !== profile.slug),
+                    )
+                  }
+                  label={<span dir="auto">{profile.name}</span>}
+                  testId={`webhook-profile-${profile.slug}`}
+                />
+              ))}
+              {noProfile && (
+                <p className="text-xs text-danger-soft-text">{t('webhooks.profiles_pick_one')}</p>
+              )}
+            </div>
+          )}
+        </fieldset>
+        <Switch
+          checked={includeContent}
+          onChange={setIncludeContent}
+          label={t('webhooks.include_content')}
+          hint={t('webhooks.include_content_hint')}
+          testId="webhook-include-content"
+        />
+        <Field label={t('webhooks.max_retries')} hint={t('webhooks.max_retries_hint')}>
+          {(props) => (
+            <Input
+              {...props}
+              type="number"
+              inputMode="numeric"
+              dir="ltr"
+              min={0}
+              max={MAX_RETRIES_LIMIT}
+              step={1}
+              value={String(retries)}
+              onChange={(event) => setRetries(clampRetries(Number(event.target.value)))}
+              data-testid="webhook-max-retries"
+            />
+          )}
+        </Field>
         {save.isError && !refusal && <Notice tone="danger">{describeError(save.error, t)}</Notice>}
       </form>
     </Dialog>

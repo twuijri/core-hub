@@ -28,6 +28,7 @@
  */
 import type { Namespace, Server as SocketServer, Socket } from 'socket.io';
 import { REALTIME_NAMESPACES } from '../../lib/module.js';
+import { publishToTaps } from '../../lib/realtime.js';
 import { ResumeJournal, type JournalEntry } from './journal.js';
 
 export const SESSIONS_NAMESPACE = REALTIME_NAMESPACES.sessions;
@@ -49,7 +50,11 @@ export type SessionEventName =
   | 'run.cancelled'
   | 'approval.requested'
   | 'approval.resolved'
-  | 'context.updated';
+  | 'context.updated'
+  | 'context.compression'
+  | 'subagent.started'
+  | 'subagent.updated'
+  | 'subagent.completed';
 
 export interface Envelope {
   event: string;
@@ -87,10 +92,39 @@ export type FollowCheck = (socket: Socket, sessionId: string) => Promise<boolean
 
 const refuseAll: FollowCheck = () => Promise.resolve(false);
 
+/**
+ * Hears every event of a session as it is sent — how `rooms` re-emits its seats' streams on
+ * `/rt/rooms` (DECISIONS §1, §69). A listener that throws is ignored: a room must never be
+ * able to break a conversation's stream.
+ */
+export type SessionEventListener = (
+  profile: string,
+  sessionId: string,
+  event: SessionEventName,
+  payload: unknown,
+) => void;
+
 export class SessionsRealtime {
   readonly journal: ResumeJournal;
   private readonly sequences = new Map<string, number>();
   private canFollow: FollowCheck = refuseAll;
+  private readonly listeners = new Set<SessionEventListener>();
+
+  /** Hear every session event from now on; the answer stops it. */
+  listen(listener: SessionEventListener): () => void {
+    this.listeners.add(listener);
+    return () => this.listeners.delete(listener);
+  }
+
+  private tell(profile: string, sessionId: string, event: SessionEventName, payload: unknown) {
+    for (const listener of this.listeners) {
+      try {
+        listener(profile, sessionId, event, payload);
+      } catch {
+        // A listener's failure is its own (see SessionEventListener).
+      }
+    }
+  }
 
   constructor(
     private readonly nsp: Namespace,
@@ -103,6 +137,7 @@ export class SessionsRealtime {
   emitToProfile(profile: string, event: SessionEventName, payload: unknown): Envelope {
     const envelope = this.envelope(profile, event, payload);
     this.nsp.to(profileRoom(profile)).emit(event, envelope);
+    this.publish(envelope);
     return envelope;
   }
 
@@ -124,6 +159,8 @@ export class SessionsRealtime {
     const envelope = this.envelope(profile, event, payload);
     this.journal.append(sessionId, { seq: envelope.seq, envelope });
     this.nsp.to(profileRoom(profile)).emit(event, envelope);
+    this.publish(envelope);
+    this.tell(profile, sessionId, event, payload);
     return envelope;
   }
 
@@ -140,6 +177,8 @@ export class SessionsRealtime {
     const envelope = this.envelope(profile, event, payload);
     this.journal.append(sessionId, { seq: envelope.seq, envelope });
     this.nsp.to(sessionRoom(sessionId)).emit(event, envelope);
+    this.publish(envelope);
+    this.tell(profile, sessionId, event, payload);
     return envelope;
   }
 
@@ -178,6 +217,17 @@ export class SessionsRealtime {
           reply(ack, { ok: true, replayed: 0, truncated: false });
         },
       );
+    });
+  }
+
+  /** Every event also goes to the hub's listeners (`lib/realtime.ts`, the webhooks). */
+  private publish(envelope: Envelope): void {
+    publishToTaps(this.nsp.server, {
+      namespace: envelope.namespace,
+      event: envelope.event,
+      profile: envelope.profile,
+      ts: envelope.ts,
+      payload: envelope.payload,
     });
   }
 

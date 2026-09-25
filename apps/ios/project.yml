@@ -1,0 +1,135 @@
+# XcodeGen spec for the Core Hub iOS app. The .xcodeproj is generated from this file and never
+# committed or hand-edited: `xcodegen generate` in apps/ios (README.md).
+name: CoreHub
+options:
+  bundleIdPrefix: io.github.twuijri.corehub
+  deploymentTarget:
+    iOS: '17.0'
+  createIntermediateGroups: true
+  developmentLanguage: en
+settings:
+  base:
+    SWIFT_VERSION: '5.0'
+    SWIFT_STRICT_CONCURRENCY: minimal
+    MARKETING_VERSION: 0.1.0
+    CURRENT_PROJECT_VERSION: '1'
+    ENABLE_USER_SCRIPT_SANDBOXING: YES
+packages:
+  # The Swift client generated from packages/contracts (`pnpm contracts:generate`).
+  CoreHubClient:
+    path: ../../packages/contracts/generated/swift
+targets:
+  CoreHub:
+    type: application
+    platform: iOS
+    sources:
+      - path: CoreHub
+    dependencies:
+      - package: CoreHubClient
+      - target: CoreHubShare
+    # The App Group the share extension leaves shared text in (ShareInbox.swift); it takes
+    # effect once the app is signed with the owner's team (README.md).
+    entitlements:
+      path: CoreHub/CoreHub.entitlements
+      properties:
+        com.apple.security.application-groups: [group.io.github.twuijri.corehub]
+    info:
+      path: CoreHub/Info.plist
+      properties:
+        CFBundleDisplayName: Core Hub
+        CFBundleDevelopmentRegion: en
+        CFBundleLocalizations: [ar, en]
+        LSRequiresIPhoneOS: true
+        UILaunchScreen: {}
+        UIApplicationSceneManifest:
+          UIApplicationSupportsMultipleScenes: false
+        UISupportedInterfaceOrientations:
+          - UIInterfaceOrientationPortrait
+          - UIInterfaceOrientationLandscapeLeft
+          - UIInterfaceOrientationLandscapeRight
+        UISupportedInterfaceOrientations~ipad:
+          - UIInterfaceOrientationPortrait
+          - UIInterfaceOrientationPortraitUpsideDown
+          - UIInterfaceOrientationLandscapeLeft
+          - UIInterfaceOrientationLandscapeRight
+        # corehub://pair?hub=…&id=…&code=… — the pairing link the web offers to copy.
+        CFBundleURLTypes:
+          - CFBundleURLName: io.github.twuijri.corehub
+            CFBundleURLSchemes: [corehub]
+        NSCameraUsageDescription: Core Hub uses the camera to scan the pairing code your hub shows on the web.
+        NSLocalNetworkUsageDescription: Core Hub connects to your hub on your local network.
+        # iOS wakes the app now and then to look at the hub's notices (LocalNotices.swift).
+        UIBackgroundModes: [fetch]
+        BGTaskSchedulerPermittedIdentifiers: [io.github.twuijri.corehub.notices]
+        NSMicrophoneUsageDescription: Core Hub listens while you dictate a message.
+        NSSpeechRecognitionUsageDescription: Core Hub turns what you dictate into text.
+        # A self-hosted hub is often reached over plain http on a LAN or a VPN address
+        # (proposed — owner to confirm; README.md).
+        NSAppTransportSecurity:
+          NSAllowsArbitraryLoads: true
+          NSAllowsLocalNetworking: true
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: io.github.twuijri.corehub
+        PRODUCT_NAME: CoreHub
+        TARGETED_DEVICE_FAMILY: '1,2'
+        GENERATE_INFOPLIST_FILE: NO
+  CoreHubShare:
+    type: app-extension
+    platform: iOS
+    sources:
+      - path: CoreHubShare
+      # The extension reads the same strings and product name as the app, and writes the
+      # inbox the app reads.
+      - path: CoreHub/i18n
+      - path: CoreHub/Share/ShareInbox.swift
+      - path: CoreHub/Generated/Product.swift
+    entitlements:
+      path: CoreHubShare/CoreHubShare.entitlements
+      properties:
+        com.apple.security.application-groups: [group.io.github.twuijri.corehub]
+    info:
+      path: CoreHubShare/Info.plist
+      properties:
+        CFBundleDisplayName: Core Hub
+        NSExtension:
+          NSExtensionPointIdentifier: com.apple.share-services
+          NSExtensionPrincipalClass: $(PRODUCT_MODULE_NAME).ShareViewController
+          NSExtensionAttributes:
+            NSExtensionActivationRule:
+              NSExtensionActivationSupportsText: true
+              NSExtensionActivationSupportsWebURLWithMaxCount: 1
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: io.github.twuijri.corehub.share
+        PRODUCT_NAME: CoreHubShare
+        GENERATE_INFOPLIST_FILE: NO
+        APPLICATION_EXTENSION_API_ONLY: YES
+  CoreHubTests:
+    type: bundle.unit-test
+    platform: iOS
+    sources:
+      - path: CoreHubTests
+      # The parity and token tests read the repository's own files, copied at build time
+      # (docs/clients/README.md: never a hand-kept second copy).
+      - path: ../../docs/clients/navigation.json
+        buildPhase: resources
+      - path: ../../packages/ui-tokens/tokens.json
+        buildPhase: resources
+    # Hosted in the app, so CoreHubClient reaches the tests through the host; linking it again
+    # would load two copies of every generated type.
+    dependencies:
+      - target: CoreHub
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: io.github.twuijri.corehub.tests
+        GENERATE_INFOPLIST_FILE: YES
+schemes:
+  CoreHub:
+    build:
+      targets:
+        CoreHub: all
+        CoreHubTests: [test]
+    test:
+      targets:
+        - CoreHubTests

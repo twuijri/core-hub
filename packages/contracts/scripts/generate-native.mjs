@@ -2,9 +2,12 @@
 // Generates the Kotlin (Android) and Swift (iOS) clients with openapi-generator-cli.
 // Needs a Java runtime. Locally without Java it skips with a warning; in CI it fails.
 import { execFileSync } from 'node:child_process';
-import { existsSync, rmSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
-import { bin, contractsRoot, generatedDir, openapiPath } from './lib.mjs';
+import { stringify } from 'yaml';
+import { KOTLIN_JSON_ANCHOR, KOTLIN_JSON_OPTIONS, prepareForKotlin } from './kotlin-openapi.mjs';
+import { bin, contractsRoot, generatedDir, loadDocument, openapiPath } from './lib.mjs';
+import { prepareForSwift } from './swift-openapi.mjs';
 
 if (!existsSync(openapiPath)) {
   console.warn('contracts:generate:native  openapi.yaml absent — nothing to generate.');
@@ -31,12 +34,24 @@ if (!hasJava()) {
   process.exit(0);
 }
 
+// Kotlin reads a prepared copy of the document (scripts/kotlin-openapi.mjs: nullable
+// properties become optional ones); the source document is never rewritten.
+mkdirSync(generatedDir, { recursive: true });
+const kotlinInput = path.join(generatedDir, 'openapi.kotlin.yaml');
+writeFileSync(kotlinInput, stringify(prepareForKotlin(loadDocument(openapiPath))));
+
+// Swift reads a prepared copy of the document (scripts/swift-openapi.mjs: nullable
+// properties become optional ones, path parameters reach every operation, names Swift owns
+// are prefixed); the source document is never rewritten.
+const swiftInput = path.join(generatedDir, 'openapi.swift.yaml');
+writeFileSync(swiftInput, stringify(prepareForSwift(loadDocument(openapiPath))));
+
 const targets = [
-  { name: 'kotlin', config: 'openapi-generator/kotlin.yaml' },
-  { name: 'swift', config: 'openapi-generator/swift.yaml' },
+  { name: 'kotlin', config: 'openapi-generator/kotlin.yaml', input: kotlinInput },
+  { name: 'swift', config: 'openapi-generator/swift.yaml', input: swiftInput },
 ];
 
-for (const { name, config } of targets) {
+for (const { name, config, input } of targets) {
   const out = path.join(generatedDir, name);
   rmSync(out, { recursive: true, force: true });
   console.log(`contracts:generate:native  ${name} -> ${path.relative(process.cwd(), out)}`);
@@ -45,7 +60,7 @@ for (const { name, config } of targets) {
     [
       'generate',
       '-i',
-      openapiPath,
+      input,
       '-c',
       path.join(contractsRoot, config),
       '-o',
@@ -59,4 +74,17 @@ for (const { name, config } of targets) {
     },
   );
 }
+// The generated JSON writes every `null` a model holds, so a PATCH built from a model would
+// clear every field it did not mean to touch. Leave nulls out (the contract's optional
+// fields are absent, not null) and read an absent nullable field as null.
+const serializer = path.join(
+  generatedDir,
+  'kotlin/src/main/kotlin/hub/core/client/infrastructure/Serializer.kt',
+);
+const source = readFileSync(serializer, 'utf8');
+if (!source.includes(KOTLIN_JSON_ANCHOR)) {
+  console.error(`contracts:generate:native  ${serializer} no longer has "${KOTLIN_JSON_ANCHOR}".`);
+  process.exit(1);
+}
+writeFileSync(serializer, source.replace(KOTLIN_JSON_ANCHOR, KOTLIN_JSON_OPTIONS));
 console.log('contracts:generate:native  OK');

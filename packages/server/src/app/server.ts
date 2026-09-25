@@ -6,7 +6,8 @@ import type { IncomingMessage, Server, ServerResponse } from 'node:http';
 import Fastify, { type FastifyBaseLogger, type FastifyInstance } from 'fastify';
 import type { Server as SocketServer } from 'socket.io';
 import { LEGACY, derived, loadOpenApiDocument, type OpenApiDocument } from '@corehub/contracts';
-import { createLogger, type Logger } from '../lib/logger.js';
+import { createLogger, logRingOf, type Logger } from '../lib/logger.js';
+import { LogRing } from '../lib/log-ring.js';
 import type { HubModule } from '../lib/module.js';
 import { modules as allModules } from '../modules/index.js';
 import { ownerUser, setupMetaFor } from '../modules/auth/index.js';
@@ -27,6 +28,8 @@ export interface HubState {
   version: string;
   /** True when the built web client is served from `/`. */
   web: boolean;
+  /** The recent log lines the Logs screen reads (`lib/log-ring.ts`). */
+  logs: LogRing;
 }
 
 declare module 'fastify' {
@@ -108,6 +111,9 @@ export async function buildServer(options: BuildOptions = {}): Promise<FastifyIn
     stubs: [],
     version,
     web: false,
+    // The logger's own ring when it made one; a logger from elsewhere writes to no ring,
+    // and Hermes's TUI gateway, which writes to this one directly, still has somewhere to.
+    logs: logRingOf(logger) ?? new LogRing(),
   };
   app.decorate('hub', hub);
   const events = await registerModuleEvents(io, modules);

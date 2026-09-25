@@ -17,6 +17,7 @@
  * Nothing here knows about HTTP, Fastify or the database.
  */
 import type { AgentCapability, AgentSection } from '../schema.js';
+import type { SubagentControl } from './subagents.js';
 
 export type AdapterKind = 'hermes' | 'acp' | 'harness' | 'builtin';
 
@@ -184,7 +185,32 @@ export type AgentEvent =
       costMicroUsd?: number;
       costSource?: 'provider' | 'estimated' | 'unknown';
     }
-  | { type: 'context'; usedTokens: number; windowTokens?: number | null }
+  | {
+      type: 'context';
+      usedTokens: number;
+      windowTokens?: number | null;
+      /** The agent counted roughly rather than taking the provider's report. */
+      estimated?: boolean;
+    }
+  | {
+      /**
+       * The agent is compressing the conversation's context on its own, inside this turn,
+       * because the window was filling up (Hermes: `status.update` of kind `compressing`).
+       */
+      type: 'compression';
+      phase: 'started' | 'finished';
+    }
+  | {
+      /**
+       * The turn moved down the fallback chain (contract decision §54): the models in
+       * `failed` refused it, in order, with an error another model could get past, and
+       * `answered` is the one that took it — or, when the run then failed, the last tried.
+       * `provider` is the hub's provider slug, when known.
+       */
+      type: 'model.fallback';
+      failed: FallbackAttempt[];
+      answered: { model: string; provider: string | null };
+    }
   | { type: 'run.completed'; stopReason: string; interrupted?: boolean }
   | {
       type: 'run.failed';
@@ -260,7 +286,40 @@ export interface PromptInput {
    * that will make the request.
    */
   modelProviderId?: string | null;
+  /** The hub's slug for the provider of `model`, for saying which model answered. */
+  modelProviderSlug?: string | null;
+  /**
+   * The profile's fallback chain for this turn, without the model above (contract decision
+   * §54). Hermes reads its own copy from `config.yaml` and uses this only to name what it
+   * switched to; the `builtin` adapter hands it to the models module, which walks it.
+   */
+  fallbacks?: readonly FallbackModel[];
   reasoningEffort?: string | null;
+}
+
+/** One model of a fallback chain that failed a turn (contract `RunFallbackAttempt`). */
+export interface FallbackAttempt {
+  model: string;
+  /** The hub's provider slug, when known. */
+  provider: string | null;
+  /** A contract `ErrorCode`; `null` when the runtime switched without saying why. */
+  code: string | null;
+  /** The provider's own words, when it sent any. */
+  error: string | null;
+}
+
+/**
+ * One model the turn may move on to when the chosen one fails (contract decision §54), in
+ * every vocabulary an adapter might need: the hub's row id (the `builtin` adapter makes the
+ * request itself), the runtime's name for the provider (Hermes), and the hub's slug.
+ */
+export interface FallbackModel {
+  providerId: string;
+  /** The name the agent runtime knows the provider by; null when it cannot be told. */
+  provider: string | null;
+  /** The hub's provider slug. */
+  slug: string;
+  model: string;
 }
 
 /** A live conversation with one agent. */
@@ -276,11 +335,41 @@ export interface AgentSession {
   answer?(questionId: string, text: string | null): Promise<void>;
   interrupt(): Promise<void>;
   close(): Promise<void>;
+  /**
+   * The subagents this conversation's agent delegates to (contract decision §56), on a channel
+   * of their own because one can outlive the turn that started it. Absent: the agent never
+   * says it delegated.
+   */
+  readonly subagents?: SubagentControl;
+  /**
+   * Compress the conversation's context now, between turns (decision §57). Absent when the
+   * agent has no such thing; the hub then refuses the command rather than pretend.
+   */
+  compress?(focus: string | null): Promise<CompressOutcome>;
+  /**
+   * Hand the turn in flight a piece of guidance without stopping it: the agent reads it
+   * after its next tool call. `rejected` = not now; the caller sends it as a message.
+   */
+  steer?(text: string): Promise<'queued' | 'rejected'>;
+}
+
+/** What `AgentSession.compress` did, in the contract's `SessionCompression` terms. */
+export interface CompressOutcome {
+  status: 'compressed' | 'unchanged' | 'skipped';
+  beforeTokens: number | null;
+  afterTokens: number | null;
+  beforeMessages: number | null;
+  afterMessages: number | null;
+  context: { usedTokens: number; windowTokens: number | null; estimated: boolean } | null;
+  /** The agent's own words about it, untranslated. */
+  message: string | null;
 }
 
 export interface SettingsChoice {
   value: string;
   label: string;
+  /** The label in both UI languages, when the adapter has it. */
+  labels?: { ar: string; en: string };
 }
 
 /** The contract's `SettingsField`. */
@@ -293,6 +382,12 @@ export interface SettingsField {
   min: number | null;
   max: number | null;
   hint: string | null;
+  /** What it does, in both languages. */
+  help?: { ar: string; en: string } | null;
+  /** The agent's own default, used while `value` is `null`. */
+  default?: unknown;
+  /** The default in words, where the value alone would mislead. */
+  default_text?: { ar: string; en: string } | null;
 }
 
 /** The contract's `SettingsSection`. */
@@ -300,6 +395,9 @@ export interface SettingsSection {
   key: string;
   title: { ar: string; en: string };
   restart_required: boolean;
+  /** When a saved value takes effect. */
+  applies?: 'next_message' | 'restart';
+  note?: { ar: string; en: string } | null;
   fields: SettingsField[];
 }
 

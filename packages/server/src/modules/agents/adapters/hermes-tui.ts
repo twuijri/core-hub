@@ -31,7 +31,21 @@ import { createInterface } from 'node:readline';
 import { StringDecoder } from 'node:string_decoder';
 import { HubError } from '../../../lib/errors.js';
 import { EventQueue } from './event-queue.js';
-import type { AgentEvent, AgentSession, PromptInput } from './types.js';
+import {
+  SubagentSignals,
+  hermesLiveSubagent,
+  hermesSubagentSignal,
+  type LiveSubagent,
+  type SubagentControl,
+  type SubagentTailText,
+} from './subagents.js';
+import type {
+  AgentEvent,
+  AgentSession,
+  CompressOutcome,
+  FallbackModel,
+  PromptInput,
+} from './types.js';
 
 type Json = Record<string, unknown>;
 
@@ -55,6 +69,8 @@ export interface TuiSessionHandlers {
 /** One running `tui_gateway`, shared by every conversation. */
 export interface TuiChannel {
   readonly alive: boolean;
+  /** The process's id, for the Performance screen; absent for a scripted channel. */
+  readonly pid?: number | null;
   /**
    * Whether closing it now would cut something short: a conversation on it has a turn in
    * flight, or a call is still waiting for its answer. The runtime asks before it recycles
@@ -70,6 +86,7 @@ export interface TuiChannel {
 }
 
 export interface Spawned {
+  pid?: number | undefined;
   stdin: NodeJS.WritableStream;
   stdout: NodeJS.ReadableStream;
   stderr?: NodeJS.ReadableStream | null;
@@ -97,6 +114,11 @@ export interface StdioChannelOptions {
    */
   exitGraceMs?: number;
   log?: (message: string, detail?: unknown) => void;
+  /**
+   * Every line of the gateway's stderr — Hermes's own log — for the Logs screen's ring
+   * (`lib/log-ring.ts`), which is bounded; it still never reaches the hub's log volume.
+   */
+  onStderrLine?: (line: string) => void;
 }
 
 const defaultSpawn = (
@@ -160,7 +182,7 @@ export function stdioTuiChannel(options: StdioChannelOptions): TuiChannel {
   // except the one line the gateway prints on its way out. Every exit path of
   // `tui_gateway/entry.py` is `sys.exit(0)`, so the code says nothing; the reason is the
   // `[gateway-exit] …` or `[gateway-signal] …` line it writes to stderr just before.
-  const exitReasons = stderrExitReasons(child.stderr);
+  const exitReasons = stderrExitReasons(child.stderr, options.onStderrLine);
 
   child.on('exit', (code, signal) => {
     const report = () => {
@@ -231,6 +253,9 @@ export function stdioTuiChannel(options: StdioChannelOptions): TuiChannel {
     get alive() {
       return alive && !exiting;
     },
+    get pid() {
+      return child.pid ?? null;
+    },
     get busy() {
       if (!alive || exiting) return false;
       if (pending.size > 0) return true;
@@ -274,10 +299,14 @@ const EXIT_REASON_MAX = 200;
 const STDERR_LINE_MAX = 4096;
 
 /**
- * Reads the gateway's stderr for its exit markers only, keeping the last few — nothing
- * else of the stream is kept or logged, and memory stays bounded however much it writes.
+ * Reads the gateway's stderr for its exit markers, keeping the last few, and hands every
+ * line to `onLine` (the Logs screen's bounded ring) — nothing else of the stream is kept or
+ * logged, and memory stays bounded however much it writes.
  */
-function stderrExitReasons(stream: NodeJS.ReadableStream | null | undefined): {
+function stderrExitReasons(
+  stream: NodeJS.ReadableStream | null | undefined,
+  onLine?: (line: string) => void,
+): {
   last(): string | null;
   /** Resolves once stderr has ended, or after `graceMs`, whichever is first. */
   drained(graceMs: number): Promise<void>;
@@ -290,6 +319,14 @@ function stderrExitReasons(stream: NodeJS.ReadableStream | null | undefined): {
     let carry = '';
     let skipping = false;
     const line = (text: string) => {
+      const trimmed = text.trimEnd();
+      if (trimmed && onLine) {
+        try {
+          onLine(trimmed);
+        } catch {
+          // the ring is a convenience; the exit reason is not
+        }
+      }
       const match = EXIT_MARKER.exec(text.trim());
       if (!match) return;
       const detail = (match[2] ?? '').slice(0, EXIT_REASON_MAX);
@@ -378,6 +415,7 @@ export class HermesTuiSession implements AgentSession {
   private readonly approvals = new Map<string, (choice: string) => void>();
   private readonly questions = new Map<string, (answer: string | null) => void>();
   private readonly openTools: Array<{ id: string; name: string }> = [];
+  private readonly subagentSignals = new SubagentSignals();
   private counter = 0;
   private isClosed = false;
   /**
@@ -386,6 +424,22 @@ export class HermesTuiSession implements AgentSession {
    * earlier turns is kept here and subtracted, so each run records its own tokens.
    */
   private reported = { input: 0, output: 0, reasoning: 0 };
+
+  /**
+   * The turn in flight, as the hub asked for it: the model and provider it named, and the
+   * fallback chain (contract decision §54), so a switch Hermes makes can be said in the hub's
+   * names. `notes` are Hermes's own "Model fallback" lines from this turn.
+   */
+  private asked: {
+    model: string | null;
+    provider: string | null;
+    slug: string | null;
+    fallbacks: readonly FallbackModel[];
+    notes: FallbackNote[];
+  } = { model: null, provider: null, slug: null, fallbacks: [], notes: [] };
+
+  /** Hermes said it is compressing inside the turn in flight; `finished` is still owed. */
+  private compressing = false;
 
   /** What this conversation is running on, so a turn that names something else switches. */
   private current: { model: string | null; provider: string | null; effort: string | null } = {
@@ -477,6 +531,53 @@ export class HermesTuiSession implements AgentSession {
     return this.isClosed || !this.channel.alive;
   }
 
+  /**
+   * Hermes's delegations (contract decision §56): its `subagent.*` events, and its calls to
+   * list, stop, steer and read a subagent of this session. The calls name the live session,
+   * which is what Hermes checks the caller's authority against.
+   */
+  readonly subagents: SubagentControl = {
+    support: 'full',
+    watch: (listener) => this.subagentSignals.watch(listener),
+    list: async (): Promise<LiveSubagent[]> => {
+      if (this.closed) return [];
+      const result = await this.channel.request('subagent.list', { session_id: this.liveId });
+      const rows = Array.isArray(result.subagents) ? result.subagents : [];
+      return rows.map(hermesLiveSubagent).filter((row): row is LiveSubagent => row !== null);
+    },
+    interrupt: async (id) => {
+      if (this.closed) return false;
+      const result = await this.channel.request('subagent.interrupt', {
+        session_id: this.liveId,
+        subagent_id: id,
+      });
+      return result.found === true;
+    },
+    steer: async (id, note) => {
+      if (this.closed) return 'rejected';
+      const result = await this.channel.request('subagent.steer', {
+        session_id: this.liveId,
+        subagent_id: id,
+        text: note,
+      });
+      return result.status === 'queued' ? 'queued' : 'rejected';
+    },
+    tail: async (id): Promise<SubagentTailText> => {
+      const none = { available: false, text: '', truncated: false };
+      if (this.closed) return none;
+      const result = await this.channel.request('subagent.tail', {
+        session_id: this.liveId,
+        subagent_id: id,
+      });
+      if (result.available !== true) return none;
+      return {
+        available: true,
+        text: typeof result.text === 'string' ? result.text : '',
+        truncated: result.truncated === true,
+      };
+    },
+  };
+
   stream(): AsyncIterable<AgentEvent> {
     return this.queue.iterator();
   }
@@ -487,15 +588,104 @@ export class HermesTuiSession implements AgentSession {
     const done = new Promise<string>((resolve) => {
       this.turn = { resolve };
     });
+    this.asked = {
+      model: prompt.model ?? null,
+      provider: prompt.modelProvider ?? null,
+      slug: prompt.modelProviderSlug ?? null,
+      fallbacks: prompt.fallbacks ?? [],
+      notes: [],
+    };
     try {
       await this.select(prompt);
-      await this.channel.request('prompt.submit', { session_id: this.liveId, text: prompt.text });
+      const text = await this.commandTurn(prompt);
+      if (text === null) {
+        // The command answered with output of its own: that is the whole turn.
+        this.end('completed');
+      } else {
+        await this.channel.request('prompt.submit', { session_id: this.liveId, text });
+      }
     } catch (error) {
       this.turn = null;
       throw error;
     }
     const stopReason = await done;
     return { stopReason };
+  }
+
+  /**
+   * A message that starts with one of Hermes's own commands (`/goal`, `/plan`, `/learn`,
+   * `/skill <name>`) is Hermes's to carry out, not text for the model (decision §57). Hermes's
+   * `command.dispatch` answers with a prompt to run — the plan prompt, the skill loaded into
+   * the turn — or with output of its own, which is then the turn's whole reply (`null` here).
+   * Anything else goes to the model exactly as typed.
+   *
+   * The command is read from the message's own first text block, so the lines the hub adds
+   * after it (attachments, where to write files) still reach the turn it becomes.
+   */
+  private async commandTurn(prompt: PromptInput): Promise<string | null> {
+    const typed = prompt.blocks?.find((block) => block.type === 'text')?.text ?? prompt.text;
+    const command = agentCommandOf(typed);
+    if (!command) return prompt.text;
+    let result: Json;
+    try {
+      result = await this.channel.request('command.dispatch', {
+        session_id: this.liveId,
+        name: command.name,
+        arg: command.arg,
+      });
+    } catch (error) {
+      const why = error instanceof Error ? error.message : String(error);
+      throw new Error(`/${command.typed}: ${why}`, { cause: error });
+    }
+    const kind = String(result.type ?? '');
+    const message = text(result.message);
+    if ((kind === 'send' || kind === 'skill') && message) {
+      const after = prompt.text.startsWith(typed) ? prompt.text.slice(typed.length) : '';
+      return `${message}${after}`;
+    }
+    const output =
+      text(result.output) ?? text(result.notice) ?? text(result.display) ?? text(result.target);
+    this.queue.push({ type: 'message.delta', text: output?.trim() ? output : `/${command.typed}` });
+    this.queue.push({ type: 'run.completed', stopReason: 'completed' });
+    return null;
+  }
+
+  /**
+   * Hermes's `session.compress` (decision §57): only between turns. Its answer carries the
+   * before/after estimate and the window as it now stands, which is what the meter shows.
+   */
+  async compress(focus: string | null): Promise<CompressOutcome> {
+    if (this.closed) throw new HubError('state_invalid', { message: 'Hermes session is closed' });
+    if (this.turn) throw new HubError('already_running', { details: { session: this.storedId } });
+    let result: Json;
+    try {
+      result = await this.channel.request('session.compress', {
+        session_id: this.liveId,
+        ...(focus?.trim() ? { focus_topic: focus.trim() } : {}),
+      });
+    } catch (error) {
+      if (error instanceof TuiError && error.code === 4009) {
+        throw new HubError('already_running', { details: { session: this.storedId } });
+      }
+      throw error;
+    }
+    return compressOutcomeOf(result);
+  }
+
+  /** Hermes's `session.steer`: read after the next tool call; the turn is not interrupted. */
+  async steer(guidance: string): Promise<'queued' | 'rejected'> {
+    if (this.closed || !this.turn) return 'rejected';
+    try {
+      const result = await this.channel.request('session.steer', {
+        session_id: this.liveId,
+        text: guidance,
+      });
+      return result.status === 'queued' ? 'queued' : 'rejected';
+    } catch (error) {
+      // 4010: the agent is not built yet, so there is nothing to steer — a message instead.
+      if (error instanceof TuiError) return 'rejected';
+      throw error;
+    }
   }
 
   /**
@@ -551,6 +741,7 @@ export class HermesTuiSession implements AgentSession {
   async close(): Promise<void> {
     if (this.isClosed) return;
     this.isClosed = true;
+    this.subagentSignals.endAll();
     this.detach();
     this.stopExit();
     if (this.channel.alive) {
@@ -564,6 +755,12 @@ export class HermesTuiSession implements AgentSession {
   // ------------------------------------------------------------ from Hermes
 
   private onEvent(type: string, payload: Json): void {
+    if (type.startsWith('subagent.')) {
+      // Not part of the turn: a subagent can outlive it (asynchronous delegation).
+      const signal = hermesSubagentSignal(type, payload);
+      if (signal) this.subagentSignals.emit(signal);
+      return;
+    }
     switch (type) {
       case 'message.delta': {
         const delta = text(payload.text);
@@ -611,7 +808,27 @@ export class HermesTuiSession implements AgentSession {
         });
         return;
       }
+      case 'status.update': {
+        // Hermes says so when it moves down its `fallback_providers` (contract decision §54).
+        const note = parseFallbackNote(text(payload.text));
+        if (note && this.turn) this.asked.notes.push(note);
+        // Hermes compressing on its own inside a turn (`_status_update`, re-tagged
+        // `compacting` for auto-compaction). A manual compress says the same between turns;
+        // that one is the hub's own call, reported where it is made.
+        if (!this.turn) return;
+        const kind = String(payload.kind ?? '');
+        if (kind === 'compressing' || kind === 'compacting') {
+          if (!this.compressing) {
+            this.compressing = true;
+            this.queue.push({ type: 'compression', phase: 'started' });
+          }
+        } else {
+          this.compressionDone();
+        }
+        return;
+      }
       case 'message.complete':
+        this.compressionDone();
         this.finish(payload);
         return;
       case 'error': {
@@ -629,8 +846,18 @@ export class HermesTuiSession implements AgentSession {
     }
   }
 
+  private compressionDone(): void {
+    if (!this.compressing) return;
+    this.compressing = false;
+    this.queue.push({ type: 'compression', phase: 'finished' });
+  }
+
   private finish(payload: Json): void {
     const usage = (payload.usage ?? null) as Json | null;
+    const fallback = this.fallbackOf(text(usage?.model));
+    if (fallback) this.queue.push(fallback);
+    const window = usage ? contextOf(usage) : null;
+    if (window) this.queue.push({ type: 'context', ...window });
     if (usage) {
       const number = (value: unknown) => (typeof value === 'number' ? value : undefined);
       const input = number(usage.input) || number(usage.prompt);
@@ -668,6 +895,41 @@ export class HermesTuiSession implements AgentSession {
       });
       this.end('failed');
     }
+  }
+
+  /**
+   * Whether Hermes answered this turn on another model than the one asked for, said in the
+   * hub's names (contract decision §54). Hermes's own notes say what failed and why; without
+   * them, a model in the usage that is not the one asked for says it all the same.
+   */
+  private fallbackOf(reported: string | null): AgentEvent | null {
+    const { model, provider, slug, fallbacks, notes } = this.asked;
+    const slugOf = (runtime: string | null, name: string | null): string | null => {
+      if (runtime !== null && runtime === provider) return slug;
+      const member =
+        fallbacks.find((each) => each.model === name && (!runtime || each.provider === runtime)) ??
+        null;
+      return member?.slug ?? null;
+    };
+    if (notes.length > 0) {
+      const last = notes[notes.length - 1] as FallbackNote;
+      return {
+        type: 'model.fallback',
+        failed: notes.map((note) => ({
+          model: note.from,
+          provider: slugOf(note.fromProvider, note.from),
+          code: null,
+          error: note.reason,
+        })),
+        answered: { model: last.to, provider: slugOf(last.toProvider, last.to) },
+      };
+    }
+    if (!reported || !model || reported === model) return null;
+    return {
+      type: 'model.fallback',
+      failed: [{ model, provider: slug, code: null, error: null }],
+      answered: { model: reported, provider: slugOf(null, reported) },
+    };
   }
 
   private async onRequest(method: string, params: Json): Promise<Json> {
@@ -729,6 +991,7 @@ export class HermesTuiSession implements AgentSession {
   }
 
   private onExit(reason: string): void {
+    this.subagentSignals.endAll(reason);
     if (this.turn) this.queue.push({ type: 'run.failed', error: reason });
     this.end('failed');
     this.isClosed = true;
@@ -739,6 +1002,7 @@ export class HermesTuiSession implements AgentSession {
   private end(stopReason: string): void {
     const turn = this.turn;
     this.turn = null;
+    this.compressing = false;
     this.openTools.length = 0;
     turn?.resolve(stopReason);
   }
@@ -766,4 +1030,121 @@ function strings(value: unknown): string[] {
   return Array.isArray(value)
     ? value.filter((item): item is string => typeof item === 'string')
     : [];
+}
+
+/** One of Hermes's "Model fallback" status lines, read back into its parts. */
+export interface FallbackNote {
+  from: string;
+  fromProvider: string;
+  reason: string | null;
+  to: string;
+  toProvider: string;
+}
+
+/**
+ * Hermes's line when it moves down `fallback_providers` (MIT source
+ * `agent/chat_completion_helpers.py` §try_activate_fallback):
+ * `⚠️ Model fallback: <model> via <provider> unavailable (<reason>); using <model> via <provider>.`
+ * `null` for every other status line.
+ */
+export function parseFallbackNote(line: string | null): FallbackNote | null {
+  if (!line) return null;
+  const match =
+    /Model fallback:\s+(\S+)\s+via\s+(\S+)\s+unavailable\s+\((.*?)\);\s+using\s+(\S+)\s+via\s+(\S+?)\.?(?:\s|$)/.exec(
+      line,
+    );
+  if (!match) return null;
+  const [, from, fromProvider, reason, to, toProvider] = match as unknown as string[];
+  return {
+    from: from as string,
+    fromProvider: fromProvider as string,
+    reason: reason ? reason : null,
+    to: to as string,
+    toProvider: toProvider as string,
+  };
+}
+
+/** The commands Hermes carries out itself, by the word after `/` (decision §57). */
+export const HERMES_COMMANDS = ['goal', 'plan', 'learn', 'skill'] as const;
+const SKILL_NAME = /^[A-Za-z0-9][A-Za-z0-9_.:-]*$/;
+
+/**
+ * `/plan build it` → `{name: 'plan', arg: 'build it'}`; `/skill review the diff` → the skill's
+ * own name, `{name: 'review', arg: 'the diff'}`, which is how Hermes invokes a skill. Anything
+ * else — another `/word`, a `/skill` without a name, plain text — is `null`: a message.
+ */
+export function agentCommandOf(
+  message: string,
+): { name: string; arg: string; typed: string } | null {
+  const match = /^\/([a-z]+)(?:[ \t]+([\s\S]*))?$/.exec(message.trim());
+  if (!match) return null;
+  const word = match[1] as string;
+  const arg = (match[2] ?? '').trim();
+  if (!(HERMES_COMMANDS as readonly string[]).includes(word)) return null;
+  if (word !== 'skill') return { name: word, arg, typed: word };
+  const [skill = ''] = arg.split(/\s+/);
+  if (!SKILL_NAME.test(skill)) return null;
+  const name = skillCommandName(skill);
+  if (!name) return null;
+  return { name, arg: arg.slice(skill.length).trim(), typed: `skill ${skill}` };
+}
+
+/**
+ * The command Hermes registers a skill under (`agent/skill_commands.py` §slugify_skill_name):
+ * lower case, spaces and underscores as hyphens, anything but word characters and hyphens
+ * dropped, hyphens not doubled nor at the ends. The hub lists a skill by its folder, which is
+ * usually its name already; this makes `Code_Review` and `code-review` the same command.
+ */
+export function skillCommandName(name: string): string {
+  return name
+    .toLowerCase()
+    .replace(/ /g, '-')
+    .replace(/_/g, '-')
+    .replace(/[^\p{L}\p{N}_-]/gu, '')
+    .replace(/-{2,}/g, '-')
+    .replace(/^-+|-+$/g, '');
+}
+
+/** The window Hermes reports with its usage (`context_used` of `context_max`), when it does. */
+function contextOf(
+  usage: Json,
+): { usedTokens: number; windowTokens: number | null; estimated: boolean } | null {
+  const used = usage.context_used;
+  if (typeof used !== 'number' || !Number.isFinite(used) || used < 0) return null;
+  const max = usage.context_max;
+  return {
+    usedTokens: Math.round(used),
+    windowTokens: typeof max === 'number' && max > 0 ? Math.round(max) : null,
+    estimated: usage.context_estimated === true,
+  };
+}
+
+/** Hermes's `session.compress` answer in the contract's terms. */
+export function compressOutcomeOf(result: Json): CompressOutcome {
+  const count = (value: unknown) =>
+    typeof value === 'number' && Number.isFinite(value) && value >= 0 ? Math.round(value) : null;
+  const summary = (result.summary ?? null) as Json | null;
+  const words = [summary?.headline, summary?.token_line, summary?.note, result.message]
+    .map((value) => text(value)?.trim() ?? '')
+    .filter((value) => value !== '');
+  const usage = (result.usage ?? (result.info as Json | undefined)?.usage ?? null) as Json | null;
+  let status: CompressOutcome['status'];
+  if (result.lock_held === true || result.compressed === false) status = 'skipped';
+  else if (
+    result.status === 'aborted' ||
+    summary?.noop === true ||
+    summary?.aborted === true ||
+    count(result.removed) === 0
+  )
+    status = 'unchanged';
+  else status = 'compressed';
+  return {
+    status,
+    beforeTokens: count(result.before_tokens),
+    afterTokens: count(result.after_tokens),
+    beforeMessages: count(result.before_messages),
+    afterMessages: count(result.after_messages),
+    context: usage ? contextOf(usage) : null,
+    message: words.length > 0 ? [...new Set(words)].join('\n') : null,
+  };
 }

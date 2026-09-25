@@ -73,6 +73,21 @@ test('23. the agent tools ask Hermes: an MCP test, a skill pack imported, WhatsA
   await expect(failed).toContainText("No such file or directory: 'not-a-command'");
   await shot(page, 'agent-mcp-test-ar-light');
 
+  // ---- Core Hub tools (§67): switched on, the hub writes its own server into this profile's
+  // config; Test has Hermes connect to it like any other; the block is not a row of the list.
+  const card = page.getByTestId('hub-tools');
+  await expect(card).toContainText('أدوات كور هب');
+  await page.getByTestId('hub-tools-toggle').click();
+  await expect(page.getByTestId('hub-group-toggle-tasks')).toBeEnabled();
+  await page.getByTestId('hub-group-writes-tasks').click();
+  await expect(page.getByTestId('hub-group-writes-tasks')).toHaveAttribute('data-state', 'checked');
+  await page.getByTestId('hub-tools-test').click();
+  await expect(page.getByTestId('mcp-test-result-corehub')).toHaveAttribute('data-ok', 'true');
+  await expect(page.getByTestId('mcp-list')).not.toContainText('corehub');
+  await shot(page, 'agent-mcp-hub-tools-ar-light');
+  await page.getByTestId('hub-tools-toggle').click();
+  await expect(page.getByTestId('hub-group-toggle-tasks')).toBeDisabled();
+
   // ---- Skills: a pack of two, installed as it is.
   await openAgentPage(page, 'المهارات', /\/skills$/);
   const pack = makeZip([

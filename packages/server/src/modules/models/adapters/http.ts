@@ -125,6 +125,53 @@ export async function requestBytes(request: JsonRequest): Promise<BytesAnswer> {
   }
 }
 
+/**
+ * A `multipart/form-data` POST whose answer is JSON — the shape of every OpenAI-style
+ * upload (`audio/transcriptions`). `fetch` writes the boundary itself; nothing here sets
+ * `content-type`, or the provider could not find the parts.
+ */
+export async function requestForm(request: {
+  url: string;
+  headers?: Record<string, string>;
+  form: FormData;
+  fetchImpl: typeof fetch;
+  timeoutMs?: number;
+}): Promise<HttpAnswer> {
+  const started = Date.now();
+  try {
+    const response = await request.fetchImpl(request.url, {
+      method: 'POST',
+      signal: AbortSignal.timeout(request.timeoutMs ?? 60_000),
+      headers: { accept: 'application/json', ...(request.headers ?? {}) },
+      body: request.form,
+    });
+    const text = (await response.text()).slice(0, MAX_BODY_BYTES);
+    let body: unknown = null;
+    try {
+      body = JSON.parse(text) as unknown;
+    } catch {
+      body = null;
+    }
+    return {
+      ok: response.ok,
+      status: response.status,
+      body,
+      text,
+      error: null,
+      durationMs: Date.now() - started,
+    };
+  } catch (error) {
+    return {
+      ok: false,
+      status: null,
+      body: null,
+      text: null,
+      error: error instanceof Error ? error.message : String(error),
+      durationMs: Date.now() - started,
+    };
+  }
+}
+
 /** Why a request failed, in the vocabulary `ProviderTestResult.reason` uses. */
 export function reasonOf(answer: { ok: boolean; status: number | null; error: string | null }) {
   if (answer.ok) return 'ok';

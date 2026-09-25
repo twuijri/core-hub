@@ -11,10 +11,6 @@
  * Operations of this module that are deliberately **not** here stay `501`
  * through the app's contract stubs:
  *
- * - `sessions.listCategories` / `createCategory` / `updateCategory` /
- *   `deleteCategory` — `session_categories` has no table in the domain model
- *   yet (docs/domain/sessions.md owns session, message, run, tool_call,
- *   approval only).
  * - every attachment operation (`uploadAttachment`, `getAttachment`,
  *   `downloadAttachment`, `deleteAttachment`, `startUpload`, `uploadChunk`,
  *   `abortUpload`, `completeUpload`) — they are declared on this module's tag
@@ -25,13 +21,16 @@
  *   the contract declares.
  */
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
+import { createReadStream } from 'node:fs';
 import { z } from 'zod';
 import { HubError, notFound } from '../../lib/errors.js';
 import { parse } from '../../lib/validate.js';
 import type { EngineScope } from './engine.js';
 import type { ScopeResolver } from './scope.js';
 import type { SessionsService } from './service.js';
+import type { ChannelConversations } from './channel-conversations.js';
 import { DEFAULT_LIMIT, MAX_LIMIT } from './store.js';
+import { toSubagent } from './subagents.js';
 
 const ulid = z.string().regex(/^[0-7][0-9A-HJKMNP-TV-Z]{25}$/, 'must be a ULID');
 const limit = z.coerce.number().int().min(1).max(MAX_LIMIT).default(DEFAULT_LIMIT);
@@ -77,9 +76,27 @@ const runCreate = z.object({
   reply_to_message_id: ulid.nullish(),
 });
 
+const sessionCompress = z.object({ focus: z.string().max(2000).nullish() });
+const runSteer = z.object({ text: z.string().trim().min(1).max(8000) });
+
+const channelContinue = z.object({
+  agent_id: ulid,
+  note: z.string().max(4000).nullish(),
+});
+
 const approvalResponse = z.object({
   decision: z.enum(['approve_once', 'approve_session', 'approve_always', 'deny']).nullish(),
   answer: z.string().max(4000).nullish(),
+});
+
+const categoryName = z.string().trim().min(1).max(60);
+const categoryInput = z.object({
+  name: categoryName.optional(),
+  color: z
+    .string()
+    .regex(/^#[0-9a-fA-F]{6}$/, 'must be #rrggbb')
+    .nullish(),
+  position: z.number().int().min(0).optional(),
 });
 
 const listQuery = z.object({
@@ -115,6 +132,8 @@ function pathId(params: unknown, name: string, resource: string): string {
 export interface RouteDeps {
   service(request: FastifyRequest): SessionsService;
   scopes: ScopeResolver;
+  /** Channel conversations read from Hermes (§61). */
+  channels(request: FastifyRequest): ChannelConversations;
 }
 
 export function registerSessionRoutes(app: FastifyInstance, deps: RouteDeps): void {
@@ -279,6 +298,106 @@ export function registerSessionRoutes(app: FastifyInstance, deps: RouteDeps): vo
     return trajectory;
   });
 
+  // ---------------------------------------------------------------- files
+
+  app.get('/sessions/:session_id/files', async (request) => {
+    const scope = await scopeOf(request);
+    const session_id = pathId(request.params, 'session_id', 'session');
+    return deps.service(request).listFiles(scope, session_id);
+  });
+
+  app.get('/sessions/:session_id/files/content', async (request, reply: FastifyReply) => {
+    const scope = await scopeOf(request);
+    const session_id = pathId(request.params, 'session_id', 'session');
+    const query = parse(
+      z.object({
+        path: z.string().min(1).max(4096),
+        download: z
+          .enum(['true', 'false'])
+          .default('false')
+          .transform((value) => value === 'true'),
+      }),
+      request.query,
+      'query',
+    );
+    const file = deps.service(request).openFile(scope, session_id, query.path, query.download);
+    const name = file.relative.split('/').at(-1) ?? 'file';
+    // Opened directly, an HTML file still runs nothing in the hub's origin: the sandbox
+    // gives it an origin of its own and `default-src 'none'` loads nothing (decision §48).
+    return reply
+      .header('content-type', file.type.contentType)
+      .header('content-length', String(file.size))
+      .header('x-content-type-options', 'nosniff')
+      .header('content-security-policy', "sandbox; default-src 'none'")
+      .header('cache-control', 'no-store')
+      .header('content-disposition', contentDisposition(query.download, name))
+      .send(createReadStream('', { fd: file.fd, start: 0, end: Math.max(0, file.size - 1) }));
+  });
+
+  // ---------------------------------------------------------- run changes
+
+  app.get('/sessions/:session_id/changes', async (request) => {
+    const scope = await scopeOf(request);
+    const session_id = pathId(request.params, 'session_id', 'session');
+    const query = parse(z.object({ cursor, limit }), request.query, 'query');
+    return deps.service(request).listChanges(scope, session_id, query.cursor, query.limit);
+  });
+
+  app.get('/sessions/:session_id/runs/:run_id/changes', async (request) => {
+    const scope = await scopeOf(request);
+    const session_id = pathId(request.params, 'session_id', 'session');
+    const run_id = pathId(request.params, 'run_id', 'run');
+    return deps.service(request).runChanges(scope, session_id, run_id);
+  });
+
+  app.get('/sessions/:session_id/runs/:run_id/changes/diff', async (request) => {
+    const scope = await scopeOf(request);
+    const session_id = pathId(request.params, 'session_id', 'session');
+    const run_id = pathId(request.params, 'run_id', 'run');
+    const query = parse(z.object({ path: z.string().min(1).max(4096) }), request.query, 'query');
+    return deps.service(request).runChangeDiff(scope, session_id, run_id, query.path);
+  });
+
+  // ------------------------------------------------------------ subagents (§56)
+
+  const subagentId = (params: unknown): string => {
+    const value = (params as { subagent_id?: unknown }).subagent_id;
+    if (typeof value !== 'string' || value === '' || value.length > 200) {
+      throw notFound({ resource: 'subagent', id: String(value ?? '') });
+    }
+    return value;
+  };
+
+  app.get('/sessions/:session_id/subagents', async (request) => {
+    const scope = await scopeOf(request);
+    const session_id = pathId(request.params, 'session_id', 'session');
+    const list = await deps.service(request).listSubagents(scope, session_id);
+    return { support: list.support, items: list.items.map(toSubagent) };
+  });
+
+  app.post('/sessions/:session_id/subagents/:subagent_id/interrupt', async (request) => {
+    const scope = await scopeOf(request);
+    const session_id = pathId(request.params, 'session_id', 'session');
+    const id = subagentId(request.params);
+    return toSubagent(await deps.service(request).interruptSubagent(scope, session_id, id));
+  });
+
+  app.post('/sessions/:session_id/subagents/:subagent_id/steer', async (request) => {
+    const scope = await scopeOf(request);
+    const session_id = pathId(request.params, 'session_id', 'session');
+    const id = subagentId(request.params);
+    const body = parse(z.object({ text: z.string().trim().min(1).max(4000) }), request.body);
+    const status = await deps.service(request).steerSubagent(scope, session_id, id, body.text);
+    return { status };
+  });
+
+  app.get('/sessions/:session_id/subagents/:subagent_id/tail', async (request) => {
+    const scope = await scopeOf(request);
+    const session_id = pathId(request.params, 'session_id', 'session');
+    const id = subagentId(request.params);
+    return deps.service(request).tailSubagent(scope, session_id, id);
+  });
+
   // ------------------------------------------------------------- messages
 
   app.get('/sessions/:session_id/messages', async (request) => {
@@ -337,6 +456,25 @@ export function registerSessionRoutes(app: FastifyInstance, deps: RouteDeps): vo
     return deps.service(request).cancelRun(scope, params.session_id, params.run_id);
   });
 
+  // ------------------------------------------- commands (decision §57)
+
+  app.post('/sessions/:session_id/compress', async (request) => {
+    const scope = await scopeOf(request);
+    const session_id = pathId(request.params, 'session_id', 'session');
+    const body = parse(sessionCompress, request.body ?? {});
+    return deps.service(request).compress(scope, session_id, body);
+  });
+
+  app.post('/sessions/:session_id/runs/:run_id/steer', async (request) => {
+    const scope = await scopeOf(request);
+    const params = {
+      session_id: pathId(request.params, 'session_id', 'session'),
+      run_id: pathId(request.params, 'run_id', 'run'),
+    };
+    const body = parse(runSteer, request.body);
+    return deps.service(request).steerRun(scope, params.session_id, params.run_id, body.text);
+  });
+
   // ------------------------------------------------------------ approvals
 
   app.get('/approvals', async (request) => {
@@ -375,4 +513,103 @@ export function registerSessionRoutes(app: FastifyInstance, deps: RouteDeps): vo
     const body = parse(approvalResponse, request.body);
     return deps.service(request).respondApproval(scope, approval_id, body);
   });
+
+  // ----------------------------------------------------------- categories
+  // Contract decision §60: the profile's folders of its chats list (`categories.ts`).
+
+  app.get('/session-categories', async (request) => {
+    const scope = await scopeOf(request);
+    const query = parse(z.object({ profiles: z.enum(['all']).optional() }), request.query, 'query');
+    const categories = deps.service(request).categories;
+    if (query.profiles === 'all') {
+      // Which profiles "all" means is `auth`'s rule (ADR 0016), as for `/sessions`.
+      const enterable = deps.scopes.enterable ? await deps.scopes.enterable(request) : null;
+      return categories.listAcross(
+        enterable
+          ? enterable.map((entry) => ({ ...entry, workspace: entry.workspaceId }))
+          : [scope],
+      );
+    }
+    return categories.list(scope);
+  });
+
+  app.post('/session-categories', async (request, reply) => {
+    const scope = await scopeOf(request);
+    const body = parse(categoryInput.extend({ name: categoryName }), request.body);
+    return reply.status(201).send(deps.service(request).categories.create(scope, body));
+  });
+
+  app.patch('/session-categories/:category_id', async (request) => {
+    const scope = await scopeOf(request);
+    const category_id = pathId(request.params, 'category_id', 'session_category');
+    const body = parse(categoryInput, request.body);
+    return deps.service(request).categories.update(scope, category_id, body);
+  });
+
+  app.delete('/session-categories/:category_id', async (request, reply) => {
+    const scope = await scopeOf(request);
+    const category_id = pathId(request.params, 'category_id', 'session_category');
+    deps.service(request).deleteCategory(scope, category_id);
+    return reply.status(204).send();
+  });
+
+  // ------------------------------------------------- channel conversations
+  // Contract decision §61: Telegram, WhatsApp… conversations as Hermes keeps them, read-only.
+
+  app.get('/channel-conversations', async (request) => {
+    const scope = await scopeOf(request);
+    const query = parse(
+      z.object({
+        profiles: z.enum(['all']).optional(),
+        channel: z
+          .string()
+          .regex(/^[a-z][a-z0-9_]{0,31}$/)
+          .optional(),
+      }),
+      request.query,
+      'query',
+    );
+    // "All" is `auth`'s rule (ADR 0016), as for `/sessions`; the header is checked first.
+    const scopes =
+      query.profiles === 'all' && deps.scopes.enterable
+        ? (await deps.scopes.enterable(request)).map((entry) => ({
+            workspace: entry.workspaceId,
+            profile: entry.profile,
+          }))
+        : [{ workspace: scope.workspace, profile: scope.profile }];
+    return deps.channels(request).list(scopes, query.channel);
+  });
+
+  app.get('/channel-conversations/:conversation_id/messages', async (request) => {
+    const scope = await scopeOf(request);
+    const id = (request.params as { conversation_id?: unknown }).conversation_id;
+    return deps
+      .channels(request)
+      .messages(
+        { workspace: scope.workspace, profile: scope.profile },
+        typeof id === 'string' ? id : '',
+      );
+  });
+
+  // "Continue in Core Hub" (§62): read the conversation as above, then make the chat.
+  app.post('/channel-conversations/:conversation_id/continue', async (request, reply) => {
+    const scope = await scopeOf(request);
+    const body = parse(channelContinue, request.body);
+    const id = (request.params as { conversation_id?: unknown }).conversation_id;
+    const read = await deps
+      .channels(request)
+      .messages(
+        { workspace: scope.workspace, profile: scope.profile },
+        typeof id === 'string' ? id : '',
+      );
+    const answer = await deps.service(request).continueChannel(scope, read, body);
+    reply.code(201);
+    return answer;
+  });
+}
+
+/** `inline` or `attachment`, with the name in both forms (RFC 6266 / RFC 5987). */
+function contentDisposition(download: boolean, name: string): string {
+  const ascii = name.replace(/[^\x20-\x7e]/g, '_').replace(/["\\]/g, '_');
+  return `${download ? 'attachment' : 'inline'}; filename="${ascii}"; filename*=UTF-8''${encodeURIComponent(name)}`;
 }

@@ -40,6 +40,7 @@ import {
 import { IconAgents, IconArrowEnd } from '../ui/icons.js';
 import { agentSections, configurable } from './sections.js';
 import { useJobs } from './useJobs.js';
+import { versionNotes } from './versionNotes.js';
 
 /** A capability's label, falling back to the raw name the catalog declared. */
 function capabilityLabel(t: Translator, capability: string): string {
@@ -257,11 +258,7 @@ function AgentCard({ agent, jobs }: { agent: Agent; jobs: Record<string, Job> })
             <span className="ch-btn-label">{t('agents.settings')}</span>
           </Link>
         )}
-        {agent.install.update_available && (
-          <Badge tone="info">
-            {t('agents.update_available', { version: agent.install.latest_version ?? '' })}
-          </Badge>
-        )}
+        <VersionBadges agent={agent} />
       </CardFooter>
       {menu.length > 0 && (
         <>
@@ -292,5 +289,33 @@ function AgentCard({ agent, jobs }: { agent: Agent; jobs: Record<string, Job> })
         </>
       )}
     </Card>
+  );
+}
+
+/**
+ * "Update available" on the card, and whether that update — or what is installed now — is
+ * past the version Core Hub was tested with (`versionNotes`).
+ */
+function VersionBadges({ agent }: { agent: Agent }) {
+  const { t } = useI18n();
+  const notes = versionNotes(agent.install);
+  return (
+    <>
+      {notes.update && (
+        <Badge tone="info" testId="agent-update-available">
+          {t(
+            notes.updateUntested ? 'agents.update_available_untested' : 'agents.update_available',
+            {
+              version: notes.update,
+            },
+          )}
+        </Badge>
+      )}
+      {notes.newerThanTested && (
+        <Badge tone="warning" testId="agent-newer-than-tested">
+          {t('agents.newer_than_tested')}
+        </Badge>
+      )}
+    </>
   );
 }

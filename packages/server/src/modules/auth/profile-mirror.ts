@@ -33,6 +33,24 @@ export interface ProfileMirror {
    * id. Throws `ProfileMirrorError` with the runtime's words when it refuses.
    */
   setDisplayName(name: string, displayName: string): Promise<void>;
+  /**
+   * The profile's automatic context compression as the runtime will use it (decision §57),
+   * or `null` when the runtime has no such profile. Throws `ProfileMirrorError` when its
+   * configuration cannot be read.
+   */
+  readCompression?(name: string): RuntimeCompression | null;
+  /** Writes it where the runtime reads it. Throws `ProfileMirrorError` when it cannot. */
+  writeCompression?(name: string, settings: RuntimeCompression): void;
+}
+
+/** `ProfileSettings.compression` in the runtime's terms (Hermes's `compression.*` keys). */
+export interface RuntimeCompression {
+  enabled: boolean;
+  threshold: number;
+  targetRatio: number;
+  protectFirst: number;
+  protectLast: number;
+  contextLength: number | null;
 }
 
 export class ProfileMirrorError extends Error {}

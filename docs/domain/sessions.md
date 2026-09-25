@@ -47,13 +47,28 @@ the only place that converts:
 | preview | text(300)? | first 300 chars of the newest message |
 | pinned | bool | |
 | parent_session_id | ulid? | set by `sessions.fork`; no FK, the parent may be purged |
-| category_id | ulid? | `session_categories` is a later phase; the column exists because the contract does |
+| category_id | ulid? → session_category | the category it is filed under (contract decision §60); no FK — deleting a category clears it on every session and announces each |
 | notify | bool | push a notice when a run here finishes |
 | metadata | json<SessionMetadata> | skills picked, non-private adapter data |
 | archived_at | ms? | |
 
 Indexes: (workspace, archived_at, last_message_at) for the list;
 (workspace, agent_id); (origin_kind, origin_id).
+
+## session_category (scoped)
+
+A folder of the profile's chats list (contract decision §60): the profile's, shared by
+everyone who may enter it, like its sessions. Whether a group is collapsed is the viewer's
+and never stored here.
+
+| column | type | meaning |
+|---|---|---|
+| name | text(60) | as typed, trimmed |
+| name_key | text(60) | `name` trimmed and lower-cased; unique per workspace |
+| color | text(7)? | `#rrggbb`, or null |
+| position | int | display order within the workspace, always `0…n-1` |
+
+Indexes: unique (workspace, name_key); (workspace, position). At most 100 per workspace.
 
 ## message (scoped)
 
@@ -97,9 +112,32 @@ One streamed agent turn. Lifecycle in `README.md` §run.
 | interrupt_requested_at | ms? | user pressed stop; adapter acknowledges later |
 | cancel_reason | text(200)? | |
 | error_code, error_message | | `{ error, code }` for clients |
+| timing | json? | the model's turns as the hub saw them (contract decision §43) |
+| changes | json? | what the run changed in its working folder, summed: source (`git`/`snapshot`), complete, files, additions, deletions, truncated, recorded at (contract decision §49); `null` when nothing was recorded |
 
 Indexes: (session_id, created_at); (workspace, status) for "what is running";
 (origin_kind, origin_id).
+
+## run_file_change (scoped)
+
+One file a run changed, written when the run ends with the diff it recorded then
+(contract decision §49): the answer stays what that run did, whatever the file became.
+At most 200 per run, the first by path.
+
+| column | type | meaning |
+|---|---|---|
+| run_id | ulid → run (FK, cascade) | |
+| seq | int | order inside the run (by path); unique per run |
+| path | text | relative to the working folder; where a deleted file was |
+| old_path | text? | where a renamed file was |
+| change | enum(added, modified, deleted, renamed) | |
+| additions, deletions | int? | `null` when the hub could not count (binary, no copy of before) |
+| binary | bool | |
+| diff_state | enum(available, binary, too_large, unavailable) | |
+| diff | text? | the unified diff's hunks, at most 256 KB, 2 MB a run |
+| diff_truncated | bool | cut at a line to stay under the cap |
+
+Indexes: unique (run_id, seq).
 
 ## tool_call (scoped)
 
@@ -178,3 +216,11 @@ row keeps the same ids in `attachment_ids`.
   to resume through the adapter.
 - Raw tool input containing secrets: redacted before insert; the redaction
   policy is the adapter's.
+
+## Channel conversations (not stored here)
+
+Conversations on Telegram, WhatsApp and the other messaging channels are Hermes's: its gateway
+receives them and its own session store keeps them. This module stores nothing of them; it reads
+them on demand through Hermes's internal server (`channel-conversations.ts`, contract decision
+§61) and keeps the last read in memory per Hermes profile, until that profile's `state.db`
+changes. They are `ChannelConversation` / `ChannelMessage` on the wire, never `session` rows.

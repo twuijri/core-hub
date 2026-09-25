@@ -33,7 +33,10 @@ import {
 } from '../auth/index.js';
 import {
   SchedulesService,
+  definitionOf,
+  problemsOf,
   validateDefinition,
+  warningIssuesOf,
   warningsFor,
   type ScheduleRow,
   type Scope,
@@ -41,9 +44,18 @@ import {
 } from './service.js';
 import type { WorkflowDefinition } from './schema.js';
 import { HermesCron, refusedByHermesCron, type HermesCronPort } from './hermes-cron.js';
-import { WorkflowEngine, stepOf, type RunScope, type WorkflowPorts } from './workflow-engine.js';
+import {
+  WorkflowEngine,
+  costOf,
+  stepOf,
+  stoppedByOf,
+  type RunScope,
+  type WorkflowPorts,
+} from './workflow-engine.js';
+import { NO_LIMITS, runLimits } from './limits.js';
 import { ScheduleRuns, type ScheduleRunPorts } from './schedule-runs.js';
 import { HubScheduler } from './scheduler.js';
+import type { BackgroundItem, BackgroundSource, BackgroundStatus } from '../audit/index.js';
 
 export { SchedulesService, validateDefinition, warningsFor } from './service.js';
 export type { Scope } from './service.js';
@@ -286,6 +298,78 @@ function realtimeOf(app: FastifyInstance): Realtime {
   return created;
 }
 
+const LIVE_WORKFLOW_RUN: ReadonlySet<string> = new Set([
+  'queued',
+  'running',
+  'waiting_approval',
+  'paused',
+]);
+
+/** A workflow run as a Background item (§56). */
+function workflowRunItem(row: WorkflowRunRow, name: string, profile: string): BackgroundItem {
+  const status: BackgroundStatus =
+    row.status === 'queued'
+      ? 'queued'
+      : LIVE_WORKFLOW_RUN.has(row.status)
+        ? 'running'
+        : row.status === 'succeeded'
+          ? 'succeeded'
+          : row.status === 'cancelled'
+            ? 'cancelled'
+            : 'failed';
+  return {
+    id: `workflow_run:${row.id}`,
+    kind: 'workflow_run',
+    job_kind: null,
+    title: name,
+    profile,
+    status,
+    started_at: row.startedAt ? row.startedAt.toISOString() : null,
+    finished_at: row.finishedAt ? row.finishedAt.toISOString() : null,
+    stoppable: LIVE_WORKFLOW_RUN.has(row.status),
+    session_id: null,
+    resource: { kind: 'workflow_run', id: row.id },
+  };
+}
+
+/**
+ * This module's share of the Background panel (§56): a person's workflow runs, stopped as their
+ * Cancel does. Registered with `audit` by the composition root.
+ */
+export function workflowBackgroundFor(app: FastifyInstance): BackgroundSource {
+  const service = () => new SchedulesService(requireSqlite(app.hub.database));
+  return {
+    prefixes: ['workflow_run'],
+    list(caller, since) {
+      const slugOf = new Map(caller.workspaces.map((w) => [w.id, w.slug]));
+      return service()
+        .backgroundWorkflowRuns(caller.userId, [...slugOf.keys()], since)
+        .map(({ run, name }) => workflowRunItem(run, name, slugOf.get(run.workspace) ?? ''));
+    },
+    async stop(caller, id) {
+      const svc = service();
+      const runId = id.slice('workflow_run:'.length);
+      const run = svc.workflowRunById(runId);
+      if (!run || run.workspace !== caller.workspace.id || run.ownerId !== caller.userId) {
+        return null;
+      }
+      const name = svc
+        .backgroundWorkflowRuns(caller.userId, [run.workspace], 0)
+        .find((row) => row.run.id === run.id)?.name;
+      if (!LIVE_WORKFLOW_RUN.has(run.status)) {
+        throw new HubError('state_invalid', { details: { reason: 'finished' } });
+      }
+      const scope = {
+        workspace: caller.workspace.id,
+        profile: caller.workspace.slug,
+        userId: caller.userId,
+      };
+      const row = cancelWorkflowRunNow(app, svc, scope, run.id);
+      return workflowRunItem(row, name ?? '', caller.workspace.slug);
+    },
+  };
+}
+
 /**
  * Cancel a workflow run as its Cancel does: the row, the live walk, a gate it waits at, the
  * ending (which settles a schedule's line) and the event. The row as cancelled.
@@ -441,6 +525,7 @@ function toWorkflow(
     active_run_id: counts.activeRunId,
     run_count: counts.runs,
     schedule_count: counts.schedules,
+    limits: definition.limits ?? { ...NO_LIMITS },
   };
 }
 
@@ -476,6 +561,10 @@ function toWorkflowRun(
     error: row.error,
     started_at: row.startedAt?.toISOString() ?? null,
     finished_at: row.finishedAt?.toISOString() ?? null,
+    // The limits it ran under, what it cost so far, and which limit ended it (§53).
+    limits: (row.definitionSnapshot as WorkflowDefinition).limits ?? { ...NO_LIMITS },
+    cost: costOf(row.output),
+    stopped_by: stoppedByOf(row.output),
   };
 }
 
@@ -711,6 +800,18 @@ export const schedulesModule = defineModule({
     });
 
     defineRoute(app, deps, {
+      operationId: 'schedules.previewTrigger',
+      handler: (request, { body }) => {
+        const ask = body as { trigger: Record<string, unknown>; count?: number };
+        const preview = serviceOf(request).previewTrigger(ask.trigger, ask.count ?? 3);
+        return {
+          timezone: preview.timezone,
+          next_runs: preview.nextRuns.map((at) => at.toISOString()),
+        };
+      },
+    });
+
+    defineRoute(app, deps, {
       operationId: 'schedules.get',
       handler: (request, { params }) => {
         const scope = scopeOf(request);
@@ -874,19 +975,47 @@ export const schedulesModule = defineModule({
 
     defineRoute(app, deps, {
       operationId: 'schedules.listWorkflows',
-      handler: (request) => {
+      handler: (request, { query }) => {
         const scope = scopeOf(request);
         const service = serviceOf(request);
+        // `profiles=all`: every profile this person may enter, as the Schedules page shows
+        // them (ADR 0016, DECISIONS §52); otherwise the header's profile, as before.
+        let scopes: Scope[] = [scope];
+        if (query.profiles === 'all') {
+          const principal = request.principal;
+          if (!principal) throw new HubError('internal', { message: 'route has no principal' });
+          const db = requireSqlite(request.server.hub.database);
+          scopes = listWorkspacesFor(db, principal.user).map((row) => ({
+            workspace: row.id,
+            profile: row.slug,
+            userId: scope.userId,
+          }));
+        }
+        const rows = scopes
+          .flatMap((each) => service.listWorkflows(each).map((row) => ({ row, each })))
+          // Newest first across profiles, as within one.
+          .sort((a, b) => (a.row.id < b.row.id ? 1 : a.row.id > b.row.id ? -1 : 0));
         return {
-          items: service.listWorkflows(scope).map((row) =>
-            toWorkflow(row, scope.profile, {
-              runs: service.workflowRunsOf(scope, row.id, 1000).length,
-              schedules: service.scheduleCount(scope, row.id),
+          items: rows.map(({ row, each }) =>
+            toWorkflow(row, each.profile, {
+              runs: service.workflowRunsOf(each, row.id, 1000).length,
+              schedules: service.scheduleCount(each, row.id),
               activeRunId: service.activeRunOf(row.id),
             }),
           ),
           next_cursor: null,
         };
+      },
+    });
+
+    defineRoute(app, deps, {
+      operationId: 'schedules.validateWorkflow',
+      handler: (request, { body }) => {
+        // The editor's live check: the rule saving applies, on a drawing nobody saved.
+        scopeOf(request);
+        const definition = definitionOf((body ?? {}) as Record<string, unknown>);
+        const problems = problemsOf(definition);
+        return { valid: problems.length === 0, problems, warnings: warningIssuesOf(definition) };
       },
     });
 
@@ -969,8 +1098,15 @@ export const schedulesModule = defineModule({
         const scope = runScopeOf(request);
         const service = serviceOf(request);
         const workflow = service.workflow(scope, params.workflow_id as string);
-        const ask = (body ?? {}) as { input?: string | null; start_node_ids?: string[] | null };
+        const ask = (body ?? {}) as {
+          input?: string | null;
+          start_node_ids?: string[] | null;
+          limits?: Record<string, unknown> | null;
+          timeout_ms?: number | null;
+        };
         const definition = workflow.definition as WorkflowDefinition;
+        // This run's own limits over the workflow's (§53); refused before anything starts.
+        const limits = runLimits(definition.limits, ask.limits, ask.timeout_ms);
         if (definition.nodes.length === 0) {
           throw new HubError('conflict', { details: { reason: 'workflow_empty' } });
         }
@@ -986,6 +1122,7 @@ export const schedulesModule = defineModule({
           input: ask.input ?? null,
           triggerKind: 'manual',
           startNodeIds: ask.start_node_ids ?? null,
+          limits,
         });
         return { job_id: run.id, workflow_run_id: run.id };
       },

@@ -30,8 +30,13 @@ export type WorkspaceStatsProvider = (workspaceId: string) => Partial<ProfileSta
  */
 const statsProviders: WorkspaceStatsProvider[] = [];
 
-export function registerWorkspaceStatsProvider(provider: WorkspaceStatsProvider): void {
+/** Returns the way to take it back: an app that closes must not stay reachable from here. */
+export function registerWorkspaceStatsProvider(provider: WorkspaceStatsProvider): () => void {
   statsProviders.push(provider);
+  return () => {
+    const at = statsProviders.indexOf(provider);
+    if (at >= 0) statsProviders.splice(at, 1);
+  };
 }
 
 /**

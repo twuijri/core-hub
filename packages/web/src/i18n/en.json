@@ -24,6 +24,7 @@
     "about": "About",
     "logs": "Logs",
     "usage": "Usage",
+    "skills_usage": "Skills usage",
     "performance": "Performance",
     "theme": "Theme",
     "workspaces": "Profiles",
@@ -45,7 +46,9 @@
     "agent_mcp": "MCP",
     "agent_memory": "Memory",
     "agent_channels": "Channels",
-    "back_to_agents": "Back to agents"
+    "back_to_agents": "Back to agents",
+    "terminal": "Terminal",
+    "files": "Files"
   },
   "common": {
     "loading": "Loading…",
@@ -181,7 +184,46 @@
     "select_none": "Clear selection",
     "select_one": "Select {title}",
     "selected_count": "{count} selected",
-    "confirm_delete_many": "Delete {count} conversations?"
+    "confirm_delete_many": "Delete {count} conversations?",
+    "categories": {
+      "new": "New category",
+      "new_label": "Category name",
+      "new_in_profile": "It is made in the profile {profile}, and everyone who can enter that profile sees it.",
+      "create": "Create",
+      "rename": "Rename category",
+      "move_up": "Move up",
+      "move_down": "Move down",
+      "delete": "Delete category",
+      "confirm_delete": "Delete the category \"{name}\"?",
+      "confirm_delete_body": "Its chats stay: they go back to the list without a category.",
+      "more": "More for {name}",
+      "count": "{count} chats",
+      "move_to": "Move to category",
+      "move_title": "Move \"{title}\" to a category",
+      "move_hint": "Categories of the profile {profile}.",
+      "none": "No category",
+      "current": "Current",
+      "new_and_move": "New category…",
+      "empty_group": "Drag a chat here, or use its menu."
+    },
+    "channels": {
+      "telegram": "Telegram",
+      "whatsapp": "WhatsApp",
+      "other": "Channels: {name}",
+      "readonly_banner": "A conversation from {channel} — read-only; replies are made in {channel}",
+      "unreachable": "Couldn't read the channel conversations from Hermes just now; showing what was last read.",
+      "untitled": "A {channel} conversation",
+      "has_more": "Only the latest 500 messages of this conversation are shown.",
+      "no_messages": "No text messages in this conversation yet.",
+      "continue": {
+        "button": "Continue in Core Hub",
+        "title": "Continue this conversation in Core Hub",
+        "hint": "A new chat in this profile starts with this conversation attached for the agent to read. The conversation on {channel} stays as it is.",
+        "note": "What should the agent do with it? (optional)",
+        "go": "Continue",
+        "no_agent": "No agent in this profile can take it. Install one from Agents first."
+      }
+    }
   },
   "search": {
     "placeholder": "Search titles and messages…",
@@ -231,14 +273,15 @@
     "copy": "Copy",
     "reply": "Reply to this",
     "fork_here": "Fork from here",
-    "speak": "Listen",
-    "speak_later": "Speech arrives in a later phase.",
     "replying_to": "Replying to: {text}",
     "estimated": "≈ {amount}",
     "anchor_missing": "The message this search pointed to is no longer in this conversation.",
     "older_loading": "Loading older messages…",
     "older_start": "Beginning of the conversation",
-    "older_failed": "Couldn’t load older messages."
+    "older_failed": "Couldn’t load older messages.",
+    "answered_by": "Answered by {model}",
+    "fallback_note": "{failed} failed, so {model} answered",
+    "fallback_reason": "Why: {reason}"
   },
   "composer": {
     "label": "Message composer",
@@ -268,17 +311,19 @@
       "auto_safe": "Auto-edit",
       "auto_all": "No ask",
       "off": "No approvals",
-      "always": "Always ask"
+      "always": "Always ask",
+      "manual": "Manual: asks about every dangerous command",
+      "smart": "Smart"
     },
-    "dictate": "Dictate",
-    "dictate_unavailable": "Dictation arrives with a speech provider (models.transcribe is still 501).",
     "add_agent": "Add an agent",
     "approval_hint": {
       "ask": "Asks before a command or a write outside the working folder.",
       "always": "Asks before everything, reads included — slowest, safest.",
       "auto_safe": "Runs what it judges safe, asks about the rest.",
       "auto_all": "Runs everything without asking; nothing to object to.",
-      "off": "No gate at all: commands, files and network without permission."
+      "off": "No gate at all: commands, files and network without permission.",
+      "manual": "Asks before every dangerous command.",
+      "smart": "A helper model lets the safe ones through and asks about the rest."
     },
     "effort": {
       "label": "Thinking effort",
@@ -291,6 +336,63 @@
       "max": "Max"
     },
     "context_ring": "Context: {percent}% — {used} of {window} tokens"
+  },
+  "slash": {
+    "title": "Commands",
+    "skills_title": "Skills — pick one to use in this message",
+    "no_match": "No command matches. Press Enter to send it as a message.",
+    "needs_argument": "{command} needs words after it.",
+    "model_unknown": "No model called “{model}” in this profile.",
+    "cleared": "The screen was cleared; the messages are still in the conversation.",
+    "show_cleared": "Show them",
+    "describe": {
+      "compress": "Compress this conversation’s context now (add words to say what to keep)",
+      "steer": "Guide the running turn without stopping it",
+      "skill": "Use one of the agent’s skills in this message",
+      "plan": "Have the agent write a plan without doing the work",
+      "goal": "Set a standing goal the agent works on across turns, or show it",
+      "learn": "Turn the recent work, or what you describe, into a skill",
+      "new": "Start a new chat with this agent",
+      "fork": "Fork this conversation into a new one",
+      "archive": "Archive this conversation",
+      "model": "Change the model (add a name, or pick from the list)",
+      "clear-screen": "Clear the screen; nothing is deleted"
+    }
+  },
+  "context_meter": {
+    "title": "Context window",
+    "percent": "{percent}% full",
+    "used": "{used} of {window} tokens",
+    "ring_estimate": "Context (estimate): {percent}% — about {used} of {window} tokens",
+    "source": {
+      "reported": "As the agent reported it after the last turn.",
+      "agent_estimate": "The agent’s own rough count after the last turn.",
+      "estimate": "Estimate: the last turn’s tokens against the model’s window in the catalogue."
+    },
+    "compress": "Compress now",
+    "compressing": "Compressing…",
+    "compressing_manual": "Compressing the conversation’s context…",
+    "compressing_auto": "The agent is compressing the context to make room…",
+    "last_compressed": "Last compression: about {before} → {after} tokens.",
+    "last_done": "Last compression finished.",
+    "last_failed": "The last compression failed.",
+    "wait_for_run": "Wait for the running turn to finish, then compress."
+  },
+  "compression_settings": {
+    "title": "Context compression",
+    "subtitle": "How Hermes shortens long conversations in this profile. Applied from the next message.",
+    "enabled": "Compress automatically",
+    "enabled_hint": "When a conversation fills the window up to the threshold, Hermes summarises its older part.",
+    "threshold": "Threshold (% of the window)",
+    "threshold_hint": "Hermes raises anything under 75% to 75% for models whose window is under 512K tokens.",
+    "target": "Kept word for word (% of the threshold)",
+    "target_hint": "The recent part left as it is. Hermes keeps it between 10% and 80%.",
+    "protect_first": "First messages always kept",
+    "protect_last": "Recent messages always kept",
+    "context_length": "Context window override (tokens)",
+    "context_length_hint": "Only when the model’s own window is reported wrong. Empty = the model’s own.",
+    "saved": "Saved. Hermes applies it from the next message.",
+    "invalid": "Enter a whole number in range (at least 1024 for the window)."
   },
   "approval": {
     "from": "{agent} is waiting for your decision",
@@ -343,6 +445,9 @@
     "install": "Install",
     "remove": "Remove",
     "restart": "Restart",
+    "restart_named": "Restart {name}",
+    "restart_done": "Restarted",
+    "restart_failed": "The restart failed",
     "limited": "This agent runs through the process harness and is limited.",
     "update_available": "Update available: {version}",
     "under_agent": "Under the agent",
@@ -384,7 +489,11 @@
     "check_update": "Check for updates",
     "update_now": "Update now",
     "auto_update": "Update automatically",
-    "auto_update_hint": "Takes a new version as soon as it ships, without asking.",
+    "auto_update_hint": "The hub looks for a newer version every six hours and installs it only while the agent is idle; a run started during the update waits for it. Off by default.",
+    "version_tested": "Tested version: {version}",
+    "newer_than_tested": "Newer than the tested version",
+    "newer_than_tested_hint": "This version is past the one Core Hub was tested with ({version}). It should work; if something breaks, say so.",
+    "update_available_untested": "Update available: {version} — newer than the tested version",
     "tools": {
       "not_supervised": "This hub does not run Hermes itself, so it cannot ask Hermes to do this.",
       "refused": "Hermes refused: {message}",
@@ -406,6 +515,28 @@
         "error": "failing"
       },
       "jobs_n": "{count} scheduled jobs"
+    },
+    "applies_next_message": "Applies from the next message.",
+    "saved": "Saved.",
+    "saved_next_message": "Saved in Hermes's settings; applies from the next message.",
+    "saved_restart_needed": "Saved in Hermes's settings; applies once Hermes restarts.",
+    "saved_restarting": "Saved; Hermes is restarting now so it applies.",
+    "default_is": "Hermes's default: {value}",
+    "default_none": "none",
+    "default_on": "on",
+    "default_off": "off",
+    "use_default": "Hermes's default ({value})",
+    "pending": {
+      "title": "Waiting for review",
+      "subtitle": "What the agent wrote to its memory or its skills, not saved yet",
+      "empty": "Nothing is waiting for review.",
+      "kind_memory": "Agent's memory",
+      "kind_user": "What it knows about you",
+      "kind_skill": "Skill",
+      "origin_review": "Hermes's own review",
+      "origin_chat": "During a conversation",
+      "approve": "Approve",
+      "reject": "Reject"
     }
   },
   "jobs": {
@@ -489,7 +620,78 @@
     "expires_in": "Expires in {seconds} s",
     "claimed": "Paired: {name}",
     "pairing_expired": "The pairing expired. Start a new one.",
-    "pairing_cancelled": "The pairing was cancelled."
+    "pairing_cancelled": "The pairing was cancelled.",
+    "pair_link": "On a computer with the Core Hub app, open this link there, or paste it into the app:",
+    "copy_link": "Copy link",
+    "copied": "Copied",
+    "list_empty_title": "No devices yet",
+    "list_empty_body": "Pair a phone from the App tab, or enable browser notifications under Settings → Notifications.",
+    "last_seen": "Last seen {time}",
+    "never_seen": "Not seen yet",
+    "online": "Online",
+    "this_browser": "This browser",
+    "this_device": "This device",
+    "owner_other": "Another person's",
+    "push_on": "Push: {provider}",
+    "push_off": "No push",
+    "rename": "Rename",
+    "rename_title": "Rename the device",
+    "name_label": "Name",
+    "revoke": "Revoke",
+    "revoke_title": "Revoke {name}?",
+    "revoke_body": "It stops receiving notifications. A paired app is signed out and has to be paired again.",
+    "test_push": "Send a test",
+    "test_sent": "Sent. It should appear on the device in a moment.",
+    "test_failed": "Not delivered: {error}",
+    "kind": {
+      "phone": "Phone",
+      "tablet": "Tablet",
+      "computer": "Computer",
+      "browser": "Browser"
+    },
+    "push": {
+      "title": "Push senders",
+      "intro": "Web Push (browsers and the desktop app) works with nothing to set up. Android (FCM) and iPhone (APNs) need the owner's credentials.",
+      "provider": {
+        "webpush": "Web Push",
+        "fcm": "FCM (Android)",
+        "apns": "APNs (iPhone)"
+      },
+      "state": {
+        "ready": "Ready",
+        "disabled": "Switched off",
+        "not_configured": "Not configured",
+        "error": "Error"
+      },
+      "source": {
+        "generated": "Keys made by the hub",
+        "environment": "From the environment",
+        "settings": "From Settings",
+        "none": "None"
+      },
+      "devices": "Devices: {count}",
+      "missing": "Missing:",
+      "how": "FCM and APNs are set by these environment variables (docs/DEPLOY.md):",
+      "set_up": "Set up",
+      "change": "Change",
+      "form": {
+        "fcm_intro": "Firebase Console → Project settings → Service accounts → Generate new private key. Paste the whole JSON file.",
+        "apns_intro": "Apple Developer → Certificates, IDs & Profiles → Keys: a key with Apple Push Notifications service (APNs).",
+        "enabled": "Send through this service",
+        "service_account": "Service account JSON",
+        "service_account_hint": "Stored encrypted and never shown again.",
+        "secret_kept": "Leave empty to keep the stored one.",
+        "key_id": "Key ID",
+        "team_id": "Team ID",
+        "bundle_id": "App bundle ID",
+        "environment": "Environment",
+        "production": "Production",
+        "sandbox": "Sandbox (development builds)",
+        "private_key": ".p8 key",
+        "private_key_hint": "The contents of AuthKey_….p8. Stored encrypted and never shown again.",
+        "forget": "Forget"
+      }
+    }
   },
   "placeholder": {
     "later": "{name} arrives with its module in phase {phase}. Nothing is hidden here.",
@@ -539,7 +741,15 @@
       "inherited": "From the default profile",
       "no_models": "No models yet. Add a provider key and the hub fetches its model list.",
       "inheriting": "Agents inheriting these",
-      "inheriting_hint": "What each agent will use when a chat does not name a model."
+      "inheriting_hint": "What each agent will use when a chat does not name a model.",
+      "fallbacks": "Fallback models",
+      "fallbacks_hint": "Tried in order when the chat model fails because its provider is down, rate limited or not answering — never after a request the provider refused as invalid. Every agent of this profile uses them.",
+      "fallbacks_empty": "No fallback models: if the chat model's provider fails, the turn fails.",
+      "fallbacks_need_default": "Choose a chat model first; the fallbacks are tried after it.",
+      "fallback_add": "Add a fallback model",
+      "fallback_up": "Move {model} up",
+      "fallback_down": "Move {model} down",
+      "fallback_remove": "Remove {model}"
     },
     "ensembles": {
       "hint": "Ensembles are created over the API for now; this tab lands with the rooms screens."
@@ -608,7 +818,12 @@
       "scope_all": "All profiles",
       "scope_profile": "This profile only",
       "scope_all_hint": "Shared: every profile uses it, including profiles made later.",
-      "scope_profile_hint": "Only {profile} uses it, and its key wins there over a shared provider of the same kind. Other profiles never see it."
+      "scope_profile_hint": "Only {profile} uses it, and its key wins there over a shared provider of the same kind. Other profiles never see it.",
+      "kind": "What it does",
+      "kind_llm": "Chat",
+      "kind_stt": "Speech to text",
+      "kind_tts": "Text to speech",
+      "sign_in_hint": "This provider is used by signing in to your account, not with a key. Add it, then sign in from its card."
     },
     "runtime": {
       "title": "Runtime",
@@ -631,11 +846,50 @@
       },
       "gateway_reloaded": {
         "ok": "The runtime restarted after the last change.",
-        "missing": "The runtime has not restarted since the last change."
+        "missing": "Settings changed after Hermes last started — restart it to apply them."
       },
       "all_ok": "Everything works",
+      "restart_now": "Restart now",
       "show": "Show checks",
       "hide": "Hide checks"
+    },
+    "speech": {
+      "active_stt": "Speech to text for this profile",
+      "active_tts": "Text to speech for this profile",
+      "hint_stt": "The composer’s microphone and voice mode send what you say to this provider.",
+      "hint_tts": "The speaker under each reply, reading replies aloud and voice mode speak through this provider.",
+      "provider": "Provider",
+      "none": "None",
+      "model": "Model",
+      "voice": "Voice",
+      "voice_hint": "The provider’s voice id, e.g. alloy",
+      "language": "Language (optional)",
+      "save": "Save",
+      "saved": "Saved.",
+      "ready": "Ready",
+      "not_ready": "Not ready",
+      "try": "Try the voice",
+      "try_text": "Hello. This is how replies will sound.",
+      "try_failed": "The voice could not be played: {detail}",
+      "add_hint": "Add OpenAI (it brings its speech rows with the same key), ElevenLabs, or your own OpenAI-compatible speech server with Add provider → Custom."
+    },
+    "signin": {
+      "signed_in": "Signed in",
+      "signed_out": "Not signed in",
+      "action": "Sign in",
+      "again": "Sign in again",
+      "title": "Sign in to {provider}",
+      "steps": "Open the sign-in page, sign in to your account there, and enter this code:",
+      "open": "Open the sign-in page",
+      "code": "Code",
+      "copy": "Copy the code",
+      "waiting": "Waiting for you to approve it on the provider’s page…",
+      "approved": "Signed in. Its models are being fetched.",
+      "denied": "The sign-in was declined.",
+      "expired": "The code ran out before it was used.",
+      "failed": "The sign-in did not finish.",
+      "retry": "Start again",
+      "close": "Close"
     }
   },
   "working_dir": {
@@ -939,6 +1193,217 @@
         "cancelled": "Cancelled",
         "rejected": "Rejected"
       }
+    },
+    "templates": {
+      "label": "Common schedules",
+      "every_hour": "Every hour",
+      "daily_8": "Every day at 8:00",
+      "weekdays_9": "Weekdays at 9:00",
+      "monday_9": "Every Monday at 9:00",
+      "monthly_1": "First of the month at 9:00",
+      "every_15": "Every 15 minutes"
+    },
+    "preview": {
+      "title": "Next runs ({zone})",
+      "incomplete": "Fill in the time to see when it runs.",
+      "none": "It would not run again.",
+      "cron_invalid": "The hub cannot read this: {message}",
+      "timezone_unknown": "The hub does not know the timezone “{zone}”."
+    },
+    "limits": {
+      "title": "Limits",
+      "edit": "Change this workflow’s limits",
+      "hide": "Hide the limits form",
+      "time": "Time limit",
+      "cost": "Cost limit",
+      "step": "Step timeout",
+      "spent": "Cost so far",
+      "none": "No limit",
+      "not_priced": "No priced turn yet",
+      "form_hint": "For the next runs of this workflow. Leave a field empty for no limit. Time waiting for someone’s approval does not count.",
+      "time_minutes": "Time limit for a run (minutes)",
+      "cost_usd": "Cost limit for a run (US dollars, the hub’s estimate)",
+      "step_minutes": "Timeout for each step (minutes)",
+      "invalid_time": "A number of minutes above zero, at most a week.",
+      "invalid_cost": "An amount in US dollars above zero, like 2.50.",
+      "invalid_step": "A number of minutes above zero, at most a day.",
+      "saved": "Limits saved. They apply from the next run.",
+      "units": {
+        "hours": "{n} h",
+        "minutes": "{n} min",
+        "seconds": "{n} s"
+      },
+      "stopped": {
+        "max_duration": "Stopped: the run went over its time limit.",
+        "max_cost": "Stopped: the run went over its cost limit.",
+        "step_timeout": "Stopped: a step went over its timeout and nothing handled it."
+      }
+    }
+  },
+  "workflows": {
+    "section": "Workflows",
+    "schedules_section": "Schedules",
+    "sections_label": "Schedules and workflows",
+    "new": "New workflow",
+    "new_hint": "Draw the steps and connect them. New workflows are made in {name}.",
+    "empty": "No workflows yet",
+    "empty_hint": "Make one, add steps from the palette and connect them.",
+    "untitled": "Untitled workflow",
+    "steps_count": "Steps: {count}",
+    "runs_count": "Runs: {count}",
+    "open": "Edit",
+    "run": "Run",
+    "duplicate": "Duplicate",
+    "copy_name": "{name} (copy)",
+    "confirm_delete": "Delete “{name}”? Its runs and its schedules go with it.",
+    "started": "“{name}” started.",
+    "open_run": "Show the run",
+    "status": {
+      "idle": "Idle",
+      "running": "Running",
+      "waiting": "Waiting",
+      "error": "Error"
+    },
+    "kinds": {
+      "agent": "Agent",
+      "condition": "Condition",
+      "delay": "Delay",
+      "notify": "Notify",
+      "approval": "Approval"
+    },
+    "kind_hints": {
+      "agent": "An agent works on a prompt",
+      "condition": "Goes one way or the other",
+      "delay": "Waits, up to an hour",
+      "notify": "A notice in the inbox",
+      "approval": "Waits for a person"
+    },
+    "routes": {
+      "success": "On success",
+      "failure": "On failure",
+      "always": "Always"
+    },
+    "condition_routes": {
+      "success": "Yes",
+      "failure": "No",
+      "always": "Always"
+    },
+    "states": {
+      "idle": "Not reached yet",
+      "waiting": "Waiting",
+      "running": "Running",
+      "done": "Done",
+      "failed": "Failed",
+      "skipped": "Skipped"
+    },
+    "editor": {
+      "back": "Back to workflows",
+      "name": "Workflow name",
+      "unsaved": "Unsaved changes",
+      "saved": "Saved.",
+      "palette": "Add a step",
+      "canvas_label": "Workflow canvas",
+      "canvas_help": "Drag a step to move it. Drag from a step's green dot (success) or red dot (failure) onto another step to connect them. Keys: Tab moves between steps, arrows move the selected step, Delete removes it, + and − zoom, 0 fits everything.",
+      "zoom_in": "Zoom in",
+      "zoom_out": "Zoom out",
+      "fit": "Fit",
+      "legend": "Green: on success · Red: on failure · Grey: always",
+      "no_selection": "Select a step to edit it, or add one from the palette.",
+      "checking": "Checking…",
+      "valid": "Ready to run",
+      "problems": "Problems: {count}",
+      "warnings": "Warnings: {count}",
+      "save_blocked": "Fix the problems before saving.",
+      "name_required": "Give the workflow a name before saving.",
+      "check_failed": "The drawing could not be checked: {message}",
+      "delete_step": "Delete step",
+      "delete_edge": "Delete connection",
+      "connections": "Connections from this step",
+      "no_connections": "Nothing follows this step yet.",
+      "connect_target": "Next step",
+      "connect_route": "When",
+      "connect_add": "Connect",
+      "edge_title": "Connection",
+      "edge_label": "From “{from}” to “{to}”: {route}",
+      "run_input": "Run input (optional)",
+      "run_input_hint": "Steps read it as {input}.",
+      "run_from_here": "Run from this step",
+      "rerun_from_here": "Run again from this step",
+      "rerun_hint": "A new run starts here, reusing what the earlier steps said in this run.",
+      "save_first": "Saves the workflow, then runs it.",
+      "mode_edit": "Edit",
+      "mode_runs": "Runs",
+      "runs_empty": "It has not run yet. Run it to see each step here.",
+      "run_pick": "Run",
+      "run_status": "Run status",
+      "run_of": "{status} · {at}",
+      "cancel_run": "Stop the run",
+      "step_output": "Output",
+      "step_output_show": "Show the whole output",
+      "step_error": "Error",
+      "step_not_reached": "This run did not reach this step.",
+      "run_readonly": "A run shows the drawing it ran; switch to Edit to change it.",
+      "issue_count": "{count} findings"
+    },
+    "form": {
+      "title": "Title",
+      "id": "Step id",
+      "id_hint": "Later steps read this step's output as {path}.",
+      "agent": "Agent",
+      "agent_none": "Choose an agent",
+      "model": "Model (optional)",
+      "model_default": "The agent's own model",
+      "prompt": "Prompt",
+      "insert": "Insert",
+      "insert_input": "The run's input",
+      "insert_step": "Output of “{name}”",
+      "insert_none": "Connect earlier steps to use their output here.",
+      "attachments_note": "Workflow steps cannot carry attachments yet.",
+      "condition_path": "What to check",
+      "condition_path_hint": "A value the run can read: input, steps.<id>.output or trigger.<field>.",
+      "condition_operator": "Comparison",
+      "condition_value": "Compare with",
+      "condition_text": "Condition",
+      "condition_raw_hint": "The form cannot split this condition into parts; edit it as text.",
+      "condition_routes_hint": "Yes follows the success connections; no follows the failure ones.",
+      "operators": {
+        "eq": "is",
+        "ne": "is not",
+        "gt": "greater than",
+        "gte": "at least",
+        "lt": "less than",
+        "lte": "at most",
+        "contains": "contains",
+        "matches": "matches (regular expression)",
+        "exists": "exists",
+        "empty": "is empty"
+      },
+      "delay_amount": "Wait",
+      "delay_unit": "Unit",
+      "seconds": "Seconds",
+      "minutes": "Minutes",
+      "delay_hint": "Up to an hour. A longer wait belongs in a schedule.",
+      "delay_template": "The wait is read from {value} when the step runs.",
+      "notify_text": "Message",
+      "notify_to": "Goes to the inbox of whoever runs the workflow.",
+      "approval_question": "Question",
+      "approval_who": "Anyone who can answer approvals in this profile approves or denies it — here, in the inbox, or from the pending bar.",
+      "approval_timeout": "It waits until someone answers; there is no time limit.",
+      "approval_required": "Ask for approval before this step runs"
+    },
+    "issues": {
+      "node_id_missing": "A step has no id.",
+      "node_id_duplicate": "Two steps share this id.",
+      "edge_from_unknown": "This connection starts at a step that does not exist.",
+      "edge_to_unknown": "This connection ends at a step that does not exist.",
+      "condition_unreadable": "The condition cannot be read ({detail}).",
+      "delay_out_of_range": "The wait must be 0 to {detail} seconds.",
+      "template_root_unknown": "It reads {detail}, but a step can only read input, trigger or steps.",
+      "template_step_unknown": "It reads {detail}, but there is no such step.",
+      "workflow_empty": "The workflow has no steps yet.",
+      "no_start": "Every step has a step before it, so the workflow has no starting point.",
+      "many_starts": "{detail} steps have nothing before them; they all start together.",
+      "agent_missing": "This step names no agent."
     }
   },
   "audit": {
@@ -962,6 +1427,58 @@
     "no_samples": "No samples stored yet.",
     "samples_n": "{count} samples"
   },
+  "usage": {
+    "profile": "Profile",
+    "all_profiles": "All profiles",
+    "agent": "Agent",
+    "all_agents": "All agents",
+    "removed_agent": "Removed agent",
+    "show_cost": "Show cost",
+    "show_cost_hint": "An estimate from published prices, not an invoice.",
+    "total_tokens": "Total tokens",
+    "input_output": "{input} in · {output} out",
+    "input": "Input",
+    "output": "Output",
+    "cache_read": "Cache read",
+    "cache_write": "Cache write",
+    "cache_hit_rate": "Cache hit rate",
+    "not_reported": "Not reported",
+    "cache_not_reported_hint": "No provider reported its cache in this period.",
+    "cost_estimated": "Estimated cost",
+    "cost_unpriced": "Nothing in this period had a known price.",
+    "conversations": "Conversations",
+    "per_day": "Conversations a day (average)",
+    "daily": "Tokens per day",
+    "day_table": "Day by day",
+    "date": "Day",
+    "only_active_days": "Days without runs are left out.",
+    "by_agent": "By agent",
+    "no_usage_reported": "Reports no usage",
+    "unreported_notice": "{count} runs reported no usage (coding agents never do): they are counted, but have no tokens or cost.",
+    "nothing": "Nothing ran in this period."
+  },
+  "skills_usage": {
+    "counting_since": "Counting started on {date}; skill use before that was never recorded.",
+    "not_counting": "This hub has not started counting skill use.",
+    "not_counted_acp": "Coding agents do not say which skill they load, so they are not counted.",
+    "total_uses": "Total uses",
+    "distinct": "Skills used",
+    "top": "Most used",
+    "never_used": "Never used in this period",
+    "unknown": "Unknown",
+    "unknown_hint": "The hub cannot see this Hermes's installed skills.",
+    "none": "None",
+    "daily": "Top skills per day",
+    "other": "Other",
+    "table": "Top skills",
+    "skill": "Skill",
+    "uses": "Uses",
+    "share": "Share",
+    "last_used": "Last used",
+    "uses_n": "{count} uses",
+    "never_used_list": "Enabled skills no run loaded",
+    "nothing": "No skill was loaded in this period."
+  },
   "notify": {
     "inbox": "Inbox",
     "filter": "Show",
@@ -978,7 +1495,7 @@
     "quiet_hint": "A window in which no notification is pushed to your devices.",
     "quiet_from": "From",
     "quiet_to": "To",
-    "push_note": "Quiet hours are about device notifications, not the inbox — what is written at night is still here in the morning. Device notifications are not built yet.",
+    "push_note": "Quiet hours are about device notifications, not the inbox — what is written at night is still here in the morning.",
     "kind": {
       "run_completed": "An agent finished",
       "approval_requested": "An approval is waiting",
@@ -987,12 +1504,25 @@
       "schedule_failed": "A schedule failed",
       "update_available": "An update is available",
       "system": "System messages"
+    },
+    "push_switch": "Push to devices",
+    "test": "Send a test notification",
+    "test_sent": "Sent. Check this browser and your devices.",
+    "browser": {
+      "title": "Notifications in this browser",
+      "enable": "Enable browser notifications",
+      "disable": "Turn off in this browser",
+      "on": "On: what reaches your inbox also appears on this browser, even when the page is closed.",
+      "off": "Off: notices appear here only while the page is open.",
+      "denied": "The browser blocks notifications for this site. Allow them in the browser's site settings, then try again.",
+      "unsupported": "This browser cannot receive push notifications.",
+      "no_key": "Web Push is switched off on this hub. An admin can switch it on."
     }
   },
   "webhooks": {
     "intro": "Addresses this hub calls on its own, signed so the receiver can check the sender. Webhooks belong to the profile you are in.",
     "add": "Add webhook",
-    "forwarding_note": "Today the hub sends a webhook only the test delivery from this page. Forwarding the events you choose is not built yet: they are saved and will be used once it is.",
+    "forwarding_note": "The hub sends each event you choose as it happens, signed, from the profiles you choose. A delivery that fails is tried again after 30 s, 1 min, 2 min and so on, then marked as given up; you can send it again from the deliveries.",
     "none": "No webhooks yet",
     "none_body": "Add one to give an outside service an address the hub can call.",
     "facts": "About this webhook",
@@ -1047,14 +1577,31 @@
     "secret_make": "Sign deliveries with a new secret",
     "secret_none": "Do not sign",
     "events": "Events",
-    "events_hint": "Which of the hub's events this webhook is for. Saved now; sent once forwarding exists.",
+    "events_hint": "Which of the hub's events this webhook receives.",
     "events_filter": "Filter events",
     "events_no_match": "No event matches.",
     "secret_title": "Signing secret",
     "secret_once": "Copy it now. The hub keeps it but will never show it again.",
     "secret_done": "I copied it",
     "copy": "Copy",
-    "copied": "Copied"
+    "copied": "Copied",
+    "all_profiles": "All profiles",
+    "profile_count": "Profiles: {count}",
+    "with_content": "Includes message text",
+    "profiles": "Profiles",
+    "profiles_hint": "Events from which profiles this webhook receives. Only profiles you can enter are listed.",
+    "profiles_all": "Every profile I can enter",
+    "profiles_some": "Only these profiles",
+    "profiles_pick_one": "Choose at least one profile.",
+    "include_content": "Include message text",
+    "include_content_hint": "Off: deliveries carry ids, states and times only, not what people and agents wrote.",
+    "max_retries": "Retries after a failure",
+    "max_retries_hint": "From 0 to 10. Each wait is twice the one before, starting at 30 seconds.",
+    "col_attempts": "Attempts",
+    "col_next": "Next try",
+    "col_actions": "Actions",
+    "redeliver": "Redeliver",
+    "redelivered": "Queued again. It is sent in a moment."
   },
   "privacy": {
     "access": "Apps and devices with access",
@@ -1073,7 +1620,9 @@
     "revoke_device_body": "This device loses access at once and is unlinked; pairing it again gives it a new token.",
     "none": "No app or device holds a token",
     "none_body": "Only your own sign-ins can reach your account.",
-    "browsers_note": "Browsers you signed in to are not listed here. Changing your password under Account signs out every browser except this one; it does not revoke the tokens above."
+    "browsers_note": "Browsers you signed in to are not listed here. Changing your password under Account signs out every browser except this one; it does not revoke the tokens above.",
+    "redact_title": "What reaches the model from messaging channels",
+    "redact_admin_only": "An admin changes it."
   },
   "people": {
     "title": "People",
@@ -1281,7 +1830,29 @@
     "builtin": "Built into Hermes",
     "builtin_hint": "One of Hermes's own skills. Hermes keeps it in step with its bundle, so it can be read and pinned here but not edited, switched off or deleted.",
     "bundled_refused": "This is one of Hermes's own skills; it is read-only here.",
-    "close": "Close"
+    "close": "Close",
+    "library": {
+      "title": "Core Hub library",
+      "hint": "One of Core Hub's own skills. Core Hub keeps it up to date while it is as shipped; edit it freely — an edited skill is yours and is never overwritten.",
+      "edited": "Edited",
+      "edited_hint": "You changed this skill, so Core Hub no longer updates it. Restore puts the library's version back.",
+      "edited_count": "{count} edited",
+      "restore": "Restore",
+      "restore_title": "Restore {name}?",
+      "restore_body": "Your changes to this skill are replaced by the version Core Hub ships. A skill you switched off stays off.",
+      "restored": "{name} is back to the library's version.",
+      "summary_on": "{installed} of {available} skills in this profile — images, documents, data, research, translation, slides and schedules. Kept up to date until you edit one.",
+      "summary_none": "Not installed in this profile yet: {available} skills — images, documents, data, research, translation, slides and schedules.",
+      "summary_off": "Off in this profile. Switch it on to install Core Hub's skills again.",
+      "install": "Install",
+      "switch": "Core Hub library in this profile",
+      "off_title": "Switch the Core Hub library off?",
+      "off_body": "Its skills are removed from this profile, except the ones you edited, which stay as your own. Core Hub stops installing and updating them here until you switch it back on.",
+      "off_confirm": "Switch off",
+      "editor_note": "One of Core Hub's own skills. Once you save a change it is yours: Core Hub stops updating it, and Restore brings its version back.",
+      "not_library": "This skill is not one of Core Hub's own.",
+      "off_refused": "The Core Hub library is off in this profile; switch it on first."
+    }
   },
   "mcp": {
     "title_of": "{name} MCP servers",
@@ -1303,6 +1874,47 @@
       "ok": "Hermes connected — {count} tools, {seconds} s.",
       "no_tools": "The server lists no tools.",
       "failed": "Hermes could not connect:"
+    }
+  },
+  "hub_tools": {
+    "title": "{product} tools",
+    "subtitle": "{product} offers itself to this agent as an MCP server, so the agent can work with the board, schedules, conversations and files of this profile.",
+    "enabled": "Offer {product} tools",
+    "acts_as": "Every call acts for the person whose conversation it is, in this profile only, with that person's permissions — never as an admin. Only the hub's own conversations can use them; a message arriving from a channel cannot.",
+    "allow_writes": "Allow changes",
+    "writes_only": "Only changes: nothing here reads.",
+    "recent": "Recent calls",
+    "no_calls": "No calls yet.",
+    "call_ok": "done",
+    "call_failed": "refused",
+    "group": {
+      "tasks": "Tasks",
+      "schedules": "Schedules",
+      "conversations": "Conversations",
+      "notifications": "Notifications",
+      "workflows": "Workflows",
+      "files": "Files"
+    },
+    "group_about": {
+      "tasks": "List the board's tasks; with changes allowed, create, move, assign and comment on them.",
+      "schedules": "List schedules; with changes allowed, create one, pause it or run it now.",
+      "conversations": "List and search this profile's conversations and read a summary of one.",
+      "notifications": "Tell the person something: a notice in their inbox.",
+      "workflows": "List workflows; with changes allowed, run one.",
+      "files": "Read the files in this profile's folder; with changes allowed, write them."
+    },
+    "unavailable": {
+      "runtime_absent": "There is no Hermes beside this hub to give the tools to.",
+      "hermes_profile_absent": "Hermes has no folder for this profile yet. Start a conversation in it first."
+    },
+    "reason": {
+      "hub_tools_no_live_run": "no conversation was running, so there was nobody to act for",
+      "hub_tools_run_ambiguous": "several people had conversations running and the hub could not tell whose it was",
+      "hub_tools_tool_off": "that tool is switched off here",
+      "path_outside_profile": "the path was outside the profile's folder",
+      "forbidden": "the person may not do that",
+      "not_found": "not found",
+      "validation_failed": "the arguments were not valid"
     }
   },
   "memory": {
@@ -1438,7 +2050,7 @@
       "section": {
         "access": "Who may message the bot",
         "replies": "Replies",
-        "groups": "Groups",
+        "groups": "Groups and channels",
         "media": "Media & voice",
         "advanced": "Advanced"
       },
@@ -1562,6 +2174,82 @@
         "proxy_url": {
           "label": "Proxy",
           "help": "Reach Telegram through a proxy, e.g. socks5://host:1080. Leave empty for a direct connection."
+        },
+        "allowed_roles": {
+          "label": "Allowed roles",
+          "help": "Server role ids (digits). The bot answers anyone who has one."
+        },
+        "allowed_channels": {
+          "label": "Only these channels",
+          "help": "Ids of the channels it answers in. Empty: any channel it can see."
+        },
+        "free_response_channels": {
+          "label": "Channels with no mention needed",
+          "help": "Ids of channels where it answers every message."
+        },
+        "ignored_channels": {
+          "label": "Ignored channels",
+          "help": "Ids of channels it never answers in, even when mentioned."
+        },
+        "auto_thread": {
+          "label": "Answer in a thread",
+          "help": "When mentioned in a channel it opens a thread and answers there."
+        },
+        "thread_require_mention": {
+          "label": "In threads: answer only when mentioned",
+          "help": "Inside threads it answers only when mentioned."
+        },
+        "no_thread_channels": {
+          "label": "Channels without threads",
+          "help": "Ids of channels where it answers directly, without a thread."
+        },
+        "disable_dms": {
+          "label": "Ignore direct messages",
+          "help": "It does not answer DMs, only channels."
+        },
+        "reply_in_thread": {
+          "label": "Answer in a thread",
+          "help": "It answers in a thread under the message instead of the channel itself."
+        },
+        "reply_broadcast": {
+          "label": "Also show the answer in the channel",
+          "help": "The first part of a threaded answer also shows in the channel."
+        },
+        "strict_mention": {
+          "label": "Explicit mention in every message",
+          "help": "In threads it answers only a message that mentions it explicitly."
+        },
+        "free_response_rooms": {
+          "label": "Rooms with no mention needed",
+          "help": "Ids of rooms where it answers every message (they start with !)."
+        },
+        "allowed_rooms": {
+          "label": "Only these rooms",
+          "help": "Ids of the rooms it answers in. Direct messages are not affected."
+        },
+        "dm_mention_threads": {
+          "label": "Thread on a mention in a DM",
+          "help": "In a direct chat, mentioning it opens a thread."
+        },
+        "e2ee_mode": {
+          "label": "End-to-end encryption",
+          "help": "Whether it uses encryption in encrypted rooms."
+        },
+        "reply_mode": {
+          "label": "How it answers",
+          "help": "In a thread under the message, or as a plain message in the channel."
+        },
+        "require_authenticated_sender": {
+          "label": "Verify the sender",
+          "help": "Only mail your server verified the sender of (SPF/DKIM/DMARC) is accepted, so nobody can pose as an address on the list."
+        },
+        "skip_attachments": {
+          "label": "Ignore attachments",
+          "help": "Attachments are not read."
+        },
+        "poll_interval": {
+          "label": "Check mail every (seconds)",
+          "help": "Seconds between checks for new mail (5 to 3600)."
         }
       },
       "choice": {
@@ -1591,8 +2279,227 @@
         },
         "allow_bots": {
           "none": "Ignore them",
-          "all": "Answer them"
+          "all": "Answer them",
+          "mentions": "Answer only when mentioned"
+        },
+        "e2ee_mode": {
+          "off": "Off",
+          "optional": "When needed",
+          "required": "Required"
+        },
+        "reply_mode": {
+          "off": "Plain message",
+          "thread": "In a thread"
         }
+      },
+      "title_of": "{name} settings",
+      "platform": {
+        "discord": {
+          "option": {
+            "allowed_users": {
+              "label": "People the bot answers",
+              "help": "Discord user ids. Anyone not here and without an allowed role gets no answer."
+            },
+            "require_mention": {
+              "label": "In channels: answer only when mentioned",
+              "help": "In server channels it answers only a message that @mentions it. DMs are not affected."
+            },
+            "home_channel": {
+              "label": "Home channel",
+              "help": "Id of the channel scheduled results and notices go to. /set-home sets it too."
+            },
+            "reactions": {
+              "label": "Reactions",
+              "help": "A reaction on your message while it works and when it is done."
+            }
+          },
+          "list_placeholder": "123456789012345678, 876543210987654321"
+        },
+        "slack": {
+          "option": {
+            "allowed_users": {
+              "label": "People who skip approval",
+              "help": "Slack member ids (like U01ABCDEF). Anyone else gets a pairing code."
+            },
+            "require_mention": {
+              "label": "In channels: answer only when mentioned",
+              "help": "In channels it answers only a message that mentions it. DMs are not affected."
+            },
+            "home_channel": {
+              "label": "Home channel",
+              "help": "Id of the channel (starting with C) scheduled results and notices go to."
+            },
+            "reactions": {
+              "label": "Reactions",
+              "help": "A reaction on your message while it works and when it is done."
+            }
+          },
+          "list_placeholder": "C01ABCDEF, C02GHIJKL"
+        },
+        "matrix": {
+          "option": {
+            "allowed_users": {
+              "label": "People who skip approval",
+              "help": "Full Matrix ids (like @sara:matrix.org). Anyone else gets a pairing code."
+            },
+            "require_mention": {
+              "label": "In rooms: answer only when mentioned",
+              "help": "In rooms it answers only a message that mentions it. DMs are not affected."
+            },
+            "home_channel": {
+              "label": "Home room",
+              "help": "Id of the room (starting with !) scheduled results and notices go to."
+            },
+            "reactions": {
+              "label": "Reactions",
+              "help": "A reaction on your message while it works and when it is done."
+            }
+          },
+          "section": {
+            "groups": "Rooms"
+          },
+          "list_placeholder": "!abc:matrix.org"
+        },
+        "mattermost": {
+          "option": {
+            "allowed_users": {
+              "label": "People who skip approval",
+              "help": "Mattermost user ids. Anyone else gets a pairing code."
+            },
+            "require_mention": {
+              "label": "In channels: answer only when mentioned",
+              "help": "In channels it answers only a message that @mentions it. DMs are not affected."
+            },
+            "home_channel": {
+              "label": "Home channel",
+              "help": "Id of the channel scheduled results and notices go to."
+            }
+          },
+          "list_placeholder": "channelid1, channelid2"
+        },
+        "email": {
+          "option": {
+            "allowed_users": {
+              "label": "Addresses the agent answers",
+              "help": "Email addresses. Mail from anyone else is ignored and gets no pairing code."
+            },
+            "home_channel": {
+              "label": "Home address",
+              "help": "The address scheduled results and notices go to."
+            }
+          },
+          "section": {
+            "access": "Who may write to the agent",
+            "media": "Attachments"
+          },
+          "list_placeholder": "sara@example.com, ali@example.com"
+        }
+      }
+    },
+    "platform": {
+      "catalog_title": "More platforms",
+      "generic_title": "Other platforms Hermes supports",
+      "generic_list_note": "These link with a form of the values Hermes reads. The hub does not check them and has no settings panel for them.",
+      "link_title": "Link {name}",
+      "badge_first_use": "Downloaded on first start",
+      "badge_inbound": "Needs a public address",
+      "how_title": "How to start with {name}",
+      "how_pairs": "The first person to message the agent gets a pairing code; approve it below under “Waiting for approval”.",
+      "how_allowlist": "The agent answers only the people in the allowed list. Change it in Settings.",
+      "generic_intro": "Enter the {name} values as Hermes reads them. They are kept secret in this profile's Hermes files.",
+      "generic_note": "The hub does not check these values before saving them. If one is wrong, Hermes's message shows on the platform's row once the gateway starts.",
+      "first_use_note": "This platform's library is not in the hub's image: Hermes downloads it from the internet (PyPI) once, the first time it starts, and keeps it in the data folder.",
+      "inbound_note": "This platform delivers messages to a web address the internet must reach, and the hub's image does not open that port by itself. It needs extra setup on the server.",
+      "optional": "{label} (optional)",
+      "secret_hint": "Kept secret in this profile's Hermes files and never shown again.",
+      "allowed": "People who skip approval (optional)",
+      "allowed_hint": "Separate them with commas. Anyone else gets a pairing code to approve here.",
+      "allowed_hint_generic": "Separate them with commas, as the platform names them. Saved to {key}.",
+      "allowlist_empty": "{name} answers nobody who is not on this list, and sends no pairing code. Add yourself at least.",
+      "submit": "Link",
+      "submit_check": "Check and link",
+      "checking": "Asking {name}…",
+      "done": "Linked.",
+      "done_as": "Linked: {account}.",
+      "done_now": "The agent answers on the platform now.",
+      "done_restart": "In the default profile, restart Hermes from its card for the agent to start answering.",
+      "invalid": "“{field}” is missing or not in the right form.",
+      "rejected": "{name} refused these details: {message}",
+      "unreachable": "{name} did not answer. Check the address and the hub's internet connection, and try again.",
+      "in_use": "This {name} account is linked in the profile “{profile}”. It answers from one place only: unlink it there first.",
+      "unlink_body": "The {name} details are removed from this profile and the agent stops answering there. The account itself stays on the platform, and the allowed people and settings stay.",
+      "unlinked_note": "{name} unlinked. It no longer answers from this profile.",
+      "name": {
+        "discord": "Discord",
+        "slack": "Slack",
+        "matrix": "Matrix",
+        "mattermost": "Mattermost",
+        "email": "Email"
+      },
+      "field": {
+        "DISCORD_BOT_TOKEN": "Bot token",
+        "SLACK_BOT_TOKEN": "Bot token (starts with xoxb-)",
+        "SLACK_APP_TOKEN": "App token (starts with xapp-)",
+        "MATRIX_HOMESERVER": "Homeserver address",
+        "MATRIX_ACCESS_TOKEN": "Access token",
+        "MATTERMOST_URL": "Mattermost server address",
+        "MATTERMOST_TOKEN": "Bot account token",
+        "EMAIL_ADDRESS": "Email address",
+        "EMAIL_PASSWORD": "Password (or app password)",
+        "EMAIL_IMAP_HOST": "IMAP (incoming) server",
+        "EMAIL_IMAP_PORT": "IMAP port (default 993)",
+        "EMAIL_SMTP_HOST": "SMTP (outgoing) server",
+        "EMAIL_SMTP_PORT": "SMTP port (default 587)"
+      },
+      "discord": {
+        "summary": "A Discord bot that answers in DMs and server channels.",
+        "intro": "The agent answers through a Discord bot you make in the developer portal. The hub asks Discord about the bot before it stores the token.",
+        "step1": "Open the Discord developer portal, press New Application and pick a name.",
+        "step2": "Under Bot, press Reset Token and copy it. On the same page, turn on Message Content Intent.",
+        "step3": "Under OAuth2 → URL Generator pick the scopes bot and applications.commands, then Send Messages and Read Message History, and open the link to add the bot to your server.",
+        "step4": "Paste the token here, and your Discord user id (turn on Developer Mode, right-click your name → Copy User ID).",
+        "allowed": "People the bot answers",
+        "allowed_hint": "Discord user ids (digits), separated by commas. Discord sends strangers no pairing code, so anyone not here gets no answer.",
+        "how": "Add the bot to your server with the link from the developer portal if you have not, then DM it or @mention it in a channel."
+      },
+      "slack": {
+        "summary": "A Slack app that answers in DMs and channels (Socket Mode).",
+        "intro": "The agent answers through a Slack app you make. The hub asks Slack about both tokens before it stores them.",
+        "step1": "Open api.slack.com/apps, press Create New App → From scratch and pick your Slack team.",
+        "step2": "Under Socket Mode, turn it on and create an app-level token with connections:write (it starts with xapp-).",
+        "step3": "Under OAuth & Permissions add the bot scopes chat:write, app_mentions:read, channels:history, im:history, im:read, im:write and users:read.",
+        "step4": "Under Event Subscriptions, turn them on and subscribe to app_mention, message.im and message.channels; under App Home, turn on the Messages tab.",
+        "step5": "Press the Install button on the OAuth & Permissions page, copy the bot token (it starts with xoxb-), and paste both tokens here.",
+        "allowed_hint": "Slack member ids (like U01ABCDEF), separated by commas. Anyone else gets a pairing code to approve here.",
+        "how": "Invite the app to a channel with /invite, then mention it or message it directly."
+      },
+      "matrix": {
+        "summary": "A Matrix account that answers in rooms and DMs, on any homeserver.",
+        "intro": "The agent answers through a Matrix account. Make one for the bot on your homeserver; the hub asks the server about it before saving.",
+        "step1": "Create an account for the bot on a Matrix homeserver (in Element, for example).",
+        "step2": "Sign in to Element with that account and copy the Access Token from Settings → Help & About.",
+        "step3": "Enter the homeserver address (like https://matrix.org) and paste the token here.",
+        "allowed_hint": "Full Matrix ids (like @sara:matrix.org), separated by commas. Anyone else gets a pairing code.",
+        "how": "Invite the bot's account to a room, or start a direct chat with it. Matrix's library is downloaded on first start."
+      },
+      "mattermost": {
+        "summary": "A Mattermost bot on your server.",
+        "intro": "The agent answers through a Mattermost bot account. The hub asks the server about the account before saving.",
+        "step1": "In Mattermost open Integrations → Bot Accounts → Add Bot Account (a system admin turns them on).",
+        "step2": "Pick a name for the bot and copy the token shown after it is made.",
+        "step3": "Enter your server's address (like https://chat.example.com) and paste the token here.",
+        "allowed_hint": "Mattermost user ids, separated by commas. Anyone else gets a pairing code.",
+        "how": "Add the bot to a channel and @mention it, or message it directly."
+      },
+      "email": {
+        "summary": "A mailbox the agent reads (IMAP) and answers from (SMTP).",
+        "intro": "The agent reads a mailbox and answers the mail. The hub signs in to the incoming and outgoing servers before saving; it reads and sends nothing.",
+        "step1": "A mailbox just for the agent is best. In Gmail, turn on 2-Step Verification and make an “app password”.",
+        "step2": "Enter the address, the password and the IMAP and SMTP servers (in Gmail: imap.gmail.com and smtp.gmail.com).",
+        "step3": "Enter the addresses the agent answers. Email sends no pairing code, so anyone not on the list is ignored.",
+        "allowed": "Addresses the agent answers",
+        "allowed_hint": "Email addresses, separated by commas. Mail from anyone else is ignored.",
+        "how": "Send a message to the mailbox from an address on the list; the agent answers in the same thread."
       }
     }
   },
@@ -1651,13 +2558,15 @@
     "lane": {
       "input": "Input",
       "model": "Model",
-      "tools": "Tools"
+      "tools": "Tools",
+      "subagents": "Subagents"
     },
     "kind": {
       "input": "Input",
       "turn": "Turn",
       "reasoning": "Reasoning",
-      "tool": "Tool call"
+      "tool": "Tool call",
+      "subagent": "Subagent"
     },
     "status": {
       "running": "running",
@@ -1697,6 +2606,579 @@
       "cache_hit": "Cache hit",
       "input_tokens": "Input tokens",
       "output_tokens": "Output tokens"
+    },
+    "model": "Model: {model}",
+    "fallback": "Fell back from {failed}"
+  },
+  "terminal": {
+    "warning": "This is a terminal on the server, with the hub account's permissions.",
+    "warning_detail": "Whatever you type runs on the hub's host as the hub's own user, in the profile's folder. Opening and closing a terminal is written to the logs.",
+    "no_pty": "This hub has no PTY: commands run and print, but there is no line editing and full-screen programs do not work.",
+    "idle": "A terminal nobody types in closes after {minutes} minutes. At most {max} are open at once.",
+    "new": "New terminal",
+    "tab": "Terminal {n}",
+    "close": "Close {name}",
+    "copy": "Copy",
+    "paste": "Paste",
+    "copy_hint": "Ctrl+Shift+C copies the selection, Ctrl+Shift+V pastes.",
+    "clipboard_denied": "The browser did not allow the clipboard. Use Ctrl+Shift+V or the browser's own paste.",
+    "limit": "{max} terminals are open already. Close one first.",
+    "empty": "No terminal open",
+    "empty_body": "A new terminal starts in the {profile} profile's folder.",
+    "disabled": "The terminal is not enabled on this hub.",
+    "disabled_body": "It is off unless the hub is started with COREHUB_WEB_TERMINAL=1, and even then only the owner sees it.",
+    "connecting": "Connecting to the terminal…",
+    "ended": "This terminal has ended: {reason}",
+    "reason_exited": "the shell exited",
+    "reason_closed": "it was closed",
+    "reason_idle": "nobody typed for too long",
+    "reason_shutdown": "the hub stopped",
+    "gone": "This terminal is no longer on the hub.",
+    "folder": "Folder:"
+  },
+  "this_device": {
+    "not_desktop": "This page belongs to the desktop and phone apps.",
+    "unavailable": "The app did not answer. Restart it and try again.",
+    "connection": "Connection",
+    "mode": "Mode",
+    "mode_remote": "Connected to a hub",
+    "mode_local": "Running on this computer",
+    "hub": "Hub address",
+    "hub_state": "Hub",
+    "hub_checking": "Checking…",
+    "hub_unreachable": "Not answering",
+    "hub_connected": "Answering (build {version})",
+    "app_version": "App version",
+    "platform": "System",
+    "platform_macos": "macOS",
+    "platform_windows": "Windows",
+    "platform_linux": "Linux",
+    "change": "Change connection",
+    "change_hint": "Connect to another hub or switch between a hub and this computer. What each one keeps stays with it.",
+    "window": "Window",
+    "close_to_tray": "Keep running when the window is closed",
+    "close_to_tray_hint": "The app stays in the tray and keeps showing notifications. Quit it from the tray.",
+    "no_tray": "This desktop has no tray, so closing the window quits the app.",
+    "voice": "Voice",
+    "voice_later": "Voice input, the dictation language and spoken replies are not in the desktop app yet.",
+    "data_dir": "Data folder",
+    "hermes": "Hermes Agent",
+    "hermes_program": "Installed on this computer",
+    "hermes_gateway": "Already running on this computer",
+    "hermes_none": "Not found — the agents show Hermes as not installed",
+    "hermes_path": "Hermes program"
+  },
+  "helper": {
+    "title": "Local helper (MCP)",
+    "intro": "Lets an agent use this computer through MCP tools — only the folders you share, only as you allow. Off until you turn it on.",
+    "enable": "Turn on the local helper",
+    "enable_hint": "It listens on this computer only and wants its key on every request.",
+    "exposed": "What agents can do",
+    "tool_list_allowed_folders": "See which folders are shared",
+    "tool_list_directory": "List what is inside a shared folder",
+    "tool_read_text_file": "Read text files in shared folders",
+    "tool_write_text_file": "Write text files in folders shared as writable",
+    "tool_open_path": "Open files in shared folders with their app",
+    "tool_open_url": "Open web links in your browser",
+    "folders": "Shared folders",
+    "no_folders": "No folder is shared: agents can see nothing on this computer.",
+    "add_folder": "Share a folder…",
+    "remove": "Stop sharing",
+    "writable": "Agents may write here",
+    "allow_open": "Allow opening files and web links",
+    "allow_open_hint": "Files only inside the shared folders; links only http and https.",
+    "connection": "Connection",
+    "address": "Address",
+    "token": "Key",
+    "copy": "Copy",
+    "copied": "Copied",
+    "show": "Show",
+    "hide": "Hide",
+    "new_token": "New key",
+    "new_token_hint": "Whatever uses the old key stops working until it gets the new one.",
+    "add_to_hermes": "Add to Hermes on this hub",
+    "added_to_hermes": "Added to Hermes as “{name}”. It takes effect on Hermes’s next start.",
+    "no_hermes_agent": "This hub has no Hermes agent to add it to.",
+    "remote_note": "The helper answers on this computer only, so a hub on a server cannot reach it. It serves the hub running on this computer (local mode).",
+    "activity": "Recent use",
+    "no_activity": "Nothing has used the helper yet.",
+    "refused": "refused",
+    "not_running": "The helper is on but not running: {message}"
+  },
+  "desktop_updates": {
+    "title": "Updates",
+    "auto": "Check for a new version once a day",
+    "auto_hint": "Asks GitHub for Core Hub's releases; nothing is downloaded or installed without you.",
+    "check": "Check now",
+    "checking": "Checking…",
+    "current": "This version: {version}",
+    "available": "Core Hub {version} is available.",
+    "download": "Download",
+    "notes": "What's new",
+    "up_to_date": "This is the newest version for this computer.",
+    "failed": "Could not check: {message}",
+    "checked_at": "Checked {time}",
+    "all_releases": "All releases",
+    "size": "{size} MB"
+  },
+  "rooms": {
+    "filter": "Which rooms",
+    "active": "Active",
+    "archived": "Archived",
+    "none": "No rooms yet. Make one, or join one with its code.",
+    "none_archived": "No archived rooms.",
+    "counts": "{agents} agents · {people} people",
+    "pick_title": "Open a room",
+    "pick_body": "Pick a room from the list, make a new one, or join one by its code.",
+    "agent_badge": "Agent",
+    "archive": "Archive",
+    "unarchive": "Bring back",
+    "archived_notice": "This room is archived: its messages stay readable, and nothing new can be written in it.",
+    "back": "Back to rooms",
+    "deleted": "This room was deleted.",
+    "removed": "You are no longer a member of this room.",
+    "delete_title": "Delete this room?",
+    "delete_body": "“{name}”, its messages and its seats go for good.",
+    "leave": "Leave room",
+    "leave_title": "Leave this room?",
+    "leave_body": "You leave “{name}”. To come back you need its code again.",
+    "rename": "Rename",
+    "empty": "Nothing said yet. Write to the room; mention an agent with @ to ask it.",
+    "empty_no_seats": "No agents in this room yet. Add one from the members panel.",
+    "older": "Show older messages",
+    "handoff_to": "Passed the turn to @{name}",
+    "activity": {
+      "queued": "{name} is next",
+      "thinking": "{name} is thinking",
+      "working": "{name} is replying",
+      "waiting": "{name} is waiting for an approval",
+      "typing": "{names} typing…"
+    },
+    "status": {
+      "idle": "Idle",
+      "queued": "Queued",
+      "thinking": "Thinking",
+      "running": "Replying",
+      "waiting_approval": "Waiting for approval",
+      "offline": "Offline"
+    },
+    "composer": {
+      "label": "Message to the room",
+      "placeholder": "Write to the room — @ to mention an agent",
+      "mentions": "Agents to mention",
+      "all": "every agent",
+      "lead_hint": "A message that mentions nobody goes to @{name}.",
+      "no_lead_hint": "A message that mentions nobody is only read — mention an agent with @."
+    },
+    "invite": {
+      "button": "Invite",
+      "title": "Invite to the room",
+      "description": "Anyone who can enter this profile joins with this code or link. A new code retires the old one.",
+      "rotate": "New code",
+      "copy": "Copy link",
+      "copied": "Copied"
+    },
+    "join": {
+      "description": "Paste the room's code or its link.",
+      "code": "Code or link",
+      "join": "Join",
+      "open": "Open the room",
+      "unknown": "No room you can join has this code."
+    },
+    "new": {
+      "description": "You manage the room you make. Choose the agents to seat now; you can add more later.",
+      "name": "Room name",
+      "agents": "Agents",
+      "create": "Make the room",
+      "no_agents": "No agent is installed in this profile yet.",
+      "seat_failed": "The room was made, but these seats were not: {list}"
+    },
+    "members": {
+      "title": "Members",
+      "agents": "Agents",
+      "people": "People",
+      "lead": "Lead",
+      "make_lead": "Make lead",
+      "no_agents": "No agents yet.",
+      "owner": "Manager",
+      "online": "In the room",
+      "offline": "Away",
+      "remove": "Remove",
+      "default_model": "the agent's own model",
+      "stop": "Stop @{name}"
+    },
+    "seat": {
+      "add": "Add agent",
+      "add_title": "Add an agent to the room",
+      "edit_title": "Edit the seat",
+      "description": "Each agent in a room has its own name, role, instructions and model.",
+      "agent": "Agent",
+      "name": "Name in the room",
+      "name_hint": "People mention it as @name; unique in the room.",
+      "role": "Role",
+      "instructions": "Instructions",
+      "instructions_hint": "Given to this agent on every turn in this room.",
+      "model": "Model",
+      "model_hint": "Leave empty for the agent's own model.",
+      "remove": "Remove",
+      "remove_title": "Remove this agent from the room?",
+      "remove_body": "@{name} leaves the room; what it said stays."
+    },
+    "handoff": {
+      "active": "@{from} passed the turn to @{to} (pass {depth})",
+      "stopped_max_depth": "Stopped passing the turn: @{from} → @{to} would go past the room's limit.",
+      "stopped_loop_detected": "Stopped passing the turn: @{from} → @{to} would repeat a pass already made.",
+      "stopped_interrupted": "Passing the turn was stopped at @{from} → @{to}.",
+      "stopped_error": "Passing the turn stopped: @{to} could not answer.",
+      "continue": "One more round"
+    },
+    "clear": {
+      "menu": "Clear the context",
+      "title": "Clear the room's context?",
+      "body": "The messages stay, but the agents forget them: each starts a fresh conversation, and the summary and token count start over.",
+      "confirm": "Clear"
+    },
+    "settings": {
+      "title": "Room settings",
+      "mention_all": "Allow @all (every agent at once)",
+      "handoff": "Agents may pass the turn to each other",
+      "max_depth": "Most passes in a row",
+      "max_depth_hint": "1–20; empty for no limit. A pass repeated in the same run always stops.",
+      "project": "Project reporting here",
+      "project_none": "No project",
+      "project_hint": "When a task of this project starts or ends, the room is told."
+    },
+    "memory": {
+      "title": "Summary",
+      "none": "No summary yet. It is written every few messages, and agents are told it on every turn.",
+      "refresh": "Summarise now",
+      "edit": "Edit summary",
+      "working": "Summarising…",
+      "failed": "Could not summarise"
+    }
+  },
+  "voice": {
+    "dictate": "Dictate",
+    "stop_dictation": "Stop and transcribe",
+    "requesting": "Waiting for the microphone…",
+    "listening": "Listening… {seconds}s",
+    "transcribing": "Transcribing…",
+    "cancel": "Cancel",
+    "browser_engine": "With this browser’s own recognizer: the profile has no speech-to-text provider.",
+    "error": {
+      "no_provider": "Dictation needs a speech-to-text provider, and this browser has no recognizer of its own.",
+      "mic_denied": "The browser was not allowed to use the microphone.",
+      "mic_unavailable": "No microphone could be opened.",
+      "no_speech": "Nothing was heard. Try again a little closer to the microphone.",
+      "failed": "Dictation failed: {detail}"
+    },
+    "open_models": "Set one up in Models",
+    "menu": "Voice options",
+    "language": "Dictation language",
+    "language_auto": "Detect automatically",
+    "language_ar": "العربية",
+    "language_en": "English",
+    "auto_read": "Read replies aloud",
+    "mode": "Voice mode",
+    "speak": "Read aloud",
+    "stop_speaking": "Stop reading",
+    "loading_audio": "Preparing the voice…",
+    "browser_voice": "Read aloud with this browser’s voice (the profile has no text-to-speech provider)",
+    "no_tts": "No text-to-speech provider is ready for this profile.",
+    "stage": {
+      "title": "Voice mode",
+      "turn_by_turn": "Turn by turn: the hub’s speech providers don’t stream, so your words go when you stop talking, and the reply is spoken sentence by sentence as it arrives.",
+      "ready": "Tap to talk",
+      "listening": "Listening",
+      "transcribing": "Transcribing",
+      "thinking": "Thinking",
+      "speaking": "Speaking",
+      "tap_to_send": "Tap to send",
+      "interrupt": "Interrupt",
+      "close": "End voice mode",
+      "hint": "Tap to start and tap again to send — or hold, and let go to send.",
+      "you_said": "You said:"
+    }
+  },
+  "perf": {
+    "live": "Live",
+    "paused": "Paused while this tab is hidden",
+    "every": "Updates every {count} s",
+    "at": "Measured at {time}",
+    "no_proc": "This host has no /proc, so the Hermes processes are listed without their numbers.",
+    "host": "Host",
+    "hub": "Hub process",
+    "cpu": "CPU",
+    "cores": "{count} cores",
+    "memory": "Memory",
+    "of": "{used} of {total}",
+    "load": "Load",
+    "load_hint": "1 · 5 · 15 minutes",
+    "one_core": "Of one core",
+    "rss": "Memory (RSS)",
+    "heap": "Heap {size}",
+    "lag": "Event-loop lag",
+    "ms": "{count} ms",
+    "uptime": "Uptime",
+    "hermes": "Hermes processes",
+    "hermes_rss": "Memory of every Hermes process",
+    "hermes_none": "The hub runs no Hermes process right now.",
+    "kind_tui_gateway": "TUI gateway (conversations)",
+    "kind_dashboard": "hermes serve",
+    "kind_gateway": "Messaging gateway · {profile}",
+    "process": "Process",
+    "state": "State",
+    "profiles": "Profiles",
+    "profile": "Profile",
+    "active_runs": "Active runs",
+    "sessions": "Conversations",
+    "sockets": "Sockets",
+    "dh": "{d}d {h}h",
+    "hm": "{h}h {m}m",
+    "m": "{m}m",
+    "s": "{s}s"
+  },
+  "logview": {
+    "kept": "The latest lines of the hub and of every Hermes gateway, kept in the hub's memory — a restart empties them.",
+    "source": "Source",
+    "source_all": "All",
+    "source_hub": "Hub",
+    "source_hermes": "Hermes",
+    "source_errors": "Errors only",
+    "profile": "Profile",
+    "all_profiles": "Every profile",
+    "level": "Level",
+    "level_debug": "Everything",
+    "level_info": "Info and above",
+    "level_warn": "Warnings and errors",
+    "level_error": "Errors",
+    "level_short_error": "ERROR",
+    "level_short_warn": "WARN",
+    "level_short_info": "INFO",
+    "level_short_debug": "DEBUG",
+    "search": "Search the lines",
+    "lines": "Lines",
+    "last_n": "Last {count}",
+    "tail": "Live tail",
+    "tail_paused": "Paused while this tab is hidden",
+    "download": "Download",
+    "no_match": "No line matches.",
+    "empty": "No lines yet.",
+    "showing": "{count} lines shown",
+    "hub": "Hub",
+    "tui": "Hermes · TUI gateway",
+    "hermes_of": "Hermes · {profile}"
+  },
+  "files": {
+    "button": "Files",
+    "button_count": "Files ({count})",
+    "title": "Files",
+    "list_label": "Files of this conversation",
+    "empty": "No files yet. What the agent writes in this conversation's folder, and what is attached, appears here.",
+    "truncated": "The folder holds more files than are listed; the newest are shown.",
+    "load_failed": "The files could not be read.",
+    "panel_label": "Open files",
+    "close_tab": "Close {name}",
+    "open": "Open {name}",
+    "download": "Download",
+    "open_new_tab": "Open in new tab",
+    "view_source": "View source",
+    "view_rendered": "View page",
+    "loading": "Loading the file…",
+    "too_large": "This file is too large to show here ({size}). Download it to open it.",
+    "no_preview": "This kind of file cannot be shown here. Download it to open it.",
+    "source": {
+      "tool": "written by a tool",
+      "working_dir": "in the folder",
+      "attachment": "attached"
+    },
+    "rows_capped": "Showing the first {shown} of {total} rows.",
+    "columns_capped": "Only the first {count} columns are shown.",
+    "sheets_label": "Sheets",
+    "slide": "Slide {number}",
+    "untitled_slide": "Untitled slide",
+    "pptx_outline": "An outline of the slides' titles and text. The slides themselves are not drawn here; download the file to see them.",
+    "docx_note": "The text of the document; pictures and page layout are not shown.",
+    "office_error": {
+      "too_many_entries": "The file holds too many parts to open safely.",
+      "too_large": "The file unpacks to more than can be opened safely.",
+      "not_office": "This is not the Office file its name says.",
+      "damaged": "The file is damaged and cannot be read."
+    },
+    "html_note": "Shown in a sandbox: its scripts run apart from this app and it cannot contact anything.",
+    "modified": "Changed {time}",
+    "updated": "Updated just now",
+    "gone": "This file is no longer in the conversation's folder.",
+    "close": "Close the files"
+  },
+  "workspace_files": {
+    "intro": "The working folder of the profile «{profile}»: the folders its conversations and tasks work in. A file manager only — nothing here runs a command.",
+    "root": "{profile}",
+    "breadcrumb": "Folder path",
+    "caption": "Files in {folder}",
+    "name": "Name",
+    "size": "Size",
+    "modified": "Modified",
+    "actions": "Actions",
+    "actions_for": "Actions for {name}",
+    "up": "Up one folder",
+    "empty": "This folder is empty",
+    "empty_body": "Drop files here, or use Upload, New folder or New file.",
+    "truncated": "This folder holds more than 5,000 items; only the first 5,000 are listed.",
+    "limits": "Limits: upload {upload} per file · edit {edit} · zip {zip}.",
+    "new_folder": "New folder",
+    "new_file": "New file",
+    "new_name": "Name",
+    "create": "Create",
+    "upload": "Upload",
+    "uploading": "Uploading {names}…",
+    "uploaded": "Uploaded {count} file(s)",
+    "drop_zone": "Folder contents; drop files here to upload",
+    "drop_here": "Drop to upload into this folder",
+    "replace_title": "Replace «{name}»?",
+    "replace_body": "A file with this name is already in this folder. Replacing it cannot be undone.",
+    "replace": "Replace",
+    "download": "Download",
+    "download_zip": "Download as zip",
+    "preview": "Preview",
+    "preview_of": "Preview of {name}",
+    "no_preview": "No preview for this kind of file",
+    "no_preview_body": "Download it to open it on your device.",
+    "pdf_fallback": "This browser cannot show the PDF here. Download it instead.",
+    "close": "Close",
+    "attach": "Attach to chat",
+    "attach_title": "Attach «{name}» to a chat",
+    "attach_body": "A copy of the file goes into the chat's message box, ready to send. The file here stays as it is.",
+    "attach_new_chat": "New chat",
+    "rename_title": "Rename «{name}»",
+    "move": "Move",
+    "copy": "Copy",
+    "move_title": "Move «{name}»",
+    "copy_title": "Copy «{name}»",
+    "destination": "Destination path",
+    "destination_hint": "Inside this profile's files, for example reports/2026/plan.md. The folder must exist.",
+    "moved": "Moved to {path}",
+    "copied": "Copied to {path}",
+    "delete_title": "Delete «{name}»?",
+    "delete_body": "The file is removed from the profile's folder. This cannot be undone.",
+    "delete_folder_body": "The folder and everything in it are removed from the profile's folder. This cannot be undone.",
+    "deleted": "Deleted {name}",
+    "failed": "That did not work",
+    "back_to_top": "Back to the top folder",
+    "link": "Link",
+    "link_outside": "Link outside",
+    "link_outside_hint": "This link points outside the profile's files, so it cannot be opened here.",
+    "edit_title": "Edit {name}",
+    "new_file_title": "New file {name}",
+    "editor_label": "Text of {name}",
+    "saved": "Saved {name}",
+    "unsaved": "Unsaved changes",
+    "all_saved": "All changes saved",
+    "conflict": "The file changed on disk after you opened it (an agent or another tab wrote it). Nothing was saved.",
+    "conflict_reload": "Load the new version (discard my edits)",
+    "conflict_overwrite": "Keep my text and overwrite",
+    "discard_title": "Discard your changes?",
+    "discard_body": "Your edits to {name} are not saved.",
+    "discard": "Discard"
+  },
+  "changes": {
+    "label": "Files this run changed",
+    "summary": {
+      "zero": "Changed no files",
+      "one": "Changed one file",
+      "two": "Changed two files",
+      "few": "Changed {count} files",
+      "many": "Changed {count} files",
+      "other": "Changed {count} files"
+    },
+    "kind": {
+      "added": "new",
+      "modified": "changed",
+      "deleted": "deleted",
+      "renamed": "moved"
+    },
+    "binary": "binary",
+    "open_diff": "Show what this run changed in {name}",
+    "diff_tab": "{name} (changes)",
+    "show_all": "Show all {count}",
+    "show_less": "Show fewer",
+    "unlisted": "And more files not listed here ({count}).",
+    "incomplete": "The folder is larger than the hub reads when a run starts, so a change may be missing here."
+  },
+  "diff": {
+    "layout": "How to show the changes",
+    "unified": "Unified",
+    "split": "Side by side",
+    "open_file": "Open the file",
+    "open_file_named": "Open {name}",
+    "loading": "Loading the changes…",
+    "renamed_from": "Moved from",
+    "truncated": "The changes are cut here to stay under the size limit.",
+    "no_lines": "Moved without changing its lines.",
+    "state": {
+      "available": "There are no lines to show.",
+      "binary": "A binary file: there are no lines to compare.",
+      "too_large": "The changes to this file are too large to show here.",
+      "unavailable": "The hub saw this file change but kept no copy of it from before the run, so it cannot show the lines."
+    }
+  },
+  "subagents": {
+    "title": "Subagents",
+    "running_count": "{count} running",
+    "finished": "Finished ({count})",
+    "stop": "Stop",
+    "steer": "Steer",
+    "steer_placeholder": "Tell it what to change…",
+    "steer_send": "Send",
+    "steer_queued": "Sent. It reads it before its next step.",
+    "steer_rejected": "It no longer takes guidance.",
+    "view": "View",
+    "tools": "{count} tools",
+    "last_tool": "last: {tool}",
+    "status": {
+      "running": "Running",
+      "completed": "Done",
+      "failed": "Failed",
+      "interrupted": "Stopped"
+    },
+    "observe_note": "This agent only says when its subagents start and end.",
+    "sheet_title": "Subagent",
+    "close": "Close",
+    "status_label": "Status",
+    "model": "Model",
+    "elapsed": "Time",
+    "tool_count": "Tools",
+    "summary": "Last words",
+    "recent_tools": "Recent tools",
+    "output": "Live output",
+    "no_output": "Nothing to show yet.",
+    "output_truncated": "Only the end is shown.",
+    "open_trajectory": "Open in Trajectory"
+  },
+  "background": {
+    "open": "Background",
+    "open_count": "Running in the background: {count}",
+    "title": "Background",
+    "close": "Close",
+    "none": "Nothing is running.",
+    "none_body": "Chats, tasks, schedules, workflows, jobs and subagents appear here while they work.",
+    "finished": "Finished in the last 24 hours ({count})",
+    "stop": "Stop",
+    "open_item": "Open",
+    "kind": {
+      "chat_run": "Chat",
+      "task_run": "Task",
+      "schedule_run": "Schedule",
+      "workflow_run": "Workflow",
+      "job": "Job",
+      "subagent": "Subagent"
+    },
+    "status": {
+      "queued": "Queued",
+      "running": "Running",
+      "succeeded": "Done",
+      "failed": "Failed",
+      "cancelled": "Stopped"
     }
   }
 }

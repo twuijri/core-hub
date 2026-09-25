@@ -35,6 +35,7 @@ import type { FastifyBaseLogger } from 'fastify';
 import { t, type Language } from '../../i18n/index.js';
 import { newUlid } from '../../db/ids.js';
 import type { AuditService } from '../audit/index.js';
+import { skillUseOf } from './skill-use.js';
 import {
   toApproval,
   toMessage,
@@ -57,6 +58,8 @@ import type {
 } from './ports.js';
 import { SessionNamer } from './naming.js';
 import { OutputWatcher, ensureRunFolders, type ProducedRefusal } from './run-files.js';
+import { startChangeTracking, type ChangeTracker } from './run-changes.js';
+import { fileRefsOf } from './files.js';
 import {
   initialRunState,
   isTerminal,
@@ -69,6 +72,7 @@ import {
 } from './run-reducer.js';
 import type { SessionsRealtime } from './realtime.js';
 import type { SessionsStore } from './store.js';
+import type { SubagentScope } from './subagents.js';
 import { preview } from './store.js';
 import type { MessagePart } from './schema.js';
 
@@ -90,6 +94,8 @@ interface ActiveRun {
   state: RunState;
   /** The run's output folder, watched while it is live; `null` when files are off. */
   outputs: OutputWatcher | null;
+  /** The working folder as the run started it (decision §49); `null` without one. */
+  changes: ChangeTracker | null;
 }
 
 export interface EngineDeps {
@@ -98,6 +104,10 @@ export interface EngineDeps {
   realtime: SessionsRealtime;
   ports: SessionsPorts;
   log: FastifyBaseLogger;
+  /** What a git call inherits (`HubConfig.hostEnv`), minus git's own variables. */
+  hostEnv?: NodeJS.ProcessEnv;
+  /** Told where each conversation lives when a run of it starts (§56). */
+  subagents?: { remember(sessionId: string, scope: SubagentScope): void };
 }
 
 export class RunEngine {
@@ -160,6 +170,12 @@ export class RunEngine {
 
   isActive(runId: string): boolean {
     return this.active.has(runId);
+  }
+
+  /** The run going on in a session right now, if any. */
+  activeRunOf(sessionId: string): string | null {
+    for (const run of this.active.values()) if (run.sessionId === sessionId) return run.runId;
+    return null;
   }
 
   /** Ask the adapter to stop; the stream ends on its own afterwards. */
@@ -312,6 +328,12 @@ export class RunEngine {
     }
 
     audit.startJob(runRow.jobId);
+    // The conversation's subagents are told to its profile, and belong to its owner (§56).
+    this.deps.subagents?.remember(session.id, {
+      workspace: scope.workspace,
+      profile: scope.profile,
+      ownerId: session.ownerId,
+    });
 
     // The assistant message shell: it exists before the first delta so every
     // delta has a message to append to (contract: run.started).
@@ -331,6 +353,8 @@ export class RunEngine {
     // Files in and files out. A session always has a working directory
     // (`working-dir.ts`), so the only reason this is `null` is a disk that refused.
     const exchange = this.prepareFiles(scope, session.workingDir, runRow);
+    // The folder as the agent is about to find it, so the end can say what this run changed.
+    const changes = await this.trackChanges(session.workingDir, runRow);
 
     const active: ActiveRun = {
       runId: runRow.id,
@@ -340,6 +364,7 @@ export class RunEngine {
       agent,
       state: initialRunState(shell.id),
       outputs: exchange ? new OutputWatcher(exchange.files.outputDir).start() : null,
+      changes,
     };
     this.active.set(runRow.id, active);
 
@@ -357,6 +382,7 @@ export class RunEngine {
         prompt: exchange?.prompt ?? promptOf(store, scope.workspace, runRow),
         files: exchange?.files ?? null,
         allowedTools: allowedToolsOf(session),
+        userId: scope.userId,
       });
       if (accepted.agentSessionRef && accepted.agentSessionRef !== session.agentSessionRef) {
         store.updateSession(scope.workspace, session.id, {
@@ -451,6 +477,46 @@ export class RunEngine {
   }
 
   /**
+   * Record the working folder as the run starts it (decision §49). Never fails the run: a
+   * folder that cannot be read is a run without a "files changed" card, and the reason is logged.
+   */
+  private async trackChanges(
+    workingDir: string | null,
+    runRow: RunRow,
+  ): Promise<ChangeTracker | null> {
+    if (!workingDir) return null;
+    try {
+      return await startChangeTracking(workingDir, { env: this.deps.hostEnv ?? {} });
+    } catch (error) {
+      this.deps.log.warn(
+        { err: error, runId: runRow.id, workingDir },
+        'sessions: the run works without recording its file changes',
+      );
+      return null;
+    }
+  }
+
+  /** Compare the folder with the run's start and write what changed, before the run ends. */
+  private async recordChanges(run: ActiveRun): Promise<void> {
+    if (!run.changes) return;
+    try {
+      const record = await run.changes.finish();
+      this.deps.store.saveRunChanges(
+        run.scope.workspace,
+        run.scope.userId,
+        run.runId,
+        record,
+        new Date(),
+      );
+    } catch (error) {
+      this.deps.log.warn(
+        { err: error, runId: run.runId },
+        'sessions: the files this run changed could not be recorded',
+      );
+    }
+  }
+
+  /**
    * Everything the agent wrote into this run's output folder becomes an attachment on
    * the reply, so the person can download it. What the caps refused is named in the
    * message rather than dropped in silence.
@@ -533,7 +599,44 @@ export class RunEngine {
         case 'tool_failed': {
           const call = state.toolCalls.find((c) => c.id === action.toolCallId);
           if (!call) break;
+          if (action.type === 'tool_started' && run.changes) {
+            // Keep what the files this call names look like before it works on them.
+            run.changes.touch(
+              fileRefsOf([
+                {
+                  id: call.id,
+                  runId: run.runId,
+                  name: call.name,
+                  kind: call.kind,
+                  title: call.title,
+                  input: call.input,
+                },
+              ]).map((ref) => ref.path),
+            );
+          }
           const row = this.writeToolCall(run, call);
+          // A skill the agent loaded is a use of it (contract decision §50).
+          if (action.type === 'tool_completed') {
+            const skill = skillUseOf(call);
+            if (skill) {
+              try {
+                audit.recordSkillUse({
+                  workspace: scope.workspace,
+                  ownerId: scope.userId,
+                  runId: run.runId,
+                  sessionId,
+                  agentId: run.agent.id,
+                  skill,
+                });
+              } catch (error) {
+                // A count nobody could write is not worth failing a run over.
+                this.deps.log.warn(
+                  { err: error, runId: run.runId },
+                  'sessions: skill use not recorded',
+                );
+              }
+            }
+          }
           this.emitToSession(
             scope,
             sessionId,
@@ -594,15 +697,37 @@ export class RunEngine {
           break;
         }
 
+        case 'fallback': {
+          // The run is now the model that took it (contract decision §54): `Run.model` and
+          // `Run.provider` name it, and `Run.fallback` what failed before it.
+          if (!state.fallback) break;
+          const { answered, failed } = state.fallback;
+          store.updateRun(scope.workspace, run.runId, {
+            modelLabel: answered.provider
+              ? `${answered.provider}/${answered.model}`
+              : answered.model,
+            provider: answered.provider,
+            timing: { turns: state.turns, fallback: { failed } },
+          });
+          break;
+        }
+
         case 'context': {
           if (!state.context) break;
-          this.emitToSession(scope, sessionId, 'context.updated', {
+          this.recordContext(scope, sessionId, state.context);
+          break;
+        }
+
+        case 'compression': {
+          // The agent compressing on its own inside the run (decision §57).
+          this.emitToSession(scope, sessionId, 'context.compression', {
             session_id: sessionId,
-            context: {
-              used_tokens: state.context.usedTokens,
-              window_tokens: state.context.windowTokens,
-            },
-            usage: null,
+            run_id: run.runId,
+            phase: action.phase,
+            trigger: 'auto',
+            before_tokens: null,
+            after_tokens: null,
+            message: null,
           });
           break;
         }
@@ -626,7 +751,19 @@ export class RunEngine {
         }
 
         case 'finished':
-          // Handled in finalise(), which needs the final message too.
+          // Handled in finalise(), which needs the final message too. A compression the
+          // run was still in never finishes now: say so, or the chat would keep showing it.
+          if (state.compressing) {
+            this.emitToSession(scope, sessionId, 'context.compression', {
+              session_id: sessionId,
+              run_id: run.runId,
+              phase: action.status === 'succeeded' ? 'finished' : 'failed',
+              trigger: 'auto',
+              before_tokens: null,
+              after_tokens: null,
+              message: null,
+            });
+          }
           break;
       }
     }
@@ -719,9 +856,17 @@ export class RunEngine {
 
     // Before anything is awaited: the run has left `active`, and a trajectory read in the
     // meantime must find its turns on the row.
-    store.updateRun(scope.workspace, run.runId, { timing: { turns: state.turns } });
+    store.updateRun(scope.workspace, run.runId, {
+      timing: {
+        turns: state.turns,
+        ...(state.fallback ? { fallback: { failed: state.fallback.failed } } : {}),
+      },
+    });
 
     const produced = await this.collectProduced(run);
+    // Written before the terminal event, so a client that reads the changes when it arrives
+    // finds them (contract `sessions.listChanges`).
+    await this.recordChanges(run);
     const note = refusalNote(produced.refused, scope.language);
     const text = note ? [state.text, note].filter(Boolean).join('\n\n') : state.text;
 
@@ -796,6 +941,56 @@ export class RunEngine {
   }
 
   // ------------------------------------------------------------- emitters
+
+  /**
+   * The window as the agent last reported it: kept on the session, so `Session.context`
+   * answers after a reload, and announced as `context.updated` (decision §57).
+   */
+  recordContext(
+    scope: EngineScope,
+    sessionId: string,
+    context: { usedTokens: number; windowTokens: number | null; estimated: boolean },
+  ): void {
+    const { store } = this.deps;
+    const session = store.getSession(scope.workspace, sessionId);
+    if (!session) return;
+    store.updateSession(scope.workspace, sessionId, {
+      metadata: {
+        ...session.metadata,
+        context: {
+          usedTokens: context.usedTokens,
+          windowTokens: context.windowTokens,
+          estimated: context.estimated,
+        },
+      },
+    });
+    this.emitToSession(scope, sessionId, 'context.updated', {
+      session_id: sessionId,
+      context: {
+        used_tokens: context.usedTokens,
+        window_tokens: context.windowTokens,
+        ...(context.estimated ? { estimated: true } : {}),
+      },
+      usage: null,
+    });
+  }
+
+  /**
+   * Work that must not overlap a turn of this session (`sessions.compress`): it waits for
+   * the session's run chain, and a run queued meanwhile waits for it in turn.
+   */
+  exclusive<T>(sessionId: string, work: () => Promise<T>): Promise<T> {
+    const previous = this.chains.get(sessionId) ?? Promise.resolve();
+    const result = previous.catch(() => undefined).then(work);
+    this.chains.set(
+      sessionId,
+      result.then(
+        () => undefined,
+        () => undefined,
+      ),
+    );
+    return result;
+  }
 
   private emitToSession(
     scope: EngineScope,

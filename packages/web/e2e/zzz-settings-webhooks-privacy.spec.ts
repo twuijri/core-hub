@@ -73,10 +73,8 @@ test('24. Webhooks: a private address needs a yes, the secret shows once, and th
 
     await openSettings(page, 'خطافات الويب');
     await expect(page.getByTestId('webhooks-tab')).toBeVisible();
-    // Not the placeholder, and it says what the hub does not send yet.
-    await expect(page.getByTestId('webhooks-forwarding-note')).toContainText(
-      'إلا التسليم التجريبي',
-    );
+    // Not the placeholder, and it says how events are sent (decision §59).
+    await expect(page.getByTestId('webhooks-forwarding-note')).toContainText('فور وقوعه');
     await expect(page.getByTestId('webhooks-empty')).toBeVisible();
 
     await page.getByTestId('add-webhook').click();
@@ -84,7 +82,7 @@ test('24. Webhooks: a private address needs a yes, the secret shows once, and th
     await dialog.getByTestId('webhook-name').fill('مستقبِل الاختبار');
     await dialog.getByTestId('webhook-url-input').fill(endpoint.url);
     await dialog.getByTestId('webhook-events-filter').fill('run.');
-    await dialog.getByRole('checkbox', { name: 'run.completed', exact: true }).click();
+    await dialog.getByRole('checkbox', { name: /^انتهى تشغيل وكيل/ }).click();
     await shot(page, 'webhook-dialog-ar-light');
     await dialog.getByTestId('save-webhook').click();
     // 127.0.0.1 is private: the hub refuses it before storing anything, in words.
@@ -161,8 +159,9 @@ test('25. Privacy: a token that acts as you is listed, revoked here, and refused
   const table = page.getByTestId('app-token-table');
   await expect(table).toContainText('سكربت النسخ');
   await expect(table).toContainText('رمز تطبيق');
-  // No switch the hub would ignore: redact_pii is stored and read by nothing.
-  await expect(page.getByTestId('privacy-tab').getByRole('switch')).toHaveCount(0);
+  // One switch, and it is Hermes's own `privacy.redact_pii` (§58), not the hub's stored field.
+  await expect(page.getByTestId('privacy-tab').getByRole('switch')).toHaveCount(1);
+  await expect(page.getByTestId('privacy-redact')).toContainText('إخفاء المعرّفات');
   await shot(page, 'privacy-ar-light');
 
   await table

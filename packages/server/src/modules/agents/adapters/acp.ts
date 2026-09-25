@@ -27,10 +27,19 @@
  */
 import { PRODUCT, derived } from '@corehub/contracts';
 import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process';
+import path from 'node:path';
 import { createInterface } from 'node:readline';
 import type { AgentCapability } from '../schema.js';
 import { entriesFor, type CatalogEntry } from '../catalog/index.js';
 import { EventQueue } from './event-queue.js';
+import {
+  SubagentSignals,
+  acpDelegationAgent,
+  acpDelegationGoal,
+  acpParentToolRef,
+  isAcpDelegation,
+  type SubagentControl,
+} from './subagents.js';
 import { parseVersion, runCommand, whichSync, type HostEnvironment } from './host.js';
 import type {
   AgentAdapter,
@@ -128,6 +137,18 @@ export class AcpSession implements AgentSession {
   private readonly approvals = new Map<string, number | string>();
   private nextId = 1;
   private closed = false;
+  private readonly subagentSignals = new SubagentSignals();
+  /** Tool calls that are delegations, by their id: the subagent is the call (§56). */
+  private readonly delegations = new Map<string, { goal: string | null }>();
+
+  /**
+   * What an ACP agent's stream says about its delegations: that one started, what it was asked,
+   * and that it ended — `observe`, nothing more (contract decision §56).
+   */
+  readonly subagents: SubagentControl = {
+    support: 'observe',
+    watch: (listener) => this.subagentSignals.watch(listener),
+  };
 
   private constructor(transport: AcpTransport, sessionId: string) {
     this.transport = transport;
@@ -140,7 +161,18 @@ export class AcpSession implements AgentSession {
 
   static async connect(
     transport: AcpTransport,
-    options: { cwd: string; clientName: string; clientVersion: string; timeoutMs?: number },
+    options: {
+      cwd: string;
+      clientName: string;
+      clientVersion: string;
+      timeoutMs?: number;
+      /**
+       * MCP servers the hub hands the agent for this session — the hub's own tools (contract
+       * decision §67). An HTTP server goes only to an agent that says it can reach one
+       * (`agentCapabilities.mcpCapabilities.http`); ACP requires every agent to take stdio.
+       */
+      mcpServers?: readonly AcpMcpServer[];
+    },
   ): Promise<{ session: AcpSession; agentCapabilities: Record<string, unknown> }> {
     const client = new AcpSession(transport, '');
     client.listen();
@@ -158,9 +190,17 @@ export class AcpSession implements AgentSession {
         `agent speaks ACP v${String(initialize.protocolVersion)}, the hub speaks v${ACP_PROTOCOL_VERSION}`,
       );
     }
+    const capabilities = initialize.agentCapabilities ?? {};
+    const mcp = (capabilities.mcpCapabilities ?? {}) as { http?: unknown; sse?: unknown };
+    const mcpServers = (options.mcpServers ?? []).filter(
+      (server) =>
+        server.type === 'stdio' ||
+        (server.type === 'http' && mcp.http === true) ||
+        (server.type === 'sse' && mcp.sse === true),
+    );
     const created = (await client.request(
       'session/new',
-      { cwd: options.cwd, mcpServers: [] },
+      { cwd: options.cwd, mcpServers },
       options.timeoutMs,
     )) as { sessionId?: string };
     if (!created.sessionId) throw new Error('agent returned no sessionId');
@@ -177,6 +217,7 @@ export class AcpSession implements AgentSession {
       }
       this.pending.clear();
       this.closed = true;
+      this.subagentSignals.endAll(reason);
       this.queue.end();
     });
   }
@@ -252,17 +293,25 @@ export class AcpSession implements AgentSession {
       case 'agent_thought_chunk':
         if (text) this.queue.push({ type: 'reasoning.delta', text });
         return;
-      case 'tool_call':
+      case 'tool_call': {
+        const id = String(update.toolCallId ?? '');
+        const parent = acpParentToolRef(update);
         this.queue.push({
           type: 'tool.started',
-          id: String(update.toolCallId ?? ''),
+          id,
           title: String(update.title ?? update.kind ?? 'tool'),
           kind: String(update.kind ?? 'other'),
+          input: acpToolInput(update),
+          // A subagent's own call, where the bridge says whose it is.
+          ...(parent && this.delegations.has(parent) ? { subagentId: parent } : {}),
           raw: update,
         });
+        this.trackDelegation(id, update);
         return;
+      }
       case 'tool_call_update': {
         const status = String(update.status ?? '');
+        this.trackDelegation(String(update.toolCallId ?? ''), update);
         const output = contentText(update.content) ?? contentText(update.rawOutput);
         if (status === 'failed') {
           this.queue.push({
@@ -296,6 +345,45 @@ export class AcpSession implements AgentSession {
         // Updates the hub does not model yet (usage, modes, commands) are dropped, not
         // guessed at; the terminal `run.completed` still carries the outcome.
         return;
+    }
+  }
+
+  /**
+   * A delegation starts with its tool call, learns its goal when the arguments arrive (OpenCode
+   * sends them in a later update) and ends with the call.
+   */
+  private trackDelegation(id: string, update: Record<string, unknown>): void {
+    if (!id) return;
+    const known = this.delegations.get(id);
+    if (!known && !isAcpDelegation(update)) return;
+    const goal = acpDelegationGoal(update);
+    const agent = acpDelegationAgent(update);
+    const status = String(update.status ?? '');
+    if (!known) {
+      this.delegations.set(id, { goal });
+      this.subagentSignals.emit({
+        phase: 'started',
+        id,
+        parentId: null,
+        depth: 0,
+        goal,
+        model: agent,
+        toolCount: null,
+        acceptingSteer: false,
+        toolCallRef: id,
+      });
+    } else if (goal && goal !== known.goal) {
+      known.goal = goal;
+      this.subagentSignals.emit({ phase: 'updated', id, goal, ...(agent ? { model: agent } : {}) });
+    }
+    if (status === 'completed' || status === 'failed') {
+      this.subagentSignals.emit({
+        phase: 'completed',
+        id,
+        status: status === 'completed' ? 'completed' : 'failed',
+        summary: contentText(update.content) ?? contentText(update.rawOutput),
+        acceptingSteer: false,
+      });
     }
   }
 
@@ -338,6 +426,8 @@ export class AcpSession implements AgentSession {
       10 * 60_000,
     )) as { stopReason?: string };
     const stopReason = result.stopReason ?? 'completed';
+    // An ACP delegation lives inside its turn: one the stream never closed ends with it.
+    this.subagentSignals.endAll();
     this.queue.push({ type: 'run.completed', stopReason });
     return { stopReason };
   }
@@ -353,6 +443,7 @@ export class AcpSession implements AgentSession {
   async close(): Promise<void> {
     if (this.closed) return;
     this.closed = true;
+    this.subagentSignals.endAll();
     this.queue.end();
     this.transport.close();
   }
@@ -373,13 +464,50 @@ function contentText(content: unknown): string | null {
   return null;
 }
 
+/** An MCP server as ACP's `session/new` carries it. */
+export type AcpMcpServer =
+  | {
+      type: 'http' | 'sse';
+      name: string;
+      url: string;
+      headers: Array<{ name: string; value: string }>;
+    }
+  | {
+      type: 'stdio';
+      name: string;
+      command: string;
+      args: string[];
+      env: Array<{ name: string; value: string }>;
+    };
+
 export interface AcpAdapterOptions {
   host: HostEnvironment;
+  /** The MCP servers a session in this target's workspace is given (the hub's own tools). */
+  mcpServers?: (target: AgentTarget) => readonly AcpMcpServer[];
   catalog?: readonly CatalogEntry[];
   clientName?: string;
   clientVersion?: string;
   /** Injected in tests so a fake binary can be driven without spawning. */
   connect?: (target: AgentTarget) => Promise<AcpTransport>;
+}
+
+/**
+ * What an ACP child starts with: the hub's environment, the agent's own variables, and its
+ * own directory first on `PATH`. An adapter that drives a second CLI (Pi's `pi-acp` runs
+ * `pi`) then finds the one installed beside it (`catalog/pi.ts`) rather than whatever
+ * else the host has on its PATH.
+ */
+export function agentEnvironment(
+  inherited: NodeJS.ProcessEnv,
+  target: Pick<AgentTarget, 'executablePath' | 'env'>,
+): NodeJS.ProcessEnv {
+  const env: NodeJS.ProcessEnv = { ...inherited, ...(target.env ?? {}) };
+  if (target.executablePath && path.isAbsolute(target.executablePath)) {
+    const own = path.dirname(target.executablePath);
+    const rest = (env.PATH ?? '').split(path.delimiter).filter((dir) => dir && dir !== own);
+    env.PATH = [own, ...rest].join(path.delimiter);
+  }
+  return env;
 }
 
 export function createAcpAdapter(options: AcpAdapterOptions): AgentAdapter {
@@ -395,7 +523,7 @@ export function createAcpAdapter(options: AcpAdapterOptions): AgentAdapter {
     if (!command) throw new Error(`agent ${target.slug} has no command`);
     const child = spawn(target.executablePath ?? command, args, {
       stdio: ['pipe', 'pipe', 'pipe'],
-      env: { ...(host.inherited ?? {}), ...(target.env ?? {}) },
+      env: agentEnvironment(host.inherited ?? {}, target),
       ...(target.cwd ? { cwd: target.cwd } : {}),
     }) as ChildProcessWithoutNullStreams;
     return childProcessTransport(child);
@@ -500,8 +628,32 @@ export function createAcpAdapter(options: AcpAdapterOptions): AgentAdapter {
         cwd: target.cwd ?? process.cwd(),
         clientName,
         clientVersion,
+        mcpServers: options.mcpServers?.(target) ?? [],
       });
       return session;
     },
   };
+}
+
+/**
+ * What an ACP tool call was given, as the hub records it: the agent's `rawInput`, plus the
+ * files the call touches — ACP's `locations` and the paths of its `diff` content — as
+ * `locations`, so the chat can open those files (decision §48). `{}` when neither is there.
+ */
+export function acpToolInput(update: Record<string, unknown>): Record<string, unknown> {
+  const raw = update.rawInput;
+  const input: Record<string, unknown> =
+    raw && typeof raw === 'object' && !Array.isArray(raw) ? { ...(raw as object) } : {};
+  const paths = new Set<string>();
+  for (const location of Array.isArray(update.locations) ? update.locations : []) {
+    const value = (location as { path?: unknown } | null)?.path;
+    if (typeof value === 'string' && value !== '') paths.add(value);
+  }
+  for (const block of Array.isArray(update.content) ? update.content : []) {
+    const item = block as { type?: unknown; path?: unknown } | null;
+    if (item?.type === 'diff' && typeof item.path === 'string' && item.path !== '')
+      paths.add(item.path);
+  }
+  if (paths.size > 0 && !('locations' in input)) input.locations = [...paths];
+  return input;
 }

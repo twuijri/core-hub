@@ -68,7 +68,14 @@ export async function testHub(env: EnvSource = {}, options: TestHubOptions = {})
   overrideAgents({
     pathValue: path.join(dataDir, 'no-such-bin'),
     adapterOptions: { hermes: { fetchImpl: unreachableFetch } },
+    // No registry is asked from a test, and the six-hourly check is never armed: a test
+    // that wants either passes its own (`agents.updates`).
     ...agentOverrides,
+    updates: {
+      registry: { latest: () => Promise.reject(new Error('no registry in tests')) },
+      intervalMs: null,
+      ...agentOverrides?.updates,
+    },
   });
   // No provider adapter may reach the network from a test, for the same reason: the
   // suite must say the same thing on every machine.

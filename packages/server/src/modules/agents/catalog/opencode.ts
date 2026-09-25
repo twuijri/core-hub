@@ -26,4 +26,7 @@ export const opencode: CatalogEntry = {
   health: { kind: 'command', args: ['--version'] },
   capabilities: ['streaming', 'tools', 'approvals', 'mcp'],
   sections: ['mcp', 'settings'],
+  // `opencode acp` sends its `task` tool (with `subagent_type`) and its end; the subagent
+  // works in a session of its own that the stream does not relay (§56).
+  subagents: 'observe',
 };

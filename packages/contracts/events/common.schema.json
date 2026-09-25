@@ -1154,8 +1154,15 @@
         },
         "compression": {
           "type": "object",
-          "description": "Context compression applied to long sessions.",
-          "required": ["enabled", "threshold", "target_ratio", "protect_first", "protect_last"],
+          "description": "Automatic context compression for this profile's conversations (decision §57).\nWhere the hub supervises Hermes these are Hermes's own keys in the profile's\n`config.yaml` — `compression.enabled`, `compression.threshold`,\n`compression.target_ratio`, `compression.protect_first_n`,\n`compression.protect_last_n` and `model.context_length` — read from there and\nwritten there, and Hermes applies them from the next turn on.\n",
+          "required": [
+            "enabled",
+            "threshold",
+            "target_ratio",
+            "protect_first",
+            "protect_last",
+            "context_length"
+          ],
           "properties": {
             "enabled": {
               "type": "boolean"
@@ -1163,12 +1170,14 @@
             "threshold": {
               "type": "number",
               "minimum": 0,
-              "maximum": 1
+              "maximum": 1,
+              "description": "Compress once the conversation fills this share of the model's window. Hermes\nraises anything below 0.75 to 0.75 for models whose window is under 512K.\n"
             },
             "target_ratio": {
               "type": "number",
               "minimum": 0,
-              "maximum": 1
+              "maximum": 1,
+              "description": "Share of the threshold kept word for word as the recent tail (Hermes clamps it to 0.10–0.80)."
             },
             "protect_first": {
               "type": "integer",
@@ -1177,6 +1186,11 @@
             "protect_last": {
               "type": "integer",
               "minimum": 0
+            },
+            "context_length": {
+              "type": ["integer", "null"],
+              "minimum": 1024,
+              "description": "The model's window in tokens, when the catalogue's is wrong; `null` = what the model reports."
             }
           }
         },
@@ -1336,6 +1350,10 @@
           "type": ["integer", "null"],
           "minimum": 1,
           "description": "`null` when the model's window is unknown."
+        },
+        "estimated": {
+          "type": "boolean",
+          "description": "`true` when the agent counted `used_tokens` roughly rather than taking it from\nthe provider's own report of the last request. Absent is `false`.\n"
         }
       }
     },
@@ -2390,6 +2408,17 @@
                 }
               ]
             },
+            "fallback": {
+              "oneOf": [
+                {
+                  "$ref": "#/$defs/RunFallback"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "`null` when the chosen model answered (absent from hubs before decision §54). When set, the turn moved down the fallback chain and `model` / `provider` name the model that actually answered — or, when the run then failed, the last one tried."
+            },
             "started_at": {
               "oneOf": [
                 {
@@ -2843,8 +2872,15 @@
         "presets",
         "journey",
         "jobs",
-        "tasks"
-      ]
+        "tasks",
+        "compress",
+        "steer",
+        "goals",
+        "plans",
+        "learn",
+        "skill_commands"
+      ],
+      "description": "What an agent can do. The last six are the composer's `/` commands the agent itself\ncarries out (decision §57): `compress` (`sessions.compress`), `steer`\n(`sessions.steerRun`), and `goals`, `plans`, `learn`, `skill_commands` — a message\nthat starts with `/goal`, `/plan`, `/learn` or `/skill <name>` is the agent's\ncommand rather than text for the model. A client offers a command only when the\nsession's agent has its capability.\n"
     },
     "AgentSection": {
       "type": "string",
@@ -2872,6 +2908,8 @@
         "version",
         "latest_version",
         "update_available",
+        "pinned_version",
+        "newer_than_tested",
         "auto_update",
         "auto_update_supported",
         "checked_at",
@@ -2900,6 +2938,14 @@
         },
         "update_available": {
           "type": "boolean"
+        },
+        "pinned_version": {
+          "type": ["string", "null"],
+          "description": "The catalog's pin for the package the hub installs — the version the owner tested."
+        },
+        "newer_than_tested": {
+          "type": "boolean",
+          "description": "The hub installed this agent and its version is past pinned_version."
         },
         "auto_update": {
           "type": "boolean"
@@ -2958,7 +3004,8 @@
             "capabilities",
             "sections",
             "default_model",
-            "limited"
+            "limited",
+            "subagents"
           ],
           "properties": {
             "slug": {
@@ -3014,6 +3061,9 @@
             "limited": {
               "type": "boolean",
               "description": "True for the process harness — the UI marks the agent \"limited\"."
+            },
+            "subagents": {
+              "$ref": "#/$defs/SubagentSupport"
             }
           }
         }
@@ -4089,7 +4139,9 @@
             "summary_policy",
             "handoff",
             "seats",
-            "last_active_at"
+            "last_active_at",
+            "lead_seat_id",
+            "archived_at"
           ],
           "properties": {
             "name": {
@@ -4108,7 +4160,30 @@
               "description": "Whether the caller may edit the room."
             },
             "can_mention_all": {
-              "type": "boolean"
+              "type": "boolean",
+              "description": "Whether a person may address every seat at once with `@all`."
+            },
+            "lead_seat_id": {
+              "oneOf": [
+                {
+                  "$ref": "#/$defs/Ulid"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "The seat that answers a message that mentions nobody (DECISIONS §69). The first\nseat added becomes the lead; `null` means such a message is only read.\n"
+            },
+            "archived_at": {
+              "oneOf": [
+                {
+                  "$ref": "#/$defs/Timestamp"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Set while the room is archived; an archived room refuses new messages."
             },
             "member_count": {
               "type": "integer"
@@ -4313,6 +4388,10 @@
         },
         "handoff": {
           "$ref": "#/$defs/HandoffPolicy"
+        },
+        "can_mention_all": {
+          "type": "boolean",
+          "default": true
         }
       }
     },
@@ -4373,6 +4452,24 @@
         },
         "handoff": {
           "$ref": "#/$defs/HandoffPolicy"
+        },
+        "can_mention_all": {
+          "type": "boolean"
+        },
+        "lead_seat_id": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/Ulid"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "A seat of this room, or `null` for no default responder."
+        },
+        "archived": {
+          "type": "boolean",
+          "description": "Archive (`true`) or bring back (`false`) the room."
         }
       }
     },
@@ -5382,7 +5479,15 @@
       "required": ["project_id", "columns", "counts"],
       "properties": {
         "project_id": {
-          "$ref": "#/$defs/Ulid"
+          "oneOf": [
+            {
+              "$ref": "#/$defs/Ulid"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "The project asked for with `project_id`; `null` for the board of every project."
         },
         "columns": {
           "type": "array",
@@ -5817,6 +5922,38 @@
         }
       ]
     },
+    "SchedulePreviewRequest": {
+      "type": "object",
+      "required": ["trigger"],
+      "properties": {
+        "trigger": {
+          "$ref": "#/$defs/ScheduleTrigger"
+        },
+        "count": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 10,
+          "description": "How many next times; 3 when not given."
+        }
+      }
+    },
+    "SchedulePreview": {
+      "type": "object",
+      "required": ["timezone", "next_runs"],
+      "properties": {
+        "timezone": {
+          "type": "string",
+          "description": "The trigger's zone, the one to show the times in."
+        },
+        "next_runs": {
+          "type": "array",
+          "maxItems": 10,
+          "items": {
+            "$ref": "#/$defs/Timestamp"
+          }
+        }
+      }
+    },
     "WorkflowNode": {
       "type": "object",
       "required": [
@@ -5933,7 +6070,8 @@
             "status",
             "active_run_id",
             "run_count",
-            "schedule_count"
+            "schedule_count",
+            "limits"
           ],
           "properties": {
             "name": {
@@ -5978,6 +6116,9 @@
             "schedule_count": {
               "type": "integer",
               "description": "Enabled schedules targeting this workflow."
+            },
+            "limits": {
+              "$ref": "#/$defs/WorkflowLimits"
             }
           }
         }
@@ -6008,6 +6149,14 @@
           "items": {
             "$ref": "#/$defs/WorkflowEdge"
           }
+        },
+        "limits": {
+          "allOf": [
+            {
+              "$ref": "#/$defs/WorkflowLimits"
+            }
+          ],
+          "description": "Replaces the workflow's limits as a whole; a new workflow without it has none. A cost limit in a currency other than USD, or not above zero, is `409` with `details.reason = limit_invalid` and `details.field`."
         }
       }
     },
@@ -6120,7 +6269,10 @@
             "steps",
             "error",
             "started_at",
-            "finished_at"
+            "finished_at",
+            "limits",
+            "cost",
+            "stopped_by"
           ],
           "properties": {
             "workflow_id": {
@@ -6168,10 +6320,105 @@
                   "type": "null"
                 }
               ]
+            },
+            "limits": {
+              "allOf": [
+                {
+                  "$ref": "#/$defs/WorkflowLimits"
+                }
+              ],
+              "description": "The limits this run works under: the workflow's when it started, with what the run itself asked for (`WorkflowRunRequest.limits`) over them. A rerun from a step keeps the limits of the run it repeats."
+            },
+            "cost": {
+              "description": "What the run's agent steps cost so far by the hub's estimate (the per-turn estimate of `Usage.cost`, summed); `null` while no turn of it has a price.",
+              "oneOf": [
+                {
+                  "$ref": "#/$defs/Money"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "stopped_by": {
+              "description": "Which limit ended the run, when one did (DECISIONS §53): `max_duration` or `max_cost` stopped it at once, the step working then cancelled; `step_timeout` is a step that ran out of time with no `failure` edge to take. The run is then `failed` and `error` says the same in words. `null` otherwise.",
+              "oneOf": [
+                {
+                  "type": "string",
+                  "enum": ["max_duration", "max_cost", "step_timeout"]
+                },
+                {
+                  "type": "null"
+                }
+              ]
             }
           }
         }
       ]
+    },
+    "WorkflowLimits": {
+      "type": "object",
+      "description": "What one run of a workflow may take (DECISIONS §53). Each is `null` for no limit. Time a run spends waiting for a person at an approval counts toward none of them.",
+      "required": ["max_duration_seconds", "max_cost", "step_timeout_seconds"],
+      "properties": {
+        "max_duration_seconds": {
+          "type": ["integer", "null"],
+          "minimum": 1,
+          "maximum": 604800,
+          "description": "Time budget: the longest the run may work, in seconds (at most a week). Past it the run stops, the step working then cancelled (`stopped_by: max_duration`)."
+        },
+        "max_cost": {
+          "description": "Cost budget, in USD: the most the run's agent turns may cost by the hub's estimate, the same one a conversation's `Usage.cost` shows. Checked while a step works and after it; past it the run stops, the step working then cancelled (`stopped_by: max_cost`). A turn whose model has no price counts as nothing.",
+          "oneOf": [
+            {
+              "$ref": "#/$defs/Money"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "step_timeout_seconds": {
+          "type": ["integer", "null"],
+          "minimum": 1,
+          "maximum": 86400,
+          "description": "The longest any one step may work, in seconds (at most a day). A step past it is cancelled and fails (\"timed out\"); its `failure` edges are followed, and with none the run stops (`stopped_by: step_timeout`)."
+        }
+      },
+      "example": {
+        "max_duration_seconds": 1800,
+        "max_cost": {
+          "amount": "2.00",
+          "currency": "USD"
+        },
+        "step_timeout_seconds": 600
+      }
+    },
+    "WorkflowLimitsOverride": {
+      "type": "object",
+      "description": "One run's own limits: a field given replaces the workflow's for this run only, `null` lifts it, and a field left out keeps the workflow's.",
+      "properties": {
+        "max_duration_seconds": {
+          "type": ["integer", "null"],
+          "minimum": 1,
+          "maximum": 604800
+        },
+        "max_cost": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/Money"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "step_timeout_seconds": {
+          "type": ["integer", "null"],
+          "minimum": 1,
+          "maximum": 86400
+        }
+      }
     },
     "WorkflowRunRequest": {
       "type": "object",
@@ -6185,8 +6432,13 @@
             "type": "string"
           }
         },
+        "limits": {
+          "$ref": "#/$defs/WorkflowLimitsOverride"
+        },
         "timeout_ms": {
-          "type": ["integer", "null"]
+          "type": ["integer", "null"],
+          "minimum": 1,
+          "description": "The run's time budget in milliseconds, rounded up to whole seconds — the older spelling of `limits.max_duration_seconds`, which wins when both are given."
         }
       }
     },
@@ -6514,14 +6766,24 @@
     },
     "ProviderSignIn": {
       "type": "object",
-      "required": ["id", "status", "user_code", "verification_url", "accepts_code", "expires_at"],
+      "description": "One sign-in to a provider account by device code (decision §55): the person opens `verification_url`, enters `user_code`, and the client polls `models.getProviderSignIn` until `status` is no longer `pending`. On `approved` the credential is stored where the provider's scope says — the shared provider's in the `default` profile, a profile's own provider's in that profile — and the provider's `auth.signed_in` is true.",
+      "required": [
+        "id",
+        "status",
+        "user_code",
+        "verification_url",
+        "accepts_code",
+        "expires_at",
+        "error"
+      ],
       "properties": {
         "id": {
           "$ref": "#/$defs/Ulid"
         },
         "status": {
           "type": "string",
-          "enum": ["pending", "approved", "denied", "expired"]
+          "enum": ["pending", "approved", "denied", "expired", "failed"],
+          "description": "`denied` — the person declined in the browser; `expired` — the code ran out before it was used; `failed` — the sign-in could not finish (`error` says why)."
         },
         "user_code": {
           "type": ["string", "null"]
@@ -6535,6 +6797,10 @@
         },
         "expires_at": {
           "$ref": "#/$defs/Timestamp"
+        },
+        "error": {
+          "type": ["string", "null"],
+          "description": "Why a `failed` or `denied` sign-in stopped, in the runtime's own words."
         }
       }
     },
@@ -6542,6 +6808,13 @@
       "type": "object",
       "required": ["default", "fallbacks", "auxiliary"],
       "properties": {
+        "inherited": {
+          "type": "array",
+          "description": "The roles whose value is the `default` profile's, because this profile chose none (decision §37): `default` for the chat model (with its fallbacks), else an auxiliary task key. Always empty in the `default` profile.",
+          "items": {
+            "type": "string"
+          }
+        },
         "default": {
           "oneOf": [
             {
@@ -6554,7 +6827,7 @@
         },
         "fallbacks": {
           "type": "array",
-          "description": "Tried in order when the chosen model fails.",
+          "description": "Tried in order when the chosen model fails with an error another model could get past (decision §54): the provider unavailable (a 5xx, `auth_unavailable`), rate limited (429), timed out or unreachable. Never after another 4xx, and never once the model has started answering. It follows the chat model: inherited with it, and used by every agent of the profile after the model that agent runs on.",
           "items": {
             "$ref": "#/$defs/ModelRef"
           }
@@ -7988,6 +8261,282 @@
         },
         "payload": {
           "type": "object"
+        }
+      }
+    },
+    "ChannelContinueRequest": {
+      "type": "object",
+      "required": ["agent_id"],
+      "properties": {
+        "agent_id": {
+          "$ref": "#/$defs/Ulid"
+        },
+        "note": {
+          "type": ["string", "null"],
+          "maxLength": 4000,
+          "description": "What the person wants done with it; added to the first message."
+        }
+      }
+    },
+    "ChannelContinuation": {
+      "type": "object",
+      "required": ["session", "first_message"],
+      "properties": {
+        "session": {
+          "$ref": "#/$defs/Session"
+        },
+        "first_message": {
+          "type": "array",
+          "minItems": 2,
+          "description": "The chat's first message, for the client to send (`sessions.createRun`) once it watches the chat: a `text` block (the summary, and the note) and a `file` block (the transcript).",
+          "items": {
+            "$ref": "#/$defs/ContentBlock"
+          }
+        }
+      }
+    },
+    "SessionCompressRequest": {
+      "type": "object",
+      "description": "Every field is optional; an empty body compresses the whole conversation.",
+      "properties": {
+        "focus": {
+          "type": ["string", "null"],
+          "maxLength": 2000,
+          "description": "What the summary should keep in view, in the person's words. Passed to the agent\nas-is (Hermes also reads `here [N]` there: keep the last N turns word for word).\n"
+        }
+      }
+    },
+    "SessionCompression": {
+      "type": "object",
+      "required": [
+        "status",
+        "before_tokens",
+        "after_tokens",
+        "before_messages",
+        "after_messages",
+        "context",
+        "message"
+      ],
+      "properties": {
+        "status": {
+          "type": "string",
+          "enum": ["compressed", "unchanged", "skipped"],
+          "description": "`compressed`: the history was summarised. `unchanged`: there was too little to\ncompress, or the summary would not have been smaller. `skipped`: another\ncompression of the same conversation was already running.\n"
+        },
+        "before_tokens": {
+          "type": ["integer", "null"],
+          "minimum": 0,
+          "description": "The agent's estimate of the conversation before, when it gives one."
+        },
+        "after_tokens": {
+          "type": ["integer", "null"],
+          "minimum": 0
+        },
+        "before_messages": {
+          "type": ["integer", "null"],
+          "minimum": 0
+        },
+        "after_messages": {
+          "type": ["integer", "null"],
+          "minimum": 0
+        },
+        "context": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/ContextUsage"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "The window after compressing; `null` when the agent does not report it."
+        },
+        "message": {
+          "type": ["string", "null"],
+          "description": "The agent's own words about what happened, untranslated; `null` when it said nothing."
+        }
+      }
+    },
+    "RunSteerRequest": {
+      "type": "object",
+      "required": ["text"],
+      "properties": {
+        "text": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 8000
+        }
+      }
+    },
+    "RunSteerResult": {
+      "type": "object",
+      "required": ["status"],
+      "properties": {
+        "status": {
+          "type": "string",
+          "enum": ["queued", "rejected"]
+        }
+      }
+    },
+    "SubagentSupport": {
+      "type": "string",
+      "enum": ["full", "observe", "none"],
+      "description": "What an agent lets a person do with the subagents it delegates to (contract decision\n§56). `full` — see them live, stop one, steer one while it takes guidance, read its\noutput (Hermes); `observe` — see them start and end, nothing more (a coding agent whose\nstream names its delegations); `none` — the agent never says it delegated.\n"
+    },
+    "SubagentStatus": {
+      "type": "string",
+      "enum": ["running", "completed", "failed", "interrupted"]
+    },
+    "SubagentTool": {
+      "type": "object",
+      "required": ["name", "preview", "at"],
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "preview": {
+          "type": ["string", "null"],
+          "description": "The agent's one-line summary of the call, when it gave one."
+        },
+        "at": {
+          "$ref": "#/$defs/Timestamp"
+        }
+      }
+    },
+    "Subagent": {
+      "type": "object",
+      "description": "One delegated agent of a conversation. `id` is the agent's own (not a ULID). A nested\nsubagent names the one that started it in `parent_id`; `depth` is 0 for one the\nconversation's agent started itself.\n",
+      "required": [
+        "id",
+        "session_id",
+        "run_id",
+        "parent_id",
+        "depth",
+        "goal",
+        "model",
+        "status",
+        "started_at",
+        "finished_at",
+        "tool_count",
+        "last_tool",
+        "accepting_steer",
+        "summary",
+        "tools"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "maxLength": 200
+        },
+        "session_id": {
+          "$ref": "#/$defs/Ulid"
+        },
+        "run_id": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/Ulid"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "The run that was going when it started; `null` when none was."
+        },
+        "parent_id": {
+          "type": ["string", "null"]
+        },
+        "depth": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "goal": {
+          "type": "string",
+          "description": "What it was asked to do, in the agent's words."
+        },
+        "model": {
+          "type": ["string", "null"]
+        },
+        "status": {
+          "$ref": "#/$defs/SubagentStatus"
+        },
+        "started_at": {
+          "$ref": "#/$defs/Timestamp"
+        },
+        "finished_at": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/Timestamp"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "tool_count": {
+          "type": ["integer", "null"],
+          "minimum": 0,
+          "description": "Tools it called so far; `null` when the agent does not say (`observe`)."
+        },
+        "last_tool": {
+          "type": ["string", "null"]
+        },
+        "accepting_steer": {
+          "type": "boolean",
+          "description": "A note sent now would reach it (`sessions.steerSubagent`)."
+        },
+        "summary": {
+          "type": ["string", "null"],
+          "description": "Its last words when it finished, or why it failed."
+        },
+        "tools": {
+          "type": "array",
+          "maxItems": 50,
+          "description": "Its most recent tool calls, oldest first (at most 50).",
+          "items": {
+            "$ref": "#/$defs/SubagentTool"
+          }
+        }
+      }
+    },
+    "RunFallback": {
+      "type": "object",
+      "description": "What a turn went through before the model that answered it (decision §54): each model of the chain that failed with an error another model could get past, in the order tried, starting with the one that was chosen.",
+      "required": ["failed"],
+      "properties": {
+        "failed": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/$defs/RunFallbackAttempt"
+          }
+        }
+      }
+    },
+    "RunFallbackAttempt": {
+      "type": "object",
+      "required": ["model", "provider", "code", "error"],
+      "properties": {
+        "model": {
+          "type": "string"
+        },
+        "provider": {
+          "type": ["string", "null"],
+          "description": "The provider's slug, when the hub knows it."
+        },
+        "code": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/ErrorCode"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "`null` when the runtime switched models without saying why."
+        },
+        "error": {
+          "type": ["string", "null"],
+          "description": "The provider's own words, when it sent any."
         }
       }
     }

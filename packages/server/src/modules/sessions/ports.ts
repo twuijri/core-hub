@@ -32,6 +32,8 @@ export interface AgentInfo {
   available: boolean;
   /** Machine-readable reason for `available: false` (`not_installed`, `stopped`, …). */
   unavailableReason?: string;
+  /** What it lets a person do with its subagents (§56); absent is `none`. */
+  subagents?: 'full' | 'observe' | 'none';
 }
 
 export interface AgentDirectory {
@@ -106,6 +108,14 @@ export interface AttachmentsPort {
     file: { path: string; relativePath: string; sizeBytes: number },
     sourceId: string,
   ): Promise<Omit<AttachmentSummary, 'url'>>;
+  /**
+   * Keep bytes the hub itself wrote as an attachment of the caller — a channel
+   * conversation's transcript for "Continue in Core Hub" (contract decision §62).
+   */
+  store(
+    scope: { workspace: string; userId: string },
+    file: { name: string; mime: string; bytes: Buffer },
+  ): Promise<Omit<AttachmentSummary, 'url'>>;
 }
 
 export interface AgentRunRequest {
@@ -124,6 +134,11 @@ export interface AgentRunRequest {
   files: AgentFileExchange | null;
   /** Tool names the user already approved for the rest of this session. */
   allowedTools: string[];
+  /**
+   * The person the run acts for (the session's owner). The hub's own tools act as this
+   * person, in this workspace only (contract decision §67); absent, they refuse.
+   */
+  userId?: string | null;
 }
 
 export interface AgentRunAccepted {
@@ -147,6 +162,14 @@ export interface AgentChoice {
  * transport-free: an ACP notification, a Hermes gateway frame and a parsed
  * PTY line all become one of these.
  */
+/** One model of the fallback chain that failed a turn (contract `RunFallbackAttempt`). */
+export interface AgentFallbackAttempt {
+  model: string;
+  provider: string | null;
+  code: string | null;
+  error: string | null;
+}
+
 export type AgentEvent =
   | { type: 'message_delta'; text: string }
   | { type: 'reasoning_delta'; text: string }
@@ -187,7 +210,23 @@ export type AgentEvent =
       costMicroUsd?: number;
       costSource?: 'provider' | 'estimated' | 'unknown';
     }
-  | { type: 'context'; usedTokens: number; windowTokens?: number | null }
+  | { type: 'context'; usedTokens: number; windowTokens?: number | null; estimated?: boolean }
+  /**
+   * The agent is compressing the conversation's context on its own inside this run, because
+   * the window was filling up (decision §57). `finished` follows before the run ends.
+   */
+  | { type: 'compression'; phase: 'started' | 'finished' }
+  | {
+      /**
+       * The turn moved down the fallback chain (contract decision §54): the models in
+       * `failed` refused it, in order, with an error another model could get past, and
+       * `answered` is the one that took it — or, when the run then failed, the last tried.
+       * `provider` is the hub's provider slug, when known.
+       */
+      type: 'model_fallback';
+      failed: AgentFallbackAttempt[];
+      answered: { model: string; provider: string | null };
+    }
   | { type: 'completed' }
   | { type: 'failed'; code?: string; message: string };
 
@@ -220,6 +259,37 @@ export interface AgentAskRequest {
   timeoutMs: number;
 }
 
+/**
+ * Compress a conversation's context now, between runs (`sessions.compress`, decision §57).
+ * The fields a run of this session would open the agent's conversation with, so the agent
+ * compresses the same one.
+ */
+export interface AgentCompressRequest {
+  sessionId: string;
+  workspace: string;
+  agentId: string;
+  agentSessionRef: string | null;
+  workingDir: string | null;
+  model: string | null;
+  provider: string | null;
+  reasoningEffort: string | null;
+  /** What the summary should keep in view; `null` = the agent decides. */
+  focus: string | null;
+}
+
+export interface AgentCompressResult {
+  /** The agent's conversation id, when opening it for this minted or changed one. */
+  agentSessionRef: string | null;
+  status: 'compressed' | 'unchanged' | 'skipped';
+  beforeTokens: number | null;
+  afterTokens: number | null;
+  beforeMessages: number | null;
+  afterMessages: number | null;
+  context: { usedTokens: number; windowTokens: number | null; estimated: boolean } | null;
+  /** The agent's own words, untranslated. */
+  message: string | null;
+}
+
 export interface AgentRunner {
   /** Hand the turn to the agent. Throws to fail the run before it streams. */
   start(request: AgentRunRequest): Promise<AgentRunAccepted>;
@@ -235,6 +305,58 @@ export interface AgentRunner {
    * hub that cannot name a session prettily still names it.
    */
   ask?(request: AgentAskRequest): Promise<string | null>;
+  /**
+   * Optional (decision §57). A runner without it cannot compress, and `sessions.compress`
+   * says so (`409 state_invalid`, `command_unsupported`); so does one whose adapter throws
+   * `HubError('state_invalid', {reason: 'command_unsupported'})`.
+   */
+  compress?(request: AgentCompressRequest): Promise<AgentCompressResult>;
+  /** Optional: guidance into the run in flight without stopping it (`sessions.steerRun`). */
+  steer?(runId: string, text: string): Promise<'queued' | 'rejected'>;
+  /**
+   * Optional (contract decision §56): every report about a subagent of any live conversation,
+   * named by the hub session it belongs to. A runner without it has no subagents to tell of.
+   */
+  onSubagent?(listener: (sessionId: string, signal: AgentSubagentSignal) => void): () => void;
+  /** What the live conversation lets a person do with its subagents; `null` when nothing. */
+  subagents?(sessionId: string): AgentSubagentControl | null;
+}
+
+/** One report about one subagent; absent fields are "not said". */
+export interface AgentSubagentSignal {
+  phase: 'started' | 'updated' | 'tool' | 'completed';
+  id: string;
+  parentId?: string | null;
+  depth?: number | null;
+  goal?: string | null;
+  model?: string | null;
+  toolName?: string | null;
+  toolPreview?: string | null;
+  toolCount?: number | null;
+  status?: 'completed' | 'failed' | 'interrupted';
+  summary?: string | null;
+  acceptingSteer?: boolean;
+  toolCallRef?: string | null;
+}
+
+export interface AgentLiveSubagent {
+  id: string;
+  parentId: string | null;
+  depth: number;
+  goal: string;
+  model: string | null;
+  startedAt: number | null;
+  toolCount: number | null;
+  lastTool: string | null;
+  acceptingSteer: boolean;
+}
+
+export interface AgentSubagentControl {
+  readonly support: 'full' | 'observe';
+  list?(): Promise<AgentLiveSubagent[]>;
+  interrupt?(id: string): Promise<boolean>;
+  steer?(id: string, text: string): Promise<'queued' | 'rejected'>;
+  tail?(id: string): Promise<{ available: boolean; text: string; truncated: boolean }>;
 }
 
 /**

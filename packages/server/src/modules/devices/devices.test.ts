@@ -1,5 +1,5 @@
 import { describe, it } from 'vitest';
-import { devicesModule } from './index.js';
+import { devicesModule } from '../index.js';
 import { expectModuleRegistered } from '../../../tests/unit/helpers.js';
 
 describe('module: devices', () => {

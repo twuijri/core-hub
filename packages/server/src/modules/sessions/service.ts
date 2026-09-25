@@ -17,6 +17,8 @@ import {
   toApproval,
   toMessage,
   toRun,
+  toRunChanges,
+  toRunFileDiff,
   toSession,
   type ApprovalRow,
   type MessageRow,
@@ -30,6 +32,23 @@ import { excerpt, type SessionFilters } from './store.js';
 import type { MessagePart } from './schema.js';
 import type { RunState } from './run-reducer.js';
 import { buildTrajectory, type Trajectory } from './trajectory.js';
+import {
+  DOWNLOAD_MAX_BYTES,
+  PREVIEW_MAX_BYTES,
+  listSessionFiles,
+  openInside,
+  type AttachmentOnMessage,
+  type OpenedFile,
+  type SessionFileEntry,
+} from './files.js';
+import { SubagentBook, type SubagentRecord, type SubagentSupport } from './subagents.js';
+import { SessionCategories } from './categories.js';
+import {
+  continuationTitle,
+  summaryOf,
+  transcriptOf,
+  type ChannelRead,
+} from './channel-continuation.js';
 
 /** `undefined` is spelled out everywhere: `exactOptionalPropertyTypes` is on. */
 export interface ContentBlockInput {
@@ -126,6 +145,10 @@ export class SessionsService {
   readonly store: SessionsStore;
   readonly audit: AuditService;
   readonly engine: RunEngine;
+  /** The subagents of every conversation (§56). */
+  readonly subagents: SubagentBook;
+  /** The profile's categories (contract decision §60, `categories.ts`). */
+  readonly categories: SessionCategories;
 
   constructor(
     store: SessionsStore,
@@ -135,10 +158,85 @@ export class SessionsService {
     private readonly log: FastifyBaseLogger,
     /** `${DATA_DIR}`; every session works under `<dataDir>/workspaces/<profile>`. */
     private readonly dataDir: string,
+    /** The host's environment, for the git calls that record a run's changes (decision §49). */
+    hostEnv: NodeJS.ProcessEnv = {},
   ) {
     this.store = store;
     this.audit = audit;
-    this.engine = new RunEngine({ store, audit, realtime, ports, log });
+    this.subagents = new SubagentBook({
+      store,
+      realtime,
+      activeRunOf: (sessionId) => this.engine.activeRunOf(sessionId),
+      control: (sessionId) => ports.runner.subagents?.(sessionId) ?? null,
+    });
+    this.engine = new RunEngine({
+      store,
+      audit,
+      realtime,
+      ports,
+      log,
+      hostEnv,
+      subagents: this.subagents,
+    });
+    ports.runner.onSubagent?.((sessionId, signal) => this.subagents.onSignal(sessionId, signal));
+    this.categories = new SessionCategories(store.db);
+  }
+
+  // ------------------------------------------------------------ subagents (§56)
+
+  /** `sessions.listSubagents`: what the agent supports, and its subagents. */
+  async listSubagents(
+    scope: EngineScope,
+    sessionId: string,
+  ): Promise<{ support: SubagentSupport; items: SubagentRecord[] }> {
+    const row = this.requireSession(scope, sessionId);
+    const live = this.ports.runner.subagents?.(row.id);
+    const support: SubagentSupport =
+      live?.support ??
+      (await this.ports.agents.find(scope.workspace, row.agentId).catch(() => null))?.subagents ??
+      'none';
+    return { support, items: this.subagents.list(scope.workspace, row.id) };
+  }
+
+  interruptSubagent(scope: EngineScope, sessionId: string, id: string): Promise<SubagentRecord> {
+    const row = this.requireSession(scope, sessionId);
+    return this.subagents.interrupt(scope.workspace, row.id, id);
+  }
+
+  steerSubagent(
+    scope: EngineScope,
+    sessionId: string,
+    id: string,
+    text: string,
+  ): Promise<'queued' | 'rejected'> {
+    const row = this.requireSession(scope, sessionId);
+    return this.subagents.steer(scope.workspace, row.id, id, text);
+  }
+
+  /** Whether the live conversation's agent can stop one of its subagents. */
+  canStopSubagents(sessionId: string): boolean {
+    return !!this.ports.runner.subagents?.(sessionId)?.interrupt;
+  }
+
+  tailSubagent(scope: EngineScope, sessionId: string, id: string) {
+    const row = this.requireSession(scope, sessionId);
+    return this.subagents.tail(scope.workspace, row.id, id);
+  }
+
+  /**
+   * `sessions.deleteCategory`: the category goes, its sessions stay — each one loses the
+   * category and is announced (`session.updated`), so every open list moves it back.
+   */
+  deleteCategory(scope: EngineScope, categoryId: string): void {
+    this.categories.remove(scope, categoryId, (id) => {
+      for (const sessionId of this.categories.sessionIdsIn(scope.workspace, id)) {
+        const updated = this.store.updateSession(scope.workspace, sessionId, { categoryId: null });
+        if (!updated) continue;
+        this.realtime.emitToProfile(scope.profile, 'session.updated', {
+          session: this.sessionOf(scope, updated),
+        });
+      }
+    });
   }
 
   // ------------------------------------------------------------- sessions
@@ -162,6 +260,7 @@ export class SessionsService {
     } = {},
   ): Promise<Record<string, unknown>> {
     const agent = await this.requireAgent(scope, input.agent_id);
+    if (input.category_id) this.categories.require(scope.workspace, input.category_id);
     // Resolved before the row is minted: a refused path must not leave a session behind.
     const root = this.rootOf(scope);
     const asked = input.working_dir?.trim() ? input.working_dir.trim() : null;
@@ -195,6 +294,56 @@ export class SessionsService {
     const payload = this.sessionOf(scope, withDir);
     this.realtime.emitToProfile(scope.profile, 'session.created', { session: payload });
     return payload;
+  }
+
+  /**
+   * "Continue in Core Hub" (`sessions.continueChannelConversation`, contract decision §62):
+   * a channel conversation, read from Hermes (`read`), becomes an ordinary chat in this
+   * profile with `agent_id`. The transcript is kept as the caller's attachment, and the chat's
+   * first message — the summary, the person's note and the transcript — is **answered, not
+   * sent**: the client sends it once it watches the chat, as a new chat's first message is
+   * sent (a run started here would stream to nobody). The agent is checked before anything
+   * is written, as a turn is: a chat left behind with no agent to answer is a dead one.
+   */
+  async continueChannel(
+    scope: EngineScope,
+    read: ChannelRead,
+    input: { agent_id: string; note?: string | null | undefined },
+  ): Promise<{ session: Record<string, unknown>; first_message: Record<string, unknown>[] }> {
+    const agent = await this.requireAgent(scope, input.agent_id);
+    if (!agent.available) {
+      throw new HubError('agent_unavailable', {
+        details: { agent_id: agent.id, status: agent.unavailableReason ?? 'unavailable' },
+      });
+    }
+    const transcript = transcriptOf(read, scope.language);
+    const file = await this.ports.attachments.store(
+      { workspace: scope.workspace, userId: scope.userId },
+      {
+        name: transcript.name,
+        mime: 'text/markdown',
+        bytes: Buffer.from(transcript.text, 'utf8'),
+      },
+    );
+    const session = await this.create(scope, {
+      agent_id: agent.id,
+      title: continuationTitle(read, scope.language),
+    });
+    // The title names the conversation it came from; the agent's own naming does not replace it.
+    this.store.updateSession(scope.workspace, String(session.id), { titleSetByUser: true });
+    return {
+      session,
+      first_message: [
+        { type: 'text', text: summaryOf(read, scope.language, input.note ?? null) },
+        {
+          type: 'file',
+          attachment_id: file.id,
+          name: file.name,
+          mime: file.mime,
+          size_bytes: file.sizeBytes,
+        },
+      ],
+    };
   }
 
   /**
@@ -298,13 +447,8 @@ export class SessionsService {
     patch: SessionPatchInput,
   ): Promise<Record<string, unknown>> {
     const row = this.requireSession(scope, sessionId);
-    if (patch.category_id !== undefined && patch.category_id !== null) {
-      // `session_categories` is declared in the contract but has no table yet;
-      // refusing is honest, silently dropping the field would not be.
-      throw new HubError('not_implemented', {
-        details: { field: 'category_id', operation: 'sessions.listCategories' },
-      });
-    }
+    // A category of this profile, or `404` — never a silent drop (contract decision §60).
+    if (patch.category_id) this.categories.require(scope.workspace, patch.category_id);
     const changes: Partial<SessionRow> = {};
     /**
      * Who owns the name (contract decision §26). A non-empty title is the person's own
@@ -347,7 +491,7 @@ export class SessionsService {
       );
     }
     if (patch.notify !== undefined) changes.notify = patch.notify;
-    if (patch.category_id === null) changes.categoryId = null;
+    if (patch.category_id !== undefined) changes.categoryId = patch.category_id;
 
     // Putting a conversation away puts its work away too (owner, 2026-09-24): an archived
     // chat whose agent kept working — and spending — would be out of sight, not stopped.
@@ -553,8 +697,130 @@ export class SessionsService {
       toolCalls: this.store.toolCallsForRuns(scope.workspace, ids),
       usage: this.audit.totalsForRuns(scope.workspace, ids),
       live,
+      subagents: this.subagents.list(scope.workspace, row.id),
       now,
     });
+  }
+
+  /**
+   * The conversation's files for preview (contract `sessions.listFiles`, decision §48): what
+   * its tool calls named, what is in its working folder, and its messages' attachments.
+   * Tool calls are read from the store, where a live run writes each one as it happens.
+   */
+  listFiles(
+    scope: EngineScope,
+    sessionId: string,
+  ): { working_dir: string | null; truncated: boolean; items: SessionFileEntry[] } {
+    const row = this.requireSession(scope, sessionId);
+    const runs = this.store.allRuns(scope.workspace, row.id);
+    const calls = [
+      ...this.store
+        .toolCallsForRuns(
+          scope.workspace,
+          runs.map((r) => r.id),
+        )
+        .values(),
+    ]
+      .flat()
+      .sort(
+        (a, b) => (a.startedAt?.getTime() ?? 0) - (b.startedAt?.getTime() ?? 0) || a.seq - b.seq,
+      );
+    const messages = this.store.allMessages(scope.workspace, row.id);
+    const ids = [...new Set(messages.flatMap((m) => m.attachmentIds))];
+    const resolved = ids.length > 0 ? this.ports.attachments.resolve(scope.workspace, ids) : null;
+    const attachments: AttachmentOnMessage[] = [];
+    const listed = new Set<string>();
+    for (const message of messages) {
+      for (const id of message.attachmentIds) {
+        const found = resolved?.get(id);
+        if (!found || listed.has(id)) continue;
+        listed.add(id);
+        attachments.push({
+          id,
+          messageId: message.id,
+          at: message.createdAt.getTime(),
+          name: found.name,
+          mime: found.mime,
+          sizeBytes: found.sizeBytes,
+        });
+      }
+    }
+    return listSessionFiles({
+      workingDir: row.workingDir ?? null,
+      toolCalls: calls.map((call) => ({
+        id: call.id,
+        runId: call.runId,
+        name: call.name,
+        kind: call.kind ?? null,
+        title: call.title ?? null,
+        input: (call.input as Record<string, unknown> | null) ?? null,
+      })),
+      attachments,
+    });
+  }
+
+  /**
+   * One file of the working folder, opened read-only (contract `sessions.readFile`). The
+   * caller streams the descriptor and closes it. Checked against the preview limit of its
+   * kind, or the download limit when it is being saved.
+   */
+  openFile(
+    scope: EngineScope,
+    sessionId: string,
+    requested: string,
+    download: boolean,
+  ): OpenedFile {
+    const row = this.requireSession(scope, sessionId);
+    if (!row.workingDir) throw notFound({ resource: 'file', id: requested });
+    return openInside(row.workingDir, requested, (type) =>
+      download ? DOWNLOAD_MAX_BYTES : PREVIEW_MAX_BYTES[type.kind],
+    );
+  }
+
+  // ---------------------------------------------------------- run changes
+
+  /**
+   * The runs of a conversation that changed a file, newest first, each with its files and
+   * their line counts (contract `sessions.listChanges`, decision §49). The diffs stay behind
+   * `runChangeDiff`: a list drawn under every reply must not carry them.
+   */
+  listChanges(
+    scope: EngineScope,
+    sessionId: string,
+    cursor: string | undefined,
+    limit: number,
+  ): { items: Record<string, unknown>[]; next_cursor: string | null } {
+    const row = this.requireSession(scope, sessionId);
+    const page = this.store.runsWithChanges(scope.workspace, row.id, cursor, limit);
+    const files = this.store.runFileChangesOf(
+      scope.workspace,
+      page.items.map((run) => run.id),
+    );
+    return {
+      items: page.items.map((run) => toRunChanges(run, files.get(run.id) ?? [])),
+      next_cursor: page.nextCursor,
+    };
+  }
+
+  /** One run's changed files (contract `sessions.getRunChanges`); 404 when none were recorded. */
+  runChanges(scope: EngineScope, sessionId: string, runId: string): Record<string, unknown> {
+    const run = this.requireRun(scope, sessionId, runId);
+    if (!run.changes) throw notFound({ resource: 'run_changes', id: runId });
+    const files = this.store.runFileChangesOf(scope.workspace, [run.id]).get(run.id) ?? [];
+    return toRunChanges(run, files);
+  }
+
+  /** One changed file's recorded diff (contract `sessions.getRunChangeDiff`). */
+  runChangeDiff(
+    scope: EngineScope,
+    sessionId: string,
+    runId: string,
+    file: string,
+  ): Record<string, unknown> {
+    const run = this.requireRun(scope, sessionId, runId);
+    const row = run.changes ? this.store.runFileChange(scope.workspace, run.id, file) : undefined;
+    if (!row) throw notFound({ resource: 'file', id: file });
+    return toRunFileDiff(run.id, row);
   }
 
   // ------------------------------------------------------------- messages
@@ -776,6 +1042,103 @@ export class SessionsService {
   }
 
   /**
+   * A room seat's own conversation (`rooms`, DECISIONS §69): opened once when the seat is
+   * added, then every turn the seat takes runs in it, so the agent keeps what it said
+   * before. Source `room`, origin the seat, so it stays out of the chats list and its runs
+   * name the seat. An agent that is not installed is refused before anything is written.
+   */
+  async openSeatSession(
+    scope: EngineScope,
+    input: {
+      agentId: string;
+      seatId: string;
+      title: string;
+      model?: string | null | undefined;
+      provider?: string | null | undefined;
+      reasoningEffort?: string | null | undefined;
+      workingDir?: string | null | undefined;
+    },
+  ): Promise<string> {
+    const agent = await this.requireAgent(scope, input.agentId);
+    if (!agent.available) {
+      throw new HubError('agent_unavailable', {
+        details: { agent_id: agent.id, status: agent.unavailableReason ?? 'unavailable' },
+      });
+    }
+    const session = await this.create(
+      scope,
+      {
+        agent_id: input.agentId,
+        title: input.title,
+        model: input.model ?? null,
+        provider: input.provider ?? null,
+        reasoning_effort: input.reasoningEffort ?? null,
+        working_dir: input.workingDir ?? null,
+      },
+      { source: 'room', kind: 'room', id: input.seatId },
+    );
+    return String(session.id);
+  }
+
+  /**
+   * One turn of a room seat, in the seat's own session: the prompt is the room as the seat
+   * has not yet seen it. Queued behind the seat's current turn, like a chat message sent
+   * while the agent is still answering. The ids come back at once; `done` says how it ended.
+   */
+  async startSeatTurn(
+    scope: EngineScope,
+    input: { sessionId: string; seatId: string; prompt: string },
+  ): Promise<TurnHandle> {
+    const accepted = await this.createRun(
+      scope,
+      input.sessionId,
+      { content: [{ type: 'text', text: input.prompt }] },
+      { kind: 'room', id: input.seatId },
+    );
+    const runId = String(accepted.payload.run_id);
+    const sessionId = input.sessionId;
+    return {
+      sessionId,
+      runId,
+      jobId: String(accepted.payload.job_id),
+      done: accepted.started.then(
+        () =>
+          this.turnResult(scope.workspace, runId) ?? {
+            sessionId,
+            runId,
+            status: 'failed' as const,
+            output: '',
+            error: 'the run was deleted before it ended',
+            errorCode: null,
+          },
+      ),
+    };
+  }
+
+  /** The contract's `Run` of each id that exists in the workspace, in the order asked. */
+  runsById(scope: EngineScope, runIds: readonly string[]): Record<string, unknown>[] {
+    return runIds
+      .map((id) => this.store.getRun(scope.workspace, id))
+      .filter((row): row is RunRow => !!row)
+      .map((row) => this.runOf(scope, row));
+  }
+
+  /** Runs of several sessions — a room's seats — live first, then newest (`rooms.listRuns`). */
+  runsOfSessions(
+    scope: EngineScope,
+    sessionIds: readonly string[],
+    status: string | undefined,
+    cursor: string | undefined,
+    limit: number,
+  ): { items: Record<string, unknown>[]; next_cursor: string | null } {
+    const page = this.store.runsOfSessions(scope.workspace, sessionIds, status, cursor, limit);
+    return {
+      items: page.items.map((row) => this.runOf(scope, row)),
+      next_cursor: page.nextCursor,
+    };
+  }
+
+  /**
    * One whole turn, start to finish: `startTurn`, then wait for it. What comes back is how
    * it ended and what the agent said, which is all a workflow step needs.
    */
@@ -838,6 +1201,131 @@ export class SessionsService {
     // `run.cancelled` follows when the agent acknowledges (domain §sessions).
     await this.engine.requestInterrupt(row.id);
     return this.runOf(scope, this.store.getRun(scope.workspace, row.id) as RunRow);
+  }
+
+  // --------------------------------------------------- commands (decision §57)
+
+  /** Sessions being compressed right now: a second request waits for nothing, it is refused. */
+  private readonly compressing = new Set<string>();
+
+  /**
+   * `sessions.compress`: the agent summarises the older part of the conversation now. Only
+   * between turns — a run in flight or waiting in the queue is `409 already_running` — and on
+   * the session's run chain, so a message sent meanwhile starts after it rather than racing
+   * it. `context.compression` brackets it; `context.updated` carries the window after.
+   */
+  async compress(
+    scope: EngineScope,
+    sessionId: string,
+    input: { focus?: string | null | undefined },
+  ): Promise<Record<string, unknown>> {
+    const session = this.requireSession(scope, sessionId);
+    const agent = await this.requireAgent(scope, session.agentId);
+    if (!agent.available) {
+      throw new HubError('agent_unavailable', {
+        details: { agent_id: agent.id, status: agent.unavailableReason ?? 'unavailable' },
+      });
+    }
+    const runner = this.ports.runner;
+    if (!runner.compress) {
+      throw new HubError('state_invalid', {
+        details: { reason: 'command_unsupported', command: 'compress', agent: agent.id },
+      });
+    }
+    if (
+      this.compressing.has(session.id) ||
+      this.store.liveRuns(scope.workspace, session.id).length > 0
+    ) {
+      throw new HubError('already_running', { details: { session_id: session.id } });
+    }
+    this.compressing.add(session.id);
+    const announce = (
+      phase: 'started' | 'finished' | 'failed',
+      facts: { before?: number | null; after?: number | null; message?: string | null } = {},
+    ) =>
+      this.realtime.emitToSession(scope.profile, session.id, 'context.compression', {
+        session_id: session.id,
+        run_id: null,
+        phase,
+        trigger: 'manual',
+        before_tokens: facts.before ?? null,
+        after_tokens: facts.after ?? null,
+        message: facts.message ?? null,
+      });
+    announce('started');
+    let result: Awaited<ReturnType<NonNullable<typeof runner.compress>>>;
+    try {
+      result = await this.engine.exclusive(session.id, () =>
+        (runner.compress as NonNullable<typeof runner.compress>)({
+          sessionId: session.id,
+          workspace: scope.workspace,
+          agentId: agent.id,
+          agentSessionRef: session.agentSessionRef,
+          workingDir: session.workingDir,
+          model: session.modelLabel ?? agent.defaultModel,
+          provider: session.provider ?? agent.defaultProvider,
+          reasoningEffort: session.reasoningEffort ?? null,
+          focus: input.focus?.trim() ? input.focus.trim() : null,
+        }),
+      );
+    } catch (error) {
+      const message = error instanceof Error ? error.message : null;
+      announce('failed', { message });
+      // The agent's own failure is `422 agent_error` with its words, not a hub fault.
+      if (error instanceof HubError) throw error;
+      throw new HubError('agent_error', { details: { agent_id: agent.id, reason: message } });
+    } finally {
+      this.compressing.delete(session.id);
+    }
+    if (result.agentSessionRef && result.agentSessionRef !== session.agentSessionRef) {
+      this.store.updateSession(scope.workspace, session.id, {
+        agentSessionRef: result.agentSessionRef,
+      });
+    }
+    announce('finished', {
+      before: result.beforeTokens,
+      after: result.afterTokens,
+      message: result.message,
+    });
+    if (result.context) this.engine.recordContext(scope, session.id, result.context);
+    return {
+      status: result.status,
+      before_tokens: result.beforeTokens,
+      after_tokens: result.afterTokens,
+      before_messages: result.beforeMessages,
+      after_messages: result.afterMessages,
+      context: result.context
+        ? {
+            used_tokens: result.context.usedTokens,
+            window_tokens: result.context.windowTokens,
+            ...(result.context.estimated ? { estimated: true } : {}),
+          }
+        : null,
+      message: result.message,
+    };
+  }
+
+  /**
+   * `sessions.steerRun`: guidance into the run in flight, read by the agent after its next
+   * tool call. Nothing is written to the transcript and the run is not interrupted.
+   */
+  async steerRun(
+    scope: EngineScope,
+    sessionId: string,
+    runId: string,
+    text: string,
+  ): Promise<{ status: 'queued' | 'rejected' }> {
+    const row = this.requireRun(scope, sessionId, runId);
+    if (isTerminalStatus(row.status) || !this.engine.isActive(row.id)) {
+      throw new HubError('state_invalid', { details: { from: row.status, allowed: [] } });
+    }
+    const runner = this.ports.runner;
+    if (!runner.steer) {
+      throw new HubError('state_invalid', {
+        details: { reason: 'command_unsupported', command: 'steer', agent: row.agentId },
+      });
+    }
+    return { status: await runner.steer(row.id, text) };
   }
 
   // ------------------------------------------------------------ approvals

@@ -257,6 +257,71 @@ describe.skipIf(!doc)('contract: schedules fire, and a workflow step waits for a
     }
   });
 
+  it('previews a trigger, and a run carries its limits, its cost and what stopped it (§53)', async () => {
+    const preview = await call('schedules.previewTrigger', 200, {
+      body: { trigger: { ...trigger, expression: '0 9 * * 1-5' }, count: 3 },
+    });
+    expect((preview.next_runs as string[]).length).toBe(3);
+    await call('schedules.previewTrigger', 409, {
+      body: { trigger: { ...trigger, expression: 'every day' } },
+    });
+
+    const limited = await call('schedules.createWorkflow', 201, {
+      body: {
+        name: 'بحد',
+        nodes: [
+          {
+            id: 'wait',
+            kind: 'delay',
+            title: 'wait',
+            agent_id: null,
+            model: null,
+            provider: null,
+            reasoning_effort: null,
+            skills: [],
+            input: '30',
+            approval_required: false,
+            position: { x: 0, y: 0 },
+          },
+        ],
+        edges: [],
+        limits: {
+          max_duration_seconds: 3600,
+          max_cost: { amount: '1.00', currency: 'USD' },
+          step_timeout_seconds: null,
+        },
+      },
+    });
+    expect(limited.limits).toMatchObject({ max_duration_seconds: 3600 });
+    await call('schedules.createWorkflow', 409, {
+      body: {
+        name: 'يورو',
+        nodes: [],
+        edges: [],
+        limits: {
+          max_duration_seconds: null,
+          max_cost: { amount: '1.00', currency: 'EUR' },
+          step_timeout_seconds: null,
+        },
+      },
+    });
+    // One run's own limit: a one-second budget ends a thirty-second delay.
+    const started = await call('schedules.runWorkflow', 202, {
+      params: { workflow_id: limited.id as string },
+      body: { input: null, limits: { max_duration_seconds: 1 } },
+    });
+    await workflowEngineFor(hub.app).settled();
+    const stopped = await call('schedules.getWorkflowRun', 200, {
+      params: { workflow_run_id: started.workflow_run_id as string },
+    });
+    expect(stopped).toMatchObject({
+      status: 'failed',
+      stopped_by: 'max_duration',
+      cost: null,
+      limits: { max_duration_seconds: 1, max_cost: { amount: '1.00', currency: 'USD' } },
+    });
+  });
+
   it('a workflow step waits as an Approval, and the answer is an Approval too', async () => {
     const node = (id: string, kind: string, input: string) => ({
       id,

@@ -17,4 +17,7 @@ export const geminiCli: CatalogEntry = {
   health: { kind: 'command', args: ['--version'] },
   capabilities: ['streaming', 'tools', 'approvals', 'mcp', 'resume'],
   sections: ['mcp', 'settings'],
+  // A Gemini subagent arrives as an ordinary tool call of kind `think`, with nothing that
+  // tells it from any other (§56).
+  subagents: 'none',
 };

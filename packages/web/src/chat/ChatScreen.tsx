@@ -1,4 +1,5 @@
 import { HubApiError } from '@corehub/contracts';
+import { useQuery } from '@tanstack/react-query';
 import {
   useCallback,
   useEffect,
@@ -16,7 +17,7 @@ import { useI18n } from '../i18n/context.js';
 import { routeOf, termKey } from '../navigation/manifest.js';
 import { AppShell } from '../shell/AppShell.js';
 import { sessionTitle } from '../sessions/SessionList.js';
-import type { ContentBlock, Message, ReasoningEffort } from '../types.js';
+import type { ContentBlock, Message, ReasoningEffort, Run } from '../types.js';
 import {
   Button,
   buttonClass,
@@ -29,6 +30,8 @@ import {
 } from '../ui/index.js';
 import { IconClose, IconSpark } from '../ui/icons.js';
 import { AgentChips } from './AgentChips.js';
+import { ChannelConversationView } from './ChannelConversationView.js';
+import { isChannelAddress } from '../sessions/channels.js';
 import {
   ANCHOR_PARAM,
   QUERY_PARAM,
@@ -41,14 +44,16 @@ import { ApprovalCard } from './ApprovalCard.js';
 import { Composer } from './Composer.js';
 import { starterSuggestions } from './starters.js';
 import { takeFirstMessage } from './firstMessage.js';
-import { ContextRing, contextUse } from './ContextRing.js';
+import { CompressionStatus, ContextRing, contextUse } from './ContextRing.js';
+import { useChatCommands, visibleMessages } from './useChatCommands.js';
 import { MessageQueue } from './MessageQueue.js';
 import { Transcript } from './MessageView.js';
 import { holdsBack, queued, type QueuedMessage } from './outbox.js';
 import { QuestionCard } from './QuestionCard.js';
 import { RunStatus } from './RunStatus.js';
-import { RunFailureNotice } from './RunFailureNotice.js';
+import { RunFailureNotice, failuresByMessage } from './RunFailureNotice.js';
 import { SessionAgent } from './SessionAgent.js';
+import { SubagentsPanel } from './SubagentsPanel.js';
 import { useCatalogue, useRuntimeReport } from '../models/queries.js';
 import { activeRun, isBusy, textOf } from './transcript.js';
 import { runProgress, turnsOf } from './turns.js';
@@ -57,10 +62,17 @@ import { useApprovalMode, useComposerModels } from './useComposerControls.js';
 import { useFollowBottom } from './followBottom.js';
 import { useLoadOlderOnScroll } from './olderMessages.js';
 import { useSessionStream } from './useSessionStream.js';
+import { useRunHistory } from './useRunHistory.js';
 import { revisionOf } from './trajectory.js';
 import { TrajectoryView } from './TrajectoryView.js';
 import { WorkingDirPicker } from './WorkingDirPicker.js';
+import { SessionFilesProvider } from '../files/context.js';
+import { FilesButton } from '../files/FilesList.js';
+import { filesRevisionOf } from '../files/kinds.js';
+import { changesRevisionOf } from '../files/changes.js';
 import { ProfileBadge } from '../shell/ProfileBadge.js';
+import { VoiceProvider, useAutoRead, useVoicePreferences } from '../voice/context.js';
+import { VoiceStage } from '../voice/VoiceStage.js';
 import { useManyProfiles, useProfileInLink } from '../shell/profiles.js';
 
 export function ChatScreen() {
@@ -91,9 +103,14 @@ export function ChatScreen() {
   // The conversation is opened in its own profile (ADR 0016): a list across profiles puts
   // it in the address, and everything inside — the transcript, the models, the agents —
   // asks that profile. The person's own profile and the top selector do not move.
+  // A Telegram or WhatsApp conversation (`?source=channel`) is Hermes's, read-only (§61).
   return (
     <ProfileScope profile={readProfileParam(params) ?? homeProfile}>
-      <OpenSession sessionId={sessionId} />
+      {isChannelAddress(params) ? (
+        <ChannelConversationView id={sessionId} />
+      ) : (
+        <OpenSession sessionId={sessionId} />
+      )}
     </ProfileScope>
   );
 }
@@ -109,16 +126,23 @@ type OpenAnchor = Anchor & { sessionId: string; phase: AnchorPhase };
  * One open conversation. `title` replaces the conversation's own name in the top bar: the
  * global agent's page (screens/GlobalAgentScreen.tsx) is this conversation under its own name.
  */
-export function OpenSession({
-  sessionId,
-  title: pageTitle,
-  intro,
-}: {
+export function OpenSession(props: OpenSessionProps) {
+  // One voice for the whole conversation: every speaker and voice mode share it (§63).
+  return (
+    <VoiceProvider>
+      <OpenSessionBody {...props} />
+    </VoiceProvider>
+  );
+}
+
+interface OpenSessionProps {
   sessionId: string;
   title?: string;
   /** A line said above an empty conversation: what this page is, before anything is in it. */
   intro?: string;
-}) {
+}
+
+function OpenSessionBody({ sessionId, title: pageTitle, intro }: OpenSessionProps) {
   const { t, language } = useI18n();
   const { client, profile } = useAuth();
   const manyProfiles = useManyProfiles();
@@ -237,10 +261,31 @@ export function OpenSession({
       ),
     [setParams],
   );
+  /** The Trajectory tab opened at one step — a subagent's, from its panel (§56). */
+  const openStep = useCallback(
+    (stepId: string) =>
+      setParams(
+        (current) => {
+          const out = new URLSearchParams(current);
+          out.set(VIEW_PARAM, 'trajectory');
+          out.set(STEP_PARAM, stepId);
+          return out;
+        },
+        { replace: true },
+      ),
+    [setParams],
+  );
   const revision = useMemo(
     () => revisionOf(state.messages, state.runs),
     [state.messages, state.runs],
   );
+  // The Files list is read again when a tool call or a run ends (files/kinds.ts).
+  const filesRevision = useMemo(
+    () => filesRevisionOf(state.messages, state.runs),
+    [state.messages, state.runs],
+  );
+  // The files each run changed are read again when a run ends (files/changes.ts).
+  const changesRevision = useMemo(() => changesRevisionOf(state.runs), [state.runs]);
 
   const agentId = state.session?.agent_id ?? null;
   const agents = useAgents();
@@ -249,10 +294,27 @@ export function OpenSession({
   const { recent, remember } = useRecentModels();
   const approval = useApprovalMode(agentId);
 
+  const run = activeRun(state);
+  // The composer's `/` commands (decision §57): what this conversation's agent takes.
+  const slash = useChatCommands({
+    sessionId,
+    state,
+    agent: (agents.data ?? []).find((candidate) => candidate.id === agentId),
+    run,
+    models,
+    onModel: (value) => {
+      remember(value);
+      patch.mutate({ model: value });
+    },
+    profileInLink: inLink(profile),
+  });
   // Who spoke, and where each turn begins (turns.ts). Recomputed only when the transcript
   // actually changes, because a streaming reply rewrites the last message every few ms.
-  const turns = useMemo(() => turnsOf(state.messages), [state.messages]);
-  const run = activeRun(state);
+  // `/clear-screen` hides what was on screen until the person asks for it back.
+  const turns = useMemo(
+    () => turnsOf(visibleMessages(state.messages, slash.hiddenThrough)),
+    [state.messages, slash.hiddenThrough],
+  );
   const progress = runProgress(state, run);
   // The oldest question the agent is still waiting on; the next shows once it is answered.
   const question =
@@ -369,15 +431,55 @@ export function OpenSession({
     state.runs,
     (catalogue.data ?? []).find((model) => model.key === state.session?.model)?.context_window ??
       null,
+    state.context,
   );
+
+  // Voice (contract decision §63): the full-screen stage, and reading replies aloud as
+  // they finish when the person asked for it — not while the stage speaks them itself.
+  const [voiceMode, setVoiceMode] = useState(false);
+  const voicePreferences = useVoicePreferences();
 
   const title = pageTitle ?? (state.session ? sessionTitle(state.session, t) : t(termKey('chat')));
   const showReasoning = preferences.data?.show_reasoning ?? true;
-  const failedRun = Object.values(state.runs).find((r) => r.status === 'failed' && r.error);
+  // Finished runs too, so a turn still says which model answered it after a reload (§54).
+  const runHistory = useRunHistory(sessionId, state.runs);
+  // A failure hangs under the turn that failed, never above the composer (owner,
+  // 2026-09-25): the live runs, and the failed history so a reload keeps it on its turn.
+  const liveFailed = Object.values(state.runs)
+    .filter((run) => run.status === 'failed')
+    .map((run) => run.id)
+    .join(',');
+  const failedHistory = useQuery({
+    queryKey: ['session-failed-runs', profile, sessionId],
+    queryFn: async () =>
+      (
+        await client.request('get', '/sessions/{session_id}/runs', {
+          params: { session_id: sessionId },
+          query: { status: 'failed', limit: 100 },
+        })
+      ).data.items as Run[],
+  });
+  // A resync keeps only the live runs; read the history again once a run has failed here.
+  const refetchFailed = failedHistory.refetch;
+  useEffect(() => {
+    if (liveFailed) void refetchFailed();
+  }, [liveFailed, refetchFailed]);
+  const [dismissed, setDismissed] = useState<ReadonlySet<string>>(() => new Set());
+  const failures = useMemo(() => {
+    const known = new Map<string, Run>();
+    for (const run of failedHistory.data ?? []) known.set(run.id, run);
+    for (const run of Object.values(state.runs)) known.set(run.id, run);
+    const byMessage = failuresByMessage(state.messages, known.values());
+    for (const [messageId, entry] of byMessage)
+      if (dismissed.has(entry.runId)) byMessage.delete(messageId);
+    return byMessage;
+  }, [failedHistory.data, state.runs, state.messages, dismissed]);
   // Only asked for once a run has failed for want of a provider, and then asked fresh:
   // the notice says which step of propagation is missing right now.
   const runtime = useRuntimeReport({
-    enabled: failedRun?.error?.code === 'provider_not_configured',
+    enabled: [...failures.values()].some(
+      (entry) => entry.failure.code === 'provider_not_configured',
+    ),
   });
   // The folder moves freely until the first run; after that the transcript would no longer
   // describe where the work happened, and the hub refuses (`409 state_invalid`).
@@ -393,231 +495,305 @@ export function OpenSession({
   return (
     // The whole width (owner decision, 2026-09-23): the agent's replies reach the left
     // edge and the person's the right, while the composer keeps its reading column.
-    <AppShell title={title}>
-      <TabsFrame value={messageCount === 0 ? 'chat' : view} onValueChange={setView}>
-        <div
-          className="chat-flow"
-          data-empty={messageCount === 0 ? 'true' : 'false'}
-          data-view={messageCount === 0 ? 'chat' : view}
-          data-testid="chat-screen"
-          data-session-id={sessionId}
-        >
-          <div className="mb-3 flex flex-wrap items-center gap-2" data-testid="chat-header">
-            {/* Who this conversation is with, stated quietly now that the chip row is gone
+    // The files open in the frame's split pane, so their provider wraps the whole frame.
+    <SessionFilesProvider
+      sessionId={sessionId}
+      revision={filesRevision}
+      changesRevision={changesRevision}
+    >
+      <AppShell title={title}>
+        <AutoRead
+          messages={state.messages}
+          enabled={voicePreferences.autoSpeak && !voiceMode}
+          ready={stream.status === 'ready'}
+        />
+        {voiceMode && (
+          <VoiceStage
+            messages={state.messages}
+            busy={busy}
+            onSend={send}
+            onCancel={cancel}
+            onClose={() => setVoiceMode(false)}
+          />
+        )}
+        <TabsFrame value={messageCount === 0 ? 'chat' : view} onValueChange={setView}>
+          <div
+            className="chat-flow"
+            data-empty={messageCount === 0 ? 'true' : 'false'}
+            data-view={messageCount === 0 ? 'chat' : view}
+            data-testid="chat-screen"
+            data-session-id={sessionId}
+          >
+            <div className="mb-3 flex flex-wrap items-center gap-2" data-testid="chat-header">
+              {/* Who this conversation is with, stated quietly now that the chip row is gone
               (owner decision, 2026-09-22). Changing it here forks the session. */}
-            <SessionAgent sessionId={sessionId} agentId={agentId} />
-            {/* Which profile this conversation is in, once there is more than one: its
+              <SessionAgent sessionId={sessionId} agentId={agentId} />
+              {/* Which profile this conversation is in, once there is more than one: its
               models and settings are that profile's (ADR 0016). */}
-            {manyProfiles && <ProfileBadge profile={profile} testId="chat-profile" />}
-            <WorkingDirPicker
-              value={state.session?.working_dir ?? null}
-              onChange={(next) => patch.mutate({ working_dir: next })}
-              lockedReason={hasRun ? t('working_dir.locked') : null}
-            />
-            {patch.isError && (
-              <span className="text-xs text-danger-soft-text">{describeError(patch.error, t)}</span>
-            )}
-            {/* Only once there is something to trace: an empty chat is an invitation. */}
-            {messageCount > 0 && (
-              <div className="chat-header-tabs">
-                <TabList
-                  compact
-                  label={t('trajectory.tabs_label')}
-                  testId="chat-tabs"
-                  items={[
-                    { value: 'chat', label: t('trajectory.chat_tab') },
-                    { value: 'trajectory', label: t('trajectory.tab') },
-                  ]}
-                />
-              </div>
-            )}
-          </div>
-          {intro && messageCount === 0 && (
-            <p className="mb-3 text-sm text-muted" data-testid="chat-intro">
-              {intro}
-            </p>
-          )}
-          <TabPanel value="trajectory" testId="trajectory-panel">
-            {view === 'trajectory' && messageCount > 0 && (
-              <TrajectoryView sessionId={sessionId} revision={revision} />
-            )}
-          </TabPanel>
-          <TabPanel value="chat" keepMounted flow>
-            {stream.status === 'loading' && (
-              <div className="flex flex-col gap-6 py-4">
-                <SkeletonText lines={2} label={t('common.loading')} />
-                <SkeletonText lines={4} label={t('common.loading')} />
-              </div>
-            )}
-            {stream.status === 'error' && (
-              <Notice tone="danger">
-                {describeError(stream.error, t)}{' '}
-                <button type="button" className="link underline" onClick={stream.reload}>
-                  {t('common.retry')}
-                </button>
-              </Notice>
-            )}
-            {stream.lastResume && (
-              <Notice
-                tone={stream.lastResume.truncated ? 'warning' : 'info'}
-                className="mb-2"
-                role="status"
-              >
-                {stream.lastResume.truncated
-                  ? t('chat.resynced')
-                  : t('chat.resumed', { replayed: stream.lastResume.replayed })}
-              </Notice>
-            )}
-            {state.deleted && <Notice tone="warning">{t('chat.session_deleted')}</Notice>}
-            {anchor?.phase === 'missing' && (
-              <Notice tone="info" className="mb-2">
-                {t('chat.anchor_missing')}
-              </Notice>
-            )}
-            {firstError !== null && <Notice tone="danger">{describeError(firstError, t)}</Notice>}
-            {/* A held-back message that failed on its way out says so: it is no longer in the
-            queue, so silence here would lose it without a word. */}
-            {queueError !== null && <Notice tone="danger">{describeError(queueError, t)}</Notice>}
-            <div className="chat-pad" aria-hidden />
-            {/* An empty chat is an invitation, centred with the composer; the first message
-            docks the composer and hands the column to the transcript. */}
-            <div className="chat-lede">
-              <h2 className="text-xl font-semibold">{t('chat.empty_title')}</h2>
-              <p className="max-w-prose text-sm text-muted">{t('chat.empty')}</p>
+              {manyProfiles && <ProfileBadge profile={profile} testId="chat-profile" />}
+              <WorkingDirPicker
+                value={state.session?.working_dir ?? null}
+                onChange={(next) => patch.mutate({ working_dir: next })}
+                lockedReason={hasRun ? t('working_dir.locked') : null}
+              />
+              {patch.isError && (
+                <span className="text-xs text-danger-soft-text">
+                  {describeError(patch.error, t)}
+                </span>
+              )}
+              {/* The conversation's files, once it has begun (decision §48). */}
+              {messageCount > 0 && <FilesButton />}
+              {/* Only once there is something to trace: an empty chat is an invitation. */}
+              {messageCount > 0 && (
+                <div className="chat-header-tabs">
+                  <TabList
+                    compact
+                    label={t('trajectory.tabs_label')}
+                    testId="chat-tabs"
+                    items={[
+                      { value: 'chat', label: t('trajectory.chat_tab') },
+                      { value: 'trajectory', label: t('trajectory.tab') },
+                    ]}
+                  />
+                </div>
+              )}
             </div>
-            <div className="chat-stream chat-turns" ref={transcript}>
-              {messageCount > 0 && (state.hasOlder || state.pagedBack) && (
-                <OlderRow
-                  edgeRef={olderEdge}
-                  hasOlder={state.hasOlder}
-                  failed={stream.olderStatus === 'error'}
-                  onRetry={loadOlderNow}
+            {intro && messageCount === 0 && (
+              <p className="mb-3 text-sm text-muted" data-testid="chat-intro">
+                {intro}
+              </p>
+            )}
+            <TabPanel value="trajectory" testId="trajectory-panel">
+              {view === 'trajectory' && messageCount > 0 && (
+                <TrajectoryView
+                  sessionId={sessionId}
+                  revision={revision}
+                  focusStep={params.get(STEP_PARAM)}
                 />
               )}
-              <Transcript
-                turns={turns}
-                showReasoning={showReasoning}
-                showCost={preferences.data?.show_cost ?? false}
-                runs={state.runs}
-                slugOf={(id) => (agents.data ?? []).find((agent) => agent.id === id)?.slug}
-                anchor={anchor && anchor.phase !== 'missing' ? anchor : null}
-                onReply={setReplyTo}
-                onFork={forkFrom}
-              />
-              {/* Questions wait above the composer (QuestionCard); decisions stay in the thread. */}
-              {Object.values(state.approvals)
-                .filter((approval) => approval.kind !== 'question')
-                .map((approval) => (
-                  <ApprovalCard key={approval.id} approval={approval} />
-                ))}
-              {failedRun?.error &&
-                // A failed run often leaves an empty assistant message; the badge alone would
-                // hide the reason, so the notice is only suppressed when that message has text
-                // — except for the one failure whose way out the hub knows, which is never
-                // suppressed: the agent's own text does not say where to go.
-                (failedRun.error.code === 'provider_not_configured' ||
-                  !state.messages.some(
-                    (m) =>
-                      m.run_id === failedRun.id &&
-                      m.status === 'failed' &&
-                      m.content.some((part) => part.type === 'text' && part.text.trim() !== ''),
-                  )) && <RunFailureNotice failure={failedRun.error} runtime={runtime.data} />}
-            </div>
-            <Composer
-              busy={busy}
-              disabled={disabledReason !== null}
-              disabledReason={disabledReason}
-              onSend={send}
-              onCancel={cancel}
-              // While a run is alive the composer carries the live indicator: something moving,
-              // the word, and the seconds counting up (owner decision, 2026-09-22).
-              // Not while a question is open: the agent is not thinking, it is waiting on the
-              // person, and the card above says so.
-              {...(progress && !question ? { status: <RunStatus progress={progress} /> } : {})}
-              {...(question
-                ? { question: <QuestionCard key={question.id} approval={question} /> }
-                : {})}
-              {...(outbox.length > 0
-                ? {
-                    queue: (
-                      <MessageQueue
-                        items={outbox}
-                        onSendNow={(item) => release(item, 'next')}
-                        onSteer={(item) => release(item, 'interrupt')}
-                        onRemove={(item) =>
-                          setOutbox((current) => current.filter((q) => q.key !== item.key))
-                        }
+            </TabPanel>
+            <TabPanel value="chat" keepMounted flow>
+              {stream.status === 'loading' && (
+                <div className="flex flex-col gap-6 py-4">
+                  <SkeletonText lines={2} label={t('common.loading')} />
+                  <SkeletonText lines={4} label={t('common.loading')} />
+                </div>
+              )}
+              {stream.status === 'error' && (
+                <Notice tone="danger">
+                  {describeError(stream.error, t)}{' '}
+                  <button type="button" className="link underline" onClick={stream.reload}>
+                    {t('common.retry')}
+                  </button>
+                </Notice>
+              )}
+              {stream.lastResume && (
+                <Notice
+                  tone={stream.lastResume.truncated ? 'warning' : 'info'}
+                  className="mb-2"
+                  role="status"
+                >
+                  {stream.lastResume.truncated
+                    ? t('chat.resynced')
+                    : t('chat.resumed', { replayed: stream.lastResume.replayed })}
+                </Notice>
+              )}
+              {state.deleted && <Notice tone="warning">{t('chat.session_deleted')}</Notice>}
+              {anchor?.phase === 'missing' && (
+                <Notice tone="info" className="mb-2">
+                  {t('chat.anchor_missing')}
+                </Notice>
+              )}
+              {firstError !== null && <Notice tone="danger">{describeError(firstError, t)}</Notice>}
+              {/* A held-back message that failed on its way out says so: it is no longer in the
+            queue, so silence here would lose it without a word. */}
+              {queueError !== null && <Notice tone="danger">{describeError(queueError, t)}</Notice>}
+              <div className="chat-pad" aria-hidden />
+              {/* An empty chat is an invitation, centred with the composer; the first message
+            docks the composer and hands the column to the transcript. */}
+              <div className="chat-lede">
+                <h2 className="text-xl font-semibold">{t('chat.empty_title')}</h2>
+                <p className="max-w-prose text-sm text-muted">{t('chat.empty')}</p>
+              </div>
+              <div className="chat-stream chat-turns" ref={transcript}>
+                {slash.hiddenThrough !== null && (
+                  <div className="chat-older" data-testid="chat-cleared" role="status">
+                    <span>{t('slash.cleared')}</span>{' '}
+                    <button type="button" className="link underline" onClick={slash.showHidden}>
+                      {t('slash.show_cleared')}
+                    </button>
+                  </div>
+                )}
+                {slash.hiddenThrough === null &&
+                  messageCount > 0 &&
+                  (state.hasOlder || state.pagedBack) && (
+                    <OlderRow
+                      edgeRef={olderEdge}
+                      hasOlder={state.hasOlder}
+                      failed={stream.olderStatus === 'error'}
+                      onRetry={loadOlderNow}
+                    />
+                  )}
+                <Transcript
+                  turns={turns}
+                  showReasoning={showReasoning}
+                  showCost={preferences.data?.show_cost ?? false}
+                  runs={runHistory}
+                  slugOf={(id) => (agents.data ?? []).find((agent) => agent.id === id)?.slug}
+                  anchor={anchor && anchor.phase !== 'missing' ? anchor : null}
+                  noticeFor={(message) => {
+                    const entry = failures.get(message.id);
+                    return entry ? (
+                      <RunFailureNotice
+                        failure={entry.failure}
+                        runtime={runtime.data}
+                        onDismiss={() => setDismissed((held) => new Set(held).add(entry.runId))}
                       />
-                    ),
-                  }
-                : {})}
-              {...(contextRing ? { context: <ContextRing use={contextRing} /> } : {})}
-              {...(replyTo
-                ? {
-                    reply: (
-                      <div className="composer-reply" data-testid="composer-reply">
-                        <span className="truncate" dir="auto">
-                          {t('chat.replying_to', { text: previewOf(replyTo) })}
-                        </span>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          iconOnly
-                          aria-label={t('common.cancel')}
-                          tooltip={t('common.cancel')}
-                          icon={<IconClose size={14} />}
-                          onClick={() => setReplyTo(null)}
-                          data-testid="composer-reply-clear"
+                    ) : null;
+                  }}
+                  onReply={setReplyTo}
+                  onFork={forkFrom}
+                />
+                {/* Questions wait above the composer (QuestionCard); decisions stay in the thread. */}
+                {Object.values(state.approvals)
+                  .filter((approval) => approval.kind !== 'question')
+                  .map((approval) => (
+                    <ApprovalCard key={approval.id} approval={approval} />
+                  ))}
+              </div>
+              {/* What the agent delegated, above the composer (§56); nothing until it has. */}
+              <SubagentsPanel sessionId={sessionId} onOpenTrajectory={openStep} />
+              <Composer
+                busy={busy}
+                disabled={disabledReason !== null}
+                disabledReason={disabledReason}
+                onSend={send}
+                onCancel={cancel}
+                // While a run is alive the composer carries the live indicator: something moving,
+                // the word, and the seconds counting up (owner decision, 2026-09-22).
+                // Not while a question is open: the agent is not thinking, it is waiting on the
+                // person, and the card above says so.
+                {...(progress && !question
+                  ? { status: <RunStatus progress={progress} /> }
+                  : state.compression?.phase === 'running'
+                    ? { status: <CompressionStatus compression={state.compression} /> }
+                    : {})}
+                {...(question
+                  ? { question: <QuestionCard key={question.id} approval={question} /> }
+                  : {})}
+                {...(outbox.length > 0
+                  ? {
+                      queue: (
+                        <MessageQueue
+                          items={outbox}
+                          onSendNow={(item) => release(item, 'next')}
+                          onSteer={(item) => release(item, 'interrupt')}
+                          onRemove={(item) =>
+                            setOutbox((current) => current.filter((q) => q.key !== item.key))
+                          }
                         />
-                      </div>
-                    ),
-                  }
-                : {})}
-              // The row belongs to an empty chat only (owner decision, 2026-09-22): once the
-              // conversation has turns, its agent is in the header and changing it is a fork.
-              {...(messageCount === 0
-                ? {
-                    chips: (
-                      <AgentChips
-                        selectedId={agentId}
-                        mode="current"
-                        // Before the first message nothing has been said yet, so another agent
-                        // simply means another (still empty) chat.
-                        onSelect={(agent) => {
-                          if (agent.id !== agentId)
-                            navigate(`${routeOf('new_chat')}?agent=${agent.id}`);
-                        }}
-                      />
-                    ),
-                  }
-                : {})}
-              model={state.session?.model ?? null}
-              models={models}
-              recentModels={recent}
-              onModel={(value) => {
-                remember(value);
-                patch.mutate({ model: value });
-              }}
-              reasoningEffort={state.session?.reasoning_effort ?? null}
-              onReasoningEffort={(value) =>
-                patch.mutate({ reasoning_effort: value as ReasoningEffort | null })
-              }
-              approvalMode={approval.mode}
-              approvalOptions={approval.options}
-              onApprovalMode={approval.set}
-              approvalDisabledReason={approval.disabledReason}
-              starters={messageCount === 0 ? starterSuggestions(language) : []}
-            />
-            <div className="chat-pad" aria-hidden />
-          </TabPanel>
-        </div>
-      </TabsFrame>
-    </AppShell>
+                      ),
+                    }
+                  : {})}
+                {...(contextRing
+                  ? {
+                      context: (
+                        <ContextRing
+                          use={contextRing}
+                          compression={state.compression}
+                          onCompress={slash.compress}
+                          compressBlocked={slash.compressBlocked}
+                        />
+                      ),
+                    }
+                  : {})}
+                commands={slash.commands}
+                skills={slash.skills}
+                onCommand={slash.onCommand}
+                {...(replyTo
+                  ? {
+                      reply: (
+                        <div className="composer-reply" data-testid="composer-reply">
+                          <span className="truncate" dir="auto">
+                            {t('chat.replying_to', { text: previewOf(replyTo) })}
+                          </span>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            iconOnly
+                            aria-label={t('common.cancel')}
+                            tooltip={t('common.cancel')}
+                            icon={<IconClose size={14} />}
+                            onClick={() => setReplyTo(null)}
+                            data-testid="composer-reply-clear"
+                          />
+                        </div>
+                      ),
+                    }
+                  : {})}
+                // The row belongs to an empty chat only (owner decision, 2026-09-22): once the
+                // conversation has turns, its agent is in the header and changing it is a fork.
+                {...(messageCount === 0
+                  ? {
+                      chips: (
+                        <AgentChips
+                          selectedId={agentId}
+                          mode="current"
+                          // Before the first message nothing has been said yet, so another agent
+                          // simply means another (still empty) chat.
+                          onSelect={(agent) => {
+                            if (agent.id !== agentId)
+                              navigate(`${routeOf('new_chat')}?agent=${agent.id}`);
+                          }}
+                        />
+                      ),
+                    }
+                  : {})}
+                model={state.session?.model ?? null}
+                models={models}
+                recentModels={recent}
+                onModel={(value) => {
+                  remember(value);
+                  patch.mutate({ model: value });
+                }}
+                reasoningEffort={state.session?.reasoning_effort ?? null}
+                onReasoningEffort={(value) =>
+                  patch.mutate({ reasoning_effort: value as ReasoningEffort | null })
+                }
+                approvalMode={approval.mode}
+                approvalOptions={approval.options}
+                onApprovalMode={approval.set}
+                approvalDisabledReason={approval.disabledReason}
+                starters={messageCount === 0 ? starterSuggestions(language) : []}
+                onVoiceMode={disabledReason === null ? () => setVoiceMode(true) : undefined}
+              />
+              <div className="chat-pad" aria-hidden />
+            </TabPanel>
+          </div>
+        </TabsFrame>
+      </AppShell>
+    </SessionFilesProvider>
   );
+}
+
+/** Reads each reply aloud as it finishes, when the person asked for it (`useAutoRead`). */
+function AutoRead({
+  messages,
+  enabled,
+  ready,
+}: {
+  messages: readonly Message[];
+  enabled: boolean;
+  ready: boolean;
+}) {
+  useAutoRead(messages, enabled, ready);
+  return null;
 }
 
 /** The address parameter that opens a conversation on its Trajectory tab. */
 const VIEW_PARAM = 'view';
+/** The step the Trajectory tab opens at (`subagent:<id>`). */
+const STEP_PARAM = 'step';
 
 /**
  * The top of a transcript that pages back: "loading older messages…" while there is more

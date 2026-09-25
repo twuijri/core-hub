@@ -39,6 +39,17 @@ export const SESSION_EVENTS = [
   'approval.requested',
   'approval.resolved',
   'context.updated',
+  'context.compression',
+] as const;
+
+/**
+ * A conversation's subagents (contract decision §56). Profile-wide on `/rt/sessions`, so the
+ * Background panel hears them wherever the person is; each carries the whole `Subagent`.
+ */
+export const SUBAGENT_EVENTS = [
+  'subagent.started',
+  'subagent.updated',
+  'subagent.completed',
 ] as const;
 
 /** `/rt/tasks`: the board only listens, and refreshes on any of these. */
@@ -71,6 +82,10 @@ export const SCHEDULE_EVENTS = [
   'step.completed',
   'step.failed',
   'step.waiting',
+  // A workflow drawn, changed or deleted elsewhere: the Workflows section follows it.
+  'workflow.created',
+  'workflow.updated',
+  'workflow.deleted',
 ] as const;
 
 export const JOB_EVENTS = [
@@ -88,4 +103,33 @@ export const DEVICE_EVENTS = [
   'device.linked',
   'device.updated',
   'device.unlinked',
+] as const;
+
+/** `/rt/rooms`: everything a room's screen and the rooms list hear (events/rooms/*). */
+export const ROOM_EVENTS = [
+  'room.created',
+  'room.updated',
+  'room.deleted',
+  'room.cleared',
+  'member.joined',
+  'member.left',
+  'member.typing',
+  'seat.added',
+  'seat.updated',
+  'seat.removed',
+  'message.created',
+  'message.delta',
+  'reasoning.delta',
+  'tool.started',
+  'tool.completed',
+  'tool.failed',
+  'run.queued',
+  'run.started',
+  'run.completed',
+  'run.failed',
+  'run.cancelled',
+  'approval.requested',
+  'approval.resolved',
+  'handoff.updated',
+  'memory.updated',
 ] as const;

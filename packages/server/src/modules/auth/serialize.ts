@@ -80,6 +80,7 @@ export const HUB_SETTINGS_DEFAULTS: WorkspaceHubSettings = {
     targetRatio: 0.2,
     protectFirst: 3,
     protectLast: 20,
+    contextLength: null,
   },
   privacy: { redactPii: false },
   appearance: { fontSize: 14, textColor: null, accentColor: null, backgroundAttachmentId: null },
@@ -109,6 +110,7 @@ export function serializeProfileSettings(settings: WorkspaceHubSettings) {
       target_ratio: settings.compression.targetRatio,
       protect_first: settings.compression.protectFirst,
       protect_last: settings.compression.protectLast,
+      context_length: settings.compression.contextLength,
     },
     privacy: { redact_pii: settings.privacy.redactPii },
     appearance: {

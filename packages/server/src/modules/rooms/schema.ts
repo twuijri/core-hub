@@ -24,6 +24,7 @@ import {
 import {
   EMPTY_ARRAY,
   EMPTY_OBJECT,
+  bool,
   inList,
   json,
   scopedColumns,
@@ -50,6 +51,15 @@ export type RoomSettings = {
   memoryEveryMessages?: number;
 };
 
+/** The contract's `Mention`: a seat by id, or every seat (`@all`). */
+export type StoredMention = { kind: 'seat' | 'all'; seat_id: string | null };
+
+/** The contract's `Handoff`, set on a seat's reply that passes the turn to another seat. */
+export type StoredHandoff = { to_seat_id: string; chain_id: string; depth: number };
+
+/** The contract's `Avatar` as a seat keeps it. */
+export type StoredAvatar = { kind: 'image' | 'generated'; url: string | null; seed: string | null };
+
 export type RoomMessagePart =
   | { type: 'text'; text: string }
   | { type: 'image'; attachmentId: string }
@@ -72,9 +82,33 @@ export const rooms = sqliteTable(
     lastMessageAt: timestampMs('last_message_at'),
     settings: json<RoomSettings>('settings').notNull().default(EMPTY_OBJECT),
     archivedAt: timestampMs('archived_at'),
+    // Since migration 0020 (DECISIONS §69): the contract's room.
+    workingDir: text('working_dir'),
+    /** Upper-case code of `[A-Z2-9]`; the public link is `<hub>/join/<code>`. */
+    inviteCode: text('invite_code', { length: 12 }),
+    canMentionAll: bool('can_mention_all').notNull().default(true),
+    /** The seat that answers a message mentioning nobody; `null` = nobody. */
+    leadSeatId: ulid('lead_seat_id'),
+    summaryEveryTurns: integer('summary_every_turns').notNull().default(20),
+    summaryModel: text('summary_model'),
+    summaryProvider: text('summary_provider'),
+    handoffEnabled: bool('handoff_enabled').notNull().default(true),
+    /** `null` = unlimited; the contract's `HandoffPolicy.max_depth`. */
+    handoffMaxDepth: integer('handoff_max_depth').default(3),
+    totalTokens: integer('total_tokens').notNull().default(0),
+    /** `idle | summarizing | error` — the contract's `RoomMemory.status`. */
+    memoryStatus: text('memory_status', { length: 16 }).notNull().default('idle'),
+    memoryError: text('memory_error'),
+    /** How many messages the summary covers (`RoomMemory.summarized_turn_count`). */
+    memoryTurnCount: integer('memory_turn_count').notNull().default(0),
+    /** The last `seq` the summary covers; transcript before it reaches seats as the summary. */
+    memoryUptoSeq: integer('memory_upto_seq').notNull().default(0),
+    /** Messages before this `seq` are not context any more (`rooms.clearContext`). */
+    contextFromSeq: integer('context_from_seq').notNull().default(0),
   },
   (t) => [
     index('rooms_workspace_recent_idx').on(t.workspace, t.archivedAt, t.lastMessageAt),
+    uniqueIndex('rooms_invite_code_uq').on(t.inviteCode),
     check('rooms_turn_policy_check', inList(t.turnPolicy, TURN_POLICIES)),
   ],
 );
@@ -92,6 +126,7 @@ export const roomMembers = sqliteTable(
   },
   (t) => [
     uniqueIndex('room_members_room_user_uq').on(t.roomId, t.userId),
+    index('room_members_user_idx').on(t.userId),
     check('room_members_role_check', inList(t.role, ROOM_MEMBER_ROLES)),
   ],
 );
@@ -116,6 +151,16 @@ export const seats = sqliteTable(
     joinedAt: timestampMs('joined_at').notNull(),
     leftAt: timestampMs('left_at'),
     lastSpokeAt: timestampMs('last_spoke_at'),
+    // Since migration 0020: the contract's `SeatConfig` (alias is its `name`, persona its
+    // `instructions`).
+    description: text('description'),
+    model: text('model'),
+    provider: text('provider'),
+    reasoningEffort: text('reasoning_effort', { length: 16 }),
+    avatar: json<StoredAvatar>('avatar'),
+    presetId: ulid('preset_id'),
+    /** The last room `seq` this seat was shown; its next turn starts after it. */
+    seenSeq: integer('seen_seq').notNull().default(0),
   },
   (t) => [
     uniqueIndex('seats_room_session_uq').on(t.roomId, t.sessionId),
@@ -148,6 +193,18 @@ export const roomMessages = sqliteTable(
     handoffId: ulid('handoff_id').references((): AnySQLiteColumn => handoffs.id, {
       onDelete: 'set null',
     }),
+    // Since migration 0020: what the contract's `Message` needs of a room message.
+    /** `complete | streaming | failed | interrupted`. */
+    status: text('status', { length: 16 }).notNull().default('complete'),
+    /** The author's name when it was written: a seat or a person may leave. */
+    authorName: text('author_name'),
+    /** The seat's session for a seat's reply; the room's id otherwise (DECISIONS §69). */
+    sessionId: ulid('session_id'),
+    /** `mentions` holds the contract's `Mention` objects since 0020. */
+    mentionList: json<StoredMention[]>('mention_list').notNull().default(EMPTY_ARRAY),
+    handoff: json<StoredHandoff>('handoff'),
+    reasoning: text('reasoning'),
+    usage: json<Record<string, unknown>>('usage'),
   },
   (t) => [
     uniqueIndex('room_messages_room_seq_uq').on(t.roomId, t.seq),
@@ -191,4 +248,51 @@ export const handoffs = sqliteTable(
     check('handoffs_status_check', inList(t.status, HANDOFF_STATUSES)),
     check('handoffs_distinct_seats_check', sql`${t.fromSeatId} <> ${t.toSeatId}`),
   ],
+);
+
+export const HANDOFF_CHAIN_STATUSES = ['active', 'stopped', 'completed', 'failed'] as const;
+
+/**
+ * One run of agents passing the turn to each other (contract `HandoffChain`, DECISIONS §69).
+ * A chain starts when a seat's reply to a person mentions another seat; every further pass
+ * adds one to `depth`. The guard stops it at `max_depth` or when a pass repeats one the
+ * chain already made (`visited`).
+ */
+export const roomHandoffChains = sqliteTable(
+  'room_handoff_chains',
+  {
+    ...scopedColumns(),
+    roomId: ulid('room_id')
+      .notNull()
+      .references(() => rooms.id, { onDelete: 'cascade' }),
+    fromSeatId: ulid('from_seat_id').notNull(),
+    toSeatId: ulid('to_seat_id').notNull(),
+    status: text('status', { enum: HANDOFF_CHAIN_STATUSES }).notNull().default('active'),
+    stopReason: text('stop_reason', { length: 32 }),
+    depth: integer('depth').notNull().default(1),
+    maxDepth: integer('max_depth'),
+    continueUsed: bool('continue_used').notNull().default(false),
+    error: text('error'),
+    /** `from>to` pairs the chain already made; a repeat is a loop. */
+    visited: json<string[]>('visited').notNull().default(EMPTY_ARRAY),
+    /** The message that asked for the pass the chain stopped at (`continueHandoff`). */
+    lastMessageId: ulid('last_message_id'),
+  },
+  (t) => [
+    index('room_handoff_chains_room_idx').on(t.roomId, t.updatedAt),
+    check('room_handoff_chains_status_check', inList(t.status, HANDOFF_CHAIN_STATUSES)),
+  ],
+);
+
+/** A seat saved to be reused in any room of the profile (contract `SeatPreset`). */
+export const seatPresets = sqliteTable(
+  'seat_presets',
+  {
+    ...scopedColumns(),
+    name: text('name', { length: 80 }).notNull(),
+    agentId: ulid('agent_id').notNull(),
+    /** The contract's `SeatConfig`, as written. */
+    seat: json<Record<string, unknown>>('seat').notNull().default(EMPTY_OBJECT),
+  },
+  (t) => [index('seat_presets_workspace_idx').on(t.workspace, t.name)],
 );

@@ -1,0 +1,523 @@
+/**
+ * The devices module over HTTP: the registry (register, list, rename, unlink), push
+ * registration, the senders' status, and a notice reaching a device — through notify's
+ * preferences and quiet hours — delivered to fakes of Web Push, FCM and APNs.
+ */
+import { generateKeyPairSync } from 'node:crypto';
+import { eq } from 'drizzle-orm';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import { requireSqlite } from '../../src/lib/db.js';
+import { overrideDevices } from '../../src/modules/devices/index.js';
+import { devices } from '../../src/modules/devices/schema.js';
+import { notificationDeliveries } from '../../src/modules/notify/schema.js';
+import {
+  fakeFcm,
+  startFakeApns,
+  startFakePushService,
+  type FakePushService,
+} from '../../src/modules/devices/testing/fake-push.js';
+import { authed, signedInHub, type TestHub } from './helpers.js';
+
+type Json = Record<string, unknown>;
+type Hub = TestHub & { token: string; userId: string };
+
+const cleanups: Array<() => Promise<void> | void> = [];
+afterEach(async () => {
+  overrideDevices({});
+  while (cleanups.length > 0) await cleanups.pop()!();
+});
+
+async function hubWith(env: Record<string, string> = {}): Promise<Hub> {
+  const hub = await signedInHub(env);
+  cleanups.push(() => hub.close());
+  return hub;
+}
+
+async function fakePush(): Promise<FakePushService> {
+  const service = await startFakePushService();
+  cleanups.push(() => service.close());
+  // The fake lives on 127.0.0.1, which the hub refuses unless a test says otherwise.
+  overrideDevices({ allowPrivateEndpoints: true });
+  return service;
+}
+
+const browser = (key = 'browser-key-1') => ({
+  device_key: key,
+  name: 'Firefox — Linux',
+  platform: 'web',
+  kind: 'browser',
+  capabilities: ['notifications'],
+});
+
+async function registerBrowser(hub: Hub, key?: string): Promise<Json> {
+  const response = await authed(hub, hub.token, {
+    method: 'POST',
+    url: '/api/v1/devices',
+    payload: browser(key),
+  });
+  expect(response.statusCode, response.body).toBe(201);
+  return response.json() as Json;
+}
+
+/** Pairs a phone the way the app does: a pairing from the web, claimed with its code. */
+async function pairPhone(hub: Hub, key = 'phone-key', platform = 'android') {
+  const created = await authed(hub, hub.token, {
+    method: 'POST',
+    url: '/api/v1/auth/pairings',
+    payload: { ttl_seconds: 120 },
+  });
+  const pairing = created.json() as { id: string; code: string };
+  const claim = await hub.app.inject({
+    method: 'POST',
+    url: `/api/v1/auth/pairings/${pairing.id}/claim`,
+    payload: {
+      code: pairing.code,
+      device: { device_key: key, name: 'هاتف', platform, kind: 'phone' },
+    },
+  });
+  expect(claim.statusCode, claim.body).toBe(201);
+  const body = claim.json() as { app_token: string; device: { id: string } };
+  return { appToken: body.app_token, deviceId: body.device.id };
+}
+
+async function subscribe(hub: Hub, deviceId: string, subscription: unknown, token = hub.token) {
+  return authed(hub, token, {
+    method: 'PUT',
+    url: `/api/v1/devices/${deviceId}/push`,
+    payload: { provider: 'webpush', token: JSON.stringify(subscription), locale: 'ar' },
+  });
+}
+
+const testNotice = (hub: Hub) =>
+  authed(hub, hub.token, { method: 'POST', url: '/api/v1/notify/test-notice' });
+
+describe('devices: the registry', () => {
+  it('registers a browser once, lists, renames and unlinks it', async () => {
+    const hub = await hubWith();
+    const first = await registerBrowser(hub);
+    expect(first).toMatchObject({
+      user_id: hub.userId,
+      platform: 'web',
+      kind: 'browser',
+      push: null,
+      app_token_id: null,
+      capabilities: [{ kind: 'notifications', enabled: true, consent_at: null }],
+    });
+    // The same key again is the same row, not a second browser.
+    const again = await authed(hub, hub.token, {
+      method: 'POST',
+      url: '/api/v1/devices',
+      payload: { ...browser(), name: 'Firefox' },
+    });
+    expect(again.statusCode).toBe(200);
+    expect(again.json()).toMatchObject({ id: first.id, name: 'Firefox' });
+
+    const list = (
+      await authed(hub, hub.token, { method: 'GET', url: '/api/v1/devices' })
+    ).json() as { items: Json[] };
+    expect(list.items.map((item) => item.id)).toEqual([first.id]);
+
+    const renamed = await authed(hub, hub.token, {
+      method: 'PATCH',
+      url: `/api/v1/devices/${first.id as string}`,
+      payload: { name: 'حاسوب المكتب' },
+    });
+    expect(renamed.json()).toMatchObject({ name: 'حاسوب المكتب' });
+    const empty = await authed(hub, hub.token, {
+      method: 'PATCH',
+      url: `/api/v1/devices/${first.id as string}`,
+      payload: { name: '  ' },
+    });
+    expect(empty.statusCode).toBe(400);
+
+    const unlinked = await authed(hub, hub.token, {
+      method: 'DELETE',
+      url: `/api/v1/devices/${first.id as string}`,
+    });
+    expect(unlinked.statusCode).toBe(204);
+    const after = (
+      await authed(hub, hub.token, { method: 'GET', url: '/api/v1/devices' })
+    ).json() as { items: Json[] };
+    expect(after.items).toEqual([]);
+    const gone = await authed(hub, hub.token, {
+      method: 'GET',
+      url: `/api/v1/devices/${first.id as string}`,
+    });
+    expect(gone.statusCode).toBe(404);
+  });
+
+  it('unlinking a paired phone revokes its token, and a phone cannot register as a browser', async () => {
+    const hub = await hubWith();
+    const phone = await pairPhone(hub);
+    const self = await authed(hub, phone.appToken, {
+      method: 'GET',
+      url: `/api/v1/devices/${phone.deviceId}`,
+    });
+    expect(self.json()).toMatchObject({ this_device: true, platform: 'android' });
+    const asBrowser = await authed(hub, phone.appToken, {
+      method: 'POST',
+      url: '/api/v1/devices',
+      payload: browser('x'),
+    });
+    expect(asBrowser.statusCode).toBe(409);
+    // Its key belongs to the app: a browser cannot take the row over.
+    const taken = await authed(hub, hub.token, {
+      method: 'POST',
+      url: '/api/v1/devices',
+      payload: browser('phone-key'),
+    });
+    expect(taken.statusCode).toBe(409);
+
+    const unlink = await authed(hub, hub.token, {
+      method: 'DELETE',
+      url: `/api/v1/devices/${phone.deviceId}`,
+    });
+    expect(unlink.statusCode).toBe(204);
+    const refused = await authed(hub, phone.appToken, { method: 'GET', url: '/api/v1/auth/me' });
+    expect(refused.statusCode).toBe(401);
+  });
+
+  it('records when a paired device was last seen', async () => {
+    const hub = await hubWith();
+    const phone = await pairPhone(hub);
+    const db = requireSqlite(hub.app.hub.database);
+    db.update(devices)
+      .set({ lastSeenAt: new Date(0) })
+      .where(eq(devices.id, phone.deviceId))
+      .run();
+    await authed(hub, phone.appToken, { method: 'GET', url: '/api/v1/devices' });
+    const row = db.select().from(devices).where(eq(devices.id, phone.deviceId)).get()!;
+    expect(row.lastSeenAt!.getTime()).toBeGreaterThan(Date.now() - 60_000);
+  });
+
+  it("hides one person's devices from another", async () => {
+    const hub = await hubWith();
+    const mine = await registerBrowser(hub);
+    const created = await authed(hub, hub.token, {
+      method: 'POST',
+      url: '/api/v1/auth/users',
+      payload: {
+        username: 'mem',
+        password: 'mem-password-1',
+        role: 'member',
+        profiles: ['default'],
+      },
+    });
+    expect(created.statusCode, created.body).toBe(201);
+    const login = await hub.app.inject({
+      method: 'POST',
+      url: '/api/v1/auth/login',
+      payload: { username: 'mem', password: 'mem-password-1' },
+    });
+    const member = (login.json() as { access_token: string }).access_token;
+    const list = (await authed(hub, member, { method: 'GET', url: '/api/v1/devices' })).json() as {
+      items: Json[];
+    };
+    expect(list.items).toEqual([]);
+    for (const method of ['GET', 'DELETE'] as const) {
+      const response = await authed(hub, member, {
+        method,
+        url: `/api/v1/devices/${mine.id as string}`,
+      });
+      expect(response.statusCode).toBe(404);
+    }
+  });
+});
+
+describe('devices: push registration and delivery', () => {
+  it('pushes a notice to a subscribed browser, and records the delivery', async () => {
+    const service = await fakePush();
+    const hub = await hubWith();
+    const config = (
+      await authed(hub, hub.token, { method: 'GET', url: '/api/v1/push/config' })
+    ).json() as { webpush_public_key: string; providers: string[] };
+    expect(config.providers).toEqual(['webpush']);
+    expect(Buffer.from(config.webpush_public_key, 'base64url')).toHaveLength(65);
+
+    const device = await registerBrowser(hub);
+    const { subscription } = service.subscribe('laptop');
+    const registered = await subscribe(hub, device.id as string, subscription);
+    expect(registered.statusCode, registered.body).toBe(200);
+    expect(registered.json()).toMatchObject({ provider: 'webpush', locale: 'ar' });
+
+    // The token is sealed at rest and never comes back.
+    const row = requireSqlite(hub.app.hub.database)
+      .select()
+      .from(devices)
+      .where(eq(devices.id, device.id as string))
+      .get()!;
+    expect(row.pushToken).not.toContain(subscription.endpoint);
+    const read = await authed(hub, hub.token, {
+      method: 'GET',
+      url: `/api/v1/devices/${device.id as string}`,
+    });
+    expect(read.body).not.toContain(subscription.keys.auth);
+
+    const notice = await testNotice(hub);
+    expect(notice.statusCode).toBe(201);
+    await vi.waitFor(() => expect(service.received).toHaveLength(1));
+    expect(service.received[0]!.vapid).toMatchObject({ aud: service.url });
+    expect(service.received[0]!.payload).toMatchObject({
+      type: 'notice',
+      notice_id: (notice.json() as Json).id,
+      kind: 'system',
+      title: 'إشعار تجريبي',
+      profile: 'default',
+    });
+    await vi.waitFor(() => {
+      const rows = requireSqlite(hub.app.hub.database).select().from(notificationDeliveries).all();
+      expect(rows).toMatchObject([
+        { channel: 'push', deviceId: device.id, status: 'sent', attempts: 1 },
+      ]);
+    });
+
+    const test = await authed(hub, hub.token, {
+      method: 'POST',
+      url: `/api/v1/devices/${device.id as string}/push/test`,
+    });
+    expect(test.json()).toEqual({ provider: 'webpush', status: 'sent', error: null });
+  });
+
+  it("follows the person's push switch and quiet hours, and never pushes an unlinked device", async () => {
+    const service = await fakePush();
+    const hub = await hubWith();
+    const device = await registerBrowser(hub);
+    await subscribe(hub, device.id as string, service.subscribe('laptop').subscription);
+
+    const prefs = (body: Json) =>
+      authed(hub, hub.token, { method: 'PUT', url: '/api/v1/notify/preferences', payload: body });
+    const quietOff = { enabled: false, from: '22:00', to: '07:00', timezone: 'UTC' };
+
+    // "system" in the inbox but not by push.
+    await prefs({ events: { system: { in_app: true, push: false } }, quiet_hours: quietOff });
+    expect((await testNotice(hub)).statusCode).toBe(201);
+
+    // Quiet hours around now, in UTC.
+    const hour = new Date().getUTCHours();
+    const at = (h: number) => `${String((h + 24) % 24).padStart(2, '0')}:00`;
+    await prefs({
+      events: { system: { in_app: true, push: true } },
+      quiet_hours: { enabled: true, from: at(hour - 1), to: at(hour + 2), timezone: 'UTC' },
+    });
+    expect((await testNotice(hub)).statusCode).toBe(201);
+
+    // Back on: this one is pushed.
+    await prefs({ events: { system: { in_app: true, push: true } }, quiet_hours: quietOff });
+    await testNotice(hub);
+    await vi.waitFor(() => expect(service.received).toHaveLength(1));
+
+    await authed(hub, hub.token, {
+      method: 'DELETE',
+      url: `/api/v1/devices/${device.id as string}`,
+    });
+    await testNotice(hub);
+    await new Promise((resolve) => setTimeout(resolve, 100));
+    expect(service.received).toHaveLength(1);
+  });
+
+  it('forgets a subscription the push service says is gone', async () => {
+    const service = await fakePush();
+    const hub = await hubWith();
+    const device = await registerBrowser(hub);
+    await subscribe(hub, device.id as string, service.subscribe('old').subscription);
+    service.answer('old', 410);
+    const test = await authed(hub, hub.token, {
+      method: 'POST',
+      url: `/api/v1/devices/${device.id as string}/push/test`,
+    });
+    expect(test.json()).toMatchObject({ provider: 'webpush', status: 'failed' });
+    const read = await authed(hub, hub.token, {
+      method: 'GET',
+      url: `/api/v1/devices/${device.id as string}`,
+    });
+    expect(read.json()).toMatchObject({ push: null });
+  });
+
+  it('refuses a private or plain-http endpoint, junk, and a sender that is not configured', async () => {
+    const hub = await hubWith();
+    const device = await registerBrowser(hub);
+    const inside = await subscribe(hub, device.id as string, {
+      endpoint: 'https://127.0.0.1/push/x',
+      keys: {
+        p256dh:
+          'BCVxsr7N_eNgVRqvHtD0zTZsEc6-VV-JvLexhqUzORcxaOzi6-AYWXvTBHm4bjyPjs7Vd8pZGH6SRpkNtoIAiw4',
+        auth: 'BTBZMqHH6r4Tts7J_aSIgg',
+      },
+    });
+    expect(inside.statusCode).toBe(400);
+    expect(inside.json()).toMatchObject({ details: { reason: 'endpoint_refused' } });
+    const junk = await authed(hub, hub.token, {
+      method: 'PUT',
+      url: `/api/v1/devices/${device.id as string}/push`,
+      payload: { provider: 'webpush', token: 'nope' },
+    });
+    expect(junk.statusCode).toBe(400);
+    const fcm = await authed(hub, hub.token, {
+      method: 'PUT',
+      url: `/api/v1/devices/${device.id as string}/push`,
+      payload: { provider: 'fcm', token: 'f'.repeat(40) },
+    });
+    expect(fcm.statusCode).toBe(409);
+    expect(fcm.json()).toMatchObject({ details: { reason: 'sender_not_configured' } });
+  });
+
+  it("does not let a person point their paired phone's pushes elsewhere", async () => {
+    const hub = await hubWith();
+    const phone = await pairPhone(hub);
+    const response = await subscribe(hub, phone.deviceId, {
+      endpoint: 'https://push.example/x',
+      keys: { p256dh: 'x', auth: 'y' },
+    });
+    expect(response.statusCode).toBe(403);
+  });
+});
+
+function serviceAccountJson(): string {
+  const { privateKey } = generateKeyPairSync('rsa', { modulusLength: 2048 });
+  return JSON.stringify({
+    type: 'service_account',
+    project_id: 'core-hub-test',
+    client_email: 'push@core-hub-test.iam.gserviceaccount.com',
+    private_key: privateKey.export({ format: 'pem', type: 'pkcs8' }).toString(),
+    token_uri: 'https://oauth.fake/token',
+  });
+}
+
+describe('devices: the senders', () => {
+  it('shows what each sender needs, and stores FCM credentials from Settings', async () => {
+    const hub = await hubWith();
+    const list = async () =>
+      (
+        (await authed(hub, hub.token, { method: 'GET', url: '/api/v1/push/senders' })).json() as {
+          items: Json[];
+        }
+      ).items;
+    expect(await list()).toMatchObject([
+      { provider: 'webpush', state: 'ready', source: 'generated', missing: [] },
+      { provider: 'fcm', state: 'not_configured', missing: ['service_account'] },
+      {
+        provider: 'apns',
+        state: 'not_configured',
+        missing: ['key_id', 'team_id', 'bundle_id', 'private_key'],
+      },
+    ]);
+
+    const bad = await authed(hub, hub.token, {
+      method: 'PUT',
+      url: '/api/v1/push/senders/fcm',
+      payload: { service_account: '{"project_id":"x"}' },
+    });
+    expect(bad.statusCode).toBe(400);
+
+    const account = serviceAccountJson();
+    const set = await authed(hub, hub.token, {
+      method: 'PUT',
+      url: '/api/v1/push/senders/fcm',
+      payload: { service_account: account },
+    });
+    expect(set.statusCode, set.body).toBe(200);
+    expect(set.json()).toMatchObject({
+      state: 'ready',
+      source: 'settings',
+      details: { project_id: 'core-hub-test', service_account: '[stored]' },
+    });
+    expect(set.body).not.toContain('PRIVATE KEY');
+
+    const off = await authed(hub, hub.token, {
+      method: 'PUT',
+      url: '/api/v1/push/senders/fcm',
+      payload: { enabled: false, service_account: '[stored]' },
+    });
+    expect(off.json()).toMatchObject({ state: 'disabled' });
+
+    expect(
+      (await authed(hub, hub.token, { method: 'DELETE', url: '/api/v1/push/senders/fcm' }))
+        .statusCode,
+    ).toBe(204);
+    expect((await list())[1]).toMatchObject({ state: 'not_configured' });
+    expect(
+      (await authed(hub, hub.token, { method: 'DELETE', url: '/api/v1/push/senders/webpush' }))
+        .statusCode,
+    ).toBe(400);
+  });
+
+  it('lets the environment win over Settings', async () => {
+    const hub = await hubWith({ COREHUB_APNS_KEY_ID: 'ABC123DEFG' });
+    const apns = (
+      (await authed(hub, hub.token, { method: 'GET', url: '/api/v1/push/senders' })).json() as {
+        items: Json[];
+      }
+    ).items[2];
+    expect(apns).toMatchObject({
+      source: 'environment',
+      state: 'not_configured',
+      missing: ['team_id', 'bundle_id', 'private_key'],
+      details: { key_id: 'ABC123DEFG' },
+    });
+    const refused = await authed(hub, hub.token, {
+      method: 'PUT',
+      url: '/api/v1/push/senders/apns',
+      payload: { team_id: 'DEF123GHIJ' },
+    });
+    expect(refused.statusCode).toBe(409);
+  });
+
+  it('pushes to an Android phone through FCM configured by the environment', async () => {
+    const fcm = fakeFcm();
+    overrideDevices({ fetchImpl: fcm.fetchImpl, fcmBaseUrl: 'https://fcm.fake' });
+    const hub = await hubWith({ COREHUB_FCM_SERVICE_ACCOUNT: serviceAccountJson() });
+    const phone = await pairPhone(hub);
+    const registered = await authed(hub, phone.appToken, {
+      method: 'PUT',
+      url: `/api/v1/devices/${phone.deviceId}/push`,
+      payload: { provider: 'fcm', token: 'fcm-registration-token-123' },
+    });
+    expect(registered.statusCode, registered.body).toBe(200);
+    await testNotice(hub);
+    await vi.waitFor(() => expect(fcm.sent).toHaveLength(1));
+    expect(fcm.sent[0]!.body).toMatchObject({
+      message: {
+        token: 'fcm-registration-token-123',
+        notification: { title: 'إشعار تجريبي' },
+        data: { type: 'notice', kind: 'system', profile: 'default' },
+      },
+    });
+  });
+
+  it('pushes to an iPhone through APNs stored in Settings', async () => {
+    const apns = await startFakeApns();
+    cleanups.push(() => apns.close());
+    overrideDevices({ apnsOrigin: apns.origin });
+    const hub = await hubWith();
+    const { privateKey } = generateKeyPairSync('ec', { namedCurve: 'prime256v1' });
+    const set = await authed(hub, hub.token, {
+      method: 'PUT',
+      url: '/api/v1/push/senders/apns',
+      payload: {
+        key_id: 'ABC123DEFG',
+        team_id: 'DEF123GHIJ',
+        bundle_id: 'hub.core.ios',
+        environment: 'sandbox',
+        private_key: privateKey.export({ format: 'pem', type: 'pkcs8' }).toString(),
+      },
+    });
+    expect(set.json()).toMatchObject({ state: 'ready', details: { private_key: '[stored]' } });
+    const phone = await pairPhone(hub, 'iphone-key', 'ios');
+    const token = 'c'.repeat(64);
+    await authed(hub, phone.appToken, {
+      method: 'PUT',
+      url: `/api/v1/devices/${phone.deviceId}/push`,
+      payload: { provider: 'apns', token },
+    });
+    const test = await authed(hub, hub.token, {
+      method: 'POST',
+      url: `/api/v1/devices/${phone.deviceId}/push/test`,
+    });
+    expect(test.json()).toEqual({ provider: 'apns', status: 'sent', error: null });
+    expect(apns.received[0]).toMatchObject({
+      token,
+      headers: { 'apns-topic': 'hub.core.ios' },
+      body: { aps: { alert: { title: 'إشعار تجريبي' } } },
+    });
+  });
+});

@@ -36,20 +36,21 @@ import {
   SkeletonGroup,
   Switch,
   Textarea,
-  Tooltip,
   useConfirm,
 } from '../ui/index.js';
 import { IconTool, IconTrash } from '../ui/icons.js';
 import {
   useCreateMcpServer,
   useDeleteMcpServer,
+  useHubTools,
   useMcpServers,
   useTestMcpServer,
   useUpdateMcpServer,
   type McpServer,
-  type McpTestResult,
 } from './skills.js';
 import { describeToolError } from './toolErrors.js';
+import { HubToolsCard } from './HubToolsCard.js';
+import { TestResult } from './McpTestResultView.js';
 
 const TEMPLATE = `{
   "command": "npx",
@@ -65,7 +66,10 @@ export function AgentMcpScreen() {
 
   const agent = agents.data?.find((entry) => entry.id === agentId);
   const title = agent ? t('mcp.title_of', { name: agent.name }) : t('nav.agent_mcp');
-  const items = servers.data?.items ?? [];
+  // The hub's own block is the card's (contract decision §67), not a row to edit here.
+  const hubTools = useHubTools(agentId);
+  const managed = hubTools.data?.server_name ?? 'corehub';
+  const items = (servers.data?.items ?? []).filter((server) => server.name !== managed);
 
   return (
     <AppShell title={title}>
@@ -83,6 +87,7 @@ export function AgentMcpScreen() {
           </Button>
         </div>
         <Notice>{t('mcp.restart_note')}</Notice>
+        <HubToolsCard agentId={agentId} />
 
         {servers.isPending && (
           <SkeletonGroup label={t('common.loading')}>
@@ -184,48 +189,6 @@ function ServerRow({
         </div>
       )}
       {probe.data && <TestResult name={server.name} result={probe.data} />}
-    </div>
-  );
-}
-
-/** What Hermes found: the tools it listed, or why it could not connect, in its words. */
-function TestResult({ name, result }: { name: string; result: McpTestResult }) {
-  const { t } = useI18n();
-  if (!result.ok) {
-    return (
-      <div data-testid={`mcp-test-result-${name}`} data-ok="false">
-        <Notice tone="danger">
-          <span className="font-medium">{t('mcp.test.failed')}</span>{' '}
-          <span dir="auto">{result.error}</span>
-        </Notice>
-      </div>
-    );
-  }
-  return (
-    <div data-testid={`mcp-test-result-${name}`} data-ok="true">
-      <Notice tone="success">
-        <span className="font-medium">
-          {t('mcp.test.ok', {
-            count: String(result.tools.length),
-            seconds: (result.duration_ms / 1000).toFixed(1),
-          })}
-        </span>
-        {result.tools.length === 0 ? (
-          <span> {t('mcp.test.no_tools')}</span>
-        ) : (
-          <ul className="mt-1 flex flex-wrap gap-1" dir="ltr">
-            {result.tools.map((tool) => (
-              <li key={tool.name}>
-                <Tooltip label={tool.description ?? ''}>
-                  <span>
-                    <Badge>{tool.name}</Badge>
-                  </span>
-                </Tooltip>
-              </li>
-            ))}
-          </ul>
-        )}
-      </Notice>
     </div>
   );
 }

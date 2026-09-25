@@ -1,0 +1,108 @@
+{
+  "app": {
+    "name": "Core Hub"
+  },
+  "welcome": {
+    "title": "Welcome to Core Hub",
+    "intro": "Choose how this computer works with Core Hub. You can change it later in Settings → This device.",
+    "language": "العربية",
+    "back": "Back",
+    "remote": {
+      "title": "Connect to a hub",
+      "body": "Use a Core Hub that runs on a server. Your chats, agents and settings stay on that hub.",
+      "choose": "Connect to a hub"
+    },
+    "local": {
+      "title": "Run on this computer",
+      "body": "The app runs its own hub here and uses Hermes Agent installed on this computer. Nothing leaves this machine unless you connect it.",
+      "choose": "Run on this computer"
+    }
+  },
+  "remote": {
+    "heading": "Connect to a hub",
+    "url_label": "Hub address",
+    "url_hint": "The address you open Core Hub at in a browser, such as hub.example.com or 192.168.1.20:8080.",
+    "connect": "Connect",
+    "checking": "Checking the hub…",
+    "recent": "Hubs used before",
+    "pair_heading": "Or pair this computer",
+    "pair_hint": "On a device that is signed in, open Settings → Device connections → Pair. Open the link it shows on this computer, or paste the link here.",
+    "pair_label": "Pairing link",
+    "pair": "Pair",
+    "pairing": "Pairing…"
+  },
+  "errors": {
+    "url": {
+      "empty": "Enter the hub's address.",
+      "invalid": "That is not an address.",
+      "scheme": "The address must start with http:// or https://.",
+      "credentials": "Leave the user name and password out of the address; you sign in on the next screen."
+    },
+    "hub_unreachable": "Nothing answered at {url}. Check the address and that the hub is running.",
+    "not_a_hub": "{url} answered, but it is not a Core Hub.",
+    "pair_invalid": "This is not a pairing link, or it has expired. Start a new pairing and try again.",
+    "pair_failed": "Pairing did not work: {message}",
+    "local_failed": "The hub on this computer did not start: {message}",
+    "local_stopped": "The hub on this computer stopped ({reason}). Start it again, or connect to a hub.",
+    "install_failed": "Installing Hermes did not work: {message}",
+    "install_not_found": "The installer finished, but Hermes is still not where it installs. Open a new terminal and run hermes --version, then try again."
+  },
+  "tray": {
+    "show": "Open Core Hub",
+    "change_connection": "Change connection…",
+    "quit": "Quit Core Hub"
+  },
+  "menu": {
+    "file": "File",
+    "edit": "Edit",
+    "view": "View",
+    "window": "Window",
+    "help": "Help",
+    "change_connection": "Change connection…",
+    "reload": "Reload",
+    "quit": "Quit",
+    "about": "About Core Hub",
+    "website": "Core Hub on GitHub",
+    "undo": "Undo",
+    "redo": "Redo",
+    "cut": "Cut",
+    "copy": "Copy",
+    "paste": "Paste",
+    "select_all": "Select all",
+    "zoom_in": "Zoom in",
+    "zoom_out": "Zoom out",
+    "zoom_reset": "Actual size",
+    "fullscreen": "Full screen",
+    "minimize": "Minimize",
+    "close": "Close window",
+    "devtools": "Developer tools",
+    "hide": "Hide Core Hub",
+    "hide_others": "Hide others",
+    "show_all": "Show all"
+  },
+  "dialog": {
+    "pair_question": "Pair this computer with {hub}?",
+    "pair_detail": "A link asked Core Hub to pair with this hub. Continue only if you started the pairing yourself.",
+    "pair": "Pair",
+    "cancel": "Cancel"
+  },
+  "local": {
+    "starting": "Starting the hub on this computer…",
+    "no_hermes_title": "Hermes Agent is not on this computer",
+    "no_hermes_body": "The hub on this computer works with Hermes Agent, which you install once with Hermes's own installer. It goes into Hermes's own folder; Core Hub does not carry a copy of it.",
+    "install": "Install Hermes",
+    "installing": "Installing Hermes… This can take several minutes.",
+    "install_command": "This is what will run, from Hermes's site:",
+    "without": "Continue without Hermes",
+    "without_hint": "The hub starts now; its agents show Hermes as not installed until you install it.",
+    "docs": "Hermes's installation guide",
+    "log": "Installer output"
+  },
+  "helper": {
+    "pick_folder": "Choose a folder to share with the local helper"
+  },
+  "updates": {
+    "available_title": "Core Hub {version} is available",
+    "available_body": "Open the download page to install it."
+  }
+}

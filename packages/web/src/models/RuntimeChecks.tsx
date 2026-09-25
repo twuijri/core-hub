@@ -11,6 +11,9 @@
  * provider. One source, so the screen cannot disagree with the failure.
  */
 import { useState } from 'react';
+import { canRestart, useRestartAgent } from '../agents/useRestartAgent.js';
+import { useAuth } from '../auth/context.js';
+import { useAgents } from '../hub/queries.js';
 import { useI18n } from '../i18n/context.js';
 import { Badge, Button } from '../ui/index.js';
 import type { RuntimeCheck, RuntimeReport } from '../types.js';
@@ -31,6 +34,13 @@ export function sortChecks(checks: readonly RuntimeCheck[] | undefined): Runtime
   return [...checks].sort((a, b) => ORDER.indexOf(a.id) - ORDER.indexOf(b.id));
 }
 
+/**
+ * A check that is a thing to do, not a thing broken: the settings changed after Hermes last
+ * started, and a restart applies them (owner, 2026-09-25 — the red ✕ read as a failure he
+ * could not place). Amber, with its own words and the restart beside it on the Models screen.
+ */
+export const PENDING_RESTART: RuntimeCheck['id'] = 'gateway_reloaded';
+
 export function failingChecks(report: RuntimeReport | undefined): RuntimeCheck[] {
   return report ? sortChecks(report.checks).filter((check) => !check.ok) : [];
 }
@@ -48,17 +58,25 @@ export function RuntimeChecks({
   if (checks.length === 0) return null;
   return (
     <ul className="space-y-1 text-sm" data-testid="runtime-checks" data-ready={report.ready}>
-      {checks.map((check) => (
-        <li key={check.id} className="flex items-center gap-2" data-check-id={check.id}>
-          <span aria-hidden="true">{check.ok ? '✓' : '✕'}</span>
-          <span className={check.ok ? '' : 'font-medium'}>
-            {t(check.ok ? `models.runtime.${check.id}.ok` : `models.runtime.${check.id}.missing`)}
-          </span>
-          {/* The server's `detail` is a fact, never a sentence: a count, a slug, a mode.
+      {checks.map((check) => {
+        const warn = !check.ok && check.id === PENDING_RESTART;
+        return (
+          <li
+            key={check.id}
+            className={`flex items-center gap-2 ${warn ? 'text-warning-soft-text' : ''}`}
+            data-check-id={check.id}
+            data-tone={check.ok ? 'ok' : warn ? 'warning' : 'danger'}
+          >
+            <span aria-hidden="true">{check.ok ? '✓' : warn ? '⚠' : '✕'}</span>
+            <span className={check.ok ? '' : 'font-medium'}>
+              {t(check.ok ? `models.runtime.${check.id}.ok` : `models.runtime.${check.id}.missing`)}
+            </span>
+            {/* The server's `detail` is a fact, never a sentence: a count, a slug, a mode.
               It is shown next to our wording, never instead of it. */}
-          {check.detail && <span className="text-xs text-muted">{check.detail}</span>}
-        </li>
-      ))}
+            {check.detail && <span className="text-xs text-muted">{check.detail}</span>}
+          </li>
+        );
+      })}
     </ul>
   );
 }
@@ -108,8 +126,34 @@ export function RuntimeCard({ report }: { report: RuntimeReport }) {
         <>
           <p className="mb-2 mt-1 text-xs text-muted">{t('models.runtime.hint')}</p>
           <RuntimeChecks report={report} />
+          {report.checks.some((check) => check.id === PENDING_RESTART && !check.ok) && (
+            <RestartNow />
+          )}
         </>
       )}
     </section>
+  );
+}
+
+/** «إعادة التشغيل الآن»: the one thing that clears a pending restart, for whoever may do it. */
+function RestartNow() {
+  const { t } = useI18n();
+  const { user } = useAuth();
+  const agents = useAgents();
+  const hermes = agents.data?.find((agent) => agent.kind === 'hermes');
+  const restarter = useRestartAgent(hermes?.id);
+  if (!canRestart(hermes, user?.role)) return null;
+  return (
+    <Button
+      className="mt-2"
+      size="sm"
+      variant="primary"
+      loading={restarter.pending}
+      aria-busy={restarter.pending}
+      onClick={() => void restarter.restart()}
+      data-testid="runtime-restart-now"
+    >
+      {t('models.runtime.restart_now')}
+    </Button>
   );
 }

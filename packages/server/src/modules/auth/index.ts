@@ -101,6 +101,13 @@ export {
   type PrincipalUser,
 } from './principal.js';
 export {
+  RUN_TOKEN_PREFIX,
+  issueRunToken,
+  revokeRunToken,
+  runGrantOf,
+  type RunGrant,
+} from './run-tokens.js';
+export {
   DEFAULT_WORKSPACE_SLUG,
   canEnter,
   defaultWorkspace,
@@ -123,6 +130,7 @@ export {
   RUNTIME_DEFAULT_PROFILE,
   registerProfileMirror,
   type ProfileMirror,
+  type RuntimeCompression,
   type ProfileOrigin,
 } from './profile-mirror.js';
 export {
@@ -140,7 +148,7 @@ export {
   type PrincipalScope,
   type PrincipalScopeResolver,
 } from './scopes.js';
-export { findUser, ownerUser, presentUser } from './users.js';
+export { findUser, ownerUser, presentUser, revokeToken } from './users.js';
 export {
   emitToUser,
   revalidateSockets,

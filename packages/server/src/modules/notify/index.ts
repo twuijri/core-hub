@@ -2,7 +2,7 @@
  * Module `notify`: the notices a person sees, what they want to be told about, and the
  * webhooks that forward events out of the hub.
  *
- * All twelve operations answer.
+ * All thirteen operations answer.
  *
  * **Nothing here invents a notice.** The inbox is what other modules wrote to it; a hub
  * where nothing has happened has an empty inbox, and that is the correct answer rather
@@ -15,30 +15,46 @@
  *
  * **A signing secret never comes back.** It is written once and read as `[stored]`, the
  * same shape the updates module uses for its source token.
+ *
+ * **Webhooks receive the hub's events** (decision §59): every event in the contract's
+ * `WebhookEventName` catalogue, as it is emitted, goes through `webhook-queue.ts`, which
+ * queues a signed delivery per subscribed webhook and sends it in the background with
+ * retries.
  */
-import { createHmac } from 'node:crypto';
 import { and, desc, eq, isNull } from 'drizzle-orm';
 import type { FastifyInstance, FastifyRequest } from 'fastify';
 import type { Server as SocketServer } from 'socket.io';
-import { derived, loadOpenApiDocument } from '@corehub/contracts';
+import { loadOpenApiDocument } from '@corehub/contracts';
 import { newUlid } from '../../db/ids.js';
 import { createContractIndex } from '../../lib/contract.js';
 import { requireSqlite, type ModuleDb } from '../../lib/db.js';
-import { HubError, notFound } from '../../lib/errors.js';
+import { HubError, notFound, stateInvalid } from '../../lib/errors.js';
 import { REALTIME_NAMESPACES, defineModule } from '../../lib/module.js';
 import { clampLimit } from '../../lib/pagination.js';
+import { tapRealtime } from '../../lib/realtime.js';
 import { defineRoute } from '../../lib/route.js';
 import { jobRunnerFor } from '../audit/index.js';
 import {
   DEFAULT_WORKSPACE_SLUG,
+  canEnter,
   emitToUser,
+  findWorkspace,
   requireRole,
   requireUser,
   requireWorkspace,
   resolveWorkspaceFor,
 } from '../auth/index.js';
-import { deliver, unreadCount, type NoticeEvent, type Recipient } from './notices.js';
+import {
+  deliver,
+  localeOf,
+  unreadCount,
+  type NoticeEvent,
+  type NoticePush,
+  type Recipient,
+} from './notices.js';
 import { checkAddress } from './address.js';
+import { webhookCatalogue } from './webhook-catalogue.js';
+import { DEFAULT_QUEUE_OPTIONS, WebhookQueue, type QueueOptions } from './webhook-queue.js';
 import {
   notificationPreferences,
   notifications,
@@ -48,7 +64,17 @@ import {
 } from './schema.js';
 
 export { checkAddress, isPrivateAddress } from './address.js';
-export { quietNow, sentenceFor, type NoticeEvent, type Recipient } from './notices.js';
+export { retryDelayMs, type WebhookQueue } from './webhook-queue.js';
+export {
+  pushAllowed,
+  quietNow,
+  sentenceFor,
+  type NoticeEvent,
+  type NoticePush,
+  type NoticePushMessage,
+  type NoticePushResult,
+  type Recipient,
+} from './notices.js';
 
 /**
  * What another module holds to put something in somebody's inbox. One method, named after
@@ -63,24 +89,60 @@ export interface HubNotifier {
   ): void;
 }
 
-/** A notifier bound to this hub's database and sockets. Composed in `bootstrap`. */
-export function createNotifier(db: ModuleDb, io: () => SocketServer | null): HubNotifier {
+/** A notifier bound to this hub's database, sockets and push. Composed in `bootstrap`. */
+export function createNotifier(
+  db: ModuleDb,
+  io: () => SocketServer | null,
+  push: NoticePush | null = null,
+): HubNotifier {
   return {
     announce(recipient, event, resource) {
-      deliver({ db, io: io(), record }, recipient, event, resource);
+      deliver({ db, io: io(), record, push }, recipient, event, resource);
     },
   };
 }
 
-/** Injected so a test can exercise delivery without reaching the network. */
+/** The push port, lent by the composition root (`devices` sends). */
+let noticePush: ((app: FastifyInstance) => NoticePush) | null = null;
+export function registerNoticePush(factory: (app: FastifyInstance) => NoticePush): void {
+  noticePush = factory;
+}
+
+/** Injected so a test can exercise delivery without reaching the network, or quickly. */
 export interface NotifyOverrides {
   fetchImpl?: typeof fetch;
   resolveHost?: (host: string) => Promise<string[]>;
+  /** The first retry's delay (30 s in production); each later one doubles it. */
+  retryBaseMs?: number;
+  retryCapMs?: number;
+  /** One attempt's deadline (10 s in production). */
+  timeoutMs?: number;
 }
 let overrides: NotifyOverrides = {};
 export function overrideNotify(next: NotifyOverrides): void {
   overrides = next;
 }
+
+function queueOptions(): QueueOptions {
+  return {
+    retryBaseMs: overrides.retryBaseMs ?? DEFAULT_QUEUE_OPTIONS.retryBaseMs,
+    retryCapMs: overrides.retryCapMs ?? DEFAULT_QUEUE_OPTIONS.retryCapMs,
+    timeoutMs: overrides.timeoutMs ?? DEFAULT_QUEUE_OPTIONS.timeoutMs,
+    resolveHost: overrides.resolveHost,
+    fetchImpl: overrides.fetchImpl,
+  };
+}
+
+/** One delivery queue per hub, keyed like every other per-app service. */
+const queues = new WeakMap<SocketServer, WebhookQueue>();
+
+/** The webhook queue of this hub (tests use it to wait for or force what is due). */
+export function webhookQueueFor(app: FastifyInstance): WebhookQueue | null {
+  return queues.get(app.hub.io) ?? null;
+}
+
+/** A retry's default when a webhook does not say (contract `WebhookWrite.max_retries`). */
+const DEFAULT_MAX_RETRIES = 5;
 
 interface Scope {
   workspace: string;
@@ -184,6 +246,7 @@ function toDelivery(row: typeof webhookDeliveries.$inferSelect): Record<string, 
     error: row.lastError,
     created_at: row.createdAt.toISOString(),
     delivered_at: row.deliveredAt?.toISOString() ?? null,
+    next_attempt_at: row.nextAttemptAt?.toISOString() ?? null,
   };
 }
 
@@ -334,22 +397,33 @@ function announce(
   );
 }
 
-/** The events a webhook may subscribe to, served from the contract rather than a list here. */
+/**
+ * The events a webhook may subscribe to: `WebhookEventName` in the contract, in its order,
+ * with the descriptions it gives (decision §59). The hub forwards exactly these.
+ */
 function webhookEvents(): Array<{ name: string; description: { ar: string; en: string } }> {
-  const document = loadOpenApiDocument();
-  const names = new Set<string>();
-  for (const path of Object.values((document?.paths ?? {}) as Record<string, unknown>)) {
-    for (const operation of Object.values(path as Record<string, unknown>)) {
-      const events = (operation as { 'x-rt-events'?: string[] })?.['x-rt-events'];
-      for (const event of events ?? []) names.add(event);
+  return [...webhookCatalogue().values()].map((entry) => ({
+    name: entry.name,
+    description: entry.description,
+  }));
+}
+
+/**
+ * A webhook names the profiles it listens to; the person saving it may name only profiles
+ * they can enter, or a webhook would be a way to read one they cannot.
+ */
+function checkProfiles(request: FastifyRequest, profiles: string[] | undefined): void {
+  const principal = request.principal;
+  if (!principal || !profiles) return;
+  const db = dbOf(request);
+  for (const slug of profiles) {
+    const row = findWorkspace(db, slug);
+    if (!row || !canEnter(db, principal.user, row.id)) {
+      throw new HubError('bad_request', {
+        details: { reason: 'profile_not_allowed', profile: slug },
+      });
     }
   }
-  return [...names].sort().map((name) => ({
-    name,
-    // The contract names the events; describing each one in two languages is a
-    // translation table nobody maintains, so the name is the description.
-    description: { ar: name, en: name },
-  }));
 }
 
 export const notifyModule = defineModule({
@@ -357,6 +431,20 @@ export const notifyModule = defineModule({
   registerRoutes(app: FastifyInstance) {
     const document = loadOpenApiDocument();
     if (!document) throw new Error('packages/contracts/openapi.yaml is required (ADR 0003)');
+    // Every event the hub emits passes the queue, which keeps what a webhook asked for.
+    const queue = new WebhookQueue(requireSqlite(app.hub.database), queueOptions);
+    queues.set(app.hub.io, queue);
+    const untap = tapRealtime(app.hub.io, (event) => {
+      queue.dispatch(event);
+    });
+    // What was due when the hub stopped is still due: pick it up once the hub is up.
+    app.addHook('onReady', async () => {
+      queue.schedule();
+    });
+    app.addHook('onClose', async () => {
+      untap();
+      queue.stop();
+    });
     const deps = {
       contract: createContractIndex(document),
       guards: { requireUser, requireWorkspace, requireRole },
@@ -401,6 +489,34 @@ export const notifyModule = defineModule({
           next_cursor: null,
           unread_count: unreadCount,
         };
+      },
+    });
+
+    defineRoute(app, deps, {
+      operationId: 'notify.sendTestNotice',
+      status: 201,
+      handler: (request) => {
+        const scope = scopeOf(request);
+        const db = dbOf(request);
+        const ar = localeOf(db, scope.userId) === 'ar';
+        const id = deliver(
+          { db, io: request.server.hub.io, record, push: noticePush?.(request.server) ?? null },
+          { userId: scope.userId, workspace: scope.workspace, profile: scope.profile },
+          {
+            kind: 'system',
+            title: ar ? 'إشعار تجريبي' : 'Test notification',
+            body: ar
+              ? 'إن وصلك هذا على جهازك فالإشعارات تعمل.'
+              : 'If this reached your device, notifications work.',
+          },
+          null,
+        );
+        // The person turned "system" notices off: nothing was written, and saying so is
+        // more useful than a notice they asked not to get.
+        if (!id) throw new HubError('conflict', { details: { reason: 'kind_turned_off' } });
+        const row = db.select().from(notifications).where(eq(notifications.id, id)).get();
+        if (!row) throw notFound({ resource: 'notice', id });
+        return toNotice(row, scope.profile);
       },
     });
 
@@ -587,6 +703,7 @@ export const notifyModule = defineModule({
         const input = body as Record<string, unknown>;
         const url = String(input.url ?? '');
         const allowPrivate = (input.allow_private_network as boolean | undefined) ?? false;
+        checkProfiles(request, input.profiles as string[] | undefined);
         // Checked before it is stored: a webhook the hub would refuse to call is not a
         // webhook worth keeping.
         await validateUrl(url, allowPrivate);
@@ -605,7 +722,7 @@ export const notifyModule = defineModule({
             signingSecret: (input.secret as string | null | undefined) ?? null,
             includeContent: (input.include_content as boolean | undefined) ?? false,
             allowPrivateNetwork: allowPrivate,
-            maxRetries: (input.max_retries as number | undefined) ?? 3,
+            maxRetries: (input.max_retries as number | undefined) ?? DEFAULT_MAX_RETRIES,
           })
           .run();
         const row = dbOf(request).select().from(webhooks).where(eq(webhooks.id, id)).get()!;
@@ -632,6 +749,7 @@ export const notifyModule = defineModule({
         const patch = body as Record<string, unknown>;
         const allowPrivate =
           (patch.allow_private_network as boolean | undefined) ?? current.allowPrivateNetwork;
+        checkProfiles(request, patch.profiles as string[] | undefined);
         if (patch.url !== undefined) await validateUrl(String(patch.url), allowPrivate);
         const values: Partial<typeof webhooks.$inferInsert> = { updatedAt: new Date() };
         if (patch.name !== undefined) values.name = String(patch.name);
@@ -683,6 +801,28 @@ export const notifyModule = defineModule({
     });
 
     defineRoute(app, deps, {
+      operationId: 'notify.redeliverWebhookDelivery',
+      status: 202,
+      handler: (request, { params }) => {
+        const id = params.webhook_id as string;
+        webhookOf(request, id);
+        const deliveryId = params.delivery_id as string;
+        const source = dbOf(request)
+          .select()
+          .from(webhookDeliveries)
+          .where(and(eq(webhookDeliveries.id, deliveryId), eq(webhookDeliveries.webhookId, id)))
+          .get();
+        if (!source) throw notFound({ resource: 'webhook_delivery', id: deliveryId });
+        // Only one that is over: a delivery still waiting for its retry will be sent anyway,
+        // and one that arrived needs nothing.
+        const over =
+          source.status === 'dead' || (source.status === 'failed' && !source.nextAttemptAt);
+        if (!over) throw stateInvalid({ status: source.status, allowed: ['failed', 'dead'] });
+        return toDelivery(queue.redeliver(source));
+      },
+    });
+
+    defineRoute(app, deps, {
       operationId: 'notify.testWebhook',
       status: 202,
       handler: (request, { params }) => {
@@ -690,7 +830,6 @@ export const notifyModule = defineModule({
         const id = params.webhook_id as string;
         const row = webhookOf(request, id);
         const db = dbOf(request);
-        const fetchImpl = overrides.fetchImpl ?? fetch;
         const job = jobRunnerFor(request.server).start(
           {
             workspace: scope.workspace,
@@ -700,89 +839,37 @@ export const notifyModule = defineModule({
             entityId: id,
           },
           async (handle) => {
-            handle.progress(20, 'checking the address');
-            const verdict = await checkAddress(
-              row.url,
-              row.allowPrivateNetwork,
-              overrides.resolveHost ?? undefined,
-            );
-            if (!verdict.ok) {
-              throw new HubError('bad_request', {
-                details: { reason: `url_${verdict.reason}`, detail: verdict.detail },
-              });
-            }
-            const payload = {
-              event: 'webhook.test',
-              profile: scope.profile,
-              sent_at: new Date().toISOString(),
-            };
-            const bodyText = JSON.stringify(payload);
-            const headers: Record<string, string> = {
-              'content-type': 'application/json',
-              ...row.headers,
-            };
-            if (row.signingSecret) {
-              // The receiver verifies this rather than trusting the body: that is the
-              // whole reason a signing secret exists.
-              headers[derived.webhookSignatureHeader] = `sha256=${createHmac(
-                'sha256',
-                row.signingSecret,
-              )
-                .update(bodyText)
-                .digest('hex')}`;
-            }
-            handle.progress(60, 'sending');
+            handle.progress(30, 'sending');
+            // The same path as every event (the address checked again, signed, one
+            // deadline), with the contract's payload and no data; one try, no retries.
             const deliveryId = newUlid();
-            let status = 0;
-            let error: string | null = null;
-            try {
-              const response = await fetchImpl(row.url, {
-                method: 'POST',
-                headers,
-                body: bodyText,
-              });
-              status = response.status;
-              if (!response.ok) error = `the endpoint answered ${response.status}`;
-            } catch (caught) {
-              error =
-                caught instanceof Error ? caught.message : 'the endpoint could not be reached';
-            }
             db.insert(webhookDeliveries)
               .values({
                 id: deliveryId,
                 ownerId: scope.userId,
-                workspace: scope.workspace,
+                workspace: row.workspace,
                 webhookId: id,
                 eventName: 'webhook.test',
-                payload,
-                status: error ? 'failed' : 'delivered',
-                attempts: 1,
-                responseStatus: status || null,
-                lastError: error,
-                deliveredAt: error ? null : new Date(),
+                payload: {
+                  id: deliveryId,
+                  event: 'webhook.test',
+                  profile: scope.profile,
+                  occurred_at: new Date().toISOString().replace(/\.\d{3}Z$/, 'Z'),
+                  content_included: false,
+                  data: {},
+                },
+                status: 'queued',
+                attempts: 0,
+                // Not due: only this job sends it.
+                nextAttemptAt: null,
               })
               .run();
-            const now = new Date();
-            db.update(webhooks)
-              .set(
-                error
-                  ? {
-                      failureCount: row.failureCount + 1,
-                      lastError: error,
-                      lastStatus: status || null,
-                      updatedAt: now,
-                    }
-                  : {
-                      deliveredCount: row.deliveredCount + 1,
-                      lastError: null,
-                      lastStatus: status,
-                      lastDeliveredAt: now,
-                      updatedAt: now,
-                    },
-              )
-              .where(eq(webhooks.id, id))
-              .run();
-            return { delivered: !error, status, error };
+            const outcome = await queue.attempt(deliveryId, 'test');
+            return {
+              delivered: outcome?.delivered ?? false,
+              status: outcome?.status ?? 0,
+              error: outcome?.error ?? null,
+            };
           },
         );
         // The contract's `JobAccepted`: the id to follow, not the job itself. A client reads

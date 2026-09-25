@@ -62,15 +62,31 @@ RUN set -eu; \
       find "$pkg/prebuilds" -type f ! -name 'linux-x64.node' ! -name 'linux-arm64.node' -delete; \
     done; \
     cd packages/server && node -e "const db=require('better-sqlite3')(':memory:'); if (db.prepare('select 1 as ok').get().ok!==1) process.exit(1)"
+# node-pty (MIT) is the owner's web terminal (DECISIONS §70). It ships prebuilt binaries only for
+# macOS and Windows (~58 MB), so on Linux `pnpm install` above compiled it with node-gyp — the
+# build tools (python3, make, g++) come with this node:24-bookworm stage and never reach the
+# runtime image. At runtime lib/utils.js loads build/Release/pty.node; everything else — the
+# foreign prebuilds, the winpty/conpty sources, node-gyp's intermediates — goes. The script
+# spawns a shell on a real PTY and reads its output, so a binary that does not load or work fails
+# the build rather than a terminal session.
+RUN set -eu; \
+    for pkg in node_modules/.pnpm/node-pty@*/node_modules/node-pty; do \
+      rm -rf "$pkg/prebuilds" "$pkg/deps" "$pkg/src" "$pkg/third_party" "$pkg/scripts" \
+             "$pkg/binding.gyp" "$pkg/typings" "$pkg/build/Makefile" "$pkg/build/config.gypi" \
+             "$pkg"/build/*.mk "$pkg/build/Release/obj.target" "$pkg/build/Release/.deps"; \
+      find "$pkg/lib" -name '*.test.js*' -delete; \
+      test -f "$pkg/build/Release/pty.node"; \
+    done; \
+    cd packages/server && node -e "const p=require('node-pty').spawn('/bin/sh',['-c','echo pty-ok'],{cols:80,rows:24,cwd:'/',env:{PATH:'/usr/bin:/bin'}});let o='';p.onData(d=>o+=d);p.onExit(()=>process.exit(o.includes('pty-ok')?0:1))"
 
 # ---- Hermes Agent (MIT), pinned to a release tag ------------------------------------------
 # A standalone CPython managed by uv plus a venv, both under /opt/hermes so the runtime stage
 # copies one tree. Hermes refuses to build a wheel ("distributed via the shell installer,
 # Docker image, or Nix"); the supported route is an editable install from a checkout, so the
 # pinned tag is cloned to /opt/hermes/src and stays there. Core dependencies only, plus what
-# the API server (aiohttp), cron and MCP need, plus the two channels the hub links itself
-# (Telegram, WhatsApp — below): no dashboard, TUI, browsers, ffmpeg or other messaging extras —
-# the hub is the UI.
+# the API server (aiohttp), cron and MCP need, plus the channels the hub links whose libraries
+# fit (Telegram, Discord, Slack, WhatsApp — below): no dashboard, TUI, browsers, ffmpeg or other
+# messaging extras — the hub is the UI.
 FROM node:24-bookworm AS hermes
 ARG HERMES_REF=v2026.9.14
 ARG UV_VERSION=0.11.6
@@ -87,23 +103,27 @@ RUN sh /tmp/uv-installer.sh \
  && cd /opt/hermes/src \
  && uv pip install --python /opt/hermes/.venv/bin/python -e ".[cron,mcp]" "aiohttp==3.14.3" \
  && /opt/hermes/.venv/bin/hermes --version
-# The two messaging channels the hub links itself ship in the image, so linking one downloads
-# nothing at runtime (docs/changes/2026-09-25-twuijri-image-channel-deps.md).
+# The messaging channels whose libraries fit the image-size budget ship in the image, so linking
+# one downloads nothing at runtime (docs/changes/2026-09-25-twuijri-image-channel-deps.md,
+# docs/changes/2026-09-25-twuijri-more-channels.md). Matrix's (mautrix with encryption, ~9 MB
+# compressed) did not fit and is still installed by Hermes on first use; Mattermost and Email need
+# nothing beyond Hermes itself.
 #
-# Telegram: Hermes installs its client on first use (tools/lazy_deps.py, `platform.telegram`)
-# from PyPI. The spec is read from that table here, so the image carries exactly what Hermes
-# would install and the pin cannot drift from Hermes's own. The venv's current versions are the
-# constraints — the rule Hermes itself applies to a lazy install — so no core package moves; a
-# conflict fails the build instead. The last line is Hermes's own question: is_available is what
-# ensure() asks before it installs anything.
+# Telegram, Discord, Slack: Hermes installs each client on first use (tools/lazy_deps.py,
+# `platform.<name>`) from PyPI. The specs are read from that table here, so the image carries
+# exactly what Hermes would install and the pins cannot drift from Hermes's own. The venv's
+# current versions are the constraints — the rule Hermes itself applies to a lazy install — so no
+# core package moves; a conflict fails the build instead. The last line is Hermes's own question:
+# is_available is what ensure() asks before it installs anything.
+ARG IMAGE_CHANNELS="platform.telegram platform.discord platform.slack"
 RUN set -eu; cd /opt/hermes/src; \
     py=/opt/hermes/.venv/bin/python; \
-    specs=$("$py" -c "from tools.lazy_deps import LAZY_DEPS; print(' '.join(LAZY_DEPS['platform.telegram']))"); \
+    specs=$("$py" -c "import sys; from tools.lazy_deps import LAZY_DEPS; print(' '.join(s for f in sys.argv[1:] for s in LAZY_DEPS[f]))" $IMAGE_CHANNELS); \
     uv pip freeze --python "$py" | grep -E '^[A-Za-z0-9._-]+==' > /tmp/core-constraints.txt; \
-    echo "platform.telegram: $specs"; \
+    echo "$IMAGE_CHANNELS: $specs"; \
     uv pip install --python "$py" --constraint /tmp/core-constraints.txt $specs; \
     rm /tmp/core-constraints.txt; \
-    "$py" -c "from tools import lazy_deps; import telegram, telegram.ext; assert lazy_deps.is_available('platform.telegram'), lazy_deps.feature_missing('platform.telegram')"
+    "$py" -c "import importlib, sys; from tools import lazy_deps; mods = {'platform.telegram': 'telegram.ext', 'platform.discord': 'discord', 'platform.slack': 'slack_bolt'}; [importlib.import_module(mods[f]) for f in sys.argv[1:] if f in mods]; missing = [f for f in sys.argv[1:] if not lazy_deps.is_available(f)]; assert not missing, [lazy_deps.feature_missing(f) for f in missing]" $IMAGE_CHANNELS
 # WhatsApp: Hermes's bridge (scripts/whatsapp-bridge, Baileys) runs `npm install` the first time
 # a phone is linked. Its locked dependencies are installed here instead, read-only in the image;
 # the hub points each profile's copy of the bridge at them (modules/agents/whatsapp-bridge.ts).
@@ -209,6 +229,14 @@ RUN apt-get update \
  && groupadd --gid 10001 hub \
  && useradd --uid 10001 --gid hub --create-home --shell /usr/sbin/nologin hub \
  && mkdir -p /data && chown hub:hub /data
+# `python3` for the scripts skills run (Core Hub's library, decision §71, and Hermes's own —
+# xlsx, pdf, docx …). Hermes's terminal runs a login shell, and Debian's /etc/profile resets PATH
+# for a non-root user, dropping /opt/hermes/.venv/bin: `python3` was "command not found" there
+# (skill-library.real.test.ts). A wrapper, not a symlink, so the venv — and the Pillow in it — is
+# the one that runs; the venv stays read-only to `hub`.
+RUN printf '#!/bin/sh\nexec /opt/hermes/.venv/bin/python3 "$@"\n' > /usr/local/bin/python3 \
+ && chmod 0755 /usr/local/bin/python3 \
+ && ln -s python3 /usr/local/bin/python
 COPY --from=base /usr/local/bin/node /usr/local/bin/node
 COPY --from=base /usr/local/lib/node_modules/npm /usr/local/lib/node_modules/npm
 RUN ln -s ../lib/node_modules/npm/bin/npm-cli.js /usr/local/bin/npm \
@@ -223,6 +251,8 @@ COPY --from=build /app/packages/contracts/events ./packages/contracts/events
 COPY --from=build /app/packages/contracts/dist ./packages/contracts/dist
 COPY --from=build /app/packages/server/dist ./packages/server/dist
 COPY --from=build /app/packages/server/drizzle ./packages/server/drizzle
+# Core Hub's own skills, installed into every Hermes profile's skills/core-hub/ (decision §71).
+COPY --from=build /app/packages/server/skill-library ./packages/server/skill-library
 # The web client: static files the hub serves from / (packages/server/src/app/web.ts).
 COPY --from=build /app/packages/web/dist ./packages/web/dist
 USER hub

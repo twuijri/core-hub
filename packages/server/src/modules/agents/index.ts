@@ -28,7 +28,7 @@
  * test process, so the service is kept per Socket.IO server (one per app), the same way
  * `auth` keeps its context.
  */
-import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import type { FastifyInstance, FastifyRequest } from 'fastify';
@@ -40,8 +40,10 @@ import { createContractIndex } from '../../lib/contract.js';
 import { defineModule } from '../../lib/module.js';
 import { createRealtime } from '../../lib/realtime.js';
 import { defineRoute } from '../../lib/route.js';
+import { levelOfHermesLine } from '../../lib/log-ring.js';
 import { t } from '../../i18n/index.js';
 import {
+  defaultWorkspace,
   findWorkspace,
   ownerUser,
   registerWorkspaceStatsProvider,
@@ -52,14 +54,46 @@ import {
 } from '../auth/index.js';
 import { auditFor, jobRunnerFor } from '../audit/index.js';
 import { createAdapterSet, type AdapterSet, type AdapterSetOptions } from './adapters/index.js';
-import type { AdapterKind } from './adapters/types.js';
+import type { AdapterKind, AgentTarget } from './adapters/types.js';
 import { HERMES_ENTRY } from './catalog/index.js';
 import { HermesRuntime, type HermesRuntimeStatus, type Spawner } from './hermes-runtime.js';
 import { HermesDashboard, type DashboardSpawner } from './hermes-dashboard.js';
 import { QR_PLATFORMS, pairWhatsApp, testMcpServer, type HermesApiCall } from './hermes-tools.js';
 import { namedHermesProfiles } from './hermes-profiles.js';
+import { RunLeases } from './hub-tools/leases.js';
+import { HUB_SERVER_NAME } from './hub-tools/block.js';
+import { registerHubToolRoutes } from './hub-tools/routes.js';
+import { HubToolsService, type HubToolsNotify } from './hub-tools/service.js';
 import { telegramGetMe } from './telegram-api.js';
-import { SettingError, readTelegramSettings, writeTelegramSettings } from './telegram-settings.js';
+import { TELEGRAM_OPTIONS } from './telegram-settings.js';
+import {
+  SettingError,
+  readChannelSettings,
+  writeChannelSettings,
+  type OptionSpec,
+} from './channel-settings.js';
+import {
+  CredentialError,
+  PLATFORMS,
+  checkCredentials,
+  credentialPlatform,
+  identityValue,
+  linkCredentials,
+  platformSpec,
+  type PlatformSpec,
+} from './channel-platforms.js';
+import { probePlatform, type ProbeOptions } from './channel-validate.js';
+import { HermesSettingError, readHermesSettings, writeHermesSettings } from './hermes-settings.js';
+import {
+  PendingWriteError,
+  approvePendingWrite,
+  hermesPythonRunner,
+  listPendingWrites,
+  pendingWriteExists,
+  rejectPendingWrite,
+  type HermesPython,
+  type PendingKind,
+} from './hermes-pending-writes.js';
 import {
   hermesCliRunner,
   installPlugin,
@@ -73,6 +107,12 @@ import { SkillImportError, installPack, planImport, type UploadedFile } from './
 import { createNpmInstaller, managedBinDirs, type AgentInstaller } from './installer.js';
 import type { AgentDirectoryPort, AgentInfo, AgentModelsPort, AgentRunnerPort } from './ports.js';
 import { AgentRunner } from './runner.js';
+import { subagentSupport } from './serialize.js';
+import {
+  AgentUpdateChecker,
+  createPackageRegistry,
+  type PackageRegistry,
+} from './update-policy.js';
 import { AgentsService, type AgentPatchInput } from './service.js';
 import {
   ChannelError,
@@ -82,6 +122,8 @@ import {
   unlinkWhatsApp,
   linkTelegram,
   unlinkTelegram,
+  unlinkPlatform,
+  readEnv,
   telegramToken,
   TELEGRAM_TOKEN,
   whatsappLink,
@@ -117,6 +159,16 @@ import {
   setSkillEnabled,
   type Skill,
 } from './skills.js';
+import {
+  LIBRARY_CATEGORY,
+  LibraryError,
+  libraryStatus,
+  restoreLibrarySkill,
+  seedLibrary,
+  seedLibraryOfEveryProfile,
+  setLibraryEnabled,
+  type LibraryStatus,
+} from './skill-library.js';
 
 export { AgentsService } from './service.js';
 export type { AgentPatchInput, AgentsServiceOptions, ReconcileReport } from './service.js';
@@ -141,6 +193,13 @@ export {
   pinnedVersion,
 } from './catalog/index.js';
 export type { CatalogEntry, HealthCheck, InstallRecipe } from './catalog/index.js';
+export {
+  AgentUpdateChecker,
+  compareVersions,
+  createPackageRegistry,
+  isStableVersion,
+} from './update-policy.js';
+export type { PackageRegistry, UpdateCheckReport } from './update-policy.js';
 export type {
   AgentDirectoryPort,
   AgentInfo,
@@ -174,6 +233,14 @@ export { AgentRunner, toRunnerEvent, toolKindOf, mintSessionRef } from './runner
 export type { HermesApiCall } from './hermes-tools.js';
 export type { HermesCli } from './hermes-plugins.js';
 export { HermesRuntime, loadOrCreateHermesApiKey } from './hermes-runtime.js';
+export {
+  HERMES_COMPRESSION_DEFAULTS,
+  HermesCompressionError,
+  readHermesCompression,
+  writeHermesCompression,
+  type HermesCompression,
+} from './hermes-compression.js';
+export { profileHome } from './profile-home.js';
 export {
   HermesProfileError,
   PROFILE_ARCHIVE_TIMEOUT_MS,
@@ -224,10 +291,30 @@ export interface AgentsOverrides {
    * home), in place of the real `hermes` — for the tests and the e2e hub.
    */
   hermesCli?: HermesCli;
+  /**
+   * Hermes's interpreter as approving a pending memory or skill write runs it, in place of the
+   * real one — for the tests and the e2e hub.
+   */
+  hermesPython?: HermesPython;
   /** Between two questions to Hermes while a pairing runs. Default 1 s. */
   pairingPollMs?: number;
   /** Telegram's Bot API as linking asks it (`getMe`), scripted — for the tests and the e2e hub. */
   telegramFetch?: typeof fetch;
+  /**
+   * How linking asks the other platforms who an account is (`channel-validate.ts`), scripted —
+   * for the tests and the e2e hub.
+   */
+  channelProbe?: ProbeOptions;
+  /**
+   * The update policy's seams (`update-policy.ts`): a scripted registry, and the periodic
+   * check's timing — `intervalMs: null` keeps the timer from being armed at all.
+   */
+  updates?: {
+    registry?: PackageRegistry;
+    intervalMs?: number | null;
+    idleRetryMs?: number;
+    firstCheckMs?: number;
+  };
 }
 
 /** Platforms linked by pasting a bot token (`agents.linkChannel`). */
@@ -253,6 +340,37 @@ function telegramTokenOwner(root: string, home: string, token: string): string |
   return null;
 }
 
+/**
+ * The profile other than `home`'s that already holds this account of `spec`, for the platforms
+ * Hermes lets one process hold (Discord, Slack, …): Hermes refuses a second holder at start, in
+ * its own words; saying which profile has it before anything is written is the kinder answer.
+ */
+function accountOwner(
+  root: string,
+  home: string,
+  spec: PlatformSpec,
+  value: string,
+): string | null {
+  const homes: Array<[string, string]> = [
+    ['default', root],
+    ...namedHermesProfiles(root).map((name): [string, string] => [
+      name,
+      path.join(root, 'profiles', name),
+    ]),
+  ];
+  for (const [name, other] of homes) {
+    if (path.resolve(other) === path.resolve(home)) continue;
+    if (identityValue(spec, readEnv(other)) === value) return name;
+  }
+  return null;
+}
+
+/** A channel's own options: Telegram's (#97), then each full platform's (`channel-platforms.ts`). */
+function settingsOf(platform: string): readonly OptionSpec[] | null {
+  if (platform === 'telegram') return TELEGRAM_OPTIONS;
+  return platformSpec(platform)?.settings ?? null;
+}
+
 let pendingOverrides: AgentsOverrides | null = null;
 const overrides = new WeakMap<SocketServer, AgentsOverrides>();
 
@@ -268,15 +386,27 @@ interface AgentsContext {
   service: AgentsService;
   adapters: AdapterSet;
   runner: AgentRunner;
+  /** Who each live run acts for, for the hub's own tools (contract decision §67). */
+  leases: RunLeases;
+  /** The hub's own tools: settings, the profile block, the MCP endpoint (§67). */
+  hubTools: HubToolsService;
+  /** The six-hourly registry check and the idle-only auto-update. */
+  updates: AgentUpdateChecker;
+  /** Whether `updates` should arm its timer when the hub is ready. */
+  updatesArmed: boolean;
   runtime: HermesRuntime;
   dashboard: HermesDashboard;
   /** Hermes's API for the agent tools, or `null` where the hub does not supervise Hermes. */
   hermesApi(): HermesApiCall | null;
   /** Hermes's own command, or `null` where the hub does not supervise Hermes. */
   hermesCli(): HermesCli | null;
+  /** Hermes's own Python, or `null` where the hub does not supervise Hermes. */
+  hermesPython(): HermesPython | null;
   pairingPollMs: number;
   /** How linking asks Telegram who a bot is. */
   telegramFetch: typeof fetch;
+  /** How linking asks the other platforms who an account is. */
+  channelProbe: ProbeOptions;
 }
 
 /**
@@ -330,6 +460,74 @@ export function migrateMemoryOfEveryProfile(
   }
 }
 
+let hubToolsNotifyFactory: ((app: FastifyInstance) => HubToolsNotify) | null = null;
+
+/**
+ * `notifications.notify`, the one hub tool with no REST operation to go through: a notice
+ * in the run owner's inbox. `notify` owns notices; the composition root lends the writer.
+ */
+export function registerHubToolsNotify(factory: (app: FastifyInstance) => HubToolsNotify): void {
+  hubToolsNotifyFactory = factory;
+}
+
+/**
+ * Where Hermes reaches the hub's MCP server (contract decision §67): this process, on the
+ * loopback — Hermes runs beside the hub (ADR 0008). The port the server listens on once it
+ * does, the configured one before.
+ */
+function hubMcpUrl(app: FastifyInstance): string | null {
+  const address = app.server.address();
+  const port = address && typeof address === 'object' ? address.port : app.hub.config.port;
+  if (!port) return null;
+  return `http://127.0.0.1:${port}/api/v1/hub-mcp`;
+}
+
+/**
+ * Core Hub's skill library into every profile Hermes has (`skill-library.ts`, decision §71): at
+ * boot, so an upgraded image updates the skills it wrote and a profile made outside the hub gets
+ * them too. A profile switched off, and every skill the person edited, are left as they are.
+ * Called only when the hub runs Hermes itself (`managed`).
+ */
+export function seedSkillLibraryOfEveryProfile(
+  root: string | null | undefined,
+  log: Pick<FastifyInstance['log'], 'info' | 'warn'>,
+): void {
+  if (!root) return;
+  seedLibraryOfEveryProfile(
+    [
+      { profile: 'default', home: root },
+      ...namedHermesProfiles(root).map((name) => ({
+        profile: name,
+        home: path.join(root, 'profiles', name),
+      })),
+    ],
+    log,
+  );
+}
+
+/** The library into one profile just made (a copy carries its source's manifest and choice). */
+export function seedSkillLibraryOf(
+  home: string,
+  log: Pick<FastifyInstance['log'], 'info' | 'warn'>,
+): void {
+  try {
+    seedLibrary(home);
+  } catch (error) {
+    log.warn({ home, err: error }, 'agents: could not seed the Core Hub skill library');
+  }
+}
+
+/** The library in one profile's home, as the contract's `SkillLibrary`. */
+function toLibrary(status: LibraryStatus): Record<string, unknown> {
+  const states = [...status.skills.values()];
+  return {
+    enabled: status.enabled,
+    available: status.available,
+    installed: states.length,
+    edited: states.filter((state) => state === 'edited').length,
+  };
+}
+
 const contexts = new WeakMap<SocketServer, AgentsContext>();
 
 function contextOf(app: FastifyInstance): AgentsContext {
@@ -369,6 +567,16 @@ function contextOf(app: FastifyInstance): AgentsContext {
       : {}),
     // Every messaging gateway starts on the providers and model a chat in its profile uses
     // (`models` writes them, looked up per start because it mounts after this module).
+    // Hermes's own log from the TUI gateway, into the Logs screen's ring only (never the
+    // hub's log volume, `adapters/hermes-tui.ts`).
+    tuiLogLine: (line: string) => {
+      hub.logs.push({
+        source: 'hermes',
+        profile: 'tui',
+        level: levelOfHermesLine(line, 'info'),
+        message: line,
+      });
+    },
     prepareGateway: (profile: string, home: string) => {
       modelsPorts.get(hub.io)?.prepareGatewayProfile?.(profile, home);
     },
@@ -410,6 +618,15 @@ function contextOf(app: FastifyInstance): AgentsContext {
         },
         ...own.adapterOptions?.hermes,
       },
+      // A coding agent over ACP gets the hub's own tools in its session, when the profile
+      // offers them and the agent can reach an HTTP server (contract decision §67).
+      acp: {
+        mcpServers: (target: AgentTarget) =>
+          target.workspace
+            ? (contexts.get(hub.io)?.hubTools.acpServersFor(target.workspace) ?? [])
+            : [],
+        ...own.adapterOptions?.acp,
+      },
       // The hub's own agent reaches the providers through the same port every other
       // agent's credentials come from, looked up per turn because `models` registers it
       // after this module mounts (ADR 0010; ADOPTION-BACKLOG §2.15).
@@ -419,6 +636,8 @@ function contextOf(app: FastifyInstance): AgentsContext {
       },
       host,
     });
+  // Asked, never installed from: `update-policy.ts`.
+  const registry = own.updates?.registry ?? createPackageRegistry();
   const service = new AgentsService({
     db: requireSqlite(hub.database),
     log: app.log,
@@ -438,8 +657,26 @@ function contextOf(app: FastifyInstance): AgentsContext {
     // Hermes's card shows every messaging gateway the hub runs (the default one and each
     // named profile's).
     gateways: () => runtime.gateways().map(toMessagingGateway),
+    registry,
+    // An auto-update is filed under, and announced in, the hub's default workspace.
+    systemScope: () => {
+      const row = defaultWorkspace(requireSqlite(hub.database));
+      return row ? { id: row.id, slug: row.slug, name: row.name, isDefault: row.isDefault } : null;
+    },
   });
-  const runner = new AgentRunner({ service, adapters, log: app.log });
+  const leases = new RunLeases();
+  const runner = new AgentRunner({ service, adapters, log: app.log, leases });
+  // An agent installed again or updated: its open sessions run the old CLI.
+  service.onSettled((agentId) => runner.retireSessionsOf(agentId));
+  const updates = new AgentUpdateChecker({
+    store: service,
+    activity: runner,
+    registry,
+    log: app.log,
+    ...(typeof own.updates?.intervalMs === 'number' ? { intervalMs: own.updates.intervalMs } : {}),
+    ...(own.updates?.idleRetryMs !== undefined ? { idleRetryMs: own.updates.idleRetryMs } : {}),
+    ...(own.updates?.firstCheckMs !== undefined ? { firstCheckMs: own.updates.firstCheckMs } : {}),
+  });
   // Hermes's own web server as an internal API (ADR 0015): nothing runs until a caller
   // asks, and only where `runtime` is managed (`hermesDashboardFor`).
   const dashboard = new HermesDashboard({
@@ -450,10 +687,35 @@ function contextOf(app: FastifyInstance): AgentsContext {
     ...(own.dashboard?.fetchImpl ? { fetchImpl: own.dashboard.fetchImpl } : {}),
     ...(own.dashboard?.idleMs !== undefined ? { idleMs: own.dashboard.idleMs } : {}),
   });
+  const hubTools = new HubToolsService({
+    app,
+    db: requireSqlite(hub.database),
+    leases,
+    dataDir: hub.config.dataDir,
+    version: hub.version,
+    hermesAgentId: (workspaceId) =>
+      service
+        .list({ id: workspaceId, slug: '', name: '', isDefault: false }, { kind: 'hermes' })
+        .find((agent) => agent.slug === 'hermes')?.id ?? null,
+    notify: () => hubToolsNotifyFactory?.(app) ?? null,
+    timezone: () => runtime.timezone(),
+    refreshRuntime: () => runtime.refreshTui(),
+    homeOf: (workspace) => {
+      const root = runtime.status().home;
+      if (!root) return { home: null, reason: 'runtime_absent' };
+      const home = profileHome(root, workspace);
+      return home ? { home, reason: null } : { home: null, reason: 'hermes_profile_absent' };
+    },
+    url: () => hubMcpUrl(app),
+  });
   const created: AgentsContext = {
     service,
     adapters,
     runner,
+    leases,
+    hubTools,
+    updates,
+    updatesArmed: own.updates?.intervalMs !== null,
     runtime,
     dashboard,
     hermesApi: () =>
@@ -469,8 +731,20 @@ function contextOf(app: FastifyInstance): AgentsContext {
       if (mode !== 'managed' || !home || !command) return null;
       return hermesCliRunner({ command, env: () => runtime.cliEnv() });
     },
+    hermesPython: () => {
+      if (own.hermesPython) return own.hermesPython;
+      const { mode, home } = runtime.status();
+      const command = runtime.executable();
+      if (mode !== 'managed' || !home || !command) return null;
+      // The interpreter of Hermes's own venv, beside its `hermes` entry point (as the TUI
+      // gateway is started).
+      const python = path.join(path.dirname(command), 'python');
+      if (!existsSync(python)) return null;
+      return hermesPythonRunner({ python, env: () => runtime.cliEnv() });
+    },
     pairingPollMs: own.pairingPollMs ?? 1000,
     telegramFetch: own.telegramFetch ?? fetch,
+    channelProbe: own.channelProbe ?? {},
   };
   contexts.set(hub.io, created);
   return created;
@@ -478,6 +752,24 @@ function contextOf(app: FastifyInstance): AgentsContext {
 
 export function agentsServiceFor(app: FastifyInstance): AgentsService {
   return contextOf(app).service;
+}
+
+/**
+ * The enabled skills of the hub's Hermes in one profile, by name — what the Skills usage
+ * report compares with the skills actually loaded (contract decision §50). `null` when the
+ * hub cannot see them: no Hermes home, or a profile Hermes does not have.
+ */
+export function installedSkillNames(
+  app: FastifyInstance,
+  profile: { slug: string; isDefault: boolean },
+): string[] | null {
+  const root = contextOf(app).runtime.status().home;
+  if (!root) return null;
+  const home = profileHome(root, profile);
+  if (!home) return null;
+  return listSkills(home)
+    .filter((skill) => skill.enabled && !skill.broken)
+    .map((skill) => skill.name);
 }
 
 /** The Hermes runtime this hub supervises or found (ADR 0008). */
@@ -495,9 +787,49 @@ export function hermesDashboardFor(app: FastifyInstance): HermesDashboard | null
   return dashboard.available() ? dashboard : null;
 }
 
+/**
+ * Every Hermes process this hub runs, for the Performance screen (through the composition
+ * root): the TUI gateway, `hermes serve` (started on demand, so often `stopped`) and every
+ * profile's messaging gateway. Empty where the hub does not supervise Hermes.
+ */
+export function hermesProcessesFor(app: FastifyInstance): Array<{
+  kind: 'tui_gateway' | 'dashboard' | 'gateway';
+  profile: string | null;
+  pid: number | null;
+  state: string;
+}> {
+  const { runtime, dashboard } = contextOf(app);
+  const processes: ReturnType<typeof hermesProcessesFor> = runtime.processes();
+  if (dashboard.available()) {
+    const status = dashboard.status();
+    processes.push({
+      kind: 'dashboard',
+      profile: null,
+      pid: status.pid,
+      state: status.running ? 'running' : 'stopped',
+    });
+  }
+  return processes;
+}
+
+/** The hub's own tools of this app (contract decision §67). */
+export function hubToolsFor(app: FastifyInstance): HubToolsService {
+  return contextOf(app).hubTools;
+}
+
+/** Who each live run acts for — the hub's own tools read it; a test opens one by hand. */
+export function runLeasesFor(app: FastifyInstance): RunLeases {
+  return contextOf(app).leases;
+}
+
 /** The live turns, for anything that must not interrupt one (`models` recycles Hermes). */
 export function agentRunnerFor(app: FastifyInstance): AgentRunner {
   return contextOf(app).runner;
+}
+
+/** The registry check and idle-only auto-update (`update-policy.ts`), for the tests. */
+export function agentUpdatesFor(app: FastifyInstance): AgentUpdateChecker {
+  return contextOf(app).updates;
 }
 
 const scopeOf = (request: FastifyRequest): WorkspaceScope => {
@@ -527,17 +859,27 @@ const actorOf = (request: FastifyRequest): { userId: string } => {
  * read-only here), one that names the pack it came from is `external`, and one that names
  * none was written by a person, which is `user`.
  */
-function toSkill(skill: Skill, pinned: readonly string[]): Record<string, unknown> {
+function toSkill(
+  skill: Skill,
+  pinned: readonly string[],
+  library?: LibraryStatus,
+): Record<string, unknown> {
+  // One of Core Hub's own (§71): in the library's category folder and recorded by its manifest.
+  const state =
+    skill.category === LIBRARY_CATEGORY && !skill.bundled
+      ? (library?.skills.get(skill.key) ?? null)
+      : null;
   return {
     key: skill.key,
     name: skill.name,
     description: skill.broken ? `[${skill.broken}]` : skill.description,
     enabled: skill.enabled,
     pinned: pinned.includes(skill.key),
-    source: skill.bundled ? 'builtin' : skill.pack ? 'external' : 'user',
+    source: skill.bundled ? 'builtin' : state ? 'library' : skill.pack ? 'external' : 'user',
     use_count: 0,
     updated_at: skill.updatedAt.toISOString(),
     content: skill.content,
+    library: state,
   };
 }
 
@@ -554,6 +896,7 @@ function categorise(
   home: string,
   skills: readonly Skill[],
   pinned: readonly string[],
+  library?: LibraryStatus,
 ): Array<Record<string, unknown>> {
   const groups = new Map<string, Skill[]>();
   const folders = new Set<string>();
@@ -574,7 +917,7 @@ function categorise(
         description: folders.has(key) ? categoryDescription(home, key) : null,
         skills: list
           .sort((a, b) => Number(pinned.includes(b.key)) - Number(pinned.includes(a.key)))
-          .map((skill) => toSkill(skill, pinned)),
+          .map((skill) => toSkill(skill, pinned, library)),
       }))
   );
 }
@@ -591,9 +934,12 @@ export const agentsModule = defineModule({
     const service = agentsServiceFor(app);
 
     // `Profile.agent_count` comes from the registry, not from a number auth invents.
-    registerWorkspaceStatsProvider((workspaceId) => ({
+    const unregisterStats = registerWorkspaceStatsProvider((workspaceId) => ({
       agentCount: service.countEnabled(workspaceId),
     }));
+    // Taken back on close, or every hub a process ever built (the test suite builds hundreds)
+    // stays reachable through this one closure, routes and schemas and all.
+    app.addHook('onClose', async () => unregisterStats());
 
     // First boot seeds the catalog; every boot reconciles it against the data volume.
     // Rows the hub creates for itself are attributed to the owner account (domain README).
@@ -614,8 +960,19 @@ export const agentsModule = defineModule({
       const mode = await ctx.runtime.start();
       app.log.info({ mode, endpoint: ctx.runtime.endpoint }, 'agents: hermes runtime');
       migrateMemoryOfEveryProfile(ctx.runtime.status().home, app.log);
+      // The hub's own tools go back into every profile that has them on (§67).
+      ctx.hubTools.syncAll();
+      if (ctx.updatesArmed) ctx.updates.start();
+      // Only into a Hermes this hub runs itself: an external gateway's home is somebody else's,
+      // and there the Skills page installs the library when asked (`agents.updateSkillLibrary`).
+      if (mode === 'managed') seedSkillLibraryOfEveryProfile(ctx.runtime.status().home, app.log);
+    });
+    // Again once the port is known for certain (a hub on port 0 learns it only now).
+    app.addHook('onListen', async () => {
+      ctx.hubTools.syncAll();
     });
     app.addHook('onClose', async () => {
+      ctx.updates.stop();
       await ctx.runner.closeAll();
       await ctx.dashboard.close();
       await ctx.runtime.stop();
@@ -643,23 +1000,6 @@ export const agentsModule = defineModule({
       operationId: 'agents.update',
       handler: (request, { params, body }) =>
         service.update(scopeOf(request), params.agent_id as string, body as AgentPatchInput),
-    });
-
-    defineRoute(app, deps, {
-      operationId: 'agents.getSettings',
-      handler: (request, { params }) => ({
-        sections: service.settings(scopeOf(request), params.agent_id as string),
-      }),
-    });
-
-    defineRoute(app, deps, {
-      operationId: 'agents.updateSettings',
-      handler: (request, { params, body }) =>
-        service.updateSettings(
-          scopeOf(request),
-          params.agent_id as string,
-          body as { section: string; values: Record<string, unknown> },
-        ),
     });
 
     /**
@@ -715,6 +1055,164 @@ export const agentsModule = defineModule({
       return api;
     };
 
+    /**
+     * Settings. Hermes's are its own keys in the selected profile's `config.yaml` and `.env`
+     * (`hermes-settings.ts`, contract decision §58); any other agent's are the form its adapter
+     * declares, stored by the hub.
+     */
+    const isHermes = (request: FastifyRequest, agentId: string): boolean =>
+      contextOf(request.server).service.get(scopeOf(request), agentId, request.language).kind ===
+      'hermes';
+
+    const settingFault = (error: unknown): never => {
+      if (error instanceof HermesSettingError) {
+        if (error.reason === 'config_unreadable') {
+          throw new HubError('state_invalid', { details: { reason: 'config_unreadable' } });
+        }
+        if (error.reason === 'section_unknown') {
+          throw notFound({ resource: 'settings_section', id: error.key });
+        }
+        throw new HubError('validation_failed', {
+          details: { field: `values.${error.key}`, reason: error.reason },
+        });
+      }
+      throw error;
+    };
+
+    defineRoute(app, deps, {
+      operationId: 'agents.getSettings',
+      handler: (request, { params }) => {
+        const agentId = params.agent_id as string;
+        const scope = scopeOf(request);
+        if (!isHermes(request, agentId)) return { sections: service.settings(scope, agentId) };
+        const { home } = toolHome(request, agentId, 'settings_are_hermes_only');
+        try {
+          return { sections: readHermesSettings(home, scope.isDefault) };
+        } catch (error) {
+          return settingFault(error);
+        }
+      },
+    });
+
+    defineRoute(app, deps, {
+      operationId: 'agents.updateSettings',
+      handler: async (request, { params, body }) => {
+        const agentId = params.agent_id as string;
+        const scope = scopeOf(request);
+        const input = body as { section: string; values: Record<string, unknown> };
+        if (!isHermes(request, agentId)) return service.updateSettings(scope, agentId, input);
+        const { home, profile } = toolHome(request, agentId, 'settings_are_hermes_only');
+        let section;
+        try {
+          section = writeHermesSettings(home, scope.isDefault, input.section, input.values ?? {});
+        } catch (error) {
+          return settingFault(error);
+        }
+        request.log.info(
+          { profile, section: input.section, keys: Object.keys(input.values ?? {}) },
+          'agents: hermes settings saved',
+        );
+        // The values reach Hermes: the hub's conversations from the next message (a fresh TUI
+        // gateway), a named profile's messaging gateway restarted now. The default profile's
+        // proxy needs the whole of Hermes restarted, which is a job the page can follow.
+        const context = contextOf(request.server);
+        await context.runtime.settingsChanged(profile).catch((error: unknown) => {
+          request.log.warn({ err: error, profile }, 'agents: hermes did not take the settings');
+        });
+        let restartJobId: string | null = null;
+        if (section.applies === 'restart' && scope.isDefault) {
+          const managed = context.runtime.status().mode === 'managed';
+          if (managed) {
+            restartJobId = service.restart(scope, actorOf(request), agentId, {
+              managed: () => true,
+              restart: () => context.runtime.restart(),
+            }).id;
+          }
+        }
+        return { section, restart_job_id: restartJobId };
+      },
+    });
+
+    /**
+     * Memory and skill writes waiting for review (`hermes-pending-writes.ts`): Hermes's own
+     * queue in the selected profile, approved by Hermes's own code.
+     */
+    const pendingFault = (error: unknown): never => {
+      if (error instanceof PendingWriteError) {
+        if (error.reason === 'pending_not_found') throw notFound({ resource: 'pending_write' });
+        if (error.reason === 'pending_id_invalid') {
+          throw new HubError('validation_failed', {
+            details: { field: 'write_id', reason: error.reason },
+          });
+        }
+        throw new HubError('state_invalid', {
+          details: { reason: error.reason, message: error.hermesMessage },
+        });
+      }
+      throw error;
+    };
+    const pendingKind = (raw: unknown): PendingKind => {
+      if (raw === 'memory' || raw === 'skills') return raw;
+      throw new HubError('validation_failed', {
+        details: { field: 'write_kind', reason: 'kind_invalid' },
+      });
+    };
+
+    defineRoute(app, deps, {
+      operationId: 'agents.listPendingWrites',
+      handler: (request, { params }) => {
+        const { home } = toolHome(
+          request,
+          params.agent_id as string,
+          'pending_writes_are_hermes_only',
+        );
+        return { items: listPendingWrites(home) };
+      },
+    });
+
+    defineRoute(app, deps, {
+      operationId: 'agents.approvePendingWrite',
+      handler: async (request, { params }) => {
+        const agentId = params.agent_id as string;
+        const { home, profile } = toolHome(request, agentId, 'pending_writes_are_hermes_only');
+        const kind = pendingKind(params.write_kind);
+        const id = params.write_id as string;
+        const python = contextOf(request.server).hermesPython();
+        try {
+          if (!python) {
+            // Checked after the record, so a write that is not there is still a 404.
+            if (!pendingWriteExists(home, kind, id))
+              throw new PendingWriteError('pending_not_found');
+            throw new HubError('state_invalid', {
+              details: { agent_id: agentId, reason: 'hermes_not_supervised' },
+            });
+          }
+          await approvePendingWrite(python, home, kind, id);
+        } catch (error) {
+          return pendingFault(error);
+        }
+        request.log.info({ profile, kind, id }, 'agents: pending write approved');
+        return { id, kind, applied: true };
+      },
+    });
+
+    defineRoute(app, deps, {
+      operationId: 'agents.rejectPendingWrite',
+      status: 204,
+      handler: (request, { params }) => {
+        const agentId = params.agent_id as string;
+        const { home, profile } = toolHome(request, agentId, 'pending_writes_are_hermes_only');
+        const kind = pendingKind(params.write_kind);
+        try {
+          rejectPendingWrite(home, kind, params.write_id as string);
+        } catch (error) {
+          return pendingFault(error);
+        }
+        request.log.info({ profile, kind, id: params.write_id }, 'agents: pending write rejected');
+        return null;
+      },
+    });
+
     /** Hermes's own command for the plugin pages, or the reason there is none. */
     const hermesCliOf = (request: FastifyRequest, agentId: string): HermesCli => {
       const cli = contextOf(request.server).hermesCli();
@@ -743,12 +1241,15 @@ export const agentsModule = defineModule({
       handler: (request, { params }) => {
         const agentId = params.agent_id as string;
         const home = skillHome(request, agentId);
+        const library = libraryStatus(home);
         return {
           categories: categorise(
             home,
             listSkills(home),
             contextOf(request.server).service.pinnedSkills(scopeOf(request), agentId),
+            library,
           ),
+          library: toLibrary(library),
           // Which folder this is. A Hermes somebody else started with a different home
           // would otherwise read as "no skills", and a path on screen is the difference
           // between an empty agent and the wrong directory.
@@ -762,11 +1263,13 @@ export const agentsModule = defineModule({
       handler: (request, { params }) => {
         const agentId = params.agent_id as string;
         const key = params.skill_key as string;
-        const skill = getSkill(skillHome(request, agentId), key);
+        const home = skillHome(request, agentId);
+        const skill = getSkill(home, key);
         if (!skill) throw notFound({ resource: 'skill', id: key });
         return toSkill(
           skill,
           contextOf(request.server).service.pinnedSkills(scopeOf(request), agentId),
+          libraryStatus(home),
         );
       },
     });
@@ -784,6 +1287,7 @@ export const agentsModule = defineModule({
           return toSkill(
             written,
             contextOf(request.server).service.pinnedSkills(scopeOf(request), agentId),
+            libraryStatus(home),
           );
         } catch (error) {
           return skillFault(error);
@@ -812,7 +1316,7 @@ export const agentsModule = defineModule({
               patch.pinned ? [...pinned, key] : pinned.filter((entry) => entry !== key),
             );
           }
-          return toSkill(skill, pinned);
+          return toSkill(skill, pinned, libraryStatus(home));
         } catch (error) {
           return skillFault(error);
         }
@@ -829,6 +1333,44 @@ export const agentsModule = defineModule({
           return skillFault(error);
         }
         return null;
+      },
+    });
+
+    /**
+     * Core Hub's skill library in this profile (§71): on by default; off removes the library's
+     * skills that are still as the hub wrote them and leaves the edited ones as the person's.
+     */
+    defineRoute(app, deps, {
+      operationId: 'agents.updateSkillLibrary',
+      handler: (request, { params, body }) => {
+        const home = skillHome(request, params.agent_id as string);
+        setLibraryEnabled(home, (body as { enabled: boolean }).enabled === true);
+        return toLibrary(libraryStatus(home));
+      },
+    });
+
+    /** One library skill back as the library ships it — the only write over a person's edit. */
+    defineRoute(app, deps, {
+      operationId: 'agents.restoreSkill',
+      handler: (request, { params }) => {
+        const agentId = params.agent_id as string;
+        const key = params.skill_key as string;
+        const home = skillHome(request, agentId);
+        try {
+          restoreLibrarySkill(home, key);
+        } catch (error) {
+          if (error instanceof LibraryError) {
+            throw new HubError('conflict', { details: { reason: error.reason } });
+          }
+          throw error;
+        }
+        const skill = getSkill(home, key);
+        if (!skill) throw notFound({ resource: 'skill', id: key });
+        return toSkill(
+          skill,
+          contextOf(request.server).service.pinnedSkills(scopeOf(request), agentId),
+          libraryStatus(home),
+        );
       },
     });
 
@@ -893,6 +1435,13 @@ export const agentsModule = defineModule({
      * file, and Hermes — the one that will run the server — is the one that tries it. The
      * rows themselves still claim nothing: `connected` stays false until Hermes starts.
      */
+    /** The block the hub writes for its own tools is edited from their card only (§67). */
+    const refuseManaged = (name: string): void => {
+      if (name === HUB_SERVER_NAME) {
+        throw new HubError('conflict', { details: { reason: 'mcp_managed', name } });
+      }
+    };
+
     const mcpFault = (error: unknown): never => {
       if (error instanceof McpError) {
         if (error.reason === 'mcp_not_found') throw notFound({ resource: 'mcp_server' });
@@ -935,6 +1484,7 @@ export const agentsModule = defineModule({
           enabled?: boolean;
           config: Record<string, unknown>;
         };
+        refuseManaged(input.name);
         try {
           if (getMcpServer(home, input.name)) {
             throw new HubError('conflict', {
@@ -959,6 +1509,7 @@ export const agentsModule = defineModule({
         const home = skillHome(request, params.agent_id as string);
         const name = params.server_name as string;
         const patch = body as { enabled?: boolean; config?: Record<string, unknown> };
+        refuseManaged(name);
         try {
           if (!getMcpServer(home, name)) throw notFound({ resource: 'mcp_server', id: name });
           return toMcpServer(
@@ -976,6 +1527,7 @@ export const agentsModule = defineModule({
     defineRoute(app, deps, {
       operationId: 'agents.deleteMcpServer',
       handler: (request, { params }) => {
+        refuseManaged(params.server_name as string);
         const home = skillHome(request, params.agent_id as string);
         try {
           deleteMcpServer(home, params.server_name as string);
@@ -1005,6 +1557,24 @@ export const agentsModule = defineModule({
           config: server.config,
           language: request.language,
         });
+      },
+    });
+
+    registerHubToolRoutes(app, deps, {
+      service: (server) => contextOf(server).hubTools,
+      scopeOf,
+      actorOf,
+      assertHermes: (request, agentId) => {
+        const row = contextOf(request.server).service.get(
+          scopeOf(request),
+          agentId,
+          request.language,
+        );
+        if (row.kind !== 'hermes') {
+          throw new HubError('state_invalid', {
+            details: { agent_id: agentId, reason: 'skills_are_hermes_only' },
+          });
+        }
       },
     });
 
@@ -1149,7 +1719,9 @@ export const agentsModule = defineModule({
         ? 'qr'
         : (TOKEN_PLATFORMS as readonly string[]).includes(channel.platform)
           ? 'token'
-          : null,
+          : credentialPlatform(channel.platform)
+            ? 'credentials'
+            : null,
       link: channel.link
         ? {
             linked: channel.link.linked,
@@ -1194,6 +1766,39 @@ export const agentsModule = defineModule({
           request.log.warn({ err: error, profile }, 'agents: a profile gateway did not follow');
         });
     };
+
+    /** Every platform the hub links, and what each takes (`channel-platforms.ts`). */
+    defineRoute(app, deps, {
+      operationId: 'agents.listChannelPlatforms',
+      handler: (request, { params }) => {
+        toolHome(request, params.agent_id as string);
+        const order = { full: 0, generic: 1 } as const;
+        return {
+          items: [...PLATFORMS]
+            .sort((a, b) => order[a.support] - order[b.support])
+            .map((spec) => ({
+              platform: spec.platform,
+              label: spec.label,
+              support: spec.support,
+              login: spec.login,
+              credentials: spec.credentials.map((credential) => ({
+                key: credential.key,
+                kind: credential.kind,
+                required: credential.required,
+              })),
+              allowed_users_key: spec.allowedUsers?.key ?? null,
+              validates: spec.validates,
+              pairs: spec.pairs,
+              allowlist: spec.allowlist,
+              settings: settingsOf(spec.platform) !== null,
+              exclusive: spec.exclusive,
+              packages: spec.packages,
+              inbound: spec.inbound,
+              docs_url: spec.docsUrl,
+            })),
+        };
+      },
+    });
 
     defineRoute(app, deps, {
       operationId: 'agents.listChannels',
@@ -1276,6 +1881,21 @@ export const agentsModule = defineModule({
           request.log.info({ profile }, 'agents: Telegram unlinked');
           return toChannel(channel, channelStatus(request, profile, channel));
         }
+        const spec = credentialPlatform(platform);
+        if (spec) {
+          const current = listChannels(home).find((entry) => entry.platform === platform);
+          if (!current?.link?.linked) {
+            throw new HubError('state_invalid', {
+              details: { agent_id: agentId, platform, reason: 'not_linked' },
+            });
+          }
+          // Held down while the credentials go, so the account stops answering now.
+          const channel = await contextOf(request.server).runtime.withGatewayStopped(profile, () =>
+            unlinkPlatform(home, spec),
+          );
+          request.log.info({ profile, platform }, 'agents: channel unlinked');
+          return toChannel(channel, channelStatus(request, profile, channel));
+        }
         if (platform !== 'whatsapp') {
           throw new HubError('state_invalid', {
             details: { agent_id: agentId, platform, reason: 'unlink_not_supported' },
@@ -1299,6 +1919,93 @@ export const agentsModule = defineModule({
     });
 
     /**
+     * Link a platform by its variables (`channel-platforms.ts`): each checked against what the
+     * platform declares, the platform asked who the account is where it can be
+     * (`channel-validate.ts`), then written to the profile's own `.env`, the channel switched on,
+     * the gateway following. Nothing is written before every check has passed.
+     */
+    const linkByCredentials = async (
+      request: FastifyRequest,
+      agentId: string,
+      home: string,
+      profile: string,
+      spec: PlatformSpec,
+      body: unknown,
+    ) => {
+      // The same rule as WhatsApp's pairing: only a Hermes this hub runs has a gateway to answer.
+      hermesApiOf(request, agentId);
+      const input = (body ?? {}) as {
+        credentials?: Record<string, unknown>;
+        allowed_users?: string[];
+      };
+      let values: Record<string, string | null>;
+      try {
+        values = checkCredentials(spec, input.credentials ?? {});
+      } catch (error) {
+        if (error instanceof CredentialError) {
+          throw new HubError('validation_failed', {
+            details: {
+              field: `credentials.${error.field}`,
+              reason: 'credentials_invalid',
+              platform: spec.platform,
+              message: error.reason,
+            },
+          });
+        }
+        throw error;
+      }
+      let allowed: string[] | undefined;
+      if (input.allowed_users !== undefined) {
+        allowed = [...new Set(input.allowed_users.map((id) => id.trim()).filter(Boolean))];
+        const item = spec.allowedUsers?.item;
+        const bad = allowed.find((entry) => (item ? !item.test(entry) : true));
+        if (bad !== undefined) {
+          throw new HubError('validation_failed', {
+            details: {
+              field: 'allowed_users',
+              reason: 'credentials_invalid',
+              platform: spec.platform,
+            },
+          });
+        }
+      }
+      const context = contextOf(request.server);
+      const root = context.runtime.status().home;
+      const account = identityValue(
+        spec,
+        Object.fromEntries(Object.entries(values).map(([key, value]) => [key, value ?? ''])),
+      );
+      if (root && spec.exclusive && account) {
+        const owner = accountOwner(root, home, spec, account);
+        if (owner) {
+          throw new HubError('conflict', {
+            details: {
+              agent_id: agentId,
+              platform: spec.platform,
+              reason: 'token_in_use',
+              profile: owner,
+            },
+          });
+        }
+      }
+      const identity = await probePlatform(spec, values, context.channelProbe);
+      let channel: Channel | undefined;
+      try {
+        linkCredentials(home, spec, { values, allowedUsers: allowed, identity });
+        channel = listChannels(home).find((entry) => entry.platform === spec.platform);
+      } catch (error) {
+        return channelFault(error);
+      }
+      if (!channel) return channelFault(new ChannelError('channel_write_failed'));
+      request.log.info(
+        { profile, platform: spec.platform, checked: identity !== null },
+        'agents: channel linked',
+      );
+      followChannels(request, profile);
+      return toChannel(channel, channelStatus(request, profile, channel));
+    };
+
+    /**
      * Link Telegram by a bot token: shape checked, Telegram asked who the bot is, the token
      * into the profile's own `.env`, the channel on with pairing, the gateway following.
      */
@@ -1308,6 +2015,8 @@ export const agentsModule = defineModule({
         const agentId = params.agent_id as string;
         const platform = params.platform as string;
         const { home, profile } = toolHome(request, agentId);
+        const spec = credentialPlatform(platform);
+        if (spec) return linkByCredentials(request, agentId, home, profile, spec, body);
         if (!(TOKEN_PLATFORMS as readonly string[]).includes(platform)) {
           throw new HubError('state_invalid', {
             details: { agent_id: agentId, platform, reason: 'link_not_supported' },
@@ -1316,7 +2025,7 @@ export const agentsModule = defineModule({
         // The same rule as WhatsApp's pairing: only a Hermes this hub runs has a gateway to
         // answer on the bot.
         hermesApiOf(request, agentId);
-        const input = body as { token: string; allowed_users?: string[] };
+        const input = body as { token?: string; allowed_users?: string[] };
         const token = String(input.token ?? '').trim();
         if (!TELEGRAM_TOKEN.test(token)) {
           throw new HubError('validation_failed', {
@@ -1356,21 +2065,22 @@ export const agentsModule = defineModule({
      */
     const settingsTarget = (request: FastifyRequest, agentId: string, platform: string) => {
       const target = toolHome(request, agentId);
-      if (platform !== 'telegram') {
+      const options = settingsOf(platform);
+      if (!options) {
         throw new HubError('state_invalid', {
           details: { agent_id: agentId, platform, reason: 'settings_not_supported' },
         });
       }
-      return target;
+      return { ...target, options };
     };
 
     defineRoute(app, deps, {
       operationId: 'agents.getChannelSettings',
       handler: (request, { params }) => {
         const platform = params.platform as string;
-        const { home } = settingsTarget(request, params.agent_id as string, platform);
+        const { home, options } = settingsTarget(request, params.agent_id as string, platform);
         try {
-          return { platform, options: readTelegramSettings(home) };
+          return { platform, options: readChannelSettings(home, options) };
         } catch (error) {
           return channelFault(error);
         }
@@ -1381,11 +2091,12 @@ export const agentsModule = defineModule({
       operationId: 'agents.updateChannelSettings',
       handler: (request, { params, body }) => {
         const platform = params.platform as string;
-        const { home, profile } = settingsTarget(request, params.agent_id as string, platform);
+        const target = settingsTarget(request, params.agent_id as string, platform);
+        const { home, profile } = target;
         const values = (body as { values: Record<string, unknown> }).values;
         let options;
         try {
-          options = writeTelegramSettings(home, values);
+          options = writeChannelSettings(home, platform, target.options, values);
         } catch (error) {
           if (error instanceof SettingError) {
             throw new HubError('validation_failed', {
@@ -1648,6 +2359,7 @@ export function agentDirectory(app: FastifyInstance): AgentDirectoryPort {
         defaultProvider: model?.provider_id ?? null,
         available,
         ...(available ? {} : { unavailableReason: enabled ? row.installState : 'disabled' }),
+        subagents: subagentSupport(row),
       });
     },
   };

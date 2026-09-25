@@ -17,7 +17,7 @@ describe('realtime composition', () => {
     await hub.close();
   });
 
-  it('exposes exactly the namespaces from ARCHITECTURE §Realtime plus /rt/jobs', () => {
+  it('exposes exactly the namespaces from ARCHITECTURE §Realtime plus /rt/jobs and /rt/terminal', () => {
     expect(hub.app.hub.namespaces).toEqual([
       '/rt/devices',
       '/rt/jobs',
@@ -25,6 +25,7 @@ describe('realtime composition', () => {
       '/rt/schedules',
       '/rt/sessions',
       '/rt/tasks',
+      '/rt/terminal',
     ]);
     expect(Object.values(REALTIME_NAMESPACES).sort()).toEqual(hub.app.hub.namespaces);
   });

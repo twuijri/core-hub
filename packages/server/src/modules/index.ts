@@ -1,4 +1,5 @@
 // The module list the app composes, in mount order. Every module in ARCHITECTURE §Modules is here.
+import { statSync } from 'node:fs';
 import path from 'node:path';
 import type { FastifyInstance } from 'fastify';
 import type { HubModule } from '../lib/module.js';
@@ -11,6 +12,7 @@ import {
   ProfileMirrorError,
   RUNTIME_DEFAULT_PROFILE,
   authModule,
+  emitToUser,
   findUser,
   listWorkspacesFor,
   principalScopeResolver,
@@ -18,6 +20,11 @@ import {
   onProfileCreated,
   profileCreatedFor,
   registerProfileTransfer,
+  requireRole,
+  requireUser,
+  requireWorkspace,
+  revalidateSockets,
+  revokeToken,
   type ProfileArchiveRuntime,
   type ProfileTransferPorts,
 } from './auth/index.js';
@@ -32,20 +39,37 @@ import {
   type HermesDashboard,
   createHermesProfileArchives,
   createHermesProfiles,
+  HermesCompressionError,
+  profileHome,
+  readHermesCompression,
+  writeHermesCompression,
   hermesDashboardFor,
+  hermesProcessesFor,
   hermesProfileRunner,
   hermesRuntimeFor,
+  installedSkillNames,
   registerAgentAttachments,
+  registerHubToolsNotify,
+  seedSkillLibraryOf,
 } from './agents/index.js';
 import {
+  ChannelSourceRefusal,
+  ChannelSourceUnavailable,
   attachmentReferences,
   createSessionsModule,
+  registerChannelSource,
   registerWorkflowGate,
+  runActivity,
+  sessionActivityFor,
+  sessionBackgroundFor,
+  seatSessionsFor,
   sessionRunsFor,
   sessionTurnsFor,
   workflowApprovalsFor,
+  type ChannelSource,
 } from './sessions/index.js';
-import { roomsModule } from './rooms/index.js';
+import { registerRoomPorts, roomsModule, roomsServiceFor } from './rooms/index.js';
+import { t as translate } from '../i18n/index.js';
 import {
   HermesApiUnavailable,
   HermesRefusal,
@@ -53,6 +77,7 @@ import {
   registerHermesBoard,
   registerTaskNames,
   registerTaskRunner,
+  TasksService,
   tasksModule,
   type HermesCardApi,
 } from './tasks/index.js';
@@ -63,6 +88,7 @@ import {
   registerScheduleRunner,
   registerWorkflowPorts,
   schedulesModule,
+  workflowBackgroundFor,
   workflowGateFor,
 } from './schedules/index.js';
 import {
@@ -71,12 +97,25 @@ import {
   profileArchiveFiles,
   registerAttachmentReferences,
 } from './knowledge/index.js';
-import { modelsModule, modelsServiceFor } from './models/index.js';
-import { devicesModule } from './devices/index.js';
-import { createNotifier, notifyModule } from './notify/index.js';
+import { dataKeyRingFor, modelsModule, modelsServiceFor } from './models/index.js';
+import { createDevicesModule, pushFor } from './devices/index.js';
+import {
+  checkAddress,
+  createNotifier,
+  notifyModule,
+  registerNoticePush,
+  type NoticePush,
+} from './notify/index.js';
 import { updatesModule } from './updates/index.js';
-import { auditModule } from './audit/index.js';
+import {
+  auditFor,
+  auditModule,
+  registerAnalyticsSources,
+  registerBackgroundSource,
+  registerLiveSources,
+} from './audit/index.js';
 import { pluginsModule } from './plugins/index.js';
+import { terminalModule } from './terminal/index.js';
 
 // The one wiring line the sessions module asked for: its ports come from `agents` (the
 // registry and the runner over the adapters), `auth` (who is asking, in which workspace)
@@ -86,8 +125,35 @@ import { pluginsModule } from './plugins/index.js';
  * which words. The translation between the two lives here, in the composition root, so
  * neither module has to know the other exists (ARCHITECTURE §Modules).
  */
+/**
+ * `devices` sends, `notify` decides whether to (DECISIONS §66). Neither imports the other:
+ * `auth` already imports `devices`, and `devices` must not reach back into `auth` or
+ * `notify`, so what it needs from them is lent here.
+ */
+export const devicesModule = createDevicesModule({
+  guards: { requireUser, requireWorkspace, requireRole },
+  revokeAppToken(app, tokenId, now) {
+    const db = requireSqlite(app.hub.database);
+    revokeToken(db, tokenId, now);
+    revalidateSockets(app.hub.io, db, now);
+  },
+  emitToUser,
+  checkAddress: (url, allowPrivate) => checkAddress(url, allowPrivate),
+  sealer: (app) => dataKeyRingFor(app),
+});
+
+/** A notice that passed the person's push switch and quiet hours goes to their devices. */
+export const noticePushPort = (app: FastifyInstance): NoticePush => ({
+  send: (userId, message) => pushFor(app).sendToUser(userId, message),
+});
+registerNoticePush(noticePushPort);
+
 export const notifierPort = (app: FastifyInstance): SessionsNotifier => {
-  const notifier = createNotifier(requireSqlite(app.hub.database), () => app.hub.io);
+  const notifier = createNotifier(
+    requireSqlite(app.hub.database),
+    () => app.hub.io,
+    noticePushPort(app),
+  );
   return {
     runFinished(input) {
       notifier.announce(
@@ -132,6 +198,20 @@ registerAgentAttachments((app) => ({
   materialise: (workspace, ids, directory) =>
     attachmentsPort(app).materialise(workspace, ids, directory),
 }));
+
+/**
+ * `notifications.notify`, a tool of the hub's own (contract decision §67): `agents` serves
+ * the tool, `notify` owns the inbox. A notice to the run's owner, in the run's profile.
+ */
+registerHubToolsNotify((app) => {
+  const notifier = createNotifier(requireSqlite(app.hub.database), () => app.hub.io);
+  return (input) =>
+    notifier.announce(
+      { userId: input.userId, workspace: input.workspaceId, profile: input.profile },
+      { kind: 'system', title: input.title, body: input.body },
+      null,
+    );
+});
 
 /**
  * The Tasks board reflects Hermes's own kanban (owner decision, 2026-09-23). `agents`
@@ -197,6 +277,78 @@ function hermesAgentId(app: FastifyInstance, workspace: string): string | null {
 }
 
 /**
+ * Conversations on Telegram, WhatsApp… live in Hermes's own store, not the hub's (contract
+ * decision §61). `sessions` reads them through Hermes's server (ADR 0015) — only where the hub
+ * supervises Hermes, so anywhere else there is no source and the list says why. `auth` says
+ * which Hermes profile a workspace is (ADR 0014), and the store file's size and time tell
+ * `sessions` whether anything was written since it last read.
+ */
+registerChannelSource((app) => {
+  const dashboard = hermesDashboardFor(app);
+  const root = hermesRuntimeFor(app).status().home;
+  if (!dashboard || !root) return null;
+  return hermesChannelSourceOver(dashboard, root, (workspace) => {
+    const row = listWorkspacesFor(requireSqlite(app.hub.database), {
+      id: '',
+      role: 'owner',
+    }).find((each) => each.id === workspace);
+    if (!row) return null;
+    return row.isDefault ? RUNTIME_DEFAULT_PROFILE : row.slug;
+  });
+});
+
+/**
+ * Channel conversations over one dashboard server and Hermes's root home (the real-Hermes test
+ * hands in its own). `profileOf` names the Hermes profile a workspace is; one Hermes has not
+ * made yet (no folder) is none.
+ */
+export function hermesChannelSourceOver(
+  dashboard: HermesDashboard,
+  root: string,
+  profileOf: (workspace: string) => string | null,
+): ChannelSource {
+  const homeOf = (profile: string) =>
+    profile === RUNTIME_DEFAULT_PROFILE ? root : path.join(root, 'profiles', profile);
+  return {
+    hermesProfile(workspace) {
+      const profile = profileOf(workspace);
+      if (!profile) return null;
+      try {
+        return statSync(homeOf(profile)).isDirectory() ? profile : null;
+      } catch {
+        return null;
+      }
+    },
+    async get<T>(apiPath: string): Promise<T> {
+      try {
+        return await dashboard.request<T>('GET', apiPath);
+      } catch (error) {
+        if (error instanceof HermesDashboardRefusal) {
+          throw new ChannelSourceRefusal(error.status, error.message);
+        }
+        if (error instanceof HermesDashboardUnavailable) {
+          throw new ChannelSourceUnavailable(error.message);
+        }
+        throw error;
+      }
+    },
+    stamp(profile) {
+      const parts: string[] = [];
+      for (const name of ['state.db', 'state.db-wal']) {
+        try {
+          const info = statSync(path.join(homeOf(profile), name));
+          parts.push(`${info.size}@${info.mtimeMs}`);
+        } catch {
+          parts.push('-');
+        }
+      }
+      // No store at all yet: nothing to compare, so what was read is simply kept briefly.
+      return parts.every((part) => part === '-') ? null : parts.join('|');
+    },
+  };
+}
+
+/**
  * A workspace is a Hermes profile (ADR 0014). `auth` owns workspaces, `agents` knows where
  * Hermes lives; creating a workspace creates Hermes's profile of the same name, and a
  * profile Hermes already has is listed as a workspace. Only where the hub can run `hermes`
@@ -225,6 +377,30 @@ registerProfileMirror((app) => {
         await profiles.setDisplayName(name, displayName);
       } catch (error) {
         throw error instanceof HermesProfileError ? new ProfileMirrorError(error.message) : error;
+      }
+    },
+    // The profile's `compression.*` and `model.context_length` in its own `config.yaml`
+    // (decision §57): the home Hermes binds for that profile's sessions.
+    readCompression(name) {
+      const folder = profileHome(home, { slug: name, isDefault: name === 'default' });
+      if (!folder) return null;
+      try {
+        return readHermesCompression(folder);
+      } catch (error) {
+        throw error instanceof HermesCompressionError
+          ? new ProfileMirrorError(`the config.yaml of Hermes profile "${name}" is not valid YAML`)
+          : error;
+      }
+    },
+    writeCompression(name, settings) {
+      const folder = profileHome(home, { slug: name, isDefault: name === 'default' });
+      if (!folder) throw new ProfileMirrorError(`Hermes has no profile "${name}"`);
+      try {
+        writeHermesCompression(folder, settings);
+      } catch (error) {
+        throw error instanceof HermesCompressionError
+          ? new ProfileMirrorError(`the config.yaml of Hermes profile "${name}" is not valid YAML`)
+          : error;
       }
     },
   };
@@ -270,6 +446,17 @@ onProfileCreated((app, { profile, source, actorId }) => {
   if (source) models.copyOwnProviders(source.id, profile.id, { userId: actorId });
   const home = hermesRuntimeFor(app).status().home;
   if (home && !profile.isDefault) models.prepareProfile(path.join(home, 'profiles', profile.slug));
+});
+
+/**
+ * Core Hub's skill library in a profile just made (decision §71), before its first turn rather
+ * than at the next boot. A copy or an import brings its source's manifest, so its choice (on or
+ * off) and its edited skills come with it.
+ */
+onProfileCreated((app, { profile }) => {
+  const { mode, home } = hermesRuntimeFor(app).status();
+  if (mode !== 'managed' || !home) return;
+  seedSkillLibraryOf(profile.isDefault ? home : path.join(home, 'profiles', profile.slug), app.log);
 });
 
 /** Hermes's archives through its server, with its errors in `auth`'s words; null unmanaged. */
@@ -338,12 +525,39 @@ registerHermesCron((app) => ({
  * knows `schedules` exists; this is where they meet.
  */
 registerWorkflowPorts((app) => {
-  const notifier = createNotifier(requireSqlite(app.hub.database), () => app.hub.io);
+  const notifier = createNotifier(
+    requireSqlite(app.hub.database),
+    () => app.hub.io,
+    noticePushPort(app),
+  );
   return {
-    agentTurn: async (scope, input) => {
-      const turn = sessionTurnsFor(app);
-      if (!turn) throw new Error('this hub composes no sessions module');
-      return turn(scope, { ...input, source: 'workflow' });
+    agentTurn: async (scope, input, control) => {
+      if (!control) {
+        const turn = sessionTurnsFor(app);
+        if (!turn) throw new Error('this hub composes no sessions module');
+        return turn(scope, { ...input, source: 'workflow' });
+      }
+      // Followed while it works: the engine reads its cost by run id, and a limit that runs
+      // out stops it the way the chat's Stop does (DECISIONS §53).
+      const runs = sessionRunsFor(app);
+      if (!runs) throw new Error('this hub composes no sessions module');
+      const handle = await runs.start(scope, { ...input, source: 'workflow' });
+      control.started({ sessionId: handle.sessionId, runId: handle.runId });
+      const stop = () => {
+        void runs.cancel(scope, handle.sessionId, handle.runId).catch(() => undefined);
+      };
+      if (control.signal.aborted) stop();
+      else control.signal.addEventListener('abort', stop, { once: true });
+      try {
+        return await handle.done;
+      } finally {
+        control.signal.removeEventListener('abort', stop);
+      }
+    },
+    // A turn's cost is the hub's per-turn estimate the usage ledger keeps (`Usage.cost`).
+    cost: (scope, runId) => {
+      const totals = auditFor(app).totalsForRun(scope.workspace, runId);
+      return { microUsd: totals.costMicroUsd, priced: totals.hasCost };
     },
     notice: (scope, input) =>
       notifier.announce(
@@ -400,8 +614,8 @@ registerTaskRunner((app) => {
   const runs = sessionRunsFor(app);
   if (!runs) return null;
   return {
-    start: (scope, input) =>
-      runs.start(scope, {
+    async start(scope, input) {
+      const handle = await runs.start(scope, {
         agentId: input.agentId,
         prompt: input.prompt,
         title: input.title,
@@ -410,11 +624,82 @@ registerTaskRunner((app) => {
         provider: input.provider,
         origin: { kind: 'task', id: input.taskId },
         workingDir: input.workingDir,
-      }),
+      });
+      // A task's progress goes into its project's room, when the project names one (ROADMAP
+      // Phase 1, DECISIONS §69): when its run starts, and how it ended.
+      const report = taskReporter(app, scope, input.taskId, input.agentId);
+      report?.('started');
+      if (report) {
+        void handle.done.then(
+          (outcome) => report(outcome.status, outcome.output, outcome.error),
+          () => {},
+        );
+      }
+      return handle;
+    },
     cancel: (scope, sessionId, runId) => runs.cancel(scope, sessionId, runId),
     outcome: (workspace, runId) => runs.outcome(workspace, runId),
   };
 });
+
+/**
+ * The words a project's room hears about one of its tasks, in the language of the person who
+ * started it — or `null` when the task's project reports into no room. Never throws: a report
+ * that cannot be said must not stop the task.
+ */
+function taskReporter(
+  app: FastifyInstance,
+  scope: { workspace: string; profile: string; userId: string; language: 'ar' | 'en' },
+  taskId: string,
+  agentId: string,
+): ((status: string, output?: string, error?: string | null) => void) | null {
+  try {
+    const tasks = new TasksService(requireSqlite(app.hub.database));
+    const task = tasks.many(scope, [taskId])[0];
+    if (!task) return null;
+    const project = tasks.project(scope, task.projectId);
+    const roomId = project.reportRoomId;
+    if (!roomId) return null;
+    // The agent's name as the runs know it; the id stands in when it has none.
+    const agentName =
+      seatSessionsFor(app)
+        ?.agent(scope.workspace, agentId)
+        .then((info) => info?.name ?? agentId)
+        .catch(() => agentId) ?? Promise.resolve(agentId);
+    const fill = (key: string, vars: Record<string, string>) =>
+      Object.entries(vars).reduce(
+        (text, [name, value]) => text.replaceAll(`{${name}}`, value),
+        translate(`rooms.report.${key}`, scope.language),
+      );
+    return (status, output, error) => {
+      void agentName.then((agent) => {
+        const base = { agent, task: `${project.key}-${task.number}`, title: task.title };
+        try {
+          const summary = (output ?? '').trim();
+          const text =
+            status === 'started'
+              ? fill('started', base)
+              : status === 'succeeded'
+                ? summary
+                  ? fill('succeeded', {
+                      ...base,
+                      summary: summary.length > 600 ? `…${summary.slice(-600)}` : summary,
+                    })
+                  : fill('succeeded_plain', base)
+                : status === 'cancelled'
+                  ? fill('cancelled', base)
+                  : fill('failed', { ...base, reason: (error ?? status).trim() || status });
+          roomsServiceFor(app).report(scope, roomId, text);
+        } catch (failure) {
+          app.log.warn({ err: failure, taskId }, 'rooms: a task report could not be posted');
+        }
+      });
+    };
+  } catch (error) {
+    app.log.warn({ err: error, taskId }, 'rooms: a task report could not be prepared');
+    return null;
+  }
+}
 
 /**
  * The names a card shows: an agent's from the registry (`agents`), a person's from `auth`.
@@ -427,6 +712,63 @@ registerTaskNames((app) => (kind, id) => {
   const user = findUser(requireSqlite(app.hub.database), id);
   return user ? user.displayName?.trim() || user.username : null;
 });
+
+/**
+ * The Usage and Skills usage reports (contract decision §50) count runs, name agents and
+ * compare with the installed skills: runs are `sessions`'s, agents and skills `agents`'s, and
+ * `audit` reads neither module's tables — it is lent the three answers here.
+ */
+registerAnalyticsSources((app) => ({
+  runActivity: (query) => runActivity(requireSqlite(app.hub.database), query),
+  agentName: (agentId) => agentsServiceFor(app).loadAgent(agentId).name,
+  installedSkills: (profile) => installedSkillNames(app, profile),
+}));
+
+/**
+ * The live Performance screen measures processes and counts it does not own: `agents` knows
+ * which Hermes processes run, `sessions` what each profile is doing, `auth` which profiles
+ * there are. Joined here so `audit` imports none of them (contract decision §51).
+ */
+registerLiveSources((app) => ({
+  hermesProcesses: () => hermesProcessesFor(app),
+  profileActivity: () => {
+    const db = requireSqlite(app.hub.database);
+    const activity = sessionActivityFor(app);
+    // Every profile, the quiet ones too: a row of zeros is an answer.
+    return listWorkspacesFor(db, { id: '', role: 'owner' }).map((workspace) => ({
+      profile: workspace.slug,
+      active_runs: activity.get(workspace.id)?.activeRuns ?? 0,
+      sessions: activity.get(workspace.id)?.sessions ?? 0,
+    }));
+  },
+}));
+
+/**
+ * The Background panel (contract decision §56) is `audit`'s list of a person's work; the runs
+ * and subagents are `sessions`'s, the workflow runs `schedules`'s. Each answers for its own.
+ */
+registerBackgroundSource((app) => sessionBackgroundFor(app));
+registerBackgroundSource((app) => workflowBackgroundFor(app));
+
+/**
+ * A room's seats are conversations in `sessions`, its agents are `agents`', its people are
+ * `auth`'s (DECISIONS §69). The three meet here, so `rooms` imports none of them for what
+ * they do.
+ */
+registerRoomPorts((app) => ({
+  seats: seatSessionsFor(app),
+  person(userId) {
+    const user = findUser(requireSqlite(app.hub.database), userId);
+    if (!user) return null;
+    return { name: user.displayName?.trim() || user.username, seed: user.username };
+  },
+  enterable(userId) {
+    const db = requireSqlite(app.hub.database);
+    const user = findUser(db, userId);
+    if (!user) return [];
+    return listWorkspacesFor(db, user).map((row) => ({ id: row.id, slug: row.slug }));
+  },
+}));
 
 export const modules: readonly HubModule[] = [
   authModule,
@@ -442,4 +784,5 @@ export const modules: readonly HubModule[] = [
   updatesModule,
   auditModule,
   pluginsModule,
+  terminalModule,
 ];

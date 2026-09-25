@@ -79,6 +79,15 @@ export interface AgentModelsPort {
    */
   directChat(workspace: string, request: DirectChatRequest): AsyncIterable<DirectChatEvent>;
   /**
+   * The profile's chat fallback chain (contract decision §54), in every name a turn needs:
+   * the provider row, the name the runtime knows it by, the hub's slug, and the model.
+   */
+  fallbackChain?(
+    workspace: string,
+  ): { providerId: string; provider: string | null; slug: string; model: string }[];
+  /** The hub's slug for one of the profile's providers, or null. */
+  providerSlug?(workspace: string, providerId: string): string | null;
+  /**
    * A named Hermes profile is about to run a turn (ADR 0014 stage 3): `models` puts the
    * providers that profile uses where it reads them — the endpoints in its `config.yaml`,
    * and in its own `.env` the keys that differ from the root's: its own provider keys,
@@ -118,6 +127,8 @@ export interface DirectChatRequest {
   reasoningEffort?: string | null;
   /** Aborting it closes the provider socket; the stream then ends as `cancelled`. */
   signal?: AbortSignal;
+  /** Where to move on to when this model fails (contract decision §54); in order. */
+  fallbacks?: readonly { providerId: string; model: string }[];
 }
 
 export type DirectChatEvent =
@@ -136,6 +147,12 @@ export type DirectChatEvent =
       costSource?: 'provider' | 'estimated' | 'unknown';
     }
   | { type: 'completed' }
+  | {
+      /** The turn moved down the fallback chain (contract decision §54); see `RunnerEvent`. */
+      type: 'fallback';
+      failed: RunnerFallbackAttempt[];
+      answered: { model: string; provider: string | null };
+    }
   | {
       /**
        * `code` is one of the contract's `ErrorCode`s, except for `cancelled`, which
@@ -167,6 +184,8 @@ export interface AgentInfo {
   available: boolean;
   /** Machine-readable reason for `available: false` (`not_installed`, `stopped`, …). */
   unavailableReason?: string;
+  /** What it lets a person do with its subagents (§56); absent is `none`. */
+  subagents?: 'full' | 'observe' | 'none';
 }
 
 export interface AgentDirectoryPort {
@@ -209,6 +228,8 @@ export interface RunnerRunRequest {
   prompt: RunnerPromptBlock[];
   files: RunnerFileExchange | null;
   allowedTools: string[];
+  /** The person the run acts for; the hub's own tools act as them (contract decision §67). */
+  userId?: string | null;
 }
 
 export interface RunnerRunAccepted {
@@ -227,6 +248,14 @@ export interface RunnerChoice {
 }
 
 /** The sessions module's `AgentEvent`, restated. */
+/** One model of the fallback chain that failed a turn (contract `RunFallbackAttempt`). */
+export interface RunnerFallbackAttempt {
+  model: string;
+  provider: string | null;
+  code: string | null;
+  error: string | null;
+}
+
 export type RunnerEvent =
   | { type: 'message_delta'; text: string }
   | { type: 'reasoning_delta'; text: string }
@@ -266,7 +295,19 @@ export type RunnerEvent =
       costMicroUsd?: number;
       costSource?: 'provider' | 'estimated' | 'unknown';
     }
-  | { type: 'context'; usedTokens: number; windowTokens?: number | null }
+  | { type: 'context'; usedTokens: number; windowTokens?: number | null; estimated?: boolean }
+  | { type: 'compression'; phase: 'started' | 'finished' }
+  | {
+      /**
+       * The turn moved down the fallback chain (contract decision §54): the models in
+       * `failed` refused it, in order, with an error another model could get past, and
+       * `answered` is the one that took it — or, when the run then failed, the last tried.
+       * `provider` is the hub's provider slug, when known.
+       */
+      type: 'model_fallback';
+      failed: RunnerFallbackAttempt[];
+      answered: { model: string; provider: string | null };
+    }
   | { type: 'completed' }
   | { type: 'failed'; code?: string; message: string };
 
@@ -292,10 +333,80 @@ export interface RunnerAskRequest {
   timeoutMs: number;
 }
 
+/**
+ * Compress one conversation's context between turns (`modules/sessions/ports.ts`
+ * §AgentCompressRequest): the same conversation a run of this session would open.
+ */
+export interface RunnerCompressRequest {
+  sessionId: string;
+  workspace: string;
+  agentId: string;
+  agentSessionRef: string | null;
+  workingDir: string | null;
+  model: string | null;
+  provider: string | null;
+  reasoningEffort: string | null;
+  focus: string | null;
+}
+
+export interface RunnerCompressResult {
+  agentSessionRef: string | null;
+  status: 'compressed' | 'unchanged' | 'skipped';
+  beforeTokens: number | null;
+  afterTokens: number | null;
+  beforeMessages: number | null;
+  afterMessages: number | null;
+  context: { usedTokens: number; windowTokens: number | null; estimated: boolean } | null;
+  message: string | null;
+}
+
 export interface AgentRunnerPort {
   start(request: RunnerRunRequest): Promise<RunnerRunAccepted>;
+  compress(request: RunnerCompressRequest): Promise<RunnerCompressResult>;
+  steer(runId: string, text: string): Promise<'queued' | 'rejected'>;
   stream(runId: string): AsyncIterable<RunnerEvent>;
   send(runId: string, input: RunnerRunInput): Promise<void>;
   interrupt(runId: string): Promise<void>;
   ask(request: RunnerAskRequest): Promise<string | null>;
+  /** Every subagent report of every live conversation, by hub session id (§56). */
+  onSubagent(listener: (sessionId: string, signal: RunnerSubagentSignal) => void): () => void;
+  /** What the live conversation lets a person do with its subagents; `null` when none. */
+  subagents(sessionId: string): RunnerSubagentControl | null;
+}
+
+/** `adapters/subagents.ts` `SubagentSignal`, restated for `sessions` (see above). */
+export interface RunnerSubagentSignal {
+  phase: 'started' | 'updated' | 'tool' | 'completed';
+  id: string;
+  parentId?: string | null;
+  depth?: number | null;
+  goal?: string | null;
+  model?: string | null;
+  toolName?: string | null;
+  toolPreview?: string | null;
+  toolCount?: number | null;
+  status?: 'completed' | 'failed' | 'interrupted';
+  summary?: string | null;
+  acceptingSteer?: boolean;
+  toolCallRef?: string | null;
+}
+
+export interface RunnerLiveSubagent {
+  id: string;
+  parentId: string | null;
+  depth: number;
+  goal: string;
+  model: string | null;
+  startedAt: number | null;
+  toolCount: number | null;
+  lastTool: string | null;
+  acceptingSteer: boolean;
+}
+
+export interface RunnerSubagentControl {
+  readonly support: 'full' | 'observe';
+  list?(): Promise<RunnerLiveSubagent[]>;
+  interrupt?(id: string): Promise<boolean>;
+  steer?(id: string, text: string): Promise<'queued' | 'rejected'>;
+  tail?(id: string): Promise<{ available: boolean; text: string; truncated: boolean }>;
 }

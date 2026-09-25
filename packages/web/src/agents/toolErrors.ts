@@ -9,6 +9,8 @@ type T = (key: string, p?: Record<string, string | number>) => string;
 
 interface Details {
   reason?: string;
+  platform?: string;
+  field?: string;
   message?: string;
   skill?: string | null;
   file?: string | null;
@@ -40,6 +42,13 @@ export const IMPORT_REASONS = [
   'skill_duplicate',
   'skill_exists',
 ] as const;
+
+/** A messaging platform's name as the page says it: ours where we have one, else Hermes's slug. */
+export function platformName(platform: string, t: T, label?: string): string {
+  const key = `channels.platform.name.${platform}`;
+  const text = t(key);
+  return text === key ? (label ?? platform) : text;
+}
 
 /**
  * `nameOf` turns a Hermes profile id in a refusal into the name people gave that profile
@@ -83,11 +92,34 @@ export function describeToolError(
       case 'telegram_unreachable':
         return t('channels.telegram.unreachable');
       case 'token_in_use':
+        if (details?.platform && details.platform !== 'telegram') {
+          return t('channels.platform.in_use', {
+            name: platformName(details.platform, t),
+            profile: details?.profile ? nameOf(details.profile) : '',
+          });
+        }
         return t('channels.telegram.token_in_use', {
           profile: details?.profile ? nameOf(details.profile) : '',
         });
+      case 'credentials_invalid':
+        return t('channels.platform.invalid', {
+          field: (details?.field ?? '').replace(/^credentials\./, ''),
+        });
+      case 'credentials_rejected':
+        return t('channels.platform.rejected', {
+          name: platformName(details?.platform ?? '', t),
+          message: details?.message ?? '',
+        });
+      case 'platform_unreachable':
+        return t('channels.platform.unreachable', {
+          name: platformName(details?.platform ?? '', t),
+        });
       case 'skill_bundled':
         return t('skills.bundled_refused');
+      case 'skill_not_library':
+        return t('skills.library.not_library');
+      case 'skill_library_off':
+        return t('skills.library.off_refused');
       case 'plugin_bundled':
         return t('agent_plugins.bundled_refused');
       case 'memory_too_long':

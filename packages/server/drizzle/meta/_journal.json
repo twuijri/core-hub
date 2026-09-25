@@ -113,6 +113,41 @@
       "when": 1790286449843,
       "tag": "0015_run_timing",
       "breakpoints": true
+    },
+    {
+      "idx": 16,
+      "version": "6",
+      "when": 1790299456566,
+      "tag": "0016_run_file_changes",
+      "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "6",
+      "when": 1790329530838,
+      "tag": "0017_usage_analytics",
+      "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "6",
+      "when": 1790330731524,
+      "tag": "0018_session_categories",
+      "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "6",
+      "when": 1790332158927,
+      "tag": "0019_hub_tools",
+      "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "6",
+      "when": 1790332372287,
+      "tag": "0020_rooms",
+      "breakpoints": true
     }
   ]
 }

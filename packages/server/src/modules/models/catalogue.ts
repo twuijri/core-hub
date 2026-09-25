@@ -48,6 +48,11 @@ export const CREDENTIAL_FAMILIES = [
   'lmstudio',
   'litellm',
   'custom',
+  // Signed in to through Hermes (contract decision §55): no key, one account each.
+  'nous',
+  'openai-codex',
+  'xai-oauth',
+  'minimax-oauth',
 ] as const;
 export type CredentialFamily = (typeof CREDENTIAL_FAMILIES)[number];
 
@@ -141,13 +146,22 @@ export interface ProviderCatalogueEntry {
   settings?: SpeechProviderSettings;
   /** Documentation link shown next to the key field, so nobody has to search for it. */
   keysUrl: string | null;
+  /**
+   * Used by signing in to an account rather than with a key (contract decision §55): Hermes
+   * performs the device-code sign-in for its provider `hermesProvider` and keeps the
+   * credential. Only a provider Hermes can sign in to from its own server says so.
+   */
+  signIn?: boolean;
 }
 
 /**
  * The row's `auth.kind`. `none` is the contract's "no key is required" — the client still
  * offers the field, and only the endpoint's own 401 may say a key is missing.
  */
-export function authKindOf(entry: Pick<ProviderCatalogueEntry, 'keyRequirement'>): AuthKind {
+export function authKindOf(
+  entry: Pick<ProviderCatalogueEntry, 'keyRequirement' | 'signIn'>,
+): AuthKind {
+  if (entry.signIn) return 'oauth';
   return entry.keyRequirement === 'required' ? 'api_key' : 'none';
 }
 
@@ -432,6 +446,90 @@ export const PROVIDER_CATALOGUE: readonly ProviderCatalogueEntry[] = [
     settings: { model: 'eleven_multilingual_v2', language: null, voice: null },
     keysUrl: 'https://elevenlabs.io/app/settings/api-keys',
   },
+  // Signed in to through Hermes (contract decision §55): Hermes's own device-code sign-in
+  // for its provider `nous` (MIT source `hermes_cli/web_routers/oauth.py`). No key, and
+  // no request from the hub itself: the `direct` agent refuses it by name.
+  {
+    slug: 'nous',
+    label: 'Nous Portal',
+    kind: 'llm',
+    family: 'nous',
+    envVar: null,
+    hermesEnvVars: [],
+    hermesProvider: 'nous',
+    hermesRoute: 'builtin',
+    hermesApiMode: null,
+    protocol: 'openai',
+    apiMode: 'native',
+    keyRequirement: 'optional',
+    baseUrl: 'https://inference-api.nousresearch.com/v1',
+    capabilities: { chat: true, listModels: true },
+    keysUrl: 'https://portal.nousresearch.com',
+    signIn: true,
+  },
+  // Signed in to through Hermes (contract decision §55): Hermes's own device-code sign-in
+  // for its provider `openai-codex` (MIT source `hermes_cli/web_routers/oauth.py`). No key, and
+  // no request from the hub itself: the `direct` agent refuses it by name.
+  {
+    slug: 'openai-codex',
+    label: 'ChatGPT / Codex (subscription)',
+    kind: 'llm',
+    family: 'openai-codex',
+    envVar: null,
+    hermesEnvVars: [],
+    hermesProvider: 'openai-codex',
+    hermesRoute: 'builtin',
+    hermesApiMode: null,
+    protocol: 'openai',
+    apiMode: 'native',
+    keyRequirement: 'optional',
+    baseUrl: 'https://chatgpt.com/backend-api/codex',
+    capabilities: { chat: true, listModels: true },
+    keysUrl: 'https://developers.openai.com/codex',
+    signIn: true,
+  },
+  // Signed in to through Hermes (contract decision §55): Hermes's own device-code sign-in
+  // for its provider `xai-oauth` (MIT source `hermes_cli/web_routers/oauth.py`). No key, and
+  // no request from the hub itself: the `direct` agent refuses it by name.
+  {
+    slug: 'xai-oauth',
+    label: 'xAI Grok (SuperGrok / Premium+)',
+    kind: 'llm',
+    family: 'xai-oauth',
+    envVar: null,
+    hermesEnvVars: [],
+    hermesProvider: 'xai-oauth',
+    hermesRoute: 'builtin',
+    hermesApiMode: null,
+    protocol: 'openai',
+    apiMode: 'native',
+    keyRequirement: 'optional',
+    baseUrl: 'https://api.x.ai/v1',
+    capabilities: { chat: true, listModels: true },
+    keysUrl: 'https://hermes-agent.nousresearch.com/docs/guides/xai-grok-oauth',
+    signIn: true,
+  },
+  // Signed in to through Hermes (contract decision §55): Hermes's own device-code sign-in
+  // for its provider `minimax-oauth` (MIT source `hermes_cli/web_routers/oauth.py`). No key, and
+  // no request from the hub itself: the `direct` agent refuses it by name.
+  {
+    slug: 'minimax-oauth',
+    label: 'MiniMax (sign-in)',
+    kind: 'llm',
+    family: 'minimax-oauth',
+    envVar: null,
+    hermesEnvVars: [],
+    hermesProvider: 'minimax-oauth',
+    hermesRoute: 'builtin',
+    hermesApiMode: null,
+    protocol: 'openai',
+    apiMode: 'native',
+    keyRequirement: 'optional',
+    baseUrl: 'https://api.minimax.io/anthropic',
+    capabilities: { chat: true, listModels: true },
+    keysUrl: 'https://www.minimax.io',
+    signIn: true,
+  },
 ];
 
 export function catalogueEntry(slug: string): ProviderCatalogueEntry | undefined {
@@ -602,6 +700,13 @@ export function assertCatalogueIsWellFormed(
       } catch {
         throw new Error(`provider catalogue: "${entry.slug}" has no usable base URL`);
       }
+    }
+    // A sign-in is Hermes's (decision §55): its own provider, no key the hub could hold.
+    if (entry.signIn && (entry.hermesRoute !== 'builtin' || entry.keyRequirement !== 'optional')) {
+      throw new Error(
+        `provider catalogue: "${entry.slug}" signs in through Hermes, so it is Hermes's own ` +
+          'provider and takes no key',
+      );
     }
     // A repeatable entry is added more than once, so it cannot own a shared family row.
     if (entry.repeatable && entry.family !== 'custom') {

@@ -907,26 +907,7 @@ describe('models: speech', () => {
     }
   });
 
-  it('is still a documented 501 for transcription, with the reason', async () => {
-    const hub = await signedInHub();
-    try {
-      const response = await authed(hub, hub.token, {
-        method: 'POST',
-        url: '/api/v1/models/speech/transcriptions',
-        payload: {},
-      });
-      expect(response.statusCode).toBe(501);
-      // Not the app's generic stub: the route says which gap it is waiting on.
-      expect(response.json()).toMatchObject({
-        code: 'not_implemented',
-        error: expect.stringContaining('audio upload') as unknown as string,
-      });
-    } finally {
-      await hub.close();
-    }
-  });
-
-  it('is still a documented 501 for OAuth sign-in, because no provider uses it yet', async () => {
+  it('refuses a sign-in for a provider used with a key (decision §55)', async () => {
     const hub = await signedInHub();
     try {
       const anthropic = await addProvider(hub, 'anthropic', { api_key: 'sk-ant-for-signin' });
@@ -934,9 +915,10 @@ describe('models: speech', () => {
         method: 'POST',
         url: `/api/v1/models/providers/${anthropic.id}/sign-in`,
       });
-      expect(response.statusCode).toBe(501);
+      expect(response.statusCode).toBe(409);
       expect(response.json()).toMatchObject({
-        code: 'not_implemented',
+        code: 'state_invalid',
+        details: { reason: 'sign_in_unsupported' },
         error: expect.stringContaining('API key') as unknown as string,
       });
     } finally {
@@ -1559,6 +1541,58 @@ describe('models: one key, every agent (ADR 0010)', () => {
       expect(check(after, 'model_selected').detail).toBe('anthropic/claude-haiku-4-5');
       expect(check(after, 'gateway_reloaded').ok).toBe(true);
       expect(after.ready).toBe(true);
+    } finally {
+      await hub.close();
+    }
+  });
+
+  it('a restart clears "settings changed after Hermes last started" (owner, 2026-09-25)', async () => {
+    // The owner's hub after the Core Hub rename: Hermes was already running when the hub
+    // rewrote its files, so the check said "not restarted since the last change". It must
+    // compare the write with the start the person then triggers, and clear on that restart.
+    const { fetchImpl } = anthropicOnly();
+    const home = mkdtempSync(path.join(tmpdir(), 'corehub-hermes-home-'));
+    homes.push(home);
+    let startedAt: number | null = Date.now() - 60_000;
+    const restarts: number[] = [];
+    const hub = await signedInHub(
+      {},
+      {
+        models: {
+          fetchImpl,
+          // The automatic recycle is far away: only the person's restart happens here.
+          restartDelayMs: 60_000,
+          hermes: {
+            home: () => home,
+            mode: () => 'managed',
+            reloadedAt: () => startedAt,
+            restart: () => {
+              restarts.push(Date.now());
+              return Promise.resolve(true);
+            },
+          },
+        },
+      },
+    );
+    const gateway = async () =>
+      (
+        (await authed(hub, hub.token, { method: 'GET', url: '/api/v1/models/runtime' })).json() as {
+          checks: { id: string; ok: boolean }[];
+        }
+      ).checks.find((c) => c.id === 'gateway_reloaded')!.ok;
+    try {
+      // Nothing written since Hermes started: nothing to restart for.
+      expect(await gateway()).toBe(true);
+
+      // The hub writes the runtime's files after it started.
+      await addProvider(hub, 'anthropic', { api_key: 'sk-ant-restart' });
+      await drainJobs(hub.app);
+      expect(restarts).toEqual([]);
+      expect(await gateway()).toBe(false);
+
+      // The person restarts Hermes (`agents.restart` relaunches it: a new start time).
+      startedAt = Date.now();
+      expect(await gateway()).toBe(true);
     } finally {
       await hub.close();
     }

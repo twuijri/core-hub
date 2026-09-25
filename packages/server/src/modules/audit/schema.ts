@@ -5,7 +5,7 @@
  *
  * Global with a nullable workspace: audit_events, jobs, job_events (a login
  * or a server update has no workspace). Global: performance_snapshots.
- * Scoped: usage_records.
+ * Scoped: usage_records, skill_uses. Global: audit_counters.
  *
  * Other modules create jobs and usage records only through this module's
  * public API; they store the returned job id on their own rows
@@ -110,6 +110,40 @@ export const usageRecords = sqliteTable(
     check('usage_records_origin_kind_check', inList(t.originKind, USAGE_ORIGINS)),
   ],
 );
+
+/**
+ * One skill an agent loaded in one run (contract decision §50): Hermes's `skill_view` tool
+ * opening the skill itself. Written by `sessions` through `AuditService.recordSkillUse` when
+ * the tool call completes; the same skill loaded again in the same run is the same use.
+ * Nothing before this table existed can be rebuilt — `audit_counters` says from when.
+ */
+export const skillUses = sqliteTable(
+  'skill_uses',
+  {
+    ...scopedColumns(),
+    /** The skill's name as the agent asked for it (`plugin:skill` for a plugin's). */
+    skill: text('skill', { length: 200 }).notNull(),
+    agentId: ulid('agent_id').notNull(),
+    sessionId: ulid('session_id').notNull(),
+    runId: ulid('run_id').notNull(),
+    usedAt: timestampMs('used_at').notNull(),
+  },
+  (t) => [
+    uniqueIndex('skill_uses_run_skill_uq').on(t.runId, t.skill),
+    index('skill_uses_workspace_time_idx').on(t.workspace, t.usedAt),
+    index('skill_uses_agent_time_idx').on(t.workspace, t.agentId, t.usedAt),
+  ],
+);
+
+/**
+ * When the hub started counting something it could not count before. One row per counter,
+ * written by the migration that created it, so "counting started on" is this install's own
+ * date and not the release's.
+ */
+export const auditCounters = sqliteTable('audit_counters', {
+  name: text('name', { length: 64 }).primaryKey(),
+  startedAt: timestampMs('started_at').notNull(),
+});
 
 export const performanceSnapshots = sqliteTable(
   'performance_snapshots',

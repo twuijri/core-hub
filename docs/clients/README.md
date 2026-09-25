@@ -78,6 +78,14 @@ README says how it is laid out). Its parity test is
 `surfaceRoutes.web` in the manifest, so a destination without a route fails `pnpm nav:check`
 before the test even runs.
 
+## The iOS client
+
+`apps/ios` implements this manifest on iPhone and iPad (`apps/ios/README.md`). Its registry is
+`apps/ios/CoreHub/Navigation/` (`Destinations.swift`, and `Routes.swift` for `surfaceRoutes.ios`,
+whose paths are also those of `corehub://open/<path>` links); its parity test is
+`apps/ios/CoreHubTests/NavigationParityTests.swift` (rules 1–8), which reads this file copied
+into the test bundle at build time.
+
 ## The reference client
 
 `packages/cli` is the terminal client that proves the server end to end in Phase 0 (ADR 0007):

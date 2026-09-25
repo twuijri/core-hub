@@ -17,8 +17,9 @@ import {
   type UserRole,
   type UserStatus,
 } from './schema.js';
+import { isRunToken, runGrantOf } from './run-tokens.js';
 import { hashToken, isAppToken, verifyAccessToken } from './tokens.js';
-import type { WorkspaceScope } from './workspace.js';
+import { canEnter, type WorkspaceScope } from './workspace.js';
 
 export type PrincipalKind = 'user' | 'app_token';
 
@@ -28,6 +29,11 @@ export interface PrincipalUser {
   role: UserRole;
   status: UserStatus;
   locale: Locale;
+  /**
+   * Set only for a run token (`run-tokens.ts`): the one workspace this principal may enter.
+   * `canEnter` and `listWorkspacesFor` refuse every other, whatever the role says.
+   */
+  pinnedWorkspaceId?: string;
 }
 
 export interface Principal {
@@ -62,6 +68,24 @@ export async function resolvePrincipal(
 ): Promise<Principal> {
   const now = ctx.now();
   const db = ctx.db;
+  if (isRunToken(bearer)) {
+    // An agent acting for the person whose run it is (contract decision §67): that person,
+    // in that run's profile only, and never with more than a member's reach.
+    const grant = runGrantOf(bearer, now);
+    if (!grant) throw new HubError('unauthorized', { messageKey: 'auth.token_invalid' });
+    const person = loadActiveUser(ctx, grant.userId);
+    if (!canEnter(db, person, grant.workspaceId)) {
+      throw new HubError('unauthorized', { messageKey: 'auth.token_revoked' });
+    }
+    return {
+      kind: 'app_token',
+      user: { ...person, role: 'member', pinnedWorkspaceId: grant.workspaceId },
+      tokenId: grant.runId,
+      tokenKind: 'personal',
+      deviceId: null,
+      scopes: ['read', 'write'],
+    };
+  }
   if (isAppToken(bearer)) {
     assertNotLocked(db, 'token', ip, now);
     const row = db

@@ -5,7 +5,7 @@
  *   [ agent chips ]                                   — passed in, above the surface
  *   ┌───────────────────────────────────────────────┐
  *   │ attachments · error · the growing textarea    │
- *   │ [+]  [model]  [approvals]        [mic] [send] │
+ *   │ [+]  [model]  [approvals]    [mic][▾] [send] │
  *   └───────────────────────────────────────────────┘
  *   [ starters, on an empty chat ]
  *
@@ -17,12 +17,19 @@
  * `::after` twin carries the same text, so the row's height is already correct when the
  * character lands (`.composer-grow` in styles/app.css). No measuring, no jump.
  *
+ * The mic dictates into the text (contract decision §63, `voice/`): pressed once it records,
+ * pressed again the take is transcribed by the hub and the words land here for the person to
+ * read before sending. The small menu beside it holds the dictation language, reading replies
+ * aloud, and voice mode where the screen offers it.
+ *
  * Glass belongs to floating chrome, which this is (DESIGN §Glass); the intensity is the
  * one token scale, so `prefers-reduced-transparency` flattens it with everything else.
  */
 import {
   useCallback,
+  useEffect,
   useId,
+  useMemo,
   useRef,
   useState,
   type DragEvent,
@@ -31,11 +38,12 @@ import {
 } from 'react';
 import { describeError } from '../auth/client.js';
 import { blocksFor as toContentBlocks, useUploadAttachment } from '../attachments/queries.js';
+import { takeHandOff } from '../attachments/handoff.js';
+import { useAuth } from '../auth/context.js';
 import { useI18n } from '../i18n/context.js';
 import type { Attachment, ContentBlock } from '../types.js';
 import {
   IconClose,
-  IconMic,
   IconPaperclip,
   IconPlus,
   IconSend,
@@ -53,6 +61,27 @@ import { Select } from '../ui/Select.js';
 import type { ComboboxOption } from '../ui/Combobox.js';
 import type { SelectOption } from '../ui/Select.js';
 import { canSend, composerState } from './composer-state.js';
+import {
+  filterCommands,
+  moveActive,
+  parseCommand,
+  skillQuery,
+  slashQuery,
+  type SlashCommand,
+  type SlashCommandId,
+} from './slashCommands.js';
+import { SlashMenu, slashOptionId, type SlashMenuItem } from './SlashMenu.js';
+
+/** A skill offered after `/skill `. */
+export interface SlashSkill {
+  key: string;
+  name: string;
+  description: string;
+}
+import { DictationNotice, MicButton, VoiceMenu } from '../voice/DictationControls.js';
+import { useVoicePreferences } from '../voice/context.js';
+import { dictationHint } from '../voice/recorder.js';
+import { useDictation } from '../voice/useDictation.js';
 
 interface Pending {
   key: string;
@@ -120,6 +149,21 @@ export interface ComposerProps {
   approvalDisabledReason?: string | null;
   /** Three suggestions, shown only while the chat is empty. */
   starters?: readonly string[];
+  /**
+   * The `/` commands the session's agent takes (`slashCommands.ts`, decision §57). Empty:
+   * no menu, and every `/text` is an ordinary message.
+   */
+  commands?: readonly SlashCommand[];
+  /** The skills offered after `/skill `. */
+  skills?: readonly SlashSkill[];
+  /**
+   * Carries out a `hub` or `action` command. Resolves with text to send as an ordinary
+   * message instead — `/steer` with no run to steer — or with nothing once it is done.
+   * Throws to keep the text in the composer and show why.
+   */
+  onCommand?: (id: SlashCommandId, arg: string) => Promise<string | void>;
+  /** Opens the full-screen voice stage; the voice menu offers it only when given. */
+  onVoiceMode?: (() => void) | undefined;
 }
 
 export const APPROVAL_MODES = ['ask', 'auto_safe', 'auto_all'] as const;
@@ -150,17 +194,48 @@ export function Composer({
   onApprovalMode,
   approvalDisabledReason = null,
   starters = [],
+  commands = [],
+  skills = [],
+  onCommand,
+  onVoiceMode,
 }: ComposerProps) {
-  const { t } = useI18n();
+  const { t, language: uiLanguage } = useI18n();
   const { upload: uploadAttachment } = useUploadAttachment();
   const [text, setText] = useState('');
   const [pending, setPending] = useState<Pending[]>([]);
+  const { profile } = useAuth();
+  // Files the Files page handed over ("Attach to chat"): already on the hub, so they join
+  // the tray as finished uploads. A stand-in `File` carries the name the chip shows.
+  useEffect(() => {
+    const handed = takeHandOff(profile);
+    if (handed.length === 0) return;
+    setPending((current) => [
+      ...current,
+      ...handed.map((attachment) => ({
+        key: `handoff-${attachment.id}`,
+        file: new File([], attachment.name, { type: attachment.mime }),
+        status: 'done' as const,
+        attachment,
+        progress: 1,
+      })),
+    ]);
+  }, [profile]);
   const [dragging, setDragging] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [sending, setSending] = useState(false);
   const fileInput = useRef<HTMLInputElement>(null);
   const textarea = useRef<HTMLTextAreaElement>(null);
   const reasonId = useId();
+
+  // Dictated words join what is already typed, for the person to read before sending.
+  const voicePreferences = useVoicePreferences();
+  const dictation = useDictation({
+    language: dictationHint(voicePreferences.dictationLanguage, uiLanguage),
+    onText: (words) => {
+      setText((current) => (current.trim() ? `${current.replace(/\s+$/, '')} ${words}` : words));
+      textarea.current?.focus();
+    },
+  });
 
   const hasContent = text.trim() !== '' || pending.some((p) => p.status === 'done');
   const input = { disabled, dragging, busy, sending, error: error !== null, hasContent };
@@ -201,15 +276,116 @@ export function Composer({
     [uploadAttachment, t],
   );
 
+  /**
+   * The `/` menu: the commands while the command word is typed, the skills while a skill's
+   * name is. Escape closes it for the text it was closed on; typing opens it again.
+   */
+  const menuId = useId();
+  const [dismissed, setDismissed] = useState<string | null>(null);
+  const [active, setActive] = useState(0);
+  const commandWord = commands.length > 0 ? slashQuery(text) : null;
+  const skillWord = commands.some((command) => command.id === 'skill') ? skillQuery(text) : null;
+  const menu = useMemo((): { title: string; items: SlashMenuItem[] } | null => {
+    // Closed while a picked command is being carried out: the text is still in the box.
+    if (disabled || sending || dismissed === text) return null;
+    if (skillWord !== null) {
+      const found = filterCommands(
+        skills.map((skill) => ({ ...skill, name: skill.key, label: skill.name })),
+        skillWord,
+        (skill) => `${skill.label} ${skill.description}`,
+      );
+      return {
+        title: t('slash.skills_title'),
+        items: found.map((skill) => ({
+          key: `skill:${skill.key}`,
+          label: skill.key,
+          description: skill.description || skill.label,
+        })),
+      };
+    }
+    if (commandWord === null) return null;
+    const describe = (command: SlashCommand) => t(`slash.describe.${command.id}`);
+    return {
+      title: t('slash.title'),
+      items: filterCommands(commands, commandWord, describe).map((command) => ({
+        key: command.id,
+        label: `/${command.name}`,
+        description: describe(command),
+      })),
+    };
+  }, [disabled, sending, dismissed, text, skillWord, commandWord, commands, skills, t]);
+  const menuSize = menu?.items.length ?? 0;
+  useEffect(() => setActive(0), [commandWord, skillWord]);
+  const activeIndex = Math.min(active, Math.max(0, menuSize - 1));
+
+  const clearComposer = () => {
+    setText('');
+    setPending((current) => current.filter((p) => p.status === 'error'));
+    textarea.current?.focus();
+  };
+
+  /**
+   * A `hub` or `action` command: carried out, or handed back as text to send. `typed` is
+   * what was in the box when the command was picked from the menu: it leaves at once, and
+   * comes back only if the command fails.
+   */
+  const runCommand = async (id: SlashCommandId, arg: string, typed?: string) => {
+    if (!onCommand) return;
+    setSending(true);
+    setError(null);
+    if (typed !== undefined) setText('');
+    try {
+      const instead = await onCommand(id, arg);
+      if (typeof instead === 'string' && instead.trim() !== '') {
+        await onSend(blocksFor(instead, pending));
+      }
+      clearComposer();
+    } catch (err) {
+      if (typed !== undefined) setText(typed);
+      setError(describeError(err, t));
+    } finally {
+      setSending(false);
+    }
+  };
+
+  const pick = (index: number) => {
+    const item = menu?.items[index];
+    if (!item) return;
+    setError(null);
+    if (item.key.startsWith('skill:')) {
+      setText(`/skill ${item.label} `);
+      textarea.current?.focus();
+      return;
+    }
+    const command = commands.find((candidate) => candidate.id === item.key);
+    if (!command) return;
+    if (command.argument !== 'required' && command.kind !== 'message') {
+      // Picked from the menu, `/compress` and `/model` act at once; typed with words after
+      // them (`/compress the API`), Enter carries the words.
+      void runCommand(command.id, '', text);
+      return;
+    }
+    // A command that needs words waits for them; `/skill ` opens the skills.
+    setText(`/${command.name} `);
+    textarea.current?.focus();
+  };
+
   const send = async () => {
     if (!canSend({ ...input, error: false })) return;
+    const parsed = parseCommand(text, commands);
+    if (parsed && parsed.command.kind !== 'message' && onCommand) {
+      if (parsed.command.argument === 'required' && parsed.arg === '') {
+        setError(t('slash.needs_argument', { command: `/${parsed.command.name}` }));
+        return;
+      }
+      await runCommand(parsed.command.id, parsed.arg);
+      return;
+    }
     setSending(true);
     setError(null);
     try {
       await onSend(blocksFor(text, pending));
-      setText('');
-      setPending((current) => current.filter((p) => p.status === 'error'));
-      textarea.current?.focus();
+      clearComposer();
     } catch (err) {
       setError(describeError(err, t));
     } finally {
@@ -218,7 +394,28 @@ export function Composer({
   };
 
   const onKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>) => {
-    if (event.key === 'Enter' && !event.shiftKey && !event.nativeEvent.isComposing) {
+    const composing = event.nativeEvent.isComposing;
+    if (menu && !composing) {
+      if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+        event.preventDefault();
+        setActive(moveActive(activeIndex, event.key === 'ArrowDown' ? 1 : -1, menuSize));
+        return;
+      }
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        setDismissed(text);
+        return;
+      }
+      if ((event.key === 'Enter' && !event.shiftKey) || event.key === 'Tab') {
+        if (menuSize > 0) {
+          event.preventDefault();
+          pick(activeIndex);
+          return;
+        }
+        // Nothing matches: an unknown `/word` is an ordinary message.
+      }
+    }
+    if (event.key === 'Enter' && !event.shiftKey && !composing) {
       event.preventDefault();
       void send();
     }
@@ -241,6 +438,17 @@ export function Composer({
       {chips}
       {queue}
       {reply}
+      {menu && (
+        <SlashMenu
+          id={menuId}
+          title={menu.title}
+          items={menu.items}
+          active={activeIndex}
+          empty={t('slash.no_match')}
+          onPick={pick}
+          onHover={setActive}
+        />
+      )}
       <form
         className="composer glass"
         data-state={state}
@@ -294,6 +502,7 @@ export function Composer({
             {error}
           </Notice>
         )}
+        <DictationNotice dictation={dictation} />
 
         <div className="composer-grow" data-value={text}>
           <textarea
@@ -307,6 +516,17 @@ export function Composer({
             onKeyDown={onKeyDown}
             dir="auto"
             data-testid="composer-input"
+            {...(menu
+              ? {
+                  role: 'combobox',
+                  'aria-expanded': true,
+                  'aria-controls': menuId,
+                  'aria-autocomplete': 'list' as const,
+                  ...(menuSize > 0
+                    ? { 'aria-activedescendant': slashOptionId(menuId, activeIndex) }
+                    : {}),
+                }
+              : {})}
           />
         </div>
 
@@ -393,24 +613,10 @@ export function Composer({
 
           <span className="composer-spacer" />
 
-          {/* Disabled, and the reason is in the tooltip rather than left to be guessed.
-              A disabled button takes no pointer events, so the tooltip hangs off a
-              focusable wrapper — otherwise the explanation would never appear. */}
           {context}
 
-          <Tooltip label={t('composer.dictate_unavailable')}>
-            <span tabIndex={0} aria-describedby={undefined} data-testid="composer-mic-wrap">
-              <button
-                type="button"
-                className="composer-btn"
-                disabled
-                aria-label={t('composer.dictate')}
-                data-testid="composer-mic"
-              >
-                <IconMic />
-              </button>
-            </span>
-          </Tooltip>
+          <MicButton dictation={dictation} disabled={disabled} />
+          <VoiceMenu disabled={disabled} onVoiceMode={onVoiceMode} />
 
           {busy ? (
             <Tooltip label={t('composer.stop')}>

@@ -609,6 +609,8 @@ describe('agent runner: a live session whose process went away between turns', (
     const service = {
       loadAgent: () => ({ id: 'agent-1', installState: 'installed', adapterKind: 'hermes' }),
       selectionFor: () => ({ model: null, provider: null, providerId: null }),
+      fallbacksFor: () => [],
+      providerSlugOf: () => null,
       targetFor: (_row: unknown, _workspace: unknown, input: { sessionRef: string | null }) => ({
         sessionRef: input.sessionRef,
       }),

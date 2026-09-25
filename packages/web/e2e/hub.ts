@@ -17,10 +17,18 @@ import {
 import { registerProfileTransfer } from '../../server/src/modules/auth/index.js';
 import { fakeProfileRuntime } from '../../server/src/modules/auth/testing/fake-profile-runtime.js';
 import { principalScopeResolver } from '../../server/src/modules/auth/index.js';
-import { overrideAgents } from '../../server/src/modules/agents/index.js';
+import { agentModelsPort, overrideAgents } from '../../server/src/modules/agents/index.js';
 import { overrideModels } from '../../server/src/modules/models/index.js';
+import { overrideDevices } from '../../server/src/modules/devices/index.js';
+import {
+  loadNodePty,
+  overrideTerminal,
+  pipeSpawner,
+  ptySpawner,
+} from '../../server/src/modules/terminal/index.js';
 import type { AgentInstaller, HermesApiCall } from '../../server/src/modules/agents/index.js';
 import { createSessionsModule } from '../../server/src/modules/sessions/index.js';
+import { attachmentsPort } from '../../server/src/modules/knowledge/index.js';
 import { SessionsStore } from '../../server/src/modules/sessions/store.js';
 import { sessions as sessionRows } from '../../server/src/modules/sessions/schema.js';
 import { requireSqlite } from '../../server/src/lib/db.js';
@@ -33,13 +41,20 @@ import { agentsServiceFor } from '../../server/src/modules/agents/index.js';
 import { HermesRefusal, type HermesTask } from '../../server/src/modules/tasks/hermes-kanban.js';
 import type {
   AgentAskRequest,
+  AgentCompressRequest,
+  AgentCompressResult,
   AgentEvent,
   AgentRunAccepted,
   AgentRunInput,
   AgentRunRequest,
   AgentRunner,
+  AgentSubagentControl,
+  AgentSubagentSignal,
 } from '../../server/src/modules/sessions/ports.js';
 import { fakeHermes } from '../../server/src/modules/sessions/testing/fake-runner.js';
+import { registerChannelSource } from '../../server/src/modules/sessions/index.js';
+import { scriptedChannels } from '../../server/src/modules/sessions/testing/scripted-channels.js';
+import { listWorkspacesFor } from '../../server/src/modules/auth/index.js';
 import {
   loadOrCreateSigningKey,
   signAccessToken,
@@ -48,9 +63,94 @@ import {
 
 export const E2E_PASSWORD = 'e2e-owner-password';
 
-type Step = AgentEvent | { type: 'delay'; ms: number } | { type: 'await_input' };
+/** The hub this process built, once built: journey 34 asks its models module for a turn. */
+let hubApp: Awaited<ReturnType<typeof buildServer>> | null = null;
 
-function scriptFor(prompt: string): Step[] {
+type Step =
+  | AgentEvent
+  | { type: 'delay'; ms: number }
+  | { type: 'await_input' }
+  /** Write a file in the session's working folder, as an agent's tool would. */
+  | { type: 'write'; path: string; content: string }
+  // The real direct path (journey 34): the models module answers the turn, fallback chain and all.
+  | { type: 'direct'; workspace: string; text: string }
+  // A report about a subagent (§56): told to the hub on its own channel, not in the turn.
+  | { type: 'subagent'; signal: AgentSubagentSignal }
+  // Waits until the person stops this subagent (or `ms` passes, or the run is stopped).
+  | { type: 'until_stopped'; id: string; ms: number };
+
+/** The three files journey 32 writes, opens and reads back. */
+const REPORT_HTML =
+  '<!doctype html><html><body><h1 id="t">تقرير الربع</h1>' +
+  '<script>document.getElementById("t").dataset.ran = "yes";</script></body></html>';
+const DATA_CSV = 'البند,المبلغ\nإيجار,1200\nكهرباء,300\n';
+const NOTES_MD = '# ملاحظات\n\n- راجع **الميزانية** قبل الخميس\n';
+
+function writes(ref: string, file: string, content: string): Step[] {
+  return [
+    {
+      type: 'tool_started',
+      ref,
+      name: 'write_file',
+      kind: 'file_write',
+      title: file,
+      input: { path: file },
+    },
+    { type: 'delay', ms: 150 },
+    { type: 'write', path: file, content },
+    { type: 'tool_completed', ref, output: `wrote ${file}`, exitCode: 0 },
+  ];
+}
+
+function scriptFor(prompt: string, workspace = ''): Step[] {
+  if (/احتياطي|fallback/i.test(prompt)) {
+    // Journey 34 (contract decision §54): the turn is the models module's own — the profile's
+    // chat model, its fallback chain as the Defaults tab saved it, and the provider's HTTP
+    // (the scripted proxy below, whose first model is down with `auth_unavailable`).
+    return [{ type: 'direct', workspace, text: prompt }];
+  }
+  if (/راجع قائمة الإصدار/.test(prompt)) {
+    // An agent step of a workflow drawn on the canvas (journey 32): a short answer the next
+    // step reads as `{{steps.<id>.output}}`.
+    return [
+      { type: 'delay', ms: 400 },
+      { type: 'message_delta', text: 'القائمة سليمة: ثلاثة بنود جاهزة.' },
+      { type: 'completed' },
+    ];
+  }
+  // Rooms (zzzzzz-rooms): a seat's turn opens with who it is. The planner answers in two
+  // streamed parts and hands the next step to the coder, who works with a tool and finishes.
+  if (prompt.startsWith('You are @المخطِّط,')) {
+    return [
+      { type: 'reasoning_delta', text: 'أرتّب الخطوات…' },
+      { type: 'delay', ms: 900 },
+      { type: 'message_delta', text: 'الخطة: ثلاث خطوات، نبدأ بالواجهة. ' },
+      { type: 'delay', ms: 900 },
+      { type: 'message_delta', text: '@المبرمج ابدأ بالخطوة الأولى.' },
+      { type: 'usage', inputTokens: 30, outputTokens: 12 },
+      { type: 'completed' },
+    ];
+  }
+  if (prompt.startsWith('You are @المبرمج,')) {
+    return [
+      { type: 'delay', ms: 600 },
+      {
+        type: 'tool_started',
+        ref: 'r1',
+        name: 'write_file',
+        kind: 'file_write',
+        title: 'ui/Home.tsx',
+      },
+      { type: 'delay', ms: 900 },
+      { type: 'tool_completed', ref: 'r1', output: 'written', exitCode: 0 },
+      { type: 'message_delta', text: 'أنهيت الخطوة الأولى: الواجهة جاهزة.' },
+      { type: 'usage', inputTokens: 25, outputTokens: 9 },
+      { type: 'completed' },
+    ];
+  }
+  if (prompt.startsWith('You are @')) {
+    return [{ type: 'message_delta', text: 'حاضر.' }, { type: 'completed' }];
+  }
   if (/ملخص الجدولة/.test(prompt)) {
     // A schedule's own run (journey 28): a short answer the history previews and the
     // conversation shows.
@@ -208,6 +308,105 @@ function scriptFor(prompt: string): Step[] {
       { type: 'completed' },
     ];
   }
+  if (/اكتب الملفات|write the files/i.test(prompt)) {
+    // Files beside the chat (journey 32, decision §48): three files written by a tool in the
+    // session's folder, named in the reply so the words become links. `تحديث` writes the
+    // report again, so an open tab has something to follow.
+    const again = /تحديث/.test(prompt);
+    return [
+      { type: 'message_delta', text: 'أكتب الملفات الآن.\n\n' },
+      ...writes(
+        'w1',
+        'report.html',
+        again ? REPORT_HTML.replace('الربع', 'الربع المحدَّث') : REPORT_HTML,
+      ),
+      ...(again
+        ? []
+        : [...writes('w2', 'data.csv', DATA_CSV), ...writes('w3', 'notes.md', NOTES_MD)]),
+      {
+        type: 'message_delta',
+        text: again ? 'حدّثت report.html.' : 'كتبت report.html و data.csv و `notes.md`.',
+      },
+      { type: 'completed' },
+    ];
+  }
+  if (/عدّل المشروع|edit the project/i.test(prompt)) {
+    // The files a run changed (journey 33, decision §49): after journey 32's three files, this
+    // run edits two of them and creates a third — the card under the reply counts them.
+    return [
+      { type: 'message_delta', text: 'أعدّل الملفات.\n\n' },
+      ...writes('e1', 'data.csv', DATA_CSV.replace('كهرباء,300', 'كهرباء,350')),
+      ...writes('e2', 'notes.md', `${NOTES_MD}- أرسل التقرير\n`),
+      ...writes('e3', 'plan.md', '# الخطة\n\n1. راجع الأرقام\n2. أرسل التقرير\n'),
+      { type: 'message_delta', text: 'عدّلت data.csv و notes.md وكتبت plan.md.' },
+      { type: 'completed' },
+    ];
+  }
+  if (/وزّع العمل|delegate this/i.test(prompt)) {
+    // The Subagents panel (journey 33): two subagents start, one calls a tool; the person
+    // stops the first, and only then does the second finish and the run end — so the order
+    // the journey sees is never a race with the script.
+    return [
+      { type: 'message_delta', text: 'سأوزّع العمل على وكيلين.' },
+      {
+        type: 'tool_started',
+        ref: 'd1',
+        name: 'delegate_task',
+        kind: 'custom',
+        title: 'delegate_task',
+      },
+      {
+        type: 'subagent',
+        signal: {
+          phase: 'started',
+          id: 'sa-0-tests',
+          depth: 0,
+          goal: 'راجع ملفات الاختبارات',
+          model: 'hermes-4',
+          toolCount: 0,
+          acceptingSteer: true,
+        },
+      },
+      {
+        type: 'subagent',
+        signal: {
+          phase: 'started',
+          id: 'sa-1-notes',
+          depth: 0,
+          goal: 'اكتب ملاحظات الإصدار',
+          model: 'hermes-4',
+          toolCount: 0,
+          acceptingSteer: true,
+        },
+      },
+      { type: 'delay', ms: 300 },
+      {
+        type: 'subagent',
+        signal: {
+          phase: 'tool',
+          id: 'sa-0-tests',
+          toolName: 'read_file',
+          toolPreview: 'tests/status.test.ts',
+          toolCount: 1,
+        },
+      },
+      { type: 'until_stopped', id: 'sa-0-tests', ms: 60_000 },
+      { type: 'delay', ms: 300 },
+      {
+        type: 'subagent',
+        signal: {
+          phase: 'completed',
+          id: 'sa-1-notes',
+          status: 'completed',
+          summary: 'ملاحظات الإصدار جاهزة.',
+          toolCount: 2,
+        },
+      },
+      { type: 'tool_completed', ref: 'd1', output: 'done', exitCode: 0 },
+      { type: 'message_delta', text: 'انتهى الوكيلان.' },
+      { type: 'completed' },
+    ];
+  }
   if (/ارسم المسار|trace this/i.test(prompt)) {
     // The Trajectory tab (journey 31): a turn that reads a file, a command that fails, and
     // an answer — with pauses, so every step has a duration on the timeline.
@@ -242,6 +441,44 @@ function scriptFor(prompt: string): Step[] {
       { type: 'completed' },
     ];
   }
+  if (/حمّل المهارة|load the skill/i.test(prompt)) {
+    // Usage and Skills usage (journey 32, decision §50): the agent loads a skill the way
+    // Hermes does — `skill_view` with the skill's name — then a linked file of it (the same
+    // use), and reports its tokens with a cache read.
+    return [
+      {
+        type: 'tool_started',
+        ref: 'k1',
+        name: 'skill_view',
+        kind: 'custom',
+        title: 'arxiv',
+        input: { name: 'arxiv' },
+      },
+      { type: 'tool_completed', ref: 'k1', output: '{"success": true, "name": "arxiv"}' },
+      {
+        type: 'tool_started',
+        ref: 'k2',
+        name: 'skill_view',
+        kind: 'custom',
+        title: 'arxiv',
+        input: { name: 'arxiv', file_path: 'references/api.md' },
+      },
+      { type: 'tool_completed', ref: 'k2', output: '{"success": true}' },
+      { type: 'message_delta', text: 'وجدت ثلاث أوراق عن الموضوع.' },
+      { type: 'usage', inputTokens: 3000, outputTokens: 400, cacheReadTokens: 1000 },
+      { type: 'completed' },
+    ];
+  }
+  if (/املأ السياق|fill the context/i.test(prompt)) {
+    // A long conversation (journey 32): the agent reports a window three quarters full, as
+    // Hermes does with every finished turn, so the meter has its count to show.
+    return [
+      { type: 'message_delta', text: 'قرأت كل الملفات؛ السياق ممتلئ تقريبًا.' },
+      { type: 'context', usedTokens: 150_000, windowTokens: 200_000 },
+      { type: 'usage', inputTokens: 149_000, outputTokens: 1_000 },
+      { type: 'completed' },
+    ];
+  }
   if (/slow|بطيء/i.test(prompt)) {
     // The pause has to outlast creating the session, navigating and hydrating the screen,
     // or the journey would be racing the script instead of testing the resume.
@@ -269,6 +506,8 @@ function scriptFor(prompt: string): Step[] {
 
 interface Live {
   queue: Step[];
+  /** The session's working folder, where `write` steps land. */
+  workingDir: string | null;
   wake: (() => void) | null;
   closed: boolean;
   /** The last answer a person gave this run, for scripts that repeat it. */
@@ -277,14 +516,83 @@ interface Live {
   raw: string;
 }
 
+/**
+ * One turn on the models module's direct path, as the `direct` agent makes it: the profile's
+ * chat model, then its fallback chain (contract decision §54) — every step real but the
+ * provider's HTTP, which is `scriptedProvider` below.
+ */
+async function* directTurn(workspace: string, text: string): AsyncIterable<AgentEvent> {
+  const port = hubApp ? agentModelsPort(hubApp.hub.io) : null;
+  const primary = port?.defaultModelFor(workspace, 'builtin', null) ?? null;
+  if (!port || !primary) {
+    yield { type: 'failed', code: 'provider_not_configured', message: 'no chat model is chosen' };
+    return;
+  }
+  const fallbacks = (port.fallbackChain?.(workspace) ?? []).map((member) => ({
+    providerId: member.providerId,
+    model: member.model,
+  }));
+  for await (const event of port.directChat(workspace, {
+    providerId: primary.provider_id,
+    model: primary.model,
+    messages: [{ role: 'user', text }],
+    fallbacks,
+  })) {
+    if (event.type === 'delta') yield { type: 'message_delta', text: event.text };
+    else if (event.type === 'fallback') {
+      yield { type: 'model_fallback', failed: event.failed, answered: event.answered };
+    } else if (event.type === 'usage') {
+      yield {
+        type: 'usage',
+        modelLabel: event.modelLabel,
+        providerId: event.providerId,
+        ...(event.inputTokens !== undefined ? { inputTokens: event.inputTokens } : {}),
+        ...(event.outputTokens !== undefined ? { outputTokens: event.outputTokens } : {}),
+      };
+    } else if (event.type === 'completed') yield { type: 'completed' };
+    else if (event.type === 'failed')
+      yield { type: 'failed', code: event.code, message: event.message };
+  }
+}
+
 /** A runner with real pauses, so a socket can be dropped mid-run and resumed. */
 class ScriptedRunner implements AgentRunner {
   private readonly runs = new Map<string, Live>();
+  private readonly sessionOfRun = new Map<string, string>();
+  private readonly listeners = new Set<(sessionId: string, signal: AgentSubagentSignal) => void>();
+  /** `<session>:<subagent>` of the subagents a person stopped. */
+  private readonly stopped = new Set<string>();
+
+  onSubagent(listener: (sessionId: string, signal: AgentSubagentSignal) => void): () => void {
+    this.listeners.add(listener);
+    return () => this.listeners.delete(listener);
+  }
+
+  private report(sessionId: string, signal: AgentSubagentSignal): void {
+    for (const listener of this.listeners) listener(sessionId, signal);
+  }
+
+  /** Hermes-like (`full`): a stop is confirmed at once, a note is queued, the tail is text. */
+  subagents(sessionId: string): AgentSubagentControl {
+    return {
+      support: 'full',
+      list: async () => [],
+      interrupt: async (id) => {
+        this.stopped.add(`${sessionId}:${id}`);
+        this.report(sessionId, { phase: 'completed', id, status: 'interrupted', summary: null });
+        return true;
+      },
+      steer: async () => 'queued',
+      tail: async (id) => ({ available: true, text: `${id}: أعمل…`, truncated: false }),
+    };
+  }
 
   async start(request: AgentRunRequest): Promise<AgentRunAccepted> {
+    this.sessionOfRun.set(request.runId, request.sessionId);
     const text = request.prompt.map((b) => (b.type === 'text' ? b.text : '')).join(' ');
     this.runs.set(request.runId, {
-      queue: scriptFor(text),
+      queue: scriptFor(text, request.workspace),
+      workingDir: request.workingDir,
       wake: null,
       closed: false,
       answer: '',
@@ -317,10 +625,31 @@ class ScriptedRunner implements AgentRunner {
         });
         continue;
       }
+      if (step.type === 'write') {
+        if (live.workingDir) writeFileSync(path.join(live.workingDir, step.path), step.content);
+        continue;
+      }
       if (step.type === 'await_input') {
         await new Promise<void>((resolve) => {
           live.wake = resolve;
         });
+        continue;
+      }
+      if (step.type === 'direct') {
+        yield* directTurn(step.workspace, step.text);
+        continue;
+      }
+      if (step.type === 'subagent') {
+        const sessionId = this.sessionOfRun.get(runId);
+        if (sessionId) this.report(sessionId, step.signal);
+        continue;
+      }
+      if (step.type === 'until_stopped') {
+        const sessionId = this.sessionOfRun.get(runId) ?? '';
+        const until = Date.now() + step.ms;
+        while (!live.closed && Date.now() < until && !this.stopped.has(`${sessionId}:${step.id}`)) {
+          await new Promise((resolve) => setTimeout(resolve, 100));
+        }
         continue;
       }
       if (step.type === 'tool_completed' && step.output) {
@@ -351,6 +680,29 @@ class ScriptedRunner implements AgentRunner {
     live.queue = [];
     live.closed = true;
     live.wake?.();
+  }
+
+  /**
+   * `/compress` (journey 32, decision §57): long enough that the progress is seen, then the
+   * window as a real Hermes reports it after compressing — much emptier.
+   */
+  async compress(request: AgentCompressRequest): Promise<AgentCompressResult> {
+    await new Promise((resolve) => setTimeout(resolve, 1500));
+    return {
+      agentSessionRef: request.agentSessionRef ?? `e2e-${request.sessionId}`,
+      status: 'compressed',
+      beforeTokens: 150_000,
+      afterTokens: 24_000,
+      beforeMessages: 40,
+      afterMessages: 6,
+      context: { usedTokens: 24_000, windowTokens: 200_000, estimated: false },
+      message: 'Compressed: 40 → 6 messages',
+    };
+  }
+
+  /** `/steer` into a running scripted turn: taken, as Hermes takes it. */
+  async steer(): Promise<'queued' | 'rejected'> {
+    return 'queued';
   }
 
   /**
@@ -643,6 +995,35 @@ const scriptedTelegram: typeof fetch = async (input) => {
   return json(401, { ok: false, error_code: 401, description: 'Unauthorized' });
 };
 
+/**
+ * Discord's API as linking asks it (journey 41), scripted: one token belongs to the bot
+ * @corehub_discord, any other is refused as Discord refuses it (`401: Unauthorized`).
+ */
+const E2E_DISCORD_TOKEN = 'fake-discord-token-for-e2e-only-000000000000000000000000000000001';
+const scriptedPlatforms: typeof fetch = async (input, init) => {
+  const url = String(input instanceof Request ? input.url : input);
+  const auth = new Headers(init?.headers).get('authorization');
+  const json = (status: number, value: unknown) =>
+    new Response(JSON.stringify(value), {
+      status,
+      headers: { 'content-type': 'application/json' },
+    });
+  // Discord's `users/@me`, the one question linking asks it.
+  if (
+    url.startsWith('https://discord.com/') &&
+    url.endsWith('@me') &&
+    auth === `Bot ${E2E_DISCORD_TOKEN}`
+  ) {
+    return json(200, {
+      id: '1234567890123456789',
+      username: 'corehub_discord',
+      global_name: 'مساعد ديسكورد',
+      bot: true,
+    });
+  }
+  return json(401, { message: '401: Unauthorized', code: 0 });
+};
+
 overrideAgents({
   pathValue: path.join(dataDir, 'no-such-bin'),
   installer: e2eInstaller,
@@ -651,6 +1032,7 @@ overrideAgents({
   hermesCli: scriptedPlugins.cli,
   pairingPollMs: 700,
   telegramFetch: scriptedTelegram,
+  channelProbe: { fetchImpl: scriptedPlatforms },
 });
 
 /**
@@ -676,17 +1058,91 @@ const bigCatalogue = Array.from({ length: 443 }, (_, i) => {
   const variant = i % 3 === 0 ? '-thinking' : i % 3 === 1 ? '-instruct' : '';
   return { id: `${family}-${Math.floor(i / FAMILIES.length) + 1}${variant}`, object: 'model' };
 });
-const scriptedProvider: typeof fetch = async (input) => {
+/**
+ * The owner's proxy on 2026-09-25 (journey 34): its first model is down with
+ * `503 auth_unavailable`, the second answers.
+ */
+export const E2E_PROXY_URL = 'http://proxy.e2e/v1';
+const proxyAnswer = 'أجاب النموذج الاحتياطي بدل النموذج المعطّل.';
+function scriptedProxy(url: string, init: RequestInit | undefined): Response {
+  const json = (status: number, value: unknown) =>
+    new Response(JSON.stringify(value), {
+      status,
+      headers: { 'content-type': 'application/json' },
+    });
+  if (url.endsWith('/models')) {
+    return json(200, { data: [{ id: 'gemini-3.8-flash-high' }, { id: 'gpt-backup' }] });
+  }
+  const body = JSON.parse(String(init?.body ?? '{}')) as { model?: string };
+  if (body.model === 'gemini-3.8-flash-high') {
+    return json(503, {
+      error: {
+        message:
+          'auth_unavailable: no auth available (providers=antigravity, model=gemini-3.8-flash-high)',
+      },
+    });
+  }
+  const frames = [
+    { choices: [{ delta: { content: proxyAnswer } }] },
+    { choices: [{ delta: {} }], usage: { prompt_tokens: 14, completion_tokens: 9 } },
+  ];
+  const encoder = new TextEncoder();
+  const stream = new ReadableStream<Uint8Array>({
+    start(controller) {
+      for (const frame of frames) {
+        controller.enqueue(encoder.encode(`data: ${JSON.stringify(frame)}\n\n`));
+      }
+      controller.enqueue(encoder.encode('data: [DONE]\n\n'));
+      controller.close();
+    },
+  });
+  return new Response(stream, { status: 200, headers: { 'content-type': 'text/event-stream' } });
+}
+
+const scriptedProvider: typeof fetch = async (input, init) => {
   const url = String(input instanceof Request ? input.url : input);
+  if (url.startsWith(E2E_PROXY_URL)) return scriptedProxy(url, init);
   const json = (value: unknown) =>
     new Response(JSON.stringify(value), {
       status: 200,
       headers: { 'content-type': 'application/json' },
     });
   if (url.endsWith('/models')) return json({ data: bigCatalogue });
+  // Speech (journey 32, DECISIONS §63): a scripted Whisper that hears one sentence, and a
+  // voice that answers with a tenth of a second of real silence the browser can play.
+  if (url.endsWith('/audio/transcriptions')) return json({ text: 'لخّص اجتماع اليوم' });
+  if (url.endsWith('/audio/speech')) {
+    return new Response(silentWav(), { status: 200, headers: { 'content-type': 'audio/wav' } });
+  }
   return json({ ok: true });
 };
+
+/** A playable WAV: 16-bit mono PCM at 8 kHz, a tenth of a second of silence. */
+function silentWav(): ArrayBuffer {
+  const samples = 800;
+  const buffer = Buffer.alloc(44 + samples * 2);
+  buffer.write('RIFF', 0);
+  buffer.writeUInt32LE(36 + samples * 2, 4);
+  buffer.write('WAVE', 8);
+  buffer.write('fmt ', 12);
+  buffer.writeUInt32LE(16, 16);
+  buffer.writeUInt16LE(1, 20);
+  buffer.writeUInt16LE(1, 22);
+  buffer.writeUInt32LE(8000, 24);
+  buffer.writeUInt32LE(16000, 28);
+  buffer.writeUInt16LE(2, 32);
+  buffer.writeUInt16LE(16, 34);
+  buffer.write('data', 36);
+  buffer.writeUInt32LE(samples * 2, 40);
+  return buffer.buffer.slice(
+    buffer.byteOffset,
+    buffer.byteOffset + buffer.byteLength,
+  ) as ArrayBuffer;
+}
 overrideModels({ fetchImpl: scriptedProvider });
+// The browser-push journey's fake push service listens on 127.0.0.1, which a hub refuses to
+// call unless told otherwise (a Web Push endpoint is otherwise https and public).
+overrideDevices({ allowPrivateEndpoints: true });
 
 /**
  * Hermes's own board, scripted: one card Hermes finished, and a Hermes that refuses to let
@@ -775,9 +1231,64 @@ const profileArchives = fakeProfileRuntime((profile) => [
 ]);
 registerProfileTransfer((app) => profileTransferPorts(app, profileArchives.runtime));
 
+/**
+ * Hermes's channel conversations, scripted (contract decision §61): one Telegram conversation
+ * in the default profile, as Hermes's server would list it. Off until a journey turns it on
+ * (`/__e2e/channels`) — every other journey sees a hub with no Hermes to read, as before, so
+ * their lists and screenshots do not change.
+ */
+let channelsOn = false;
+const E2E_T0 = Date.parse('2026-09-25T09:15:00Z') / 1000;
+const hermesChannels = scriptedChannels(
+  {
+    default: {
+      sessions: [
+        {
+          id: '20260925_091500_e2e0tg01',
+          source: 'telegram',
+          user_id: '5550001',
+          chat_id: '5550001',
+          chat_type: 'dm',
+          display_name: 'أحمد من تيليجرام',
+          title: null,
+          message_count: 2,
+          started_at: E2E_T0,
+          last_active: E2E_T0 + 300,
+          preview: 'متى موعد التسليم؟',
+        },
+      ],
+      messages: {
+        '20260925_091500_e2e0tg01': [
+          { id: 1, role: 'user', content: 'متى موعد التسليم؟', timestamp: E2E_T0 },
+          {
+            id: 2,
+            role: 'assistant',
+            content: 'موعد التسليم **يوم الخميس**، وسأذكّرك قبله بيوم.',
+            timestamp: E2E_T0 + 300,
+          },
+        ],
+      },
+    },
+  },
+  {
+    // The hub's default workspace is Hermes's `default` profile (ADR 0014). `app` is the hub
+    // built below; nothing asks before it exists.
+    profileOf: (workspace) =>
+      listWorkspacesFor(requireSqlite(app.hub.database), { id: '', role: 'owner' }).some(
+        (row) => row.id === workspace && row.isDefault,
+      )
+        ? 'default'
+        : null,
+  },
+);
+registerChannelSource(() => (channelsOn ? hermesChannels : null));
+
 const sessions = createSessionsModule({
   agents: { find: async (_workspace, agentId) => fakeHermes(agentId) },
   runner: new ScriptedRunner(),
+  // The real file store, as the composition root wires it: a chat's attachments, and the
+  // transcript "Continue in Core Hub" keeps (§62).
+  attachments: attachmentsPort,
   // The real wiring, not a stub: the journeys then prove that a finished run actually
   // reaches the inbox, which is the only claim worth making about notifications. The
   // scope resolver has to be the real one too — the derived one invents a local owner id,
@@ -786,11 +1297,21 @@ const sessions = createSessionsModule({
   notifier: notifierPort,
   agentTimeoutMs: 30_000,
 });
+// The terminal journey's shell is `sh` on a real PTY: no machine's bash profile (its prompt,
+// its user and host names) reaches the journey or its screenshot.
+if (process.env.COREHUB_WEB_TERMINAL === '1') {
+  const pty = loadNodePty();
+  overrideTerminal({
+    spawner: () => (pty ? ptySpawner(pty, '/bin/sh') : pipeSpawner('/bin/sh')),
+  });
+}
 const app = await buildServer({
   config: loadConfig({
     DATA_DIR: dataDir,
     PORT: String(port),
     ...(setupMode ? {} : { HUB_ADMIN_PASSWORD: E2E_PASSWORD }),
+    // The terminal journey's hub (playwright.config.ts): the owner's web terminal is on.
+    ...(process.env.COREHUB_WEB_TERMINAL === '1' ? { COREHUB_WEB_TERMINAL: '1' } : {}),
   }),
   logger: createLogger({ level: 'warn' }),
   modules: defaultModules.map((module) => (module.name === 'sessions' ? sessions : module)),
@@ -817,6 +1338,12 @@ app.post('/__e2e/git-repo', async () => {
 });
 
 // Test-only control: drop every sessions socket, like a hub restart (journey 3).
+// Test-only control: Hermes's scripted channel conversations on or off (journey 33).
+app.post('/__e2e/channels', async (request) => {
+  channelsOn = (request.body as { on?: boolean } | null)?.on === true;
+  return { ok: true, on: channelsOn };
+});
+
 app.post('/__e2e/drop-sockets', async () => {
   app.hub.io.of('/rt/sessions').disconnectSockets(true);
   return { ok: true };
@@ -868,6 +1395,22 @@ app.post('/__e2e/expire-token', async (request) => {
   return { token: expired };
 });
 
+// Test-only control: lines in the hub's log rings, as the hub and a profile's Hermes gateway
+// would have written them (zzzzzz-perf-logs) — the e2e hub runs no Hermes to write its own.
+app.post('/__e2e/seed-logs', async (request) => {
+  const { lines } = request.body as {
+    lines: Array<{
+      level: 'error' | 'warn' | 'info' | 'debug';
+      source: 'hub' | 'hermes';
+      profile?: string;
+      message: string;
+    }>;
+  };
+  for (const line of lines) app.hub.logs.push(line);
+  return { ok: true, count: lines.length };
+});
+
+hubApp = app;
 await app.listen({ port, host: '127.0.0.1' });
 console.log(
   `e2e hub listening on http://127.0.0.1:${port} (web: ${app.hub.web}, setup: ${setupMode})`,

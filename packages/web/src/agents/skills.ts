@@ -14,11 +14,24 @@ export interface Skill {
   description: string | null;
   enabled: boolean;
   pinned: boolean;
-  source: 'builtin' | 'user' | 'external';
+  source: 'builtin' | 'user' | 'external' | 'library';
   use_count: number;
   updated_at: string | null;
   content: string | null;
+  /** A Core Hub library skill (`source: library`): as shipped, or edited by the person. */
+  library?: 'current' | 'edited' | null;
 }
+
+/** Core Hub's own skill library in the selected profile (decision §71). */
+export interface SkillLibrary {
+  enabled: boolean;
+  available: number;
+  installed: number;
+  edited: number;
+}
+
+/** The category folder the library lives in. */
+export const LIBRARY_CATEGORY = 'core-hub';
 
 export interface SkillCategory {
   key: string;
@@ -42,7 +55,11 @@ export function useSkills(agentId: string | undefined) {
         await client.request('get', '/agents/{agent_id}/skills', {
           params: { agent_id: agentId ?? '' },
         })
-      ).data as unknown as { categories: SkillCategory[]; home: string | null },
+      ).data as unknown as {
+        categories: SkillCategory[];
+        home: string | null;
+        library?: SkillLibrary;
+      },
     enabled: !!session && !!agentId,
   });
 }
@@ -113,6 +130,41 @@ export function useDeleteSkill(agentId: string | undefined) {
         })
       ).data,
     onSuccess: invalidate,
+  });
+}
+
+/** Switch Core Hub's library on (installing it) or off in the selected profile. */
+export function useSetSkillLibrary(agentId: string | undefined) {
+  const { client } = useAuth();
+  const invalidate = useSkillInvalidation(agentId);
+  return useMutation({
+    mutationFn: async (enabled: boolean) =>
+      (
+        await client.request('patch', '/agents/{agent_id}/skill-library', {
+          params: { agent_id: agentId ?? '' },
+          body: { enabled } as never,
+        })
+      ).data as unknown as SkillLibrary,
+    onSuccess: invalidate,
+  });
+}
+
+/** Put a library skill back as Core Hub ships it, over the person's edits. */
+export function useRestoreSkill(agentId: string | undefined) {
+  const { client, profile } = useAuth();
+  const queryClient = useQueryClient();
+  const invalidate = useSkillInvalidation(agentId);
+  return useMutation({
+    mutationFn: async (key: string) =>
+      (
+        await client.request('post', '/agents/{agent_id}/skills/{skill_key}/restore', {
+          params: { agent_id: agentId ?? '', skill_key: key },
+        })
+      ).data as unknown as Skill,
+    onSuccess: (_skill, key) => {
+      invalidate();
+      void queryClient.invalidateQueries({ queryKey: skillKeys.one(profile, agentId ?? '', key) });
+    },
   });
 }
 
@@ -211,6 +263,86 @@ export function useDeleteMcpServer(agentId: string | undefined) {
   });
 }
 
+// ------------------------------------------------------- the hub's own tools
+//
+// Core Hub offers itself to the agent as an MCP server (contract decision §67). The card on
+// the MCP page reads and switches it per profile; the block it writes is tested like any
+// other server, by name.
+
+export type HubToolGroupId =
+  'tasks' | 'schedules' | 'conversations' | 'notifications' | 'workflows' | 'files';
+
+export interface HubToolGroup {
+  id: HubToolGroupId;
+  enabled: boolean;
+  allow_writes: boolean;
+  tools: Array<{ name: string; access: 'read' | 'write' }>;
+}
+
+export interface HubToolCall {
+  id: string;
+  tool: string;
+  ok: boolean;
+  error_code: string | null;
+  user_id: string | null;
+  session_id: string | null;
+  duration_ms: number;
+  created_at: string;
+}
+
+export interface HubTools {
+  enabled: boolean;
+  available: boolean;
+  unavailable_reason: 'runtime_absent' | 'hermes_profile_absent' | null;
+  server_name: string;
+  url: string | null;
+  groups: HubToolGroup[];
+  recent_calls: HubToolCall[];
+  updated_at: string | null;
+}
+
+export interface HubToolsPatch {
+  enabled?: boolean;
+  groups?: Array<{ id: HubToolGroupId; enabled?: boolean; allow_writes?: boolean }>;
+}
+
+export const hubToolKeys = {
+  get: (profile: string, agentId: string) => ['agent-hub-tools', profile, agentId] as const,
+};
+
+export function useHubTools(agentId: string | undefined) {
+  const { client, profile, session } = useAuth();
+  return useQuery({
+    queryKey: hubToolKeys.get(profile, agentId ?? ''),
+    queryFn: async () =>
+      (
+        await client.request('get', '/agents/{agent_id}/hub-tools', {
+          params: { agent_id: agentId ?? '' },
+        })
+      ).data as unknown as HubTools,
+    enabled: !!session && !!agentId,
+  });
+}
+
+export function useUpdateHubTools(agentId: string | undefined) {
+  const { client, profile } = useAuth();
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (patch: HubToolsPatch) =>
+      (
+        await client.request('patch', '/agents/{agent_id}/hub-tools', {
+          params: { agent_id: agentId ?? '' },
+          body: patch as never,
+        })
+      ).data as unknown as HubTools,
+    onSuccess: (next) => {
+      queryClient.setQueryData(hubToolKeys.get(profile, agentId ?? ''), next);
+      // The block is a server in the same file; the list below leaves it out by name.
+      void queryClient.invalidateQueries({ queryKey: mcpKeys.list(profile, agentId ?? '') });
+    },
+  });
+}
+
 // ---------------------------------------------------------------- memory
 
 export interface MemoryItem {
@@ -299,9 +431,12 @@ export interface Channel {
   exclusive: boolean;
   status: 'online' | 'offline' | 'error' | 'unknown';
   error: string | null;
-  /** `qr` pairs by a code (WhatsApp); `token` links by a bot token (Telegram). */
-  login: 'qr' | 'token' | null;
-  /** WhatsApp (its session) and Telegram (its bot): whether this profile has one, and whose. */
+  /**
+   * `qr` pairs by a code (WhatsApp); `token` links by a bot token (Telegram); `credentials` links
+   * by the variables `agents.listChannelPlatforms` declares (Discord, Slack, …).
+   */
+  login: 'qr' | 'token' | 'credentials' | null;
+  /** A linked platform: whether this profile has it, and whose account. */
   link: ChannelLink | null;
   fields: ChannelField[];
 }
@@ -311,8 +446,45 @@ export interface ChannelLink {
   account_id: string | null;
   account_name: string | null;
   account_phone: string | null;
-  /** Telegram: the bot's @username, without the @. */
+  /** The account's handle as the platform named it, without an @ (Telegram's bot, Discord's…). */
   account_username: string | null;
+}
+
+/** A platform the hub links, and what it takes (`agents.listChannelPlatforms`). */
+export interface ChannelPlatform {
+  platform: string;
+  label: string;
+  support: 'full' | 'generic';
+  login: 'qr' | 'token' | 'credentials';
+  credentials: Array<{
+    key: string;
+    kind: 'secret' | 'text' | 'url' | 'email' | 'host' | 'number';
+    required: boolean;
+  }>;
+  allowed_users_key: string | null;
+  validates: boolean;
+  pairs: boolean;
+  allowlist: boolean;
+  settings: boolean;
+  exclusive: boolean;
+  packages: 'image' | 'first_use' | 'none';
+  inbound: boolean;
+  docs_url: string | null;
+}
+
+export function useChannelPlatforms(agentId: string | undefined) {
+  const { client, profile, session } = useAuth();
+  return useQuery({
+    queryKey: ['agent-channel-platforms', profile, agentId ?? ''] as const,
+    queryFn: async () =>
+      (
+        await client.request('get', '/agents/{agent_id}/channel-platforms', {
+          params: { agent_id: agentId ?? '' },
+        })
+      ).data as unknown as { items: ChannelPlatform[] },
+    enabled: !!session && !!agentId,
+    staleTime: 5 * 60_000,
+  });
 }
 
 /** The messaging gateway serving the profile's channels (`agents.listChannels`). */
@@ -409,17 +581,26 @@ export function useUnlinkChannel(agentId: string | undefined) {
   });
 }
 
-/** Link Telegram by the token @BotFather gave (`agents.linkChannel`). */
+/**
+ * Link a platform (`agents.linkChannel`): Telegram by the token @BotFather gave, every other one by
+ * its credentials.
+ */
 export function useLinkChannel(agentId: string | undefined) {
   const { client } = useAuth();
   const invalidate = useChannelInvalidation(agentId);
   return useMutation({
-    mutationFn: async (input: { platform: string; token: string; allowed_users?: string[] }) =>
+    mutationFn: async (input: {
+      platform: string;
+      token?: string;
+      credentials?: Record<string, string>;
+      allowed_users?: string[];
+    }) =>
       (
         await client.request('post', '/agents/{agent_id}/channels/{platform}/link', {
           params: { agent_id: agentId ?? '', platform: input.platform },
           body: {
-            token: input.token,
+            ...(input.token !== undefined ? { token: input.token } : {}),
+            ...(input.credentials ? { credentials: input.credentials } : {}),
             ...(input.allowed_users ? { allowed_users: input.allowed_users } : {}),
           },
         })

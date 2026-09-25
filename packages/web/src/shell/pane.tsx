@@ -79,3 +79,8 @@ export function usePane(): PaneValue {
   if (!value) throw new Error('usePane outside PaneProvider');
   return value;
 }
+
+/** The pane, or `null` outside a frame (a component drawn on its own, in a test). */
+export function usePaneOptional(): PaneValue | null {
+  return useContext(PaneContext);
+}

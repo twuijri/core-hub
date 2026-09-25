@@ -268,18 +268,19 @@ describe('audit: the report route', () => {
     }
   });
 
-  it('still says 501 for the one report nothing feeds, and names the operation', async () => {
+  it('answers the skills report now that skill use is recorded (decision §50)', async () => {
     const hub = await signedInHub();
     try {
       const response = await authed(hub, hub.token, {
         method: 'GET',
-        url: '/api/v1/audit/reports/skills',
+        url: '/api/v1/audit/reports/skills?days=7',
       });
-      expect(response.statusCode).toBe(501);
-      expect(response.json()).toMatchObject({
-        code: 'not_implemented',
-        details: { operationId: 'audit.getReport', kind: 'skills' },
-      });
+      expect(response.statusCode).toBe(200);
+      const body = response.json() as { kind: string; data: Record<string, unknown> };
+      expect(body.kind).toBe('skills');
+      expect(body.data.totals).toMatchObject({ uses: 0, distinct_skills: 0, top_skill: null });
+      expect(body.data.by_day).toHaveLength(7);
+      expect(typeof body.data.counting_since).toBe('string');
     } finally {
       await hub.close();
     }

@@ -87,6 +87,10 @@
       "en": "Usage",
       "ar": "الاستخدام"
     },
+    "skills_usage": {
+      "en": "Skills usage",
+      "ar": "استخدام المهارات"
+    },
     "performance": {
       "en": "Performance",
       "ar": "الأداء"
@@ -106,6 +110,10 @@
     "plugins": {
       "en": "Plugins",
       "ar": "الإضافات"
+    },
+    "files": {
+      "en": "Files",
+      "ar": "الملفات"
     },
     "skills": {
       "en": "Skills",
@@ -158,6 +166,10 @@
     "back_to_agents": {
       "en": "Back to agents",
       "ar": "رجوع إلى الوكلاء"
+    },
+    "terminal": {
+      "en": "Terminal",
+      "ar": "الطرفية"
     }
   },
   "destinations": [
@@ -193,7 +205,7 @@
       },
       "roles": ["member"],
       "tabs": ["app", "devices"],
-      "note": "Tab devices is admin-only. A Settings page since 2026-09-22: configured once, so not in the sidebar."
+      "note": "Tab devices lists the person's own devices (rename, revoke, last seen, push); an admin sees everyone's and the push senders (contract decision §66, 2026-09-25). A Settings page since 2026-09-22: configured once, so not in the sidebar."
     },
     {
       "id": "agent_manager",
@@ -376,7 +388,8 @@
       "entry": {
         "kind": "settings-tool"
       },
-      "roles": ["member"]
+      "roles": ["admin"],
+      "note": "The hub's and every Hermes gateway's own lines (DECISIONS §51): owners and admins only."
     },
     {
       "id": "usage",
@@ -388,6 +401,17 @@
       },
       "roles": ["member"],
       "note": "Tokens and costs."
+    },
+    {
+      "id": "skills_usage",
+      "title": "skills_usage",
+      "module": "audit",
+      "level": "settings",
+      "entry": {
+        "kind": "settings-tool"
+      },
+      "roles": ["member"],
+      "note": "Which skills the agents loaded, and which never (contract decision §50)."
     },
     {
       "id": "performance",
@@ -443,6 +467,30 @@
         "kind": "settings-tool"
       },
       "roles": ["admin"]
+    },
+    {
+      "id": "files",
+      "title": "files",
+      "module": "knowledge",
+      "level": "settings",
+      "entry": {
+        "kind": "settings-tool"
+      },
+      "roles": ["admin"],
+      "note": "The selected profile's working folder (${DATA_DIR}/workspaces/<profile>): browse, upload, download, zip, new folder, rename, move, copy, delete, preview, edit text, attach to a chat. A file manager only — no shell, no commands (DECISIONS §65). Owner and admin; follows the top-bar profile chip."
+    },
+    {
+      "id": "terminal",
+      "title": "terminal",
+      "level": "settings",
+      "module": "terminal",
+      "entry": {
+        "kind": "settings-tool"
+      },
+      "roles": ["owner"],
+      "surfaces": ["web"],
+      "global": true,
+      "note": "A shell on the hub's host (DECISIONS §70). The owner only — not admins (owner, 2026-09-25) — and only while the hub runs with COREHUB_WEB_TERMINAL=1: a client shows the entry only when GET /terminal answers 200."
     },
     {
       "id": "agent_skills",
@@ -549,7 +597,18 @@
     "about"
   ],
   "settingsManagement": ["models", "device_connections", "knowledge"],
-  "settingsTools": ["logs", "usage", "performance", "theme", "workspaces", "updates", "plugins"],
+  "settingsTools": [
+    "logs",
+    "usage",
+    "skills_usage",
+    "performance",
+    "theme",
+    "workspaces",
+    "updates",
+    "plugins",
+    "files",
+    "terminal"
+  ],
   "agentLevel": [
     "agent_skills",
     "agent_mcp",
@@ -577,13 +636,17 @@
     "login": {
       "title": "login",
       "routes": {
-        "web": "/login"
+        "web": "/login",
+        "ios": "/login",
+        "android": "/login"
       }
     },
     "setup": {
       "title": "setup",
       "routes": {
-        "web": "/setup"
+        "web": "/setup",
+        "ios": "/setup",
+        "android": "/setup"
       }
     }
   },
@@ -604,7 +667,7 @@
       "models": "/settings/models",
       "knowledge": "/settings/knowledge",
       "chat": "/chat/:sessionId?",
-      "rooms": "/rooms",
+      "rooms": "/rooms/:roomId?",
       "tasks": "/tasks",
       "schedules": "/schedules",
       "settings": "/settings",
@@ -617,11 +680,14 @@
       "about": "/settings/about",
       "logs": "/settings/logs",
       "usage": "/settings/usage",
+      "skills_usage": "/settings/skills-usage",
       "performance": "/settings/performance",
       "theme": "/settings/theme",
       "workspaces": "/settings/workspaces",
       "updates": "/settings/updates",
       "plugins": "/settings/plugins",
+      "terminal": "/settings/terminal",
+      "files": "/settings/files",
       "agent_skills": "/agents/:agentId/skills",
       "agent_mcp": "/agents/:agentId/mcp",
       "agent_memory": "/agents/:agentId/memory",
@@ -630,6 +696,87 @@
       "agent_plugins": "/agents/:agentId/plugins",
       "agent_settings": "/agents/:agentId/settings",
       "global_agent": "/global-agent"
+    },
+    "ios": {
+      "new_chat": "/new",
+      "search": "/search",
+      "device_connections": "/settings/devices",
+      "agent_manager": "/agents",
+      "models": "/settings/models",
+      "knowledge": "/settings/knowledge",
+      "chat": "/chat/:sessionId?",
+      "rooms": "/rooms",
+      "tasks": "/tasks",
+      "schedules": "/schedules",
+      "settings": "/settings",
+      "account": "/settings/account",
+      "users": "/settings/users",
+      "webhooks": "/settings/webhooks",
+      "display": "/settings/display",
+      "notifications": "/settings/notifications",
+      "privacy": "/settings/privacy",
+      "this_device": "/settings/this-device",
+      "about": "/settings/about",
+      "logs": "/settings/logs",
+      "usage": "/settings/usage",
+      "skills_usage": "/settings/skills-usage",
+      "performance": "/settings/performance",
+      "theme": "/settings/theme",
+      "workspaces": "/settings/workspaces",
+      "updates": "/settings/updates",
+      "plugins": "/settings/plugins",
+      "files": "/settings/files",
+      "agent_skills": "/agents/:agentId/skills",
+      "agent_mcp": "/agents/:agentId/mcp",
+      "agent_memory": "/agents/:agentId/memory",
+      "agent_jobs": "/agents/:agentId/jobs",
+      "agent_channels": "/agents/:agentId/channels",
+      "agent_plugins": "/agents/:agentId/plugins",
+      "agent_settings": "/agents/:agentId/settings",
+      "global_agent": "/global-agent"
+    },
+    "android": {
+      "new_chat": "/new",
+      "search": "/search",
+      "device_connections": "/settings/devices",
+      "agent_manager": "/agents",
+      "models": "/settings/models",
+      "knowledge": "/settings/knowledge",
+      "chat": "/chat/:sessionId?",
+      "rooms": "/rooms",
+      "tasks": "/tasks",
+      "schedules": "/schedules",
+      "settings": "/settings",
+      "account": "/settings/account",
+      "users": "/settings/users",
+      "webhooks": "/settings/webhooks",
+      "display": "/settings/display",
+      "notifications": "/settings/notifications",
+      "privacy": "/settings/privacy",
+      "this_device": "/settings/this-device",
+      "about": "/settings/about",
+      "logs": "/settings/logs",
+      "usage": "/settings/usage",
+      "skills_usage": "/settings/skills-usage",
+      "performance": "/settings/performance",
+      "theme": "/settings/theme",
+      "workspaces": "/settings/workspaces",
+      "updates": "/settings/updates",
+      "plugins": "/settings/plugins",
+      "files": "/settings/files",
+      "agent_skills": "/agents/:agentId/skills",
+      "agent_mcp": "/agents/:agentId/mcp",
+      "agent_memory": "/agents/:agentId/memory",
+      "agent_jobs": "/agents/:agentId/jobs",
+      "agent_channels": "/agents/:agentId/channels",
+      "agent_plugins": "/agents/:agentId/plugins",
+      "agent_settings": "/agents/:agentId/settings",
+      "global_agent": "/global-agent"
+    },
+    "desktop": {
+      "$comment": "The desktop app draws the web client (ADR 0009, ADR 0020), so it takes every web route that exists on the desktop and adds its own. `$extends` names the surface whose routes are inherited; nav:check resolves it the same way the client does.",
+      "$extends": "web",
+      "this_device": "/settings/this-device"
     }
   },
   "agentShell": {

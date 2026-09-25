@@ -74,6 +74,8 @@
             "version": "0.21.3",
             "latest_version": "0.21.3",
             "update_available": false,
+            "pinned_version": null,
+            "newer_than_tested": false,
             "auto_update": true,
             "auto_update_supported": true,
             "checked_at": null,
@@ -97,7 +99,8 @@
             "settings"
           ],
           "default_model": null,
-          "limited": false
+          "limited": false,
+          "subagents": "full"
         }
       }
     }
@@ -123,7 +126,8 @@
             "capabilities",
             "sections",
             "default_model",
-            "limited"
+            "limited",
+            "subagents"
           ],
           "properties": {
             "slug": {
@@ -179,6 +183,9 @@
             "limited": {
               "type": "boolean",
               "description": "True for the process harness — the UI marks the agent \"limited\"."
+            },
+            "subagents": {
+              "$ref": "#/$defs/SubagentSupport"
             }
           }
         }
@@ -215,6 +222,8 @@
         "version",
         "latest_version",
         "update_available",
+        "pinned_version",
+        "newer_than_tested",
         "auto_update",
         "auto_update_supported",
         "checked_at",
@@ -243,6 +252,14 @@
         },
         "update_available": {
           "type": "boolean"
+        },
+        "pinned_version": {
+          "type": ["string", "null"],
+          "description": "The catalog's pin for the package the hub installs — the version the owner tested."
+        },
+        "newer_than_tested": {
+          "type": "boolean",
+          "description": "The hub installed this agent and its version is past pinned_version."
         },
         "auto_update": {
           "type": "boolean"
@@ -379,6 +396,11 @@
           "$ref": "#/$defs/Timestamp"
         }
       }
+    },
+    "SubagentSupport": {
+      "type": "string",
+      "enum": ["full", "observe", "none"],
+      "description": "What an agent lets a person do with the subagents it delegates to (contract decision\n§56). `full` — see them live, stop one, steer one while it takes guidance, read its\noutput (Hermes); `observe` — see them start and end, nothing more (a coding agent whose\nstream names its delegations); `none` — the agent never says it delegated.\n"
     },
     "Timestamp": {
       "type": "string",

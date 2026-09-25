@@ -1,10 +1,11 @@
 /**
  * notify — in-app notices, push deliveries, per-user preferences, outgoing
- * webhooks and their deliveries, and the server's push credentials.
+ * webhooks and their deliveries.
  *
  * Scoped: notifications (owner_id = recipient), notification_deliveries,
  * notification_preferences, webhooks, webhook_deliveries.
- * Global: push_credentials (one row per push provider for the whole hub).
+ * The push senders' credentials (`push_credentials`) belong to `devices`, which sends
+ * (DECISIONS §66): notify decides whether a person is told, devices decides how.
  *
  * Cross-module id columns: notification_deliveries.device_id -> devices.devices,
  * notifications.entity_id -> the entity named by `entity_kind`,
@@ -15,7 +16,6 @@ import {
   EMPTY_ARRAY,
   EMPTY_OBJECT,
   bool,
-  globalColumns,
   inList,
   json,
   scopedColumns,
@@ -42,7 +42,6 @@ export const SEVERITIES = ['info', 'warning', 'error', 'action_required'] as con
 export const DELIVERY_CHANNELS = ['in_app', 'push', 'webhook'] as const;
 export const DELIVERY_STATUSES = ['queued', 'sent', 'failed', 'skipped'] as const;
 export const WEBHOOK_DELIVERY_STATUSES = ['queued', 'delivered', 'failed', 'dead'] as const;
-export const PUSH_CREDENTIAL_PROVIDERS = ['fcm', 'apns', 'webpush'] as const;
 
 /** Deep link the client opens: `{ route: 'session', id }` etc. */
 export type NotificationData = {
@@ -182,27 +181,5 @@ export const webhookDeliveries = sqliteTable(
     index('webhook_deliveries_webhook_idx').on(t.webhookId, t.createdAt),
     index('webhook_deliveries_retry_idx').on(t.status, t.nextAttemptAt),
     check('webhook_deliveries_status_check', inList(t.status, WEBHOOK_DELIVERY_STATUSES)),
-  ],
-);
-
-export const pushCredentials = sqliteTable(
-  'push_credentials',
-  {
-    ...globalColumns(),
-    provider: text('provider', { enum: PUSH_CREDENTIAL_PROVIDERS }).notNull(),
-    label: text('label', { length: 120 }).notNull(),
-    /** ENCRYPTED. Service-account JSON / APNs .p8 / VAPID private key. */
-    ciphertext: text('ciphertext').notNull(),
-    /** ENCRYPTED (metadata). GCM nonce. */
-    nonce: text('nonce', { length: 32 }).notNull(),
-    keyId: text('key_id', { length: 32 }).notNull(),
-    /** Non-secret identifiers: project id, team id, key id, bundle id, VAPID public key. */
-    publicMeta: json<Record<string, string>>('public_meta').notNull().default(EMPTY_OBJECT),
-    enabled: bool('enabled').notNull().default(true),
-    lastError: text('last_error'),
-  },
-  (t) => [
-    uniqueIndex('push_credentials_provider_uq').on(t.provider),
-    check('push_credentials_provider_check', inList(t.provider, PUSH_CREDENTIAL_PROVIDERS)),
   ],
 );

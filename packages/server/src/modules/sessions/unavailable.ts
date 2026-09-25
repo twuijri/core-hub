@@ -72,6 +72,11 @@ export const noAttachments: AttachmentsPort = {
       details: { reason: 'attachments_not_wired' },
     });
   },
+  async store() {
+    throw new HubError('service_unavailable', {
+      details: { reason: 'attachments_not_wired' },
+    });
+  },
 };
 
 /**

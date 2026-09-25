@@ -11,14 +11,17 @@
  * avatar are drawn once, and the gap above a grouped message is the tighter one. That
  * difference in spacing is what makes a turn read as one thing.
  */
-import type { ReactNode } from 'react';
+import { useMemo, type ReactNode } from 'react';
 import { useI18n } from '../i18n/context.js';
-import type { Message, Run } from '../types.js';
+import type { Message, Run, RunChanges } from '../types.js';
 import { highlightParts, matchRanges } from '../ui/combobox-filter.js';
 import { Avatar } from '../ui/Avatar.js';
 import { Badge } from '../ui/Badge.js';
 import { agentMark } from '../ui/brand/marks.js';
 import { MessageActions } from './MessageActions.js';
+import { useOpenFile, useSessionFilesOptional } from '../files/context.js';
+import { lastReplyOfRuns } from '../files/changes.js';
+import { RunChangesCard } from '../files/RunChangesCard.js';
 import { Markdown } from './Markdown.js';
 import { Reasoning } from './Reasoning.js';
 import { AnsweredQuestions } from './AnsweredQuestions.js';
@@ -26,6 +29,27 @@ import { HIT_CLASS } from './anchor.js';
 import { ToolCalls } from './ToolCallCard.js';
 import { textOf } from './transcript.js';
 import { reasoningWorthShowing, sideOf, thoughtSeconds, type Turn } from './turns.js';
+import { failedNames, failureReasons, fallbackOf } from './fallback.js';
+
+/**
+ * The turn moved down the fallback chain (contract decision §54): which model answered, which
+ * failed before it, and why — under the reply, where its words are, never hidden in a menu.
+ */
+function FallbackNote({ run }: { run: Run | undefined }) {
+  const { t, language } = useI18n();
+  const note = fallbackOf(run);
+  if (!note) return null;
+  const reasons = failureReasons(note.fallback);
+  return (
+    <p className="msg-usage" dir="auto" data-testid="fallback-note" role="note">
+      {t('chat.fallback_note', {
+        failed: failedNames(note.fallback, language),
+        model: note.answered,
+      })}
+      {reasons ? ` — ${t('chat.fallback_reason', { reason: reasons })}` : ''}
+    </p>
+  );
+}
 
 /**
  * What the turn cost, in words a person can read — or nothing at all.
@@ -61,19 +85,38 @@ function Marked({ text, query }: { text: string; query: string | null | undefine
 
 function Attachments({ message }: { message: Message }) {
   const { t } = useI18n();
+  const files = useSessionFilesOptional();
+  const open = useOpenFile();
   const blocks = message.content.filter((b) => b.type !== 'text');
   if (blocks.length === 0) return null;
   return (
     <ul className="msg-attachments">
-      {blocks.map((block, i) => (
-        <li key={i}>
-          <Badge>
-            {block.type === 'location'
-              ? `${t('chat.location')} ${block.latitude.toFixed(4)}, ${block.longitude.toFixed(4)}`
-              : (block.name ?? block.type)}
-          </Badge>
-        </li>
-      ))}
+      {blocks.map((block, i) => {
+        const label =
+          block.type === 'location'
+            ? `${t('chat.location')} ${block.latitude.toFixed(4)}, ${block.longitude.toFixed(4)}`
+            : (block.name ?? block.type);
+        // An attachment opens beside the chat, like any other file of it (decision §48).
+        const key = 'attachment_id' in block ? `attachment:${block.attachment_id}` : null;
+        const file = key && files ? files.fileOf(key) : undefined;
+        return (
+          <li key={i}>
+            {file && open ? (
+              <button
+                type="button"
+                className="msg-attachment-open"
+                aria-label={t('files.open', { name: file.name })}
+                onClick={() => open(file.key)}
+                data-testid="attachment-open"
+              >
+                <Badge>{label}</Badge>
+              </button>
+            ) : (
+              <Badge>{label}</Badge>
+            )}
+          </li>
+        );
+      })}
     </ul>
   );
 }
@@ -87,10 +130,14 @@ export function MessageView({
   markSlug,
   anchored = false,
   mark = null,
+  notice = null,
+  changes,
   onReply,
   onFork,
 }: {
   message: Message;
+  /** The files this reply's run changed, when it is the run's last reply (decision §49). */
+  changes?: RunChanges | undefined;
   /** Continues the turn above it: no name, no avatar, the tighter gap. */
   grouped?: boolean;
   showReasoning: boolean;
@@ -108,6 +155,8 @@ export function MessageView({
   anchored?: boolean;
   /** The searched words, marked inside this message's text. */
   mark?: string | null;
+  /** Drawn under this message, inside its turn: the failure of the run it belongs to. */
+  notice?: ReactNode;
   onReply?: ((message: Message) => void) | undefined;
   onFork?: ((message: Message) => void) | undefined;
 }) {
@@ -152,6 +201,7 @@ export function MessageView({
             </p>
             <Attachments message={message} />
           </div>
+          {notice}
           <MessageActions message={message} onFork={onFork} />
         </div>
       </article>
@@ -207,8 +257,13 @@ export function MessageView({
             {text ? <Markdown text={text} mark={mark} /> : null}
           </div>
         )}
+        {changes && !streaming && <RunChangesCard changes={changes} />}
+        {!streaming && <FallbackNote run={message.run_id ? runs[message.run_id] : undefined} />}
         {message.usage && !streaming && (
           <p className="msg-usage" dir="auto">
+            {message.run_id && runs[message.run_id]?.model
+              ? `${t('chat.answered_by', { model: runs[message.run_id]?.model ?? '' })} · `
+              : ''}
             {t('chat.usage', {
               input: message.usage.input_tokens,
               output: message.usage.output_tokens,
@@ -218,7 +273,8 @@ export function MessageView({
               : ''}
           </p>
         )}
-        {!streaming && <MessageActions message={message} onReply={onReply} onFork={onFork} />}
+        {notice}
+        {!streaming && <MessageActions message={message} onReply={onReply} onFork={onFork} speak />}
       </div>
     </article>
   );
@@ -232,6 +288,7 @@ export function Transcript({
   runs,
   slugOf,
   anchor = null,
+  noticeFor,
   onReply,
   onFork,
 }: {
@@ -243,9 +300,18 @@ export function Transcript({
   slugOf?: ((authorId: string | null) => string | undefined) | undefined;
   /** The message a search opened the conversation at, and the words to mark in it. */
   anchor?: { messageId: string; query: string } | null;
+  /** What hangs under a message: a failed run's notice, on the turn that failed. */
+  noticeFor?: ((message: Message) => ReactNode) | undefined;
   onReply?: ((message: Message) => void) | undefined;
   onFork?: ((message: Message) => void) | undefined;
 }) {
+  const files = useSessionFilesOptional();
+  // A run's "files changed" card goes under its last reply only.
+  const lastReply = useMemo(() => lastReplyOfRuns(turns.map((turn) => turn.message)), [turns]);
+  const changesOf = (message: Message): RunChanges | undefined =>
+    message.run_id && lastReply.get(message.run_id) === message.id
+      ? files?.changes.get(message.run_id)
+      : undefined;
   return (
     <>
       {turns.map((turn) => (
@@ -259,6 +325,8 @@ export function Transcript({
           markSlug={slugOf?.(turn.message.author.id ?? null)}
           anchored={turn.message.id === anchor?.messageId}
           mark={turn.message.id === anchor?.messageId ? anchor.query : null}
+          notice={noticeFor?.(turn.message) ?? null}
+          changes={changesOf(turn.message)}
           onReply={onReply}
           onFork={onFork}
         />

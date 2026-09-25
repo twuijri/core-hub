@@ -95,7 +95,25 @@
     "approval_choice_session": "For this session",
     "approval_choice_always": "Always",
     "approval_choice_deny": "Deny",
-    "produced_refused": "{files} — too many or too large to attach here; they are still in the run folder."
+    "produced_refused": "{files} — too many or too large to attach here; they are still in the run folder.",
+    "category_name_taken": "This profile already has a category with that name.",
+    "category_limit": "This profile already has 100 categories; delete one first.",
+    "continue": {
+      "agent": "Agent",
+      "facts": "{count} messages, {from} – {to} UTC · profile {profile}",
+      "latest_only": "Only its latest {count} messages are here.",
+      "summary": "Let’s continue here a {channel} conversation with “{peer}” ({count} messages, {from} – {to} UTC). The full transcript is in the attached file; read it first.",
+      "channels": {
+        "telegram": "Telegram",
+        "whatsapp": "WhatsApp",
+        "discord": "Discord",
+        "slack": "Slack",
+        "signal": "Signal",
+        "matrix": "Matrix",
+        "email": "Email",
+        "sms": "SMS"
+      }
+    }
   },
   "jobs": {
     "queued": "Queued.",
@@ -149,6 +167,9 @@
       "no_tts_provider": "No text-to-speech provider is chosen for this profile.",
       "provider_disabled": "The chosen text-to-speech provider is switched off.",
       "failed": "The speech provider did not return audio.",
+      "no_stt_provider": "No speech-to-text provider is chosen for this profile.",
+      "transcribe_failed": "The speech-to-text provider did not return a transcript.",
+      "no_speech": "No speech was heard in the recording.",
       "stt": {
         "not_chosen": "No speech-to-text provider is chosen.",
         "disabled": "The chosen speech-to-text provider is switched off.",
@@ -160,11 +181,11 @@
         "no_key": "The chosen text-to-speech provider has no key."
       }
     },
-    "transcribe": {
-      "not_implemented": "The hub cannot receive an audio upload yet; dictate on the device instead."
-    },
     "signin": {
-      "not_implemented": "No provider here signs in by browser yet; every one of them takes an API key."
+      "required": "Sign in to this provider first.",
+      "unsupported": "This provider is used with an API key; it has no account to sign in to.",
+      "hermes_not_supervised": "Signing in is done by Hermes, and this hub does not run Hermes itself.",
+      "code_not_accepted": "This sign-in takes no pasted code: enter the code on the provider's page."
     },
     "probe": {
       "failed": "The endpoint did not return a model list."
@@ -173,7 +194,15 @@
   "knowledge": {
     "attachment_in_use": "A message already points at this file, so it cannot be deleted.",
     "attachment_bytes_gone": "The file was removed while it was being uploaded. Upload it again.",
-    "attachment_conflict": "The file could not be stored because of a conflicting record. Upload it again."
+    "attachment_conflict": "The file could not be stored because of a conflicting record. Upload it again.",
+    "workspace_outside": "This path is outside the profile's files, so it cannot be used.",
+    "workspace_root": "The profile's folder itself cannot be moved or deleted.",
+    "workspace_into_itself": "A folder cannot be moved or copied into itself.",
+    "workspace_symlink": "This is a link; it cannot be written through. Open the file it points to instead.",
+    "workspace_invalid_name": "This name cannot be used for a file or folder.",
+    "workspace_exists": "Something with this name is already here.",
+    "workspace_changed": "The file changed on disk after you opened it. Reload it, or save your text under another name.",
+    "workspace_not_text": "This file is not plain text, so it cannot be edited here. Download it instead."
   },
   "agents": {
     "mcp_test": {
@@ -182,6 +211,21 @@
     },
     "plugins": {
       "duplicate": "Hermes lists more than one plugin by this name; the one shown is the one its commands act on."
+    }
+  },
+  "terminal": {
+    "disabled": "The terminal is not enabled on this hub.",
+    "owner_only": "The terminal is for the hub's owner only.",
+    "limit": "Three terminals are open already. Close one first.",
+    "web_only": "The terminal opens only from a signed-in browser, not with an app token."
+  },
+  "rooms": {
+    "report": {
+      "started": "{agent} started {task} “{title}”.",
+      "succeeded": "{agent} finished {task} “{title}”: {summary}",
+      "succeeded_plain": "{agent} finished {task} “{title}”.",
+      "failed": "{task} “{title}” is blocked: {reason}",
+      "cancelled": "{task} “{title}” was stopped."
     }
   }
 }

@@ -15,7 +15,13 @@
  * and the realtime events declared in `packages/contracts/events/sessions/`.
  * The reducer names *what happened*; only the engine knows the wire shapes.
  */
-import type { AgentApprovalKind, AgentChoice, AgentEvent, AgentToolKind } from './ports.js';
+import type {
+  AgentApprovalKind,
+  AgentChoice,
+  AgentEvent,
+  AgentFallbackAttempt,
+  AgentToolKind,
+} from './ports.js';
 import type { RUN_STATUSES, TOOL_CALL_STATUSES, APPROVAL_STATUSES } from './schema.js';
 
 export type RunStatus = (typeof RUN_STATUSES)[number];
@@ -124,13 +130,23 @@ export interface RunState {
   /** The model's turns, in order; the last is open while the model is speaking. */
   turns: ModelTurnState[];
   usage: UsageState[];
-  context: { usedTokens: number; windowTokens: number | null } | null;
+  context: { usedTokens: number; windowTokens: number | null; estimated: boolean } | null;
+  /** The agent is compressing the context inside this run (decision §57). */
+  compressing: boolean;
   interruptRequested: boolean;
   error: { code: string; message: string } | null;
   startedAt: number | null;
   finishedAt: number | null;
   /** Tool names approved for the rest of the session ("always" / "for this session"). */
   rememberedTools: string[];
+  /**
+   * The run moved down the fallback chain (contract decision §54): what failed, and the model
+   * that took the turn. `null` while the chosen model is the one running.
+   */
+  fallback: {
+    failed: AgentFallbackAttempt[];
+    answered: { model: string; provider: string | null };
+  } | null;
 }
 
 /** Everything that can move a run. Agent frames arrive wrapped in `agent`. */
@@ -165,7 +181,9 @@ export type RunAction =
   | { type: 'approval_requested'; approvalId: string }
   | { type: 'approval_resolved'; approvalId: string }
   | { type: 'usage'; modelLabel: string }
+  | { type: 'fallback' }
   | { type: 'context' }
+  | { type: 'compression'; phase: 'started' | 'finished' }
   | { type: 'finished'; status: TerminalRunStatus };
 
 export interface ReduceContext {
@@ -195,11 +213,13 @@ export function initialRunState(messageId: string): RunState {
     turns: [],
     usage: [],
     context: null,
+    compressing: false,
     interruptRequested: false,
     error: null,
     startedAt: null,
     finishedAt: null,
     rememberedTools: [],
+    fallback: null,
   };
 }
 
@@ -521,12 +541,29 @@ export function reduceRun(state: RunState, input: RunInput, ctx: ReduceContext):
           break;
         }
 
+        case 'model_fallback': {
+          // Each report carries every model that failed so far, so it replaces the last.
+          next.fallback = { failed: [...event.failed], answered: event.answered };
+          actions.push({ type: 'fallback' });
+          break;
+        }
+
         case 'context': {
           next.context = {
             usedTokens: event.usedTokens,
             windowTokens: event.windowTokens ?? null,
+            estimated: event.estimated === true,
           };
           actions.push({ type: 'context' });
+          break;
+        }
+
+        case 'compression': {
+          // A repeated phase is the agent restating it; the event goes out once.
+          const compressing = event.phase === 'started';
+          if (next.compressing === compressing) break;
+          next.compressing = compressing;
+          actions.push({ type: 'compression', phase: event.phase });
           break;
         }
 

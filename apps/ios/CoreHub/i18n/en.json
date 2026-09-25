@@ -1,0 +1,352 @@
+{
+  "nav": {
+    "new_chat": "New chat",
+    "search": "Search",
+    "device_connections": "Device connections",
+    "agent_manager": "Agents",
+    "models": "Models",
+    "knowledge": "Knowledge",
+    "chat": "Chat",
+    "rooms": "Rooms",
+    "tasks": "Tasks",
+    "schedules": "Schedules",
+    "settings": "Settings",
+    "account": "Account",
+    "users": "Users",
+    "webhooks": "Webhooks",
+    "display": "Display",
+    "notifications": "Notifications",
+    "privacy": "Privacy",
+    "this_device": "This device",
+    "about": "About",
+    "logs": "Logs",
+    "usage": "Usage",
+    "performance": "Performance",
+    "theme": "Theme",
+    "workspaces": "Profiles",
+    "updates": "Updates",
+    "plugins": "Plugins",
+    "skills": "Skills",
+    "mcp": "MCP",
+    "memory": "Memory",
+    "jobs": "Jobs",
+    "channels": "Channels",
+    "agent_settings": "Settings",
+    "global_agent": "Global agent",
+    "new_room": "New room",
+    "join_by_code": "Join by code",
+    "sign_out": "Sign out",
+    "login": "Sign in",
+    "setup": "First-run setup",
+    "back_to_agents": "Back to agents",
+    "skills_usage": "Skills usage",
+    "files": "Files",
+    "terminal": "Terminal"
+  },
+  "common": {
+    "cancel": "Cancel",
+    "retry": "Try again",
+    "close": "Close",
+    "loading": "Loading…",
+    "back": "Back",
+    "copy": "Copy",
+    "error_title": "Something went wrong",
+    "empty": "Nothing here yet.",
+    "off": "Off",
+    "on": "On",
+    "save": "Save",
+    "saved": "Saved."
+  },
+  "errors": {
+    "connection": "Cannot reach the hub. Check its address and your network.",
+    "unexpected": "Something went wrong: {message}",
+    "not_implemented": "This hub does not have this yet ({operation}).",
+    "decode": "The hub answered in a shape this app does not read ({message}). Update the app or the hub.",
+    "signed_out": "Your sign-in ended. Sign in again."
+  },
+  "login": {
+    "hub_url": "Hub address",
+    "hub_url_hint": "https://hub.example.com",
+    "username": "Username",
+    "password": "Password",
+    "submit": "Sign in",
+    "or": "or",
+    "scan": "Scan a pairing code",
+    "paste": "Paste a pairing code",
+    "paste_hint": "The text of the QR code from Settings → Device connections on the web.",
+    "pair": "Pair this phone",
+    "pairing": "Pairing…",
+    "invalid_url": "Enter the hub address, starting with http:// or https://",
+    "pairing_invalid": "This is not a Core Hub pairing code.",
+    "pairing_expired": "This pairing code has expired. Make a new one on the web: Settings → Device connections.",
+    "scanner_hint": "On the web, open Settings → Device connections → App, and point the camera at the code.",
+    "camera_denied": "Core Hub may not use the camera. Allow it in the iPhone Settings, or paste the code instead.",
+    "camera_unavailable": "This device has no camera. Paste the code instead."
+  },
+  "shell": {
+    "open_menu": "Open the menu",
+    "close_menu": "Close the menu",
+    "connected": "Connected",
+    "connecting": "Connecting…",
+    "offline": "Offline",
+    "version": "Version {version}",
+    "language": "Language",
+    "language_ar": "العربية",
+    "language_en": "English",
+    "theme_system": "System",
+    "theme_light": "Light",
+    "theme_dark": "Dark",
+    "profile": "Profile",
+    "profile_switch": "Switch profile",
+    "profile_current": "You are in {profile}"
+  },
+  "sessions": {
+    "all_profiles": "All profiles",
+    "filter_active": "Active",
+    "filter_archived": "Archived",
+    "filter_all": "All",
+    "empty": "No conversations yet.",
+    "empty_filtered": "Nothing matches.",
+    "search_placeholder": "Search conversations",
+    "pinned": "Pinned",
+    "recent": "Recent",
+    "untitled": "New chat",
+    "load_more": "Load more"
+  },
+  "chat": {
+    "send": "Send",
+    "stop": "Stop",
+    "placeholder": "Message {agent}",
+    "thinking": "Thinking",
+    "thought_for": "Thought for {seconds}s",
+    "reasoning": "Reasoning",
+    "you": "You",
+    "failed": "This reply failed: {message}",
+    "interrupted": "Stopped.",
+    "queued": "Queued, position {position}",
+    "no_agent": "No agent is available in this profile. Ask an admin to install one.",
+    "new_in_profile": "New chat in {profile}",
+    "agent": "Agent",
+    "deleted": "This conversation was deleted.",
+    "start_hint": "Ask anything. The conversation starts with your first message."
+  },
+  "tool": {
+    "running": "Running",
+    "succeeded": "Done",
+    "failed": "Failed",
+    "interrupted": "Interrupted",
+    "awaiting_approval": "Waiting for approval",
+    "arguments": "Arguments",
+    "output": "Output",
+    "truncated": "The output was cut short.",
+    "duration": "{seconds}s"
+  },
+  "approval": {
+    "title": "Waiting for your decision",
+    "question": "The agent asks",
+    "approve_once": "Allow once",
+    "approve_session": "Allow in this chat",
+    "approve_always": "Always allow",
+    "deny": "Deny",
+    "answer_placeholder": "Your answer",
+    "send_answer": "Answer"
+  },
+  "placeholder": {
+    "title": "Coming to the iPhone app",
+    "body": "This page works on the web today; the iPhone app adds it in its next part."
+  },
+  "settings": {
+    "back_to_chats": "Back to chats",
+    "management": "Management",
+    "tools": "Tools",
+    "global_note": "This page is the whole hub's, not one profile's."
+  },
+  "permissions": {
+    "camera": "Core Hub uses the camera to scan the pairing code your hub shows on the web.",
+    "local_network": "Core Hub connects to your hub on your local network.",
+    "microphone": "Core Hub listens while you dictate a message.",
+    "speech": "Core Hub turns what you dictate into text."
+  },
+  "about": {
+    "app_version": "App version",
+    "contract_version": "Contract version",
+    "hub": "Hub",
+    "server_version": "Hub version",
+    "source": "Source"
+  },
+  "account": {
+    "change_password": "Change password",
+    "current_password": "Current password",
+    "display_name": "Display name",
+    "new_password": "New password (8 characters or more)",
+    "password": "Password",
+    "password_changed": "Password changed.",
+    "role": "Role",
+    "role_owner": "Owner",
+    "role_admin": "Admin",
+    "role_member": "Member"
+  },
+  "agents": {
+    "gone": "This agent is not in this profile any more.",
+    "limited": "Limited",
+    "page_of": "{page} · {agent}",
+    "restart": "Restart",
+    "version": "Version {version}",
+    "status_available": "Available",
+    "status_not_installed": "Not installed",
+    "status_installing": "Installing",
+    "status_updating": "Updating",
+    "status_error": "Error",
+    "status_limited": "Limited",
+    "status_disabled": "Disabled"
+  },
+  "audit": {
+    "period": "Period"
+  },
+  "channels": {
+    "link_on_web": "Linking a channel (WhatsApp by QR, a Telegram bot) is done on the web; its state shows here.",
+    "status_online": "Online",
+    "status_offline": "Offline",
+    "status_error": "Error",
+    "status_unknown": "Unknown"
+  },
+  "device": {
+    "connection": "Hub connection",
+    "how": "Signed in by",
+    "paired": "Pairing this phone",
+    "password": "Username and password",
+    "realtime": "Live connection",
+    "signed_in_as": "Signed in as",
+    "voice": "Voice",
+    "voice_input": "Microphone in the composer",
+    "dictation_language": "Dictation language",
+    "dictation_app": "Same as the app",
+    "spoken_replies": "Read replies aloud",
+    "notifications": "Notifications",
+    "notifications_note": "Notices arrive while Core Hub is open or just closed. Push when the app is fully closed needs the hub's device support and the owner's Apple account.",
+    "notifications_allowed": "Allowed",
+    "notifications_denied": "Not allowed — change it in the iPhone Settings",
+    "notifications_ask": "Allow notifications",
+    "background_checks": "Look for notices while the app is closed (about every 15 minutes, when iOS allows)"
+  },
+  "devices": {
+    "expires": "Expires {time}",
+    "make_pairing": "Show a pairing code",
+    "new_pairing": "Make a new code",
+    "pair_hint": "Scan this code from the Core Hub app on another phone to sign it in as you.",
+    "qr": "Pairing QR code",
+    "tab_app": "App",
+    "tab_devices": "Devices"
+  },
+  "display": {
+    "busy_input": "Sending while the agent works",
+    "busy_interrupt": "Interrupt",
+    "busy_next": "Next in line",
+    "busy_queue": "Queue",
+    "compact": "Compact conversation",
+    "link_browser": "Browser",
+    "link_in_app": "In the app",
+    "link_target": "Open links in",
+    "show_reasoning": "Show reasoning",
+    "show_tool_calls": "Show tool calls",
+    "text_scale": "Text size {percent}%"
+  },
+  "knowledge": {
+    "kind_journal": "Journal",
+    "kind_note": "Note",
+    "kind_file": "File"
+  },
+  "mcp": {
+    "connected": "Connected",
+    "not_connected": "Not connected",
+    "test": "Test",
+    "test_failed": "The test failed.",
+    "test_ok": "Works: {count} tools.",
+    "tools": "{count} tools"
+  },
+  "models": {
+    "count": "{count} models",
+    "default": "Default model",
+    "edit_on_web": "Providers and keys are added and changed on the web.",
+    "providers": "Providers"
+  },
+  "notifications": {
+    "inbox": "Inbox · {count} unread",
+    "on_approval": "When an agent waits for me",
+    "on_complete": "When a reply finishes",
+    "sound": "Sound when a reply finishes"
+  },
+  "privacy": {
+    "app_tokens": "App tokens and paired devices",
+    "last_used": "Last used {time}",
+    "revoke": "Revoke"
+  },
+  "rooms": {
+    "empty": "No rooms yet.",
+    "members": "{count} members"
+  },
+  "schedules": {
+    "empty": "No schedules yet.",
+    "next": "Next run {time}",
+    "run_now": "Run now",
+    "started": "Started.",
+    "state_scheduled": "Scheduled",
+    "state_running": "Running",
+    "state_paused": "Paused",
+    "state_exhausted": "Finished"
+  },
+  "setup": {
+    "open": "This hub has no owner yet and is open to set up now. Make the owner account.",
+    "submit": "Create the owner",
+    "token": "Setup token",
+    "token_needed": "This hub has no owner yet. Its setup token is in setup-token.txt in the hub's data folder and in its log."
+  },
+  "tasks": {
+    "empty": "No tasks yet.",
+    "move": "Move to",
+    "open_chat": "Open its conversation",
+    "priority_low": "Low",
+    "priority_normal": "Normal",
+    "priority_high": "High",
+    "priority_urgent": "Urgent",
+    "status_triage": "Triage",
+    "status_todo": "To do",
+    "status_ready": "Ready",
+    "status_scheduled": "Scheduled",
+    "status_running": "Running",
+    "status_blocked": "Blocked",
+    "status_review": "Review",
+    "status_done": "Done",
+    "status_archived": "Archived"
+  },
+  "updates": {
+    "available": "Available",
+    "check": "Check again",
+    "not_configured": "This hub has no update channel set up.",
+    "up_to_date": "This app is up to date."
+  },
+  "users": {
+    "disabled": "Disabled"
+  },
+  "webhooks": {
+    "test": "Send a test",
+    "test_sent": "Test sent."
+  },
+  "workspaces": {
+    "create": "Create",
+    "name": "Name",
+    "new": "New profile",
+    "slug": "Id (letters, digits, dashes)"
+  },
+  "share": {
+    "saved": "Saved for Core Hub. Open Core Hub to send it in a new chat.",
+    "nothing": "There is no text or link here to share.",
+    "done": "Done"
+  },
+  "voice": {
+    "dictate": "Dictate",
+    "stop": "Stop dictating",
+    "denied": "Core Hub may not use the microphone or speech recognition. Allow them in the iPhone Settings.",
+    "unavailable": "Dictation is not available in this language on this phone."
+  }
+}

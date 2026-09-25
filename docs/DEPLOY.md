@@ -35,10 +35,26 @@ sets:
 | `COREHUB_SETUP_OPEN_MINUTES` | Optional. Minutes after the hub starts, while it has no owner, in which setup is open without the token. Default `60`; `0` = token only (§2). |
 | `COREHUB_RESET_OWNER` | Optional, recovery only. `1` disables the owner on the next boot and reopens setup (§2). Remove it afterwards. |
 | `COREHUB_TASK_AUTO_START_MAX` | Optional. How many task runs the hub starts **by itself** (a task's "Start automatically") at once in one profile; the rest wait their turn. Default `2`. A person's "Assign and start" is never held back by it. |
+| `COREHUB_WEB_TERMINAL` | Optional, **off by default**. `1` gives the owner — and only the owner — a shell on this host from Settings → Terminal (§3c). Read the risk first. |
+| `COREHUB_WEB_TERMINAL_IDLE_MINUTES` | Optional. A web terminal nobody types in closes after this many minutes. Default `15`. |
 
-These seven are the whole configuration (ARCHITECTURE invariant 5). There is
+These nine are the whole configuration (ARCHITECTURE invariant 5). There is
 no variable for model provider keys either — they are added once on the Models
 screen and the hub carries them to every agent (§3).
+
+**Push to phones (optional).** Browsers and the desktop app get notifications with nothing
+to set: the hub makes its own Web Push keys in `/data/keys/vapid.json`. Android (FCM) and
+iPhone (APNs) need the owner's credentials, entered in Device connections → Devices → Push
+senders, or — if you prefer them in the stack — these variables, which then win over Settings
+(add them to the `environment:` of the service yourself; the reference file leaves them out):
+
+| Variable | Meaning |
+|---|---|
+| `COREHUB_FCM_SERVICE_ACCOUNT` | The Firebase service-account JSON, or a path to the file inside the container. |
+| `COREHUB_APNS_KEY_ID`, `COREHUB_APNS_TEAM_ID`, `COREHUB_APNS_BUNDLE_ID` | The APNs key's id, the Apple team id, the iOS app's bundle id. |
+| `COREHUB_APNS_KEY` | The `.p8` key's contents, or a path to it. |
+| `COREHUB_APNS_ENVIRONMENT` | `production` (default) or `sandbox` for development builds. |
+| `COREHUB_PUSH_CONTACT` | A `mailto:` or `https:` contact push services may use (VAPID `sub`). |
 
 Upgrading is `docker compose pull && docker compose up -d`; the volume is
 untouched.
@@ -232,12 +248,15 @@ boot. The endpoint is the Hermes agent's `gateway.endpoint` setting
 | `/data/keys/hermes-dashboard.secret` | the session token of Hermes's dashboard API, which the hub starts on demand on the loopback (ADR 0015) |
 | `/data/hermes/` | Hermes's home: `.env`, `config.yaml`, memories, skills, sessions, cron |
 | `/data/agents/<id>/` | coding agents installed from the catalog |
-| `/data/hermes-packages/` | optional Python packages Hermes installs the first time a feature needs them (Edge voices, Bedrock, Vertex …). Telegram's client is not among them: it ships in the image |
+| `/data/hermes-packages/` | optional Python packages Hermes installs the first time a feature needs them (Edge voices, Bedrock, Vertex, and the Matrix, Feishu, DingTalk, Teams and Google Chat channels …). Telegram's, Discord's and Slack's clients are not among them: they ship in the image |
 | `/data/hermes/…/scripts/whatsapp-bridge/` | a profile's copy of Hermes's WhatsApp bridge (about 220 KB), made by the hub before the profile's gateway or the pairing screen starts it; its `node_modules` is a link to the dependencies the image ships, so linking a phone downloads nothing |
 | `/data/workspaces/<profile>/` | each chat's working folder |
 
-Linking Telegram or WhatsApp needs no download from PyPI or npm: both channels'
-dependencies are in the image (docs/changes/2026-09-25-twuijri-image-channel-deps.md). A
+Linking Telegram, WhatsApp, Discord or Slack needs no download from PyPI or npm: their
+dependencies are in the image (docs/changes/2026-09-25-twuijri-image-channel-deps.md,
+docs/changes/2026-09-25-twuijri-more-channels.md); Mattermost and Email need nothing beyond
+Hermes. Matrix's library did not fit the image-size budget: Hermes downloads it once, the first
+time a Matrix channel starts, so that first start needs PyPI. A
 profile that linked WhatsApp before keeps the bridge Hermes installed in it until a new image
 changes the bridge; then its copy is replaced by the link.
 
@@ -246,6 +265,42 @@ hub's code in `/app` and Hermes's in `/opt/hermes` belong to root. An agent cann
 the hub or Hermes, by mistake or because a page it read told it to; a change to either
 comes with a new image. Recreating the container drops nothing you need — every file that
 is written lives in `/data`.
+
+## 3c. The owner's web terminal (off by default)
+
+Settings → Terminal («الطرفية») is a shell on the hub's host, in the browser. It exists only when
+the stack sets it, and only the **owner** account sees it — not admins, not members (owner,
+2026-09-25). To turn it on, add to the hub's environment and recreate the container:
+
+```yaml
+    environment:
+      COREHUB_WEB_TERMINAL: '1'
+      # COREHUB_WEB_TERMINAL_IDLE_MINUTES: '15'
+```
+
+Turn it off by removing the line: the page and the entry disappear, and the hub refuses every
+attempt, even the owner's.
+
+**The risk, plainly.** Whoever signs in as the owner from a browser gets a shell as the hub's own
+user (`hub`, uid 10001 — never root) with everything that user can reach:
+
+- all of `/data`: the database (users, conversations, audit log), the JWT signing key, the
+  encrypted provider keys and the key that decrypts them, Hermes's home and its `.env`, every
+  profile's files and every coding agent's home;
+- the network the container is on, and whatever it can reach;
+- the processes the hub runs — Hermes's gateways, agents — and their environment (the same user
+  can read `/proc/<pid>/environ`).
+
+It cannot change the hub's or Hermes's code (`/app` and `/opt/hermes` are root's and read-only;
+`scripts/image-sealed-check.mjs` checks it from a terminal shell), cannot become root, and cannot
+reach the host outside the container unless the stack mounted something into it (a Docker
+socket, a host folder). So the owner's password is now as valuable as a shell on the server:
+use a long one, keep the hub behind HTTPS, and leave the terminal off when you do not need it.
+
+What limits it: the owner only, and only from a signed-in browser (an app token — a paired phone,
+an integration — is refused); three terminals at once; each closes after the idle timeout; and
+every start and end is written to the audit log (Settings → Logs, `terminal.opened` /
+`terminal.closed`: who, when, in which folder, why it ended). What is typed is not recorded.
 
 ## 4. Smoke checklist
 

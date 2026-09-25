@@ -1,11 +1,13 @@
 /**
  * Privacy: who, besides you signing in, can act as you on this hub — and taking that away.
  *
- * **Proposed — owner to confirm (2026-09-24).** The contract's coverage table puts one
- * control here: the profile setting `privacy.redact_pii`. The hub stores it and nothing
- * reads it — Hermes has a setting of that name for its messaging channels, but the hub
- * never writes it into Hermes's configuration — so a switch for it would say something is
- * redacted when nothing is. It is left off this page until it does something.
+ * **Hiding ids from the model** (contract decision §58, proposed — owner to confirm): the
+ * switch here is Hermes's own `privacy.redact_pii` in the selected profile — read and written
+ * through Hermes's settings (`agents.getSettings` / `agents.updateSettings`, section `privacy`),
+ * so it does what it says: on WhatsApp, Telegram, Signal and BlueBubbles Hermes hashes the ids
+ * and leaves phone numbers out of what the model is told. The hub's own
+ * `ProfileSettings.privacy.redact_pii`, which nothing ever read, is deprecated and no longer
+ * written from here.
  *
  * What the hub does answer, and what is a privacy question, is the list of **app tokens**:
  * the paired phones and the integrations that hold a key to your account. Each one can be
@@ -17,6 +19,8 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '../auth/context.js';
 import { describeError } from '../auth/client.js';
 import { useI18n } from '../i18n/context.js';
+import { useAgents, useAgentSettings, useSaveAgentSetting } from '../hub/queries.js';
+import type { SettingsSection } from '../types.js';
 import {
   Badge,
   Button,
@@ -24,6 +28,7 @@ import {
   Notice,
   Skeleton,
   SkeletonGroup,
+  Switch,
   Table,
   useConfirm,
   type Column,
@@ -177,10 +182,55 @@ export function PrivacyTab() {
           />
         )}
       </section>
+      <HermesPrivacy />
       <p className="max-w-prose text-xs text-muted" data-testid="privacy-browsers-note">
         {t('privacy.browsers_note')}
       </p>
       {dialog}
     </div>
+  );
+}
+
+/**
+ * Hermes's `privacy.redact_pii` in the selected profile. Nothing is shown where there is no
+ * Hermes, or where the hub cannot reach its files — a switch there would change nothing.
+ */
+function HermesPrivacy() {
+  const { t, language } = useI18n();
+  const { user } = useAuth();
+  const agents = useAgents();
+  const hermes = (agents.data ?? []).find((agent) => agent.kind === 'hermes') ?? null;
+  const settings = useAgentSettings(hermes?.id ?? null);
+  const save = useSaveAgentSetting(hermes?.id ?? null);
+  const section = (settings.data?.sections as SettingsSection[] | undefined)?.find(
+    (candidate) => candidate.key === 'privacy',
+  );
+  const field = section?.fields.find((candidate) => candidate.key === 'redact_pii');
+  if (!hermes || !section || !field) return null;
+  const isAdmin = user?.role === 'admin' || user?.role === 'owner';
+  const fallback = (field as { default?: unknown }).default === true;
+  const checked =
+    field.value === null || field.value === undefined ? fallback : field.value === true;
+  const note = section.note ? (language === 'ar' ? section.note.ar : section.note.en) : null;
+  return (
+    <section
+      className="flex flex-col gap-3"
+      aria-labelledby="privacy-redact-heading"
+      data-testid="privacy-redact"
+    >
+      <h3 id="privacy-redact-heading" className="text-sm font-semibold">
+        {t('privacy.redact_title')}
+      </h3>
+      <Switch
+        checked={checked}
+        disabled={!isAdmin || save.isPending}
+        onChange={(next) => save.mutate({ section: 'privacy', values: { redact_pii: next } })}
+        label={language === 'ar' ? field.label.ar : field.label.en}
+        hint={note ?? undefined}
+        testId="privacy-redact-pii"
+      />
+      {!isAdmin && <p className="text-xs text-muted">{t('privacy.redact_admin_only')}</p>}
+      {save.isError && <Notice tone="danger">{describeError(save.error, t)}</Notice>}
+    </section>
   );
 }

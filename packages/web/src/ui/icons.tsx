@@ -264,6 +264,12 @@ export const IconInbox = (p: IconProps) => (
     <path d="M4 13h4.5l1 2h5l1-2H20" />
   </Svg>
 );
+/** Work going on in the background: a pulse line (the Background button, §56). */
+export const IconActivity = (p: IconProps) => (
+  <Svg {...p}>
+    <path d="M3 12h4l2.5-6 5 12 2.5-6h4" />
+  </Svg>
+);
 export const IconShield = (p: IconProps) => (
   <Svg {...p}>
     <path d="M12 3 5 6v6c0 4 3 7.3 7 9 4-1.7 7-5 7-9V6l-7-3z" />
@@ -282,9 +288,22 @@ export const IconDownload = (p: IconProps) => (
     <path d="M4 17v2a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-2" />
   </Svg>
 );
+export const IconExternal = (p: IconProps) => (
+  <Svg {...p}>
+    <path d="M14 4h6v6M20 4l-8 8" />
+    <path d="M18 14v4a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4" />
+  </Svg>
+);
 export const IconFolder = (p: IconProps) => (
   <Svg {...p}>
     <path d="M3 7a2 2 0 0 1 2-2h3.6a2 2 0 0 1 1.5.7L11.5 7H19a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />
+  </Svg>
+);
+/** A page with a folded corner: one file (the Files page). */
+export const IconFile = (p: IconProps) => (
+  <Svg {...p}>
+    <path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z" />
+    <path d="M14 3v5h5" />
   </Svg>
 );
 export const IconTasks = (p: IconProps) => (
@@ -304,5 +323,11 @@ export const IconUnarchive = (p: IconProps) => (
   <Svg {...p}>
     <path d="M3 7h18v3H3zM5 10v9h14v-9" />
     <path d="M12 17v-5m0 0-2.5 2.5M12 12l2.5 2.5" />
+  </Svg>
+);
+export const IconRestart = (p: IconProps) => (
+  <Svg {...p}>
+    <path d="M20 12a8 8 0 1 1-2.34-5.66" />
+    <path d="M20 4v4.5h-4.5" />
   </Svg>
 );

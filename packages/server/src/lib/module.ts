@@ -17,6 +17,7 @@ export const MODULE_NAMES = [
   'updates',
   'audit',
   'plugins',
+  'terminal',
 ] as const;
 export type ModuleName = (typeof MODULE_NAMES)[number];
 
@@ -34,6 +35,10 @@ export const REALTIME_NAMESPACES = {
   // Not a module of its own: the jobs kernel lives in `audit`, but the namespace is named
   // after what it carries, as the contract declares it.
   jobs: '/rt/jobs',
+  // The owner's web terminal (DECISIONS §70). Always declared, so `auth` authenticates it like
+  // every other namespace; the terminal module then refuses anyone but the owner, and everyone
+  // while the hub runs without `COREHUB_WEB_TERMINAL=1`.
+  terminal: '/rt/terminal',
 } as const satisfies Partial<Record<ModuleName | 'jobs', string>>;
 export type RealtimeNamespace = (typeof REALTIME_NAMESPACES)[keyof typeof REALTIME_NAMESPACES];
 

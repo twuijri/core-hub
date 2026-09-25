@@ -20,6 +20,7 @@ import {
   visibleEntries,
 } from '../navigation/manifest.js';
 import { useRealtime } from '../realtime/context.js';
+import { RoomList } from '../rooms/RoomList.js';
 import { SessionList } from '../sessions/SessionList.js';
 import { SettingsNav, settingsIdFromPath } from '../settings/SettingsNav.js';
 import { AgentBackRow, AgentNav } from '../agents/AgentNav.js';
@@ -48,6 +49,7 @@ import {
   Tooltip,
 } from '../ui/index.js';
 import { useNoticeStream } from '../notify/queries.js';
+import { useDesktopEffects } from '../desktop/effects.js';
 
 const RAIL_ICONS: Record<string, (p: { size?: number }) => ReactElement> = {
   new_chat: IconPlus,
@@ -73,6 +75,7 @@ export function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
   // The inbox is watched here rather than on its own page: the unread count rides in the
   // Settings list, which is on screen when that page is not.
   useNoticeStream();
+  useDesktopEffects();
   const { t, language } = useI18n();
   const { user, signOut } = useAuth();
   const { prefs, update } = useTheme();
@@ -215,6 +218,8 @@ export function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
           <AgentNav agentId={agentPage.agentId} current={agentPage.id} onNavigate={onNavigate} />
         ) : selected === 'chat' ? (
           <SessionList {...(onNavigate ? { onOpen: onNavigate } : {})} />
+        ) : selected === 'rooms' ? (
+          <RoomList {...(onNavigate ? { onOpen: onNavigate } : {})} />
         ) : (
           <p className="px-2 text-xs text-muted">
             {t('shell.segment_later', { name: t(termKey(selected)) })}

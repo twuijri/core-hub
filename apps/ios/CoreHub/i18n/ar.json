@@ -1,0 +1,352 @@
+{
+  "nav": {
+    "new_chat": "محادثة جديدة",
+    "search": "بحث",
+    "device_connections": "اتصالات الأجهزة",
+    "agent_manager": "الوكلاء",
+    "models": "النماذج",
+    "knowledge": "المعرفة",
+    "chat": "محادثة",
+    "rooms": "الغرف",
+    "tasks": "المهام",
+    "schedules": "الجدولة",
+    "settings": "الإعدادات",
+    "account": "الحساب",
+    "users": "المستخدمون",
+    "webhooks": "خطافات الويب",
+    "display": "العرض",
+    "notifications": "الإشعارات",
+    "privacy": "الخصوصية",
+    "this_device": "هذا الجهاز",
+    "about": "حول",
+    "logs": "السجلات",
+    "usage": "الاستخدام",
+    "performance": "الأداء",
+    "theme": "السمة",
+    "workspaces": "البروفايلات",
+    "updates": "التحديثات",
+    "plugins": "الإضافات",
+    "skills": "المهارات",
+    "mcp": "MCP",
+    "memory": "الذاكرة",
+    "jobs": "المهام المجدولة",
+    "channels": "القنوات",
+    "agent_settings": "الإعدادات",
+    "global_agent": "الوكيل العام",
+    "new_room": "غرفة جديدة",
+    "join_by_code": "انضمام برمز",
+    "sign_out": "تسجيل الخروج",
+    "login": "تسجيل الدخول",
+    "setup": "تهيئة أول تشغيل",
+    "back_to_agents": "رجوع إلى الوكلاء",
+    "skills_usage": "استخدام المهارات",
+    "files": "الملفات",
+    "terminal": "الطرفية"
+  },
+  "common": {
+    "cancel": "إلغاء",
+    "retry": "حاول مجددًا",
+    "close": "إغلاق",
+    "loading": "جارٍ التحميل…",
+    "back": "رجوع",
+    "copy": "نسخ",
+    "error_title": "حدث خطأ",
+    "empty": "لا شيء هنا بعد.",
+    "off": "متوقف",
+    "on": "يعمل",
+    "save": "احفظ",
+    "saved": "حُفظ."
+  },
+  "errors": {
+    "connection": "تعذّر الوصول إلى المركز. تحقّق من عنوانه ومن الشبكة.",
+    "unexpected": "حدث خطأ: {message}",
+    "not_implemented": "هذا المركز لا يدعم هذا بعد ({operation}).",
+    "decode": "ردّ المركز بصيغة لا يقرؤها هذا التطبيق ({message}). حدّث التطبيق أو المركز.",
+    "signed_out": "انتهى تسجيل دخولك. سجّل الدخول من جديد."
+  },
+  "login": {
+    "hub_url": "عنوان المركز",
+    "hub_url_hint": "https://hub.example.com",
+    "username": "اسم المستخدم",
+    "password": "كلمة المرور",
+    "submit": "دخول",
+    "or": "أو",
+    "scan": "امسح رمز الاقتران",
+    "paste": "الصق رمز الاقتران",
+    "paste_hint": "نص رمز QR من الإعدادات ← اتصالات الأجهزة في الويب.",
+    "pair": "اقرن هذا الهاتف",
+    "pairing": "جارٍ الاقتران…",
+    "invalid_url": "اكتب عنوان المركز مبتدئًا بـ http:// أو https://",
+    "pairing_invalid": "هذا ليس رمز اقتران لكور هب.",
+    "pairing_expired": "انتهت صلاحية رمز الاقتران. أنشئ رمزًا جديدًا من الويب: الإعدادات ← اتصالات الأجهزة.",
+    "scanner_hint": "في الويب افتح الإعدادات ← اتصالات الأجهزة ← التطبيق، ووجّه الكاميرا إلى الرمز.",
+    "camera_denied": "لا يُسمح لكور هب باستخدام الكاميرا. اسمح بها من إعدادات الآيفون، أو الصق الرمز بدلًا من ذلك.",
+    "camera_unavailable": "هذا الجهاز بلا كاميرا. الصق الرمز بدلًا من ذلك."
+  },
+  "shell": {
+    "open_menu": "افتح القائمة",
+    "close_menu": "أغلق القائمة",
+    "connected": "متصل",
+    "connecting": "جارٍ الاتصال…",
+    "offline": "غير متصل",
+    "version": "الإصدار {version}",
+    "language": "اللغة",
+    "language_ar": "العربية",
+    "language_en": "English",
+    "theme_system": "النظام",
+    "theme_light": "فاتح",
+    "theme_dark": "داكن",
+    "profile": "البروفايل",
+    "profile_switch": "بدّل البروفايل",
+    "profile_current": "أنت في {profile}"
+  },
+  "sessions": {
+    "all_profiles": "كل البروفايلات",
+    "filter_active": "النشطة",
+    "filter_archived": "المؤرشفة",
+    "filter_all": "الكل",
+    "empty": "لا محادثات بعد.",
+    "empty_filtered": "لا شيء يطابق.",
+    "search_placeholder": "ابحث في المحادثات",
+    "pinned": "المثبّتة",
+    "recent": "الأخيرة",
+    "untitled": "محادثة جديدة",
+    "load_more": "حمّل المزيد"
+  },
+  "chat": {
+    "send": "أرسل",
+    "stop": "أوقف",
+    "placeholder": "راسل {agent}",
+    "thinking": "يفكّر",
+    "thought_for": "فكّر {seconds} ث",
+    "reasoning": "التفكير",
+    "you": "أنت",
+    "failed": "فشل هذا الرد: {message}",
+    "interrupted": "أُوقف.",
+    "queued": "في الطابور، الترتيب {position}",
+    "no_agent": "لا وكيل متاح في هذا البروفايل. اطلب من المشرف تثبيت وكيل.",
+    "new_in_profile": "محادثة جديدة في {profile}",
+    "agent": "الوكيل",
+    "deleted": "حُذفت هذه المحادثة.",
+    "start_hint": "اسأل ما شئت. تبدأ المحادثة مع أول رسالة."
+  },
+  "tool": {
+    "running": "يعمل",
+    "succeeded": "تمّ",
+    "failed": "فشل",
+    "interrupted": "توقّف",
+    "awaiting_approval": "بانتظار الموافقة",
+    "arguments": "المعطيات",
+    "output": "المخرجات",
+    "truncated": "قُطعت المخرجات.",
+    "duration": "{seconds} ث"
+  },
+  "approval": {
+    "title": "بانتظار قرارك",
+    "question": "الوكيل يسأل",
+    "approve_once": "اسمح مرة",
+    "approve_session": "اسمح في هذه المحادثة",
+    "approve_always": "اسمح دائمًا",
+    "deny": "ارفض",
+    "answer_placeholder": "إجابتك",
+    "send_answer": "أجب"
+  },
+  "placeholder": {
+    "title": "قادم إلى تطبيق الآيفون",
+    "body": "هذه الصفحة تعمل في الويب اليوم، ويضيفها تطبيق الآيفون في جزئه التالي."
+  },
+  "settings": {
+    "back_to_chats": "رجوع إلى المحادثات",
+    "management": "الإدارة",
+    "tools": "الأدوات",
+    "global_note": "هذه الصفحة للمركز كله، لا لبروفايل واحد."
+  },
+  "permissions": {
+    "camera": "يستخدم كور هب الكاميرا لمسح رمز الاقتران الذي يعرضه مركزك في الويب.",
+    "local_network": "يتصل كور هب بمركزك على شبكتك المحلية.",
+    "microphone": "يستمع كور هب وأنت تملي رسالة.",
+    "speech": "يحوّل كور هب ما تمليه إلى نص."
+  },
+  "about": {
+    "app_version": "إصدار التطبيق",
+    "contract_version": "إصدار العقد",
+    "hub": "المركز",
+    "server_version": "إصدار المركز",
+    "source": "المصدر"
+  },
+  "account": {
+    "change_password": "غيّر كلمة المرور",
+    "current_password": "كلمة المرور الحالية",
+    "display_name": "الاسم الظاهر",
+    "new_password": "كلمة المرور الجديدة (٨ أحرف أو أكثر)",
+    "password": "كلمة المرور",
+    "password_changed": "تغيّرت كلمة المرور.",
+    "role": "الدور",
+    "role_owner": "المالك",
+    "role_admin": "مشرف",
+    "role_member": "عضو"
+  },
+  "agents": {
+    "gone": "هذا الوكيل لم يعد في هذا البروفايل.",
+    "limited": "محدود",
+    "page_of": "{page} · {agent}",
+    "restart": "أعد التشغيل",
+    "version": "الإصدار {version}",
+    "status_available": "متاح",
+    "status_not_installed": "غير مثبّت",
+    "status_installing": "يُثبَّت",
+    "status_updating": "يُحدَّث",
+    "status_error": "خطأ",
+    "status_limited": "محدود",
+    "status_disabled": "معطّل"
+  },
+  "audit": {
+    "period": "الفترة"
+  },
+  "channels": {
+    "link_on_web": "ربط قناة (واتساب برمز QR، أو بوت تيليجرام) يتم من الويب، وحالتها تظهر هنا.",
+    "status_online": "متصلة",
+    "status_offline": "غير متصلة",
+    "status_error": "خطأ",
+    "status_unknown": "غير معروفة"
+  },
+  "device": {
+    "connection": "الاتصال بالمركز",
+    "how": "طريقة الدخول",
+    "paired": "اقتران هذا الهاتف",
+    "password": "اسم المستخدم وكلمة المرور",
+    "realtime": "الاتصال اللحظي",
+    "signed_in_as": "الداخل باسم",
+    "voice": "الصوت",
+    "voice_input": "الميكروفون في خانة الكتابة",
+    "dictation_language": "لغة الإملاء",
+    "dictation_app": "مثل لغة التطبيق",
+    "spoken_replies": "اقرأ الردود بصوت",
+    "notifications": "الإشعارات",
+    "notifications_note": "تصل الإشعارات ما دام كور هب مفتوحًا أو أُغلق للتو. الإشعار والتطبيق مغلق كليًا يحتاج دعم الأجهزة في المركز وحساب Apple للمالك.",
+    "notifications_allowed": "مسموحة",
+    "notifications_denied": "غير مسموحة — غيّرها من إعدادات الآيفون",
+    "notifications_ask": "اسمح بالإشعارات",
+    "background_checks": "ابحث عن الإشعارات والتطبيق مغلق (قرابة كل ١٥ دقيقة، حين يسمح iOS)"
+  },
+  "devices": {
+    "expires": "ينتهي {time}",
+    "make_pairing": "اعرض رمز اقتران",
+    "new_pairing": "أنشئ رمزًا جديدًا",
+    "pair_hint": "امسح هذا الرمز من تطبيق كور هب على هاتف آخر ليدخل باسمك.",
+    "qr": "رمز QR للاقتران",
+    "tab_app": "التطبيق",
+    "tab_devices": "الأجهزة"
+  },
+  "display": {
+    "busy_input": "الإرسال أثناء عمل الوكيل",
+    "busy_interrupt": "يقاطع",
+    "busy_next": "التالي في الدور",
+    "busy_queue": "في الطابور",
+    "compact": "محادثة مضغوطة",
+    "link_browser": "المتصفح",
+    "link_in_app": "داخل التطبيق",
+    "link_target": "افتح الروابط في",
+    "show_reasoning": "اعرض التفكير",
+    "show_tool_calls": "اعرض استدعاءات الأدوات",
+    "text_scale": "حجم النص {percent}٪"
+  },
+  "knowledge": {
+    "kind_journal": "يوميات",
+    "kind_note": "ملاحظة",
+    "kind_file": "ملف"
+  },
+  "mcp": {
+    "connected": "متصل",
+    "not_connected": "غير متصل",
+    "test": "اختبر",
+    "test_failed": "فشل الاختبار.",
+    "test_ok": "يعمل: {count} أداة.",
+    "tools": "{count} أداة"
+  },
+  "models": {
+    "count": "{count} نموذج",
+    "default": "النموذج الافتراضي",
+    "edit_on_web": "المزوّدون ومفاتيحهم يُضافون ويُعدَّلون من الويب.",
+    "providers": "المزوّدون"
+  },
+  "notifications": {
+    "inbox": "الوارد · {count} غير مقروءة",
+    "on_approval": "حين ينتظرني وكيل",
+    "on_complete": "حين ينتهي رد",
+    "sound": "صوت حين ينتهي رد"
+  },
+  "privacy": {
+    "app_tokens": "رموز التطبيقات والأجهزة المقترنة",
+    "last_used": "آخر استخدام {time}",
+    "revoke": "ألغِ"
+  },
+  "rooms": {
+    "empty": "لا غرف بعد.",
+    "members": "{count} أعضاء"
+  },
+  "schedules": {
+    "empty": "لا جداول بعد.",
+    "next": "التشغيل التالي {time}",
+    "run_now": "شغّل الآن",
+    "started": "بدأ.",
+    "state_scheduled": "مجدول",
+    "state_running": "يعمل",
+    "state_paused": "موقوف مؤقتًا",
+    "state_exhausted": "انتهى"
+  },
+  "setup": {
+    "open": "هذا المركز بلا مالك بعد، والتهيئة مفتوحة الآن. أنشئ حساب المالك.",
+    "submit": "أنشئ المالك",
+    "token": "رمز التهيئة",
+    "token_needed": "هذا المركز بلا مالك بعد. رمز التهيئة في setup-token.txt داخل مجلد بيانات المركز وفي سجلّه."
+  },
+  "tasks": {
+    "empty": "لا مهام بعد.",
+    "move": "انقل إلى",
+    "open_chat": "افتح محادثتها",
+    "priority_low": "منخفضة",
+    "priority_normal": "عادية",
+    "priority_high": "عالية",
+    "priority_urgent": "عاجلة",
+    "status_triage": "فرز",
+    "status_todo": "للعمل",
+    "status_ready": "جاهزة",
+    "status_scheduled": "مجدولة",
+    "status_running": "تعمل",
+    "status_blocked": "متوقفة",
+    "status_review": "للمراجعة",
+    "status_done": "منجزة",
+    "status_archived": "مؤرشفة"
+  },
+  "updates": {
+    "available": "متاح",
+    "check": "تحقّق مجددًا",
+    "not_configured": "لا قناة تحديثات مضبوطة في هذا المركز.",
+    "up_to_date": "هذا التطبيق محدَّث."
+  },
+  "users": {
+    "disabled": "معطّل"
+  },
+  "webhooks": {
+    "test": "أرسل تجربة",
+    "test_sent": "أُرسلت التجربة."
+  },
+  "workspaces": {
+    "create": "أنشئ",
+    "name": "الاسم",
+    "new": "بروفايل جديد",
+    "slug": "المعرّف (حروف وأرقام وشرطات)"
+  },
+  "share": {
+    "saved": "حُفظ لكور هب. افتح كور هب لترسله في محادثة جديدة.",
+    "nothing": "لا نص ولا رابط هنا للمشاركة.",
+    "done": "تم"
+  },
+  "voice": {
+    "dictate": "إملاء",
+    "stop": "أوقف الإملاء",
+    "denied": "لا يُسمح لكور هب باستخدام الميكروفون أو التعرّف على الكلام. اسمح بهما من إعدادات الآيفون.",
+    "unavailable": "الإملاء غير متاح بهذه اللغة على هذا الهاتف."
+  }
+}

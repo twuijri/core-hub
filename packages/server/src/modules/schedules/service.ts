@@ -9,13 +9,14 @@
  * the scheduler claims, with a compare-and-set on that very value, so two ticks — two
  * processes, or one restarted — never fire the same moment twice.
  */
-import { and, asc, desc, eq, inArray, isNull, lt, lte } from 'drizzle-orm';
+import { and, asc, desc, eq, inArray, isNull, lt, lte, or, sql } from 'drizzle-orm';
 import { newUlid } from '../../db/ids.js';
 import type { ModuleDb } from '../../lib/db.js';
 import { conflict, notFound } from '../../lib/errors.js';
 import { CronError, nextRunAt, parseCron } from './cron.js';
 import { ConditionError, parseCondition, pathsIn } from './expr.js';
 import { deliveryOfHermes, type HermesJob } from './hermes-jobs.js';
+import { NO_LIMITS, limitsOf } from './limits.js';
 import { MAX_DELAY_SECONDS } from './workflow-engine.js';
 import {
   nodeRuns,
@@ -27,6 +28,7 @@ import {
   type ScheduleOverlap,
   type WorkflowDefinition,
   type WorkflowEdge,
+  type WorkflowLimits,
   type WorkflowNode,
   type WorkflowResumeState,
 } from './schema.js';
@@ -156,6 +158,40 @@ export class SchedulesService {
     if (!row.enabled) return null;
     if (row.repeatLimit !== null && row.repeatCount >= row.repeatLimit) return null;
     return row.nextRunAt;
+  }
+
+  /**
+   * The next `count` times a trigger would fire, from `now`, without saving anything — the
+   * same checks as saving it (`validateTrigger`) and the same calculation that sets
+   * `next_run_at` (`cron.ts`), each next time counted from the one before, as the scheduler
+   * does when it claims a tick. Fewer come back when there are fewer.
+   */
+  previewTrigger(
+    trigger: Record<string, unknown>,
+    count: number,
+    now: Date = new Date(),
+  ): { timezone: string; nextRuns: Date[] } {
+    this.validateTrigger(trigger);
+    const timezone = (trigger.timezone as string | undefined) ?? 'UTC';
+    const kind = (trigger.kind as ScheduleRow['kind'] | undefined) ?? 'cron';
+    const shape = {
+      kind,
+      cron: (trigger.expression as string | null | undefined) ?? null,
+      timezone,
+      intervalSeconds: trigger.every_minutes ? Number(trigger.every_minutes) * 60 : null,
+      runAt: trigger.run_at ? new Date(String(trigger.run_at)) : null,
+    };
+    const nextRuns: Date[] = [];
+    let from = now;
+    let last: Date | null = null;
+    while (nextRuns.length < count) {
+      const next = nextRunAt(shape, from, last);
+      if (!next) break;
+      nextRuns.push(next);
+      from = next;
+      last = next;
+    }
+    return { timezone, nextRuns };
   }
 
   create(scope: Scope, input: Record<string, unknown>): ScheduleRow {
@@ -842,11 +878,17 @@ export class SchedulesService {
     const values: Partial<typeof workflows.$inferInsert> = { updatedAt: new Date() };
     if (patch.name !== undefined) values.name = String(patch.name);
     if (patch.description !== undefined) values.description = patch.description as string | null;
-    if (patch.nodes !== undefined || patch.edges !== undefined || patch.working_dir !== undefined) {
+    if (
+      patch.nodes !== undefined ||
+      patch.edges !== undefined ||
+      patch.working_dir !== undefined ||
+      patch.limits !== undefined
+    ) {
       const definition = definitionOf({
         nodes: patch.nodes ?? current.definition.nodes,
         edges: patch.edges ?? current.definition.edges,
         working_dir: patch.working_dir ?? current.definition.workingDir ?? null,
+        limits: patch.limits !== undefined ? patch.limits : (current.definition.limits ?? null),
       });
       const problems = validateDefinition(definition);
       if (problems.length > 0) throw conflict({ reason: 'workflow_invalid', problems });
@@ -926,6 +968,8 @@ export class SchedulesService {
       triggerKind: WorkflowRunRow['triggerKind'];
       triggerRef?: string | null;
       scheduleId?: string | null;
+      /** The limits this run works under; the workflow's when not given. */
+      limits?: WorkflowLimits;
     },
   ): WorkflowRunRow {
     const id = newUlid();
@@ -942,7 +986,11 @@ export class SchedulesService {
         triggerRef: input.triggerRef ?? null,
         status: 'running',
         workflowVersion: workflow.version,
-        definitionSnapshot: workflow.definition,
+        // The run's own limits travel with the drawing it runs, so a rerun keeps them.
+        definitionSnapshot: {
+          ...workflow.definition,
+          limits: input.limits ?? workflow.definition.limits ?? { ...NO_LIMITS },
+        },
         input: input.input,
         startedAt: now,
       })
@@ -1158,6 +1206,35 @@ export class SchedulesService {
       .run();
   }
 
+  /**
+   * The Background panel's workflow runs (§56): one person's in these workspaces — every one not
+   * over, and those that ended at or after `since` — with the workflow's name.
+   */
+  backgroundWorkflowRuns(
+    ownerId: string,
+    workspaces: readonly string[],
+    since: number,
+  ): Array<{ run: WorkflowRunRow; name: string }> {
+    if (workspaces.length === 0) return [];
+    return this.db
+      .select({ run: workflowRuns, name: workflows.name })
+      .from(workflowRuns)
+      .innerJoin(workflows, eq(workflows.id, workflowRuns.workflowId))
+      .where(
+        and(
+          eq(workflowRuns.ownerId, ownerId),
+          inArray(workflowRuns.workspace, [...workspaces]),
+          or(
+            inArray(workflowRuns.status, ['queued', 'running', 'waiting_approval', 'paused']),
+            sql`${workflowRuns.finishedAt} >= ${since}`,
+          ),
+        ),
+      )
+      .orderBy(desc(workflowRuns.createdAt))
+      .limit(500)
+      .all();
+  }
+
   cancelWorkflowRun(scope: Scope, id: string): WorkflowRunRow {
     const row = this.workflowRun(scope, id);
     if (['succeeded', 'failed', 'cancelled'].includes(row.status)) {
@@ -1217,30 +1294,74 @@ function deliveryOf(delivery: Record<string, unknown> | undefined) {
   };
 }
 
-function definitionOf(input: Record<string, unknown>): WorkflowDefinition {
+export function definitionOf(input: Record<string, unknown>): WorkflowDefinition {
   return {
     nodes: ((input.nodes as WorkflowNode[] | undefined) ?? []).map((node) => ({ ...node })),
     edges: ((input.edges as WorkflowEdge[] | undefined) ?? []).map((edge) => ({ ...edge })),
     workingDir: (input.working_dir as string | null | undefined) ?? null,
+    limits: limitsOf(input.limits),
   };
 }
+
+/**
+ * One thing worth saying about a drawing: a stable `code` a client translates, the node or
+ * edge it is about (so an editor can mark it), and the same thing in English words — which
+ * is what `workflow_invalid` has always carried (contract `WorkflowIssue`, DECISIONS §52).
+ */
+export interface WorkflowIssue {
+  code: string;
+  node_id: string | null;
+  edge_id: string | null;
+  detail: string | null;
+  message: string;
+}
+
+const issue = (
+  code: string,
+  message: string,
+  at: { node?: string | null; edge?: string | null; detail?: string | null } = {},
+): WorkflowIssue => ({
+  code,
+  node_id: at.node ?? null,
+  edge_id: at.edge ?? null,
+  detail: at.detail ?? null,
+  message,
+});
 
 /**
  * What is wrong with a workflow, in words a person can act on. A definition is refused
  * when it is *unrunnable* — a duplicate id, an edge to nowhere — and only warned about
  * when it is merely odd, because a half-drawn workflow is a normal thing to save.
  */
-export function validateDefinition(definition: WorkflowDefinition): string[] {
-  const problems: string[] = [];
+export function problemsOf(definition: WorkflowDefinition): WorkflowIssue[] {
+  const problems: WorkflowIssue[] = [];
   const ids = new Set<string>();
   for (const node of definition.nodes) {
-    if (!node.id) problems.push('a node has no id');
-    else if (ids.has(node.id)) problems.push(`two nodes share the id "${node.id}"`);
+    if (!node.id) problems.push(issue('node_id_missing', 'a node has no id'));
+    else if (ids.has(node.id)) {
+      problems.push(
+        issue('node_id_duplicate', `two nodes share the id "${node.id}"`, { node: node.id }),
+      );
+    }
     ids.add(node.id);
   }
   for (const edge of definition.edges) {
-    if (!ids.has(edge.from)) problems.push(`an edge starts at "${edge.from}", which is not a node`);
-    if (!ids.has(edge.to)) problems.push(`an edge ends at "${edge.to}", which is not a node`);
+    if (!ids.has(edge.from)) {
+      problems.push(
+        issue('edge_from_unknown', `an edge starts at "${edge.from}", which is not a node`, {
+          edge: edge.id ?? null,
+          detail: edge.from,
+        }),
+      );
+    }
+    if (!ids.has(edge.to)) {
+      problems.push(
+        issue('edge_to_unknown', `an edge ends at "${edge.to}", which is not a node`, {
+          edge: edge.id ?? null,
+          detail: edge.to,
+        }),
+      );
+    }
   }
   // What a step says is checked now, not when the run reaches it at 3 a.m. (`expr.ts`).
   for (const node of definition.nodes) {
@@ -1250,8 +1371,12 @@ export function validateDefinition(definition: WorkflowDefinition): string[] {
       try {
         parseCondition(input);
       } catch (error) {
+        const reason = error instanceof ConditionError ? error.reason : 'unreadable';
         problems.push(
-          `the condition of "${name}" cannot be read (${error instanceof ConditionError ? error.reason : 'unreadable'})`,
+          issue('condition_unreadable', `the condition of "${name}" cannot be read (${reason})`, {
+            node: node.id,
+            detail: reason,
+          }),
         );
       }
       continue;
@@ -1259,39 +1384,76 @@ export function validateDefinition(definition: WorkflowDefinition): string[] {
     if (node.kind === 'delay' && pathsIn(input).length === 0) {
       const seconds = Number(input.trim());
       if (!Number.isFinite(seconds) || seconds < 0 || seconds > MAX_DELAY_SECONDS) {
-        problems.push(`the delay of "${name}" must be 0 to ${MAX_DELAY_SECONDS} seconds`);
+        problems.push(
+          issue(
+            'delay_out_of_range',
+            `the delay of "${name}" must be 0 to ${MAX_DELAY_SECONDS} seconds`,
+            { node: node.id, detail: String(MAX_DELAY_SECONDS) },
+          ),
+        );
       }
     }
     for (const path of pathsIn(input)) {
       const [root, second] = path.split('.');
       if (root !== 'input' && root !== 'trigger' && root !== 'steps') {
         problems.push(
-          `"${name}" refers to {{${path}}}; a path starts with input, trigger or steps`,
+          issue(
+            'template_root_unknown',
+            `"${name}" refers to {{${path}}}; a path starts with input, trigger or steps`,
+            { node: node.id, detail: path },
+          ),
         );
       } else if (root === 'steps' && (!second || !ids.has(second))) {
-        problems.push(`"${name}" refers to {{${path}}}, but there is no step "${second ?? ''}"`);
+        problems.push(
+          issue(
+            'template_step_unknown',
+            `"${name}" refers to {{${path}}}, but there is no step "${second ?? ''}"`,
+            { node: node.id, detail: path },
+          ),
+        );
       }
     }
   }
   return problems;
 }
 
+/** The refusal's words, as `workflow_invalid` carries them. */
+export function validateDefinition(definition: WorkflowDefinition): string[] {
+  return problemsOf(definition).map((problem) => problem.message);
+}
+
 /** Things worth saying about a workflow that are not reasons to refuse it. */
-export function warningsFor(definition: WorkflowDefinition): string[] {
-  const warnings: string[] = [];
-  if (definition.nodes.length === 0) warnings.push('the workflow has no nodes yet');
+export function warningIssuesOf(definition: WorkflowDefinition): WorkflowIssue[] {
+  const warnings: WorkflowIssue[] = [];
+  if (definition.nodes.length === 0) {
+    warnings.push(issue('workflow_empty', 'the workflow has no nodes yet'));
+  }
   const reached = new Set(definition.edges.map((edge) => edge.to));
   const starts = definition.nodes.filter((node) => !reached.has(node.id));
   if (definition.nodes.length > 0 && starts.length === 0) {
-    warnings.push('every node is reached by an edge, so the workflow has no starting point');
+    warnings.push(
+      issue('no_start', 'every node is reached by an edge, so the workflow has no starting point'),
+    );
   }
   if (starts.length > 1) {
-    warnings.push(`${starts.length} nodes have nothing before them`);
+    warnings.push(
+      issue('many_starts', `${starts.length} nodes have nothing before them`, {
+        detail: String(starts.length),
+      }),
+    );
   }
   for (const node of definition.nodes) {
     if (node.kind === 'agent' && !node.agent_id) {
-      warnings.push(`the node "${node.title || node.id}" names no agent`);
+      warnings.push(
+        issue('agent_missing', `the node "${node.title || node.id}" names no agent`, {
+          node: node.id,
+        }),
+      );
     }
   }
   return warnings;
+}
+
+export function warningsFor(definition: WorkflowDefinition): string[] {
+  return warningIssuesOf(definition).map((warning) => warning.message);
 }

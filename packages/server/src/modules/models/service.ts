@@ -28,9 +28,11 @@ import { providerAdapter } from './adapters/index.js';
 import type {
   ChatFailureReason,
   ChatMessage,
+  DiscoveredModel,
   DiscoveredVoice,
   ProviderContext,
   SynthesizeResult,
+  TranscribeResult,
 } from './adapters/types.js';
 import {
   PROVIDER_CATALOGUE,
@@ -77,6 +79,7 @@ import {
 } from './schema.js';
 import type { SecretStore } from './secrets.js';
 import { ModelsStore } from './store.js';
+import { signInStatusOf, type SignInRuntime, type SignInStatus } from './sign-in.js';
 import {
   modelKeyOf,
   serializeEnsemble,
@@ -189,7 +192,34 @@ export interface ModelsServiceOptions {
    * none: that profile then uses the shared providers only.
    */
   profileWorkspace?: (profile: string) => string | null;
+  /**
+   * The runtime that signs in to a provider account (contract decision §55): Hermes's server,
+   * where the hub supervises Hermes. `null` (or absent) elsewhere — the sign-in is then refused
+   * with the reason rather than started somewhere its credential could not be used.
+   */
+  signIn?: () => SignInRuntime | null;
 }
+
+/** A sign-in the hub started and still answers polls for (contract `ProviderSignIn`). */
+interface SignInRecord {
+  id: string;
+  providerId: string;
+  /** The profile it was started from; only that profile's callers may poll it. */
+  workspace: string;
+  actorId: string;
+  hermesProvider: string;
+  /** Hermes's profile the credential lands in; null = the root (the `default` profile). */
+  profile: string | null;
+  session: string;
+  userCode: string | null;
+  verificationUrl: string;
+  expiresAt: number;
+  status: SignInStatus;
+  error: string | null;
+}
+
+/** How long a finished or abandoned sign-in stays readable after its code ran out. */
+const SIGN_IN_KEEP_MS = 15 * 60_000;
 
 /** Where a provider row is stored: the shared scope, or one profile's own (decision §37). */
 interface ProviderOwner {
@@ -294,6 +324,30 @@ export interface ProviderCreateInput {
   scope?: 'all' | 'profile';
 }
 
+/** The contract's `ProviderSignIn`. */
+export interface ContractProviderSignIn {
+  id: string;
+  status: SignInStatus;
+  user_code: string | null;
+  verification_url: string;
+  accepts_code: boolean;
+  expires_at: string;
+  error: string | null;
+}
+
+function signInView(record: SignInRecord): ContractProviderSignIn {
+  return {
+    id: record.id,
+    status: record.status,
+    user_code: record.userCode,
+    verification_url: record.verificationUrl,
+    // Every sign-in the hub offers is a device code, entered on the provider's page.
+    accepts_code: false,
+    expires_at: new Date(record.expiresAt).toISOString(),
+    error: record.error,
+  };
+}
+
 /** One entry of `models.listProviderPresets`. */
 export interface ContractProviderPreset {
   id: string;
@@ -306,6 +360,7 @@ export interface ContractProviderPreset {
   local: boolean;
   repeatable: boolean;
   keys_url: string | null;
+  sign_in: boolean;
 }
 
 export interface ProviderHostInfo {
@@ -410,6 +465,8 @@ export class ModelsService {
   private restartTimer: ReturnType<typeof setTimeout> | null = null;
   private restartPending = false;
   private readonly restartDelayMs: number;
+  /** Sign-ins in flight (contract decision §55); process memory, as Hermes's own are. */
+  private readonly signIns = new Map<string, SignInRecord>();
 
   constructor(private readonly options: ModelsServiceOptions) {
     this.store = new ModelsStore({
@@ -690,6 +747,7 @@ export class ModelsService {
       local: entry.local === true,
       repeatable: entry.repeatable === true,
       keys_url: entry.keysUrl,
+      sign_in: entry.signIn === true,
     }));
     return { items, host: hostInfo() };
   }
@@ -1002,6 +1060,14 @@ export class ModelsService {
       .scopeFamilyRows(row.workspace, row.shared, row.family)
       .filter((sibling) => sibling.id !== row.id && !sibling.archivedAt);
     if (remaining.length === 0) this.clearKey(this.ownerOf(row), row.family);
+    if (row.authKind === 'oauth') {
+      // Removing a provider applies everywhere (§37): Hermes forgets the account too.
+      const entry = this.entryOf(row);
+      const runtime = this.options.signIn?.();
+      if (entry?.hermesProvider && runtime) {
+        void runtime.signOut(entry.hermesProvider, this.signInProfileOf(scope, row));
+      }
+    }
     this.options.audit.record({
       workspace: scope.id,
       ownerId: actor.userId,
@@ -1077,6 +1143,18 @@ export class ModelsService {
   /** One small authenticated request. A failure is still a `200` with `ok: false`. */
   async testProvider(scope: WorkspaceScope, id: string): Promise<TestOutcome> {
     const row = this.loadProvider(scope, id);
+    if (row.authKind === 'oauth') {
+      // Signed in through Hermes (decision §55): the hub holds no credential to try, and
+      // what it knows is whether the sign-in was approved.
+      const ok = row.status === 'ok';
+      return {
+        ok,
+        reason: ok ? 'ok' : 'unauthorized',
+        reasonKey: ok ? 'models.test.ok' : 'models.signin.required',
+        detail: null,
+        durationMs: 0,
+      };
+    }
     const entry = this.entryOf(row);
     const adapter = providerAdapter(entry?.protocol ?? 'openai');
     const result = await adapter.test(this.contextOf(scope, row));
@@ -1169,6 +1247,10 @@ export class ModelsService {
     const row = this.loadProvider(scope, id);
     const entry = this.entryOf(row);
     if (entry && entry.capabilities.listModels === false) return null;
+    // A provider signed in to through Hermes lists what Hermes lists for it, once signed in.
+    if (row.authKind === 'oauth' && (row.status !== 'ok' || !this.options.signIn?.())) {
+      return null;
+    }
     const at = this.now();
     this.db
       .update(providers)
@@ -1189,7 +1271,10 @@ export class ModelsService {
         handle.progress(20, `asking ${row.label} for its models`);
         const adapter = providerAdapter(entry?.protocol ?? 'openai');
         const current = this.loadProvider(scope, row.id);
-        const result = await adapter.listModels(this.contextOf(scope, current));
+        const result =
+          current.authKind === 'oauth'
+            ? await this.signedInModels(scope, current)
+            : await adapter.listModels(this.contextOf(scope, current));
         const finishedAt = this.now();
         if (!result.supported) {
           this.db
@@ -1364,6 +1449,185 @@ export class ModelsService {
     });
   }
 
+  // ------------------------------------------------------------ sign-in (§55)
+
+  /**
+   * Starts Hermes's device-code sign-in for a provider that is used by signing in
+   * (`auth.kind = oauth`), in the Hermes profile its scope says: a shared provider's in the
+   * root (the `default` profile), a profile's own in that profile (decision §55).
+   */
+  async startSignIn(
+    scope: WorkspaceScope,
+    actor: Actor,
+    providerId: string,
+  ): Promise<ContractProviderSignIn> {
+    const row = this.loadProvider(scope, providerId);
+    const entry = this.entryOf(row);
+    if (row.authKind !== 'oauth' || !entry?.signIn || !entry.hermesProvider) {
+      throw new HubError('state_invalid', {
+        messageKey: 'models.signin.unsupported',
+        details: { reason: 'sign_in_unsupported', provider: row.slug },
+      });
+    }
+    const runtime = this.options.signIn?.() ?? null;
+    if (!runtime) {
+      throw new HubError('state_invalid', {
+        messageKey: 'models.signin.hermes_not_supervised',
+        details: { reason: 'hermes_not_supervised', provider: row.slug },
+      });
+    }
+    this.forgetOldSignIns();
+    const profile = this.signInProfileOf(scope, row);
+    const started = await runtime.start(entry.hermesProvider, profile);
+    const record: SignInRecord = {
+      id: newUlid(),
+      providerId: row.id,
+      workspace: scope.id,
+      actorId: actor.userId,
+      hermesProvider: entry.hermesProvider,
+      profile,
+      session: started.session,
+      userCode: started.userCode,
+      verificationUrl: started.verificationUrl,
+      expiresAt: this.now().getTime() + started.expiresIn * 1000,
+      status: 'pending',
+      error: null,
+    };
+    this.signIns.set(record.id, record);
+    this.options.audit.record({
+      workspace: scope.id,
+      ownerId: actor.userId,
+      actorKind: 'user',
+      actorId: actor.userId,
+      action: 'provider.sign_in_started',
+      entityKind: 'provider',
+      entityId: row.id,
+      summary: `sign-in to ${row.slug} started`,
+      data: { slug: row.slug, scope: row.shared ? 'all' : 'profile' },
+    });
+    return signInView(record);
+  }
+
+  /**
+   * How a sign-in stands, asked of Hermes while it is pending. On `approved` the provider is
+   * signed in (`auth.signed_in`) and its models are fetched from Hermes.
+   */
+  async pollSignIn(
+    scope: WorkspaceScope,
+    providerId: string,
+    signInId: string,
+  ): Promise<ContractProviderSignIn> {
+    const record = this.signInOf(scope, providerId, signInId);
+    if (record.status !== 'pending') return signInView(record);
+    const runtime = this.options.signIn?.() ?? null;
+    const expired = this.now().getTime() >= record.expiresAt;
+    if (!runtime) {
+      record.status = expired ? 'expired' : 'failed';
+      record.error = 'Hermes is no longer supervised by this hub';
+      return signInView(record);
+    }
+    const poll = await runtime.poll(record.hermesProvider, record.session, record.profile);
+    record.status = signInStatusOf(poll, expired);
+    record.error = record.status === 'denied' || record.status === 'failed' ? poll.error : null;
+    if (record.status === 'approved') this.signedIn(scope, record);
+    return signInView(record);
+  }
+
+  /** A pasted code: none of the sign-ins the hub offers takes one (decision §55). */
+  completeSignIn(
+    scope: WorkspaceScope,
+    providerId: string,
+    signInId: string,
+  ): ContractProviderSignIn {
+    const record = this.signInOf(scope, providerId, signInId);
+    throw new HubError('state_invalid', {
+      messageKey: 'models.signin.code_not_accepted',
+      details: { reason: 'code_not_accepted', sign_in_id: record.id },
+    });
+  }
+
+  private signInOf(scope: WorkspaceScope, providerId: string, signInId: string): SignInRecord {
+    const record = this.signIns.get(signInId);
+    if (!record || record.providerId !== providerId || record.workspace !== scope.id) {
+      throw notFound({ resource: 'sign_in', id: signInId });
+    }
+    return record;
+  }
+
+  /** The approved sign-in: the provider reads as signed in, and gets its models. */
+  private signedIn(scope: WorkspaceScope, record: SignInRecord): void {
+    const at = this.now();
+    this.db
+      .update(providers)
+      .set({ status: 'ok', lastCheckedAt: at, lastError: null, updatedAt: at })
+      .where(eq(providers.id, record.providerId))
+      .run();
+    const actor = { userId: record.actorId };
+    this.options.audit.record({
+      workspace: scope.id,
+      ownerId: actor.userId,
+      actorKind: 'user',
+      actorId: actor.userId,
+      action: 'provider.signed_in',
+      entityKind: 'provider',
+      entityId: record.providerId,
+      summary: `signed in to ${record.hermesProvider}`,
+      data: { provider: record.hermesProvider },
+    });
+    try {
+      this.refreshProvider(scope, actor, record.providerId);
+    } catch (error) {
+      this.options.log.warn(
+        { err: error, provider: record.hermesProvider },
+        'models: signed in, but the model list could not be asked for',
+      );
+    }
+  }
+
+  /** The models Hermes lists for a provider signed in through it. */
+  private async signedInModels(
+    scope: WorkspaceScope,
+    row: ProviderRow,
+  ): Promise<
+    { supported: true; models: DiscoveredModel[] } | { supported: false; reason: string }
+  > {
+    const entry = this.entryOf(row);
+    const runtime = this.options.signIn?.() ?? null;
+    if (!runtime || !entry?.hermesProvider) {
+      return { supported: false, reason: 'Hermes is not supervised by this hub' };
+    }
+    try {
+      const ids = await runtime.models(entry.hermesProvider, this.signInProfileOf(scope, row));
+      if (!ids || ids.length === 0) {
+        return { supported: false, reason: `Hermes lists no models for ${row.label}` };
+      }
+      return {
+        supported: true,
+        models: ids.map((key) => ({ key, label: key, kind: 'chat' as const })),
+      };
+    } catch (error) {
+      return {
+        supported: false,
+        reason: error instanceof Error ? error.message : 'Hermes could not be asked',
+      };
+    }
+  }
+
+  /** The Hermes profile a provider's sign-in belongs to: null for the root. */
+  private signInProfileOf(scope: WorkspaceScope, row: ProviderRow): string | null {
+    if (row.shared) return null;
+    const hub = this.hub(scope);
+    if (row.workspace === hub.id) return null;
+    return row.workspace === scope.id ? scope.slug : null;
+  }
+
+  private forgetOldSignIns(): void {
+    const now = this.now().getTime();
+    for (const [id, record] of this.signIns) {
+      if (record.expiresAt + SIGN_IN_KEEP_MS < now) this.signIns.delete(id);
+    }
+  }
+
   // ------------------------------------------------------------------- defaults
 
   /**
@@ -1435,7 +1699,16 @@ export class ModelsService {
       } else {
         const model = this.requireModel(scope, body.default);
         this.requireExpressible(scope, model.providerId);
-        const fallbacks = (body.fallbacks ?? []).map((ref) => this.requireModel(scope, ref).id);
+        // A new chat model keeps the chain unless one is sent with it: choosing a model on a
+        // provider card must not quietly throw the fallbacks away (decision §54).
+        const fallbacks = chainOf(
+          body.fallbacks !== undefined
+            ? body.fallbacks.map((ref) => this.requireModel(scope, ref).id)
+            : (this.effectiveDefault(scope.id, 'chat')?.row.fallbackModelIds ?? []).filter(
+                (id) => this.refOf(scope, id) !== null,
+              ),
+          model.id,
+        );
         this.store.setDefault(
           { workspace: scope.id, ownerId: actor.userId },
           'chat',
@@ -1451,7 +1724,10 @@ export class ModelsService {
           reason: 'a fallback chain needs a default model to fall back from',
         });
       }
-      const fallbacks = body.fallbacks.map((ref) => this.requireModel(scope, ref).id);
+      const fallbacks = chainOf(
+        body.fallbacks.map((ref) => this.requireModel(scope, ref).id),
+        chat.modelId,
+      );
       this.store.setDefault(
         { workspace: scope.id, ownerId: actor.userId },
         'chat',
@@ -1667,20 +1943,7 @@ export class ModelsService {
       providerId?: string | null;
     },
   ): Promise<{ audio: Uint8Array; contentType: string; provider: string }> {
-    const id = request.providerId ?? this.speechChoice(scope, ownerId).tts;
-    if (!id) {
-      throw new HubError('agent_unavailable', {
-        messageKey: 'models.speech.no_tts_provider',
-        details: { reason: 'no_tts_provider' },
-      });
-    }
-    const row = this.requireSpeechProvider(scope, id, 'tts');
-    if (!row.enabled) {
-      throw new HubError('agent_unavailable', {
-        messageKey: 'models.speech.provider_disabled',
-        details: { reason: 'provider_disabled', provider: row.slug },
-      });
-    }
+    const row = this.activeSpeechRow(scope, ownerId, 'tts', request.providerId ?? null);
     const adapter = providerAdapter(this.entryOf(row)?.protocol ?? 'openai');
     const result: SynthesizeResult = await adapter.synthesize(this.contextOf(scope, row), {
       text: request.text,
@@ -1694,6 +1957,98 @@ export class ModelsService {
       });
     }
     return { audio: result.audio, contentType: result.contentType, provider: row.slug };
+  }
+
+  /**
+   * `models.transcribe`: one recording through the profile's speech-to-text provider (or
+   * the one named), and its words back. Every way it can fail is named — no provider, a
+   * provider switched off, a provider that refused or answered nothing usable — and a
+   * silent take is `400 no_speech`, never an empty transcript presented as a result.
+   */
+  async transcribe(
+    scope: WorkspaceScope,
+    ownerId: string,
+    request: {
+      audio: Uint8Array;
+      filename: string;
+      mime: string;
+      language: string | null;
+      providerId: string | null;
+      /** The length the client recorded; used when the provider does not report one. */
+      durationMs: number | null;
+    },
+  ): Promise<{
+    text: string;
+    language: string | null;
+    duration_ms: number;
+    provider_id: string;
+    model: string | null;
+  }> {
+    const row = this.activeSpeechRow(scope, ownerId, 'stt', request.providerId);
+    const adapter = providerAdapter(this.entryOf(row)?.protocol ?? 'openai');
+    if (!adapter.transcribe) {
+      throw new HubError('agent_unavailable', {
+        messageKey: 'models.speech.transcribe_failed',
+        details: { reason: 'unsupported', detail: null, provider: row.slug },
+      });
+    }
+    const context = this.contextOf(scope, row);
+    const result: TranscribeResult = await adapter.transcribe(context, {
+      audio: request.audio,
+      filename: request.filename,
+      mime: request.mime,
+      language: request.language,
+    });
+    if (!result.supported) {
+      throw new HubError('agent_unavailable', {
+        messageKey: 'models.speech.transcribe_failed',
+        details: { reason: result.reason, detail: result.detail ?? null, provider: row.slug },
+      });
+    }
+    if (result.text === '') {
+      throw new HubError('validation_failed', {
+        messageKey: 'models.speech.no_speech',
+        details: { reason: 'no_speech' },
+      });
+    }
+    return {
+      text: result.text,
+      language: result.language,
+      duration_ms: Math.max(0, Math.round(result.durationMs ?? request.durationMs ?? 0)),
+      provider_id: row.id,
+      model: context.settings.model ?? null,
+    };
+  }
+
+  /**
+   * The speech provider a request speaks through: the one it names, else the profile's
+   * choice — resolved the way the speech tabs resolve it (a profile's own row of the same
+   * slug over a shared one), so what the tab calls ready is what answers.
+   */
+  private activeSpeechRow(
+    scope: WorkspaceScope,
+    ownerId: string,
+    kind: 'stt' | 'tts',
+    named: string | null,
+  ): ProviderRow {
+    const id = named ?? this.speechChoice(scope, ownerId)[kind];
+    if (!id) {
+      throw new HubError('agent_unavailable', {
+        messageKey:
+          kind === 'tts' ? 'models.speech.no_tts_provider' : 'models.speech.no_stt_provider',
+        details: { reason: kind === 'tts' ? 'no_tts_provider' : 'no_stt_provider' },
+      });
+    }
+    const chosen = this.requireSpeechProvider(scope, id, kind);
+    const row = named ? chosen : (this.effectiveFor(scope.id, chosen.id) ?? chosen);
+    if (!row.enabled) {
+      throw new HubError('agent_unavailable', {
+        messageKey:
+          kind === 'tts' ? 'models.speech.provider_disabled' : 'models.speech.stt.disabled',
+        details: { reason: 'provider_disabled', provider: row.slug },
+      });
+    }
+    return row;
   }
 
   // ------------------------------------------------------------ the first default
@@ -1903,6 +2258,12 @@ export class ModelsService {
       hermesProviders,
       hermesModel: chat.choice,
       hermesModelBlocked: chat.blocked,
+      // Owned where the model selection is (contract decision §54).
+      hermesFallbacks: chat.choice
+        ? this.fallbackChain(workspace).flatMap((member) =>
+            member.provider ? [{ provider: member.provider, model: member.model }] : [],
+          )
+        : null,
       ownedEnv: this.ownedEnvNames(),
     };
   }
@@ -2047,6 +2408,84 @@ export class ModelsService {
    * a run loop that will one day forget to.
    */
   async *chat(workspace: string, request: DirectChatRequest): AsyncIterable<DirectChatEvent> {
+    // The chosen model first, then the chain, each model once (contract decision §54).
+    const seen = new Set<string>();
+    const chain: { providerId: string; model: string }[] = [];
+    for (const target of [
+      { providerId: request.providerId, model: request.model },
+      ...(request.fallbacks ?? []),
+    ]) {
+      const key = `${target.providerId}\u0000${target.model}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      chain.push({ providerId: target.providerId, model: target.model });
+    }
+    const failed: DirectFallbackAttempt[] = [];
+    for (const [index, target] of chain.entries()) {
+      const last = index === chain.length - 1;
+      let started = false;
+      let failure: Extract<AttemptEvent, { type: 'failed' }> | null = null;
+      for await (const event of this.chatOnce(workspace, { ...request, ...target })) {
+        if (event.type === 'failed') {
+          failure = event;
+          break;
+        }
+        if (!started) {
+          started = true;
+          // Said before the first word of the model that took over, so the reader of the
+          // stream knows whose words these are.
+          if (failed.length > 0) {
+            yield {
+              type: 'fallback',
+              failed: [...failed],
+              answered: this.answerOf(workspace, target),
+            };
+          }
+        }
+        yield event;
+      }
+      if (!failure) return;
+      const moveOn = !started && failure.retryable && !last && !request.signal?.aborted;
+      if (!moveOn) {
+        if (failed.length > 0 && !started) {
+          yield {
+            type: 'fallback',
+            failed: [...failed],
+            answered: this.answerOf(workspace, target),
+          };
+        }
+        yield { type: 'failed', code: failure.code, message: failure.message };
+        return;
+      }
+      failed.push({
+        model: target.model,
+        provider: this.answerOf(workspace, target).provider,
+        code: failure.code,
+        error: failure.message,
+      });
+    }
+  }
+
+  /** A chain member as a client names it: the model and its provider's slug. */
+  private answerOf(
+    workspace: string,
+    target: { providerId: string; model: string },
+  ): { model: string; provider: string | null } {
+    const row = this.effectiveFor(workspace, target.providerId);
+    return { model: target.model, provider: row?.slug ?? null };
+  }
+
+  /**
+   * One model's attempt at the turn. A failure says whether another model could get past it
+   * (`retryable`, contract decision §54): the provider was unavailable (a 5xx, or its words
+   * say `auth_unavailable`), rate limited, timed out or unreachable. A request it refused as
+   * invalid — any other 4xx — would be refused by the next model too, and a refused key is the
+   * person's to fix, not something to hide behind another provider.
+   */
+  private async *chatOnce(
+    workspace: string,
+    request: DirectChatRequest,
+  ): AsyncIterable<AttemptEvent> {
     const provider = this.effectiveFor(workspace, request.providerId);
     if (!provider || provider.archivedAt || !provider.enabled) {
       yield {
@@ -2055,6 +2494,17 @@ export class ModelsService {
         message: provider
           ? `the provider "${provider.label}" is disabled`
           : 'the hub has no such provider',
+        retryable: false,
+      };
+      return;
+    }
+    if (provider.authKind === 'oauth') {
+      // Signed in through Hermes (decision §55): the credential is Hermes's, not the hub's.
+      yield {
+        type: 'failed',
+        code: 'provider_not_configured',
+        message: `${provider.label} is signed in through Hermes; only the Hermes agent can use it`,
+        retryable: false,
       };
       return;
     }
@@ -2088,11 +2538,44 @@ export class ModelsService {
           code: DIRECT_ERROR_CODES[event.reason],
           // The provider's own words when it sent any; ours only when it sent none.
           message: event.detail ?? directFailureText(event.reason, provider.label),
+          retryable: retryableFailure(event),
         };
         return;
       }
       yield event;
     }
+  }
+
+  /**
+   * The chat fallback chain in effect for a profile (contract decision §54): its own, or the
+   * default profile's together with the chat model it inherits (§37), each member resolved to
+   * the provider of that slug this profile uses. Members this profile cannot reach are left
+   * out rather than tried.
+   */
+  fallbackChain(
+    workspace: string,
+  ): { providerId: string; provider: string | null; slug: string; model: string }[] {
+    const chat = this.effectiveDefault(workspace, 'chat');
+    const chain: { providerId: string; provider: string | null; slug: string; model: string }[] =
+      [];
+    for (const modelId of chat?.row.fallbackModelIds ?? []) {
+      const ref = this.refOf({ id: workspace }, modelId);
+      if (!ref) continue;
+      const row = this.effectiveFor(workspace, ref.provider_id);
+      if (!row) continue;
+      chain.push({
+        providerId: row.id,
+        provider: this.hermesNameOfProvider(row),
+        slug: row.slug,
+        model: ref.model,
+      });
+    }
+    return chain;
+  }
+
+  /** The slug of one of this profile's providers, for naming the model that answered. */
+  providerSlug(workspace: string, providerId: string): string | null {
+    return this.effectiveFor(workspace, providerId)?.slug ?? null;
   }
 
   /**
@@ -2236,9 +2719,11 @@ export class ModelsService {
       const workspace = this.options.profileWorkspace?.(profile) ?? `hermes-profile:${profile}`;
       const mine = this.state(workspace);
       // A messaging gateway also needs the model: it names none (`prepareGateway`).
+      // The fallback chain too: Hermes reads it from the profile's own file when the
+      // conversation starts (contract decision §54), where a turn names only its model.
       const written = options.model
         ? writeHermesRoute(profileHome, mine)
-        : writeHermesProviders(profileHome, mine.hermesProviders);
+        : writeHermesProviders(profileHome, mine.hermesProviders, mine.hermesFallbacks ?? null);
       const rootValues = hermesProcessEnv(root);
       const ownValues = hermesProcessEnv(mine);
       const owned = [
@@ -2627,6 +3112,11 @@ export interface DirectChatRequest {
   /** A `providers` row id in this workspace, as `resolveModelKey` returned it. */
   providerId: string;
   model: string;
+  /**
+   * The models to move on to, in order, when this one fails with an error another model
+   * could get past (contract decision §54). Absent or empty: no fallback.
+   */
+  fallbacks?: readonly { providerId: string; model: string }[];
   messages: ChatMessage[];
   reasoningEffort?: string | null;
   signal?: AbortSignal;
@@ -2648,7 +3138,59 @@ export type DirectChatEvent =
       costSource?: 'provider' | 'estimated' | 'unknown';
     }
   | { type: 'completed' }
+  | {
+      /**
+       * The turn moved down the fallback chain (contract decision §54), said before the first
+       * word of `answered` — or, when every member failed, just before the last failure.
+       */
+      type: 'fallback';
+      failed: DirectFallbackAttempt[];
+      answered: { model: string; provider: string | null };
+    }
   | { type: 'failed'; code: string; message: string };
+
+/**
+ * A fallback chain as stored: in the order given, each model once, and never the model it
+ * falls back from — trying it again would only repeat the failure (contract decision §54).
+ */
+function chainOf(ids: readonly string[], primary: string): string[] {
+  const seen = new Set<string>([primary]);
+  return ids.filter((id) => (seen.has(id) ? false : (seen.add(id), true)));
+}
+
+/** One member of the chain that failed a turn (contract `RunFallbackAttempt`). */
+export interface DirectFallbackAttempt {
+  model: string;
+  /** The provider's slug. */
+  provider: string | null;
+  code: string | null;
+  error: string | null;
+}
+
+/** One model's attempt, before the chain decides whether to move on. */
+type AttemptEvent =
+  | Exclude<DirectChatEvent, { type: 'failed' } | { type: 'fallback' }>
+  | { type: 'failed'; code: string; message: string; retryable: boolean };
+
+/**
+ * Whether another model could get past this failure (contract decision §54): the provider
+ * unreachable or timed out, rate limiting, failing on its side, or saying in its own words
+ * that it has no credential to serve with (`auth_unavailable`, the owner's 2026-09-25 outage,
+ * which one proxy sends as a 503 and another inside a stream). Every other 4xx is the request
+ * or the key, and the next model would refuse it too.
+ */
+export function retryableFailure(event: {
+  reason: ChatFailureReason;
+  status: number | null;
+  detail: string | null;
+}): boolean {
+  if (event.reason === 'cancelled' || event.reason === 'no_key') return false;
+  if ((event.detail ?? '').toLowerCase().includes('auth_unavailable')) return true;
+  if (event.reason === 'unreachable') return true;
+  const status = event.status;
+  if (status === null) return false;
+  return status === 408 || status === 429 || status >= 500;
+}
 
 /**
  * An adapter's reason for stopping, as one of the contract's `ErrorCode`s.

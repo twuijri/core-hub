@@ -1,0 +1,109 @@
+name: iOS
+
+# The iOS client (apps/ios): generate the Swift client from the contract on Linux, then build
+# and test the app on a macOS runner's simulator. Nothing is signed or published here
+# (apps/ios/README.md, "Signing").
+on:
+  pull_request:
+    paths:
+      - 'apps/ios/**'
+      - 'packages/contracts/openapi.yaml'
+      - 'packages/contracts/openapi-generator/swift.yaml'
+      - 'packages/ui-tokens/tokens.json'
+      - 'docs/clients/navigation.json'
+      - 'docs/changes/*-ios-*.md'
+      - '.github/workflows/ios.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'apps/ios/**'
+      - 'packages/contracts/openapi.yaml'
+      - 'packages/contracts/openapi-generator/swift.yaml'
+      - 'packages/ui-tokens/tokens.json'
+      - 'docs/clients/navigation.json'
+      - '.github/workflows/ios.yml'
+  workflow_dispatch:
+
+concurrency:
+  group: ios-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  swift-client:
+    name: Generate the Swift client (CoreHubClient)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - run: corepack enable
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - run: pnpm install --frozen-lockfile --filter @corehub/contracts
+      - run: pnpm --filter @corehub/contracts generate:native
+      - name: Tokens.swift, Product.swift and InfoPlist.strings match their sources
+        run: node apps/ios/scripts/generate-swift.mjs --check
+      - uses: actions/upload-artifact@v4
+        with:
+          name: corehub-swift-client
+          path: packages/contracts/generated/swift
+          retention-days: 3
+
+  build-test:
+    name: Build and test on the iOS simulator
+    needs: swift-client
+    runs-on: macos-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: corehub-swift-client
+          path: packages/contracts/generated/swift
+      - name: Toolchain
+        run: |
+          xcodebuild -version
+          swift --version
+      - name: XcodeGen
+        run: brew install xcodegen
+      - name: Generate the Xcode project from project.yml
+        working-directory: apps/ios
+        run: xcodegen generate
+      - name: Pick an iPhone simulator
+        id: sim
+        run: |
+          udid=$(xcrun simctl list devices available -j \
+            | jq -r '[.devices | to_entries[] | select(.key | test("iOS")) | .value[] | select(.name | test("^iPhone"))] | last | .udid')
+          test -n "$udid" && test "$udid" != null
+          echo "udid=$udid" >> "$GITHUB_OUTPUT"
+          xcrun simctl list devices available | grep "$udid"
+      - name: Build and run the unit tests (XCTest)
+        working-directory: apps/ios
+        run: |
+          mkdir -p build
+          xcodebuild \
+            -project CoreHub.xcodeproj \
+            -scheme CoreHub \
+            -destination "id=${{ steps.sim.outputs.udid }}" \
+            -skipPackagePluginValidation \
+            -resultBundlePath build/CoreHub.xcresult \
+            CODE_SIGNING_ALLOWED=NO \
+            build test > build/xcodebuild.log 2>&1 || status=$?
+          grep -E "error:|warning: .*(isolat|Sendable)|Test Case .* (passed|failed)|Executed [0-9]+ tests|\*\* (BUILD|TEST) " build/xcodebuild.log | grep -v "^\s*$" | sort -u | head -300
+          exit "${status:-0}"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: ios-test-results
+          path: |
+            apps/ios/build/xcodebuild.log
+            apps/ios/build/CoreHub.xcresult
+          retention-days: 5

@@ -14,6 +14,8 @@
  */
 import type {
   AgentAskRequest,
+  AgentCompressRequest,
+  AgentCompressResult,
   AgentDirectory,
   AgentEvent,
   AgentInfo,
@@ -21,6 +23,8 @@ import type {
   AgentRunInput,
   AgentRunRequest,
   AgentRunner,
+  AgentSubagentControl,
+  AgentSubagentSignal,
 } from '../ports.js';
 
 export class FakeAgentDirectory implements AgentDirectory {
@@ -40,12 +44,21 @@ export class FakeAgentDirectory implements AgentDirectory {
   }
 }
 
-/** One step of a script: an event to emit, or a pause until a person answers. */
-export type ScriptStep = AgentEvent | { type: 'await_input' };
+/**
+ * One step of a script: an event to emit, a pause until a person answers, or a report about a
+ * subagent (§56), which goes to `onSubagent` listeners rather than into the turn.
+ */
+export type ScriptStep =
+  AgentEvent | { type: 'await_input' } | { type: 'subagent'; signal: AgentSubagentSignal };
 
 export interface FakeRunnerOptions {
   /** Events for the next run, in order. */
   script?: ScriptStep[];
+  /**
+   * Events for a run chosen from what it was asked — several agents in one test (a room's
+   * seats) each playing their own part. Wins over `script` when it answers a script.
+   */
+  scriptFor?(request: AgentRunRequest, prompt: string): ScriptStep[] | null;
   /** Throw instead of accepting the turn (tests the `starting -> failed` arrow). */
   failOnStart?: Error;
   /** Do not end the stream on `interrupt()`; used to test the timeout arrow. */
@@ -63,9 +76,25 @@ export interface FakeRunnerOptions {
    * proves the fallback.
    */
   answer?: string | null | ((request: AgentAskRequest) => string | null | Promise<string | null>);
+  /**
+   * What the agent lets a person do with its subagents (§56). `full` answers every verb —
+   * a stop is confirmed at once with a `completed` / `interrupted` report — `observe` none.
+   * Absent: the runner has no subagents at all.
+   */
+  subagents?: 'full' | 'observe';
+  /**
+   * What `compress` answers (decision §57); a function may throw to play a refusal.
+   * `undefined` leaves the runner without `compress`, as an agent that cannot.
+   */
+  compress?:
+    | AgentCompressResult
+    | ((request: AgentCompressRequest) => AgentCompressResult | Promise<AgentCompressResult>);
+  /** What `steer` answers; `undefined` leaves the runner without `steer`. */
+  steer?: 'queued' | 'rejected';
 }
 
 interface RunChannel {
+  runId: string;
   queue: ScriptStep[];
   waiting: ((value: IteratorResult<AgentEvent>) => void)[];
   pending: AgentEvent[];
@@ -79,7 +108,14 @@ export class FakeAgentRunner implements AgentRunner {
   readonly asked: AgentAskRequest[] = [];
   readonly inputs: Array<{ runId: string; input: AgentRunInput }> = [];
   readonly interrupted: string[] = [];
+  /** Every subagent verb the hub used, in order (§56). */
+  readonly subagentCalls: Array<{ verb: string; sessionId: string; id?: string; text?: string }> =
+    [];
   private readonly channels = new Map<string, RunChannel>();
+  private readonly sessionOfRun = new Map<string, string>();
+  private readonly subagentListeners = new Set<
+    (sessionId: string, signal: AgentSubagentSignal) => void
+  >();
   private script: ScriptStep[];
 
   /**
@@ -88,6 +124,11 @@ export class FakeAgentRunner implements AgentRunner {
    * is the only faithful way to play one.
    */
   readonly ask?: (request: AgentAskRequest) => Promise<string | null>;
+  readonly compress?: (request: AgentCompressRequest) => Promise<AgentCompressResult>;
+  readonly steer?: (runId: string, text: string) => Promise<'queued' | 'rejected'>;
+  /** Every compression asked for, and every piece of guidance sent, in order. */
+  readonly compressed: AgentCompressRequest[] = [];
+  readonly steered: Array<{ runId: string; text: string }> = [];
 
   constructor(private readonly options: FakeRunnerOptions = {}) {
     this.script = [...(options.script ?? [])];
@@ -96,6 +137,20 @@ export class FakeAgentRunner implements AgentRunner {
         this.asked.push(request);
         const answer = options.answer;
         return typeof answer === 'function' ? answer(request) : (answer ?? null);
+      };
+    }
+    const compress = options.compress;
+    if (compress !== undefined) {
+      this.compress = async (request: AgentCompressRequest) => {
+        this.compressed.push(request);
+        return typeof compress === 'function' ? compress(request) : compress;
+      };
+    }
+    const steer = options.steer;
+    if (steer !== undefined) {
+      this.steer = async (runId: string, text: string) => {
+        this.steered.push({ runId, text });
+        return steer;
       };
     }
   }
@@ -108,9 +163,14 @@ export class FakeAgentRunner implements AgentRunner {
   async start(request: AgentRunRequest): Promise<AgentRunAccepted> {
     if (this.options.failOnStart) throw this.options.failOnStart;
     this.started.push(request);
+    this.sessionOfRun.set(request.runId, request.sessionId);
     await this.options.onStart?.(request);
+    const prompt = request.prompt
+      .map((block) => (block.type === 'text' ? block.text : ''))
+      .join('');
     this.channels.set(request.runId, {
-      queue: [...this.script],
+      runId: request.runId,
+      queue: [...(this.options.scriptFor?.(request, prompt) ?? this.script)],
       waiting: [],
       pending: [],
       closed: false,
@@ -162,6 +222,39 @@ export class FakeAgentRunner implements AgentRunner {
     this.wake(channel);
   }
 
+  onSubagent(listener: (sessionId: string, signal: AgentSubagentSignal) => void): () => void {
+    this.subagentListeners.add(listener);
+    return () => this.subagentListeners.delete(listener);
+  }
+
+  /** Tell the hub about a subagent of `sessionId`, as an agent would between turns. */
+  report(sessionId: string, signal: AgentSubagentSignal): void {
+    for (const listener of this.subagentListeners) listener(sessionId, signal);
+  }
+
+  subagents(sessionId: string): AgentSubagentControl | null {
+    const support = this.options.subagents;
+    if (!support) return null;
+    if (support === 'observe') return { support };
+    return {
+      support,
+      list: async () => [],
+      interrupt: async (id) => {
+        this.subagentCalls.push({ verb: 'interrupt', sessionId, id });
+        this.report(sessionId, { phase: 'completed', id, status: 'interrupted', summary: null });
+        return true;
+      },
+      steer: async (id, text) => {
+        this.subagentCalls.push({ verb: 'steer', sessionId, id, text });
+        return 'queued';
+      },
+      tail: async (id) => {
+        this.subagentCalls.push({ verb: 'tail', sessionId, id });
+        return { available: true, text: `tail of ${id}`, truncated: false };
+      },
+    };
+  }
+
   /** Move script steps into the pending queue until the script blocks or ends. */
   private pump(channel: RunChannel): void {
     while (!channel.blocked && channel.queue.length > 0) {
@@ -169,6 +262,11 @@ export class FakeAgentRunner implements AgentRunner {
       if (step.type === 'await_input') {
         channel.blocked = true;
         return;
+      }
+      if (step.type === 'subagent') {
+        const sessionId = this.sessionOfRun.get(channel.runId);
+        if (sessionId) this.report(sessionId, step.signal);
+        continue;
       }
       channel.pending.push(step);
     }

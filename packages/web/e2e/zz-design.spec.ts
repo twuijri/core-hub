@@ -233,7 +233,8 @@ test.describe('the rebuilt screens', () => {
     await page.getByTestId('settings-nav').getByRole('link', { name: 'الحساب' }).click();
     await expect(page.getByTestId('settings-tabs')).toBeVisible();
     await expect(page.getByTestId('settings-management').getByRole('link')).toHaveCount(3);
-    await expect(page.getByTestId('settings-tools').getByRole('link')).toHaveCount(7);
+    // Nine tools since «الملفات» / Files joined them (DECISIONS §65) beside Skills usage (§50).
+    await expect(page.getByTestId('settings-tools').getByRole('link')).toHaveCount(9);
     await shot(page, 'design-settings-ar-light');
     await page.getByRole('link', { name: 'العرض' }).click();
     await expect(page.getByRole('switch', { name: /تفكير/ })).toBeVisible();
@@ -247,7 +248,8 @@ test.describe('the rebuilt screens', () => {
     await page.getByTestId('settings-nav').getByRole('link', { name: 'الأداء' }).click();
     await expect(page.getByText('Node')).toBeVisible();
     await page.getByTestId('settings-nav').getByRole('link', { name: 'السجلات' }).click();
-    await expect(page.getByTestId('audit-days-7')).toBeVisible();
+    // Live since DECISIONS §51: the hub's own lines, not a period report.
+    await expect(page.getByTestId('logs-tool')).toBeVisible();
 
     // Models: the provider card, and the model panel's table inside a scroll area.
     await page.getByTestId('settings-nav').getByRole('link', { name: 'النماذج' }).click();

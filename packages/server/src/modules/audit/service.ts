@@ -26,6 +26,7 @@ import {
   auditEvents,
   jobEvents,
   jobs,
+  skillUses,
   usageRecords,
   type ACTOR_KINDS,
   type COST_SOURCES,
@@ -108,6 +109,17 @@ export interface UsageWrite {
   costSource?: CostSource;
   originKind?: UsageOrigin;
   originId?: string | null;
+}
+
+export interface SkillUseWrite {
+  workspace: string;
+  ownerId: string;
+  runId: string;
+  sessionId: string;
+  agentId: string;
+  /** The skill's name as the agent asked for it. */
+  skill: string;
+  at?: number;
 }
 
 export interface UsageTotals {
@@ -340,6 +352,27 @@ export class AuditService {
     return pageOf(rows, limit, (row) => row);
   }
 
+  /**
+   * The Background panel's jobs (§56): one person's, in these workspaces — every one still
+   * queued or running, and the ones that ended at or after `since`.
+   */
+  backgroundJobs(ownerId: string, workspaces: readonly string[], since: number): JobRow[] {
+    if (workspaces.length === 0) return [];
+    return this.db
+      .select()
+      .from(jobs)
+      .where(
+        and(
+          eq(jobs.ownerId, ownerId),
+          inArray(jobs.workspace, [...workspaces]),
+          sql`(${jobs.status} in ('queued', 'running', 'cancelling') or ${jobs.finishedAt} >= ${since})`,
+        ),
+      )
+      .orderBy(desc(jobs.id))
+      .limit(500)
+      .all();
+  }
+
   appendJobEvent(jobId: string, message: string, level: 'info' | 'error' | 'progress'): void {
     const row = this.job(jobId);
     if (!row) return;
@@ -424,6 +457,34 @@ export class AuditService {
         target: [usageRecords.runId, usageRecords.modelLabel],
         set: { ...row, updatedAt: new Date() },
       })
+      .run();
+  }
+
+  // ------------------------------------------------------------ skill use
+
+  /**
+   * One skill an agent loaded in one run (contract decision §50). The same skill loaded again
+   * in the same run is the same use, so a second write is ignored rather than counted.
+   */
+  recordSkillUse(input: SkillUseWrite): void {
+    const skill = input.skill.trim().slice(0, 200);
+    if (!skill) return;
+    const at = new Date(input.at ?? Date.now());
+    this.db
+      .insert(skillUses)
+      .values({
+        id: newUlid(at.getTime()),
+        ownerId: input.ownerId,
+        workspace: input.workspace,
+        runId: input.runId,
+        sessionId: input.sessionId,
+        agentId: input.agentId,
+        skill,
+        usedAt: at,
+        createdAt: at,
+        updatedAt: at,
+      })
+      .onConflictDoNothing({ target: [skillUses.runId, skillUses.skill] })
       .run();
   }
 

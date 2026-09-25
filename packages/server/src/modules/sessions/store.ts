@@ -13,11 +13,40 @@
  * seen, so a page stays stable while new rows arrive at the top — which they
  * constantly do in a chat.
  */
-import { and, asc, desc, eq, inArray, isNotNull, isNull, lt, or, sql, type SQL } from 'drizzle-orm';
+import {
+  and,
+  asc,
+  desc,
+  eq,
+  exists,
+  inArray,
+  isNotNull,
+  isNull,
+  lt,
+  or,
+  sql,
+  type SQL,
+} from 'drizzle-orm';
 import type { ModuleDatabase } from '../../db/handle.js';
 import { newUlid } from '../../db/ids.js';
-import { approvals, messages, runs, sessions, toolCalls } from './schema.js';
-import type { ApprovalRow, MessageRow, RunRow, SessionRow, ToolCallRow } from './mappers.js';
+import {
+  approvals,
+  messages,
+  runFileChanges,
+  runs,
+  sessions,
+  toolCalls,
+  type RunChangesSummary,
+} from './schema.js';
+import type { RunChangesRecord } from './run-changes.js';
+import type {
+  ApprovalRow,
+  MessageRow,
+  RunFileChangeRow,
+  RunRow,
+  SessionRow,
+  ToolCallRow,
+} from './mappers.js';
 
 export const DEFAULT_LIMIT = 50;
 export const MAX_LIMIT = 200;
@@ -337,6 +366,34 @@ export class SessionsStore {
    * is a JSON array, so the test is a substring of the serialised form — which is exact
    * here because a ULID is 26 fixed characters and cannot be a prefix of another id.
    */
+  /**
+   * Per workspace: runs not yet finished and conversations not archived — the Performance
+   * screen's "what is each profile doing". Two grouped counts, whatever the number of rows.
+   */
+  activityByWorkspace(): Map<string, { activeRuns: number; sessions: number }> {
+    const out = new Map<string, { activeRuns: number; sessions: number }>();
+    const entry = (workspace: string) => {
+      const found = out.get(workspace) ?? { activeRuns: 0, sessions: 0 };
+      out.set(workspace, found);
+      return found;
+    };
+    const live = this.db
+      .select({ workspace: runs.workspace, n: sql<number>`count(*)` })
+      .from(runs)
+      .where(sql`${runs.status} not in ('succeeded', 'failed', 'cancelled', 'timed_out')`)
+      .groupBy(runs.workspace)
+      .all();
+    for (const row of live) entry(row.workspace).activeRuns = Number(row.n);
+    const open = this.db
+      .select({ workspace: sessions.workspace, n: sql<number>`count(*)` })
+      .from(sessions)
+      .where(isNull(sessions.archivedAt))
+      .groupBy(sessions.workspace)
+      .all();
+    for (const row of open) entry(row.workspace).sessions = Number(row.n);
+    return out;
+  }
+
   isAttachmentReferenced(workspace: string, attachmentId: string): boolean {
     const row = this.db
       .select({ id: messages.id })
@@ -386,6 +443,41 @@ export class SessionsStore {
     return this.getRun(input.workspace, input.id) as RunRow;
   }
 
+  /**
+   * The Background panel's runs (§56): one person's in these workspaces — every one not over,
+   * and those that ended at or after `since` — each with its conversation's title.
+   */
+  backgroundRuns(
+    ownerId: string,
+    workspaces: readonly string[],
+    since: number,
+  ): Array<{ run: RunRow; title: string | null; source: SessionRow['source'] }> {
+    if (workspaces.length === 0) return [];
+    return this.db
+      .select({ run: runs, title: sessions.title, source: sessions.source })
+      .from(runs)
+      .innerJoin(sessions, eq(sessions.id, runs.sessionId))
+      .where(
+        and(
+          eq(runs.ownerId, ownerId),
+          inArray(runs.workspace, [...workspaces]),
+          or(
+            inArray(runs.status, [
+              'queued',
+              'starting',
+              'streaming',
+              'waiting_approval',
+              'waiting_input',
+            ]),
+            sql`${runs.finishedAt} >= ${since}`,
+          ),
+        ),
+      )
+      .orderBy(desc(runs.createdAt))
+      .limit(500)
+      .all();
+  }
+
   getRun(workspace: string, id: string): RunRow | undefined {
     return this.db
       .select()
@@ -411,6 +503,29 @@ export class SessionsStore {
     limit: number,
   ): Page<RunRow> {
     const where: SQL[] = [eq(runs.workspace, workspace), eq(runs.sessionId, sessionId)];
+    if (status) where.push(inArray(runs.status, internalStatuses(status)));
+    const position = decodeCursor(cursor);
+    if (position) where.push(lt(runs.id, position.id));
+    const rows = this.db
+      .select()
+      .from(runs)
+      .where(and(...where))
+      .orderBy(desc(runs.id))
+      .limit(limit + 1)
+      .all();
+    return pageOf(rows, limit, (row) => encodeCursor(row.createdAt.getTime(), row.id));
+  }
+
+  /** `listRuns` over several sessions at once (a room's seats), newest first. */
+  runsOfSessions(
+    workspace: string,
+    sessionIds: readonly string[],
+    status: string | undefined,
+    cursor: string | undefined,
+    limit: number,
+  ): Page<RunRow> {
+    if (sessionIds.length === 0) return { items: [], nextCursor: null };
+    const where: SQL[] = [eq(runs.workspace, workspace), inArray(runs.sessionId, [...sessionIds])];
     if (status) where.push(inArray(runs.status, internalStatuses(status)));
     const position = decodeCursor(cursor);
     if (position) where.push(lt(runs.id, position.id));
@@ -613,6 +728,138 @@ export class SessionsStore {
       out.set(row.runId, list);
     }
     return out;
+  }
+
+  // ---------------------------------------------------------- run changes
+
+  /** What a run changed (decision §49): its rows replace any earlier, its totals go on the run. */
+  saveRunChanges(
+    workspace: string,
+    ownerId: string,
+    runId: string,
+    record: RunChangesRecord,
+    recordedAt: Date,
+  ): void {
+    const summary: RunChangesSummary = {
+      source: record.source,
+      complete: record.complete,
+      filesChanged: record.filesChanged,
+      additions: record.additions,
+      deletions: record.deletions,
+      truncated: record.truncated,
+      recordedAt: recordedAt.getTime(),
+    };
+    this.db.transaction((tx) => {
+      tx.delete(runFileChanges)
+        .where(and(eq(runFileChanges.workspace, workspace), eq(runFileChanges.runId, runId)))
+        .run();
+      if (record.files.length > 0) {
+        tx.insert(runFileChanges)
+          .values(
+            record.files.map((file, seq) => ({
+              id: newUlid(),
+              workspace,
+              ownerId,
+              runId,
+              seq,
+              path: file.path,
+              oldPath: file.oldPath,
+              change: file.change,
+              additions: file.additions,
+              deletions: file.deletions,
+              binary: file.binary,
+              diffState: file.diffState,
+              diff: file.diff,
+              diffTruncated: file.diffTruncated,
+            })),
+          )
+          .run();
+      }
+      tx.update(runs)
+        .set({ changes: summary, updatedAt: new Date() })
+        .where(and(eq(runs.workspace, workspace), eq(runs.id, runId)))
+        .run();
+    });
+  }
+
+  /** The files of these runs, without their diffs, in each run's order. */
+  runFileChangesOf(workspace: string, runIds: readonly string[]): Map<string, RunFileChangeRow[]> {
+    const out = new Map<string, RunFileChangeRow[]>();
+    if (runIds.length === 0) return out;
+    const rows = this.db
+      .select({
+        id: runFileChanges.id,
+        runId: runFileChanges.runId,
+        seq: runFileChanges.seq,
+        path: runFileChanges.path,
+        oldPath: runFileChanges.oldPath,
+        change: runFileChanges.change,
+        additions: runFileChanges.additions,
+        deletions: runFileChanges.deletions,
+        binary: runFileChanges.binary,
+        diffState: runFileChanges.diffState,
+      })
+      .from(runFileChanges)
+      .where(
+        and(eq(runFileChanges.workspace, workspace), inArray(runFileChanges.runId, [...runIds])),
+      )
+      .orderBy(asc(runFileChanges.runId), asc(runFileChanges.seq))
+      .all();
+    for (const row of rows) {
+      const list = out.get(row.runId) ?? [];
+      list.push(row);
+      out.set(row.runId, list);
+    }
+    return out;
+  }
+
+  /** One file a run changed, with its diff. */
+  runFileChange(
+    workspace: string,
+    runId: string,
+    file: string,
+  ): (RunFileChangeRow & { diff: string | null; diffTruncated: boolean }) | undefined {
+    return this.db
+      .select()
+      .from(runFileChanges)
+      .where(
+        and(
+          eq(runFileChanges.workspace, workspace),
+          eq(runFileChanges.runId, runId),
+          eq(runFileChanges.path, file),
+        ),
+      )
+      .get();
+  }
+
+  /** The session's runs that changed a file, newest first, keyset-paged by run id. */
+  runsWithChanges(
+    workspace: string,
+    sessionId: string,
+    cursor: string | undefined,
+    limit: number,
+  ): Page<RunRow> {
+    const where: SQL[] = [
+      eq(runs.workspace, workspace),
+      eq(runs.sessionId, sessionId),
+      isNotNull(runs.changes),
+      exists(
+        this.db
+          .select({ one: sql`1` })
+          .from(runFileChanges)
+          .where(eq(runFileChanges.runId, runs.id)),
+      ),
+    ];
+    const position = decodeCursor(cursor);
+    if (position) where.push(lt(runs.id, position.id));
+    const rows = this.db
+      .select()
+      .from(runs)
+      .where(and(...where))
+      .orderBy(desc(runs.id))
+      .limit(limit + 1)
+      .all();
+    return pageOf(rows, limit, (row) => encodeCursor(row.createdAt.getTime(), row.id));
   }
 
   // ------------------------------------------------------------ approvals

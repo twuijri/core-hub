@@ -9,6 +9,7 @@ import type {
   ProviderHost,
   ProviderPreset,
   ProviderProbeResult,
+  ProviderSignIn,
   RuntimeReport,
   SpeechSettings,
 } from '../types.js';
@@ -93,11 +94,29 @@ export function useCatalogue() {
   const { client, profile, session } = useAuth();
   return useQuery({
     queryKey: modelKeys.catalogue(profile),
-    queryFn: async () =>
-      (await client.request('get', '/models', { query: { limit: 200 } })).data.items as Model[],
+    // Every page, not the first: a hub with OpenRouter has more than one page of models, and
+    // a model past the first was missing from every picker (the fallback list among them).
+    queryFn: async () => {
+      const models: Model[] = [];
+      let cursor: string | null = null;
+      for (let page = 0; page < CATALOGUE_MAX_PAGES; page += 1) {
+        const data = (
+          await client.request('get', '/models', {
+            query: { limit: 200, ...(cursor ? { cursor } : {}) },
+          })
+        ).data as { items: Model[]; next_cursor?: string | null };
+        models.push(...data.items);
+        cursor = data.next_cursor ?? null;
+        if (!cursor) break;
+      }
+      return models;
+    },
     enabled: !!session,
   });
 }
+
+/** 200 models a page: ten pages is a catalogue of 2 000, far past any provider's list. */
+const CATALOGUE_MAX_PAGES = 10;
 
 /**
  * Everything the screen writes invalidates the same reads: one rule, no drift. In **every**
@@ -251,9 +270,58 @@ export interface ModelRef {
 export function useSaveDefaults() {
   const { client } = useAuth();
   return useModelsMutation(
-    async (body: { default?: ModelRef | null; assignments?: Record<string, ModelRef | null> }) =>
-      (await client.request('put', '/models/defaults', { body })).data as ModelDefaults,
+    async (body: {
+      default?: ModelRef | null;
+      /** The chat model's fallback chain, in order (contract decision §54). */
+      fallbacks?: ModelRef[];
+      assignments?: Record<string, ModelRef | null>;
+    }) => (await client.request('put', '/models/defaults', { body })).data as ModelDefaults,
   );
+}
+
+/** Starts a device-code sign-in for a provider used by signing in (contract decision §55). */
+export function useStartSignIn() {
+  const { client } = useAuth();
+  return useMutation({
+    mutationFn: async (providerId: string) =>
+      (
+        await client.request('post', '/models/providers/{provider_id}/sign-in', {
+          params: { provider_id: providerId },
+        })
+      ).data as ProviderSignIn,
+  });
+}
+
+/** How often a pending sign-in is asked about: Hermes itself polls the provider every 5 s. */
+export const SIGN_IN_POLL_MS = 3000;
+
+/**
+ * Polls a sign-in until it is no longer `pending`. On `approved` the provider list is read
+ * again, so the card says it is signed in and its models arrive.
+ */
+export function useSignInStatus(providerId: string, signInId: string | null) {
+  const { client, profile } = useAuth();
+  const queryClient = useQueryClient();
+  return useQuery({
+    queryKey: ['models', 'sign-in', profile, providerId, signInId] as const,
+    enabled: signInId !== null,
+    queryFn: async () => {
+      const signIn = (
+        await client.request('get', '/models/providers/{provider_id}/sign-in/{sign_in_id}', {
+          params: { provider_id: providerId, sign_in_id: signInId as string },
+        })
+      ).data as ProviderSignIn;
+      if (signIn.status === 'approved') {
+        // The card and the pickers, not this query: it would ask again, and again.
+        for (const key of ['providers', 'catalogue', 'defaults']) {
+          void queryClient.invalidateQueries({ queryKey: ['models', key] });
+        }
+      }
+      return signIn;
+    },
+    refetchInterval: (query) =>
+      !query.state.data || query.state.data.status === 'pending' ? SIGN_IN_POLL_MS : false,
+  });
 }
 
 /** `<provider_id>|<model>` — one string a picker can carry for a `ModelRef`. */
@@ -265,4 +333,42 @@ export function parseRef(value: string): ModelRef | null {
   const separator = value.indexOf('|');
   if (separator <= 0) return null;
   return { provider_id: value.slice(0, separator), model: value.slice(separator + 1) };
+}
+
+// -------------------------------------------------------------------- speech (§63)
+
+export interface SpeechChoice {
+  kind: 'stt' | 'tts';
+  providerId: string | null;
+  /** The chosen provider's settings; only what the person can edit here. */
+  settings?: { model?: string | null; language?: string | null; voice?: string | null };
+}
+
+/** Choose the profile's STT or TTS provider and set its model, language or voice. */
+export function useUpdateSpeech() {
+  const { client } = useAuth();
+  return useModelsMutation(async ({ kind, providerId, settings }: SpeechChoice) => {
+    const body = {
+      ...(kind === 'stt' ? { stt_provider_id: providerId } : { tts_provider_id: providerId }),
+      ...(providerId && settings ? { providers: [{ id: providerId, settings }] } : {}),
+    };
+    return (await client.request('patch', '/models/speech', { body })).data as SpeechSettings;
+  });
+}
+
+/** The voices a TTS provider lists; empty for one that takes a free-form voice id. */
+export function useVoices(providerId: string | null) {
+  const { client, profile, session } = useAuth();
+  return useQuery({
+    queryKey: ['models', 'voices', profile, providerId] as const,
+    queryFn: async () =>
+      (
+        await client.request('get', '/models/speech/voices', {
+          query: { provider_id: providerId as string },
+        })
+      ).data.items as { id: string; name: string; language: string | null }[],
+    enabled: !!session && !!providerId,
+    staleTime: 5 * 60_000,
+    retry: false,
+  });
 }

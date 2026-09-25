@@ -33,6 +33,8 @@ import type {
   RunnerAskRequest,
   RunnerApprovalKind,
   RunnerChoice,
+  RunnerCompressRequest,
+  RunnerCompressResult,
   RunnerDecision,
   RunnerEvent,
   RunnerFileExchange,
@@ -40,9 +42,12 @@ import type {
   RunnerRunAccepted,
   RunnerRunInput,
   RunnerRunRequest,
+  RunnerSubagentControl,
+  RunnerSubagentSignal,
   RunnerToolKind,
 } from './ports.js';
 import type { AgentsService } from './service.js';
+import type { RunLeases } from './hub-tools/leases.js';
 
 /**
  * How long a question waits for the person (owner decision, 2026-09-23: five minutes, as in
@@ -56,8 +61,14 @@ type DecisionMap = Map<RunnerDecision, string>;
 interface LiveSession {
   session: AgentSession;
   adapterKind: string;
+  /** The registry row it runs, so an update can retire the sessions of that agent. */
+  agentId: string;
+  /** Set when the agent was updated under a running turn: closed as soon as it ends. */
+  retire?: boolean;
   /** The hub session the agent session serves; the map key, kept for logging. */
   sessionId: string;
+  /** Stops forwarding its subagent reports (§56). */
+  unwatch: () => void;
 }
 
 interface LiveRun {
@@ -71,27 +82,33 @@ interface LiveRun {
   decisions: Map<string, DecisionMap>;
   /** Questions the agent asked in this run and still waits on (`question.asked`). */
   questions: Set<string>;
+  /** Tools in flight, by id, so an end can be matched to what started. */
+  tools: Map<string, { name: string; input: unknown }>;
 }
 
 export interface AgentRunnerDeps {
   service: AgentsService;
   adapters: AdapterSet;
   log: FastifyBaseLogger;
+  /** Who each live run acts for, for the hub's own tools (`hub-tools/leases.ts`). */
+  leases?: RunLeases;
 }
 
 export class AgentRunner implements AgentRunnerPort {
   private readonly sessions = new Map<string, LiveSession>();
   private readonly runs = new Map<string, LiveRun>();
+  private readonly subagentListeners = new Set<
+    (sessionId: string, signal: RunnerSubagentSignal) => void
+  >();
 
   constructor(private readonly deps: AgentRunnerDeps) {}
 
   async start(request: RunnerRunRequest): Promise<RunnerRunAccepted> {
-    const { service, adapters } = this.deps;
-    const row = service.loadAgent(request.agentId);
+    const { service } = this.deps;
+    const row = await this.readyRow(request.agentId);
     if (row.installState !== 'installed') {
       throw agentUnavailable({ agent_id: row.id, status: row.installState });
     }
-    const adapter = adapters.byKind(row.adapterKind);
 
     // Resolved every turn, not only when the conversation opens. The composer can change
     // the model between turns, and a live Hermes session is deliberately never evicted —
@@ -102,26 +119,7 @@ export class AgentRunner implements AgentRunnerPort {
       provider: request.provider,
     });
 
-    let live = this.sessions.get(request.sessionId);
-    if (live && isClosed(live.session)) {
-      // Its process went away between turns — a Hermes TUI gateway retired after a key
-      // change and closed once idle: reopen by the stored ref rather than hand the turn to
-      // a session that can only refuse it ("Hermes session is closed").
-      this.sessions.delete(request.sessionId);
-      live = undefined;
-    }
-    if (!live) {
-      const target = service.targetFor(row, request.workspace, {
-        sessionRef: request.agentSessionRef ?? mintSessionRef(row.adapterKind, request.sessionId),
-        cwd: request.workingDir,
-        model: request.model,
-        provider: request.provider,
-        reasoningEffort: request.reasoningEffort,
-      });
-      const session = await adapter.start(target);
-      live = { session, adapterKind: row.adapterKind, sessionId: request.sessionId };
-      this.sessions.set(request.sessionId, live);
-    }
+    const live = await this.open(row, request);
 
     const run: LiveRun = {
       runId: request.runId,
@@ -133,8 +131,17 @@ export class AgentRunner implements AgentRunnerPort {
       interruptRequested: false,
       decisions: new Map(),
       questions: new Set(),
+      tools: new Map(),
     };
     this.runs.set(request.runId, run);
+    // From here until the run ends, a call to the hub's own tools from this profile may act
+    // for the run's owner (contract decision §67).
+    this.deps.leases?.open({
+      runId: request.runId,
+      sessionId: request.sessionId,
+      workspaceId: request.workspace,
+      userId: request.userId ?? null,
+    });
 
     // The turn: events are pumped from the session stream while `send()` drives the agent.
     // Neither is awaited here — the engine consumes `stream()` and `send()` resolves on the
@@ -148,6 +155,8 @@ export class AgentRunner implements AgentRunnerPort {
       model: selection.model,
       modelProvider: selection.provider,
       modelProviderId: selection.providerId,
+      modelProviderSlug: service.providerSlugOf(request.workspace, selection),
+      fallbacks: service.fallbacksFor(request.workspace, selection),
       reasoningEffort: request.reasoningEffort,
     };
     void live.session.send(prompt).catch((error: unknown) => {
@@ -166,12 +175,134 @@ export class AgentRunner implements AgentRunnerPort {
   }
 
   /**
+   * The conversation's live agent session, opened (or reopened by its stored ref) when there
+   * is none. A run and a compression of the same hub session share it.
+   */
+  private async open(
+    row: ReturnType<AgentsService['loadAgent']>,
+    request: Pick<
+      RunnerRunRequest,
+      | 'sessionId'
+      | 'workspace'
+      | 'agentSessionRef'
+      | 'workingDir'
+      | 'model'
+      | 'provider'
+      | 'reasoningEffort'
+    >,
+  ): Promise<LiveSession> {
+    const { service, adapters } = this.deps;
+    let live = this.sessions.get(request.sessionId);
+    if (live && isClosed(live.session)) {
+      // Its process went away between turns — a Hermes TUI gateway retired after a key
+      // change and closed once idle: reopen by the stored ref rather than hand the turn to
+      // a session that can only refuse it ("Hermes session is closed").
+      live.unwatch();
+      this.sessions.delete(request.sessionId);
+      live = undefined;
+    }
+    if (!live) {
+      const target = service.targetFor(row, request.workspace, {
+        sessionRef: request.agentSessionRef ?? mintSessionRef(row.adapterKind, request.sessionId),
+        cwd: request.workingDir,
+        model: request.model,
+        provider: request.provider,
+        reasoningEffort: request.reasoningEffort,
+      });
+      const session = await adapters.byKind(row.adapterKind).start(target);
+      const sessionId = request.sessionId;
+      // A subagent's reports are the conversation's, not the turn's: forwarded as they come,
+      // between turns too (Hermes's asynchronous delegation).
+      const unwatch =
+        session.subagents?.watch((signal) => {
+          for (const listener of this.subagentListeners) listener(sessionId, signal);
+        }) ?? (() => undefined);
+      live = { session, adapterKind: row.adapterKind, agentId: row.id, sessionId, unwatch };
+      this.sessions.set(request.sessionId, live);
+    }
+    return live;
+  }
+
+  /**
+   * Compress the conversation's context between turns (decision §57). The agent session is
+   * the one the next run would use, so what is compressed is what the next turn reads.
+   */
+  async compress(request: RunnerCompressRequest): Promise<RunnerCompressResult> {
+    const row = this.deps.service.loadAgent(request.agentId);
+    if (row.installState !== 'installed') {
+      throw agentUnavailable({ agent_id: row.id, status: row.installState });
+    }
+    if (!row.capabilities.includes('compress')) throw commandUnsupported('compress', row.id);
+    const live = await this.open(row, request);
+    if (!live.session.compress) throw commandUnsupported('compress', row.id);
+    const outcome = await live.session.compress(request.focus);
+    return { agentSessionRef: live.session.id, ...outcome };
+  }
+
+  /** Guidance into the run in flight (`sessions.steerRun`); the run is not interrupted. */
+  async steer(runId: string, text: string): Promise<'queued' | 'rejected'> {
+    const run = this.runs.get(runId);
+    if (!run || run.ended) {
+      throw new HubError('state_invalid', { details: { reason: 'run_not_live', runId } });
+    }
+    if (!run.live.session.steer) throw commandUnsupported('steer', run.live.adapterKind);
+    return run.live.session.steer(text);
+  }
+
+  /**
    * Whether any turn is in flight. The `models` module asks before recycling the agent
    * runtime: a restart mid-turn kills the run the person is watching, and a provider
    * change can wait the few seconds a turn takes (ADR 0010 §Consequences).
    */
   get busy(): boolean {
     return this.runs.size > 0;
+  }
+
+  /**
+   * Whether a turn of this agent is in flight. The update policy asks before an
+   * auto-update: it never replaces an agent's CLI under a running turn
+   * (`update-policy.ts`).
+   */
+  busyFor(agentId: string): boolean {
+    for (const run of this.runs.values()) {
+      if (run.live.agentId === agentId) return true;
+    }
+    return false;
+  }
+
+  /**
+   * After an agent was installed again or updated: its open sessions still run the old
+   * process, so each idle one is closed now and each busy one as soon as its turn ends.
+   * The next turn opens a fresh session on the new CLI, resuming the conversation by
+   * its stored ref.
+   */
+  retireSessionsOf(agentId: string): void {
+    const busy = new Set([...this.runs.values()].map((run) => run.live));
+    for (const [sessionId, live] of [...this.sessions.entries()]) {
+      if (live.agentId !== agentId) continue;
+      if (busy.has(live)) {
+        live.retire = true;
+        continue;
+      }
+      live.unwatch();
+      this.sessions.delete(sessionId);
+      void live.session.close().catch((error: unknown) => {
+        this.deps.log.warn({ err: error, sessionId }, 'agents: close after update failed');
+      });
+    }
+  }
+
+  /**
+   * The agent's row, once it can run: a turn asked for while the agent is being updated
+   * waits for the update to end instead of starting on a CLI that is being replaced
+   * (`AgentsService.settled`, bounded by `HOLD_FOR_UPDATE_MS`).
+   */
+  private async readyRow(agentId: string) {
+    const { service } = this.deps;
+    const row = service.loadAgent(agentId);
+    if (row.installState !== 'updating') return row;
+    await service.settled(row.id);
+    return service.loadAgent(agentId);
   }
 
   stream(runId: string): AsyncIterable<RunnerEvent> {
@@ -248,7 +379,7 @@ export class AgentRunner implements AgentRunnerPort {
    */
   async ask(request: RunnerAskRequest): Promise<string | null> {
     const { service, adapters } = this.deps;
-    const row = service.loadAgent(request.agentId);
+    const row = await this.readyRow(request.agentId);
     if (row.installState !== 'installed') return null;
     const target = service.targetFor(row, request.workspace, {
       // A conversation of its own: `-ask-` keeps it apart from the chat's own ref for
@@ -278,6 +409,9 @@ export class AgentRunner implements AgentRunnerPort {
             text: request.prompt,
             model: selection.model,
             modelProvider: selection.provider,
+            modelProviderId: selection.providerId,
+            // A title is worth the same fallback a turn gets (contract decision §54).
+            fallbacks: service.fallbacksFor(request.workspace, selection),
           }),
           collect,
         ]),
@@ -292,6 +426,25 @@ export class AgentRunner implements AgentRunnerPort {
       await session.close().catch(() => undefined);
     }
     return text.trim() === '' ? null : text;
+  }
+
+  onSubagent(listener: (sessionId: string, signal: RunnerSubagentSignal) => void): () => void {
+    this.subagentListeners.add(listener);
+    return () => this.subagentListeners.delete(listener);
+  }
+
+  subagents(sessionId: string): RunnerSubagentControl | null {
+    const live = this.sessions.get(sessionId);
+    const control = live && !isClosed(live.session) ? live.session.subagents : undefined;
+    if (!control) return null;
+    // Only the verbs: `watch` stays here, where every report is already forwarded.
+    return {
+      support: control.support,
+      ...(control.list ? { list: () => control.list!() } : {}),
+      ...(control.interrupt ? { interrupt: (id: string) => control.interrupt!(id) } : {}),
+      ...(control.steer ? { steer: (id: string, text: string) => control.steer!(id, text) } : {}),
+      ...(control.tail ? { tail: (id: string) => control.tail!(id) } : {}),
+    };
   }
 
   /** Shutdown: end every live agent session (ACP children exit, Hermes streams close). */
@@ -333,6 +486,16 @@ export class AgentRunner implements AgentRunnerPort {
   }
 
   private translate(run: LiveRun, event: AgentEvent): RunnerEvent[] {
+    if (event.type === 'tool.started') {
+      const started = { name: event.name ?? event.title, input: event.input };
+      this.deps.leases?.toolStarted(run.runId, started.name, started.input);
+      run.tools.set(event.id, started);
+    }
+    if (event.type === 'tool.completed' || event.type === 'tool.failed') {
+      const started = run.tools.get(event.id);
+      this.deps.leases?.toolEnded(run.runId, started?.name, started?.input);
+      run.tools.delete(event.id);
+    }
     if (event.type === 'question.asked') {
       run.questions.add(event.id);
       return [
@@ -377,12 +540,26 @@ export class AgentRunner implements AgentRunnerPort {
     run.ended = true;
     for (const waiter of run.waiting.splice(0)) waiter({ value: undefined as never, done: true });
     this.runs.delete(run.runId);
+    this.deps.leases?.close(run.runId);
     // A session whose process died is not reusable; forget it so the next turn opens a
     // fresh one (an ACP child, or the Hermes TUI gateway). Hermes's HTTP sessions stay.
     if (isClosed(run.live.session)) {
+      if (this.sessions.get(run.sessionId) === run.live) run.live.unwatch();
       this.sessions.delete(run.sessionId);
+    } else if (run.live.retire && this.sessions.get(run.sessionId) === run.live) {
+      // Updated under this turn: the process is the old CLI, so it goes now.
+      run.live.unwatch();
+      this.sessions.delete(run.sessionId);
+      void run.live.session.close().catch(() => undefined);
     }
   }
+}
+
+/** The agent has no such command (decision §57): `409 state_invalid`, said plainly. */
+function commandUnsupported(command: string, agent: string): HubError {
+  return new HubError('state_invalid', {
+    details: { reason: 'command_unsupported', command, agent },
+  });
 }
 
 /** Resolve, or give up. The work behind it is abandoned, never awaited. */
@@ -637,7 +814,10 @@ export function toRunnerEvent(event: AgentEvent, ctx: TranslateContext): RunnerE
         type: 'context',
         usedTokens: event.usedTokens,
         windowTokens: event.windowTokens ?? null,
+        ...(event.estimated ? { estimated: true } : {}),
       };
+    case 'compression':
+      return { type: 'compression', phase: event.phase };
     case 'run.completed':
       if (event.interrupted && !ctx.interruptRequested) {
         // The agent stopped on its own; the hub never asked. Not a success.
@@ -651,6 +831,12 @@ export function toRunnerEvent(event: AgentEvent, ctx: TranslateContext): RunnerE
         type: 'failed',
         code: event.code ?? failureCode(event.error),
         message: event.error,
+      };
+    case 'model.fallback':
+      return {
+        type: 'model_fallback',
+        failed: event.failed.map((attempt) => ({ ...attempt })),
+        answered: { ...event.answered },
       };
     case 'plan':
       // No `/rt/sessions` event carries a plan yet; it is not a message.

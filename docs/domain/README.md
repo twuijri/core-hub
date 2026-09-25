@@ -173,8 +173,8 @@ id everywhere else. The referencing module asks the owner through its public
 | `schedules` | schedule, schedule_run, workflow, workflow_run, node_run | agent, model, run, approval, task |
 | `knowledge` | knowledge_note, journal_entry, attachment | project, task, agent, run |
 | `models` | provider, model, model_default, secret | — |
-| `devices` | device, device_command | app_token, run, user/agent/workflow_run (requester), attachment |
-| `notify` | notification, notification_delivery, notification_preference, webhook, webhook_delivery, push_credential | device, secret, any entity (deep link) |
+| `devices` | device, device_command, push_credential | app_token, run, user/agent/workflow_run (requester), attachment |
+| `notify` | notification, notification_delivery, notification_preference, webhook, webhook_delivery | device, secret, any entity (deep link) |
 | `updates` | release_channel, release, channel_subscription | device |
 | `audit` | audit_event, usage_record, performance_snapshot, job, job_event | run, session, agent, provider, device, any entity |
 | `plugins` | plugin, plugin_binding, plugin_tool | job, secret, agent |

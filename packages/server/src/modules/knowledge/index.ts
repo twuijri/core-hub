@@ -22,10 +22,14 @@
  * paging are the real ones, and the other two kinds appear the moment something writes
  * them, with no change here.
  *
+ * Also implemented: the profile's working files (`knowledge.*WorkspaceFile*`, contract
+ * decision §65) — a file manager over `${DATA_DIR}/workspaces/<profile>` for owners and
+ * admins, in `workspace-files.ts` (the path rules) and `workspace-files-routes.ts`.
+ *
  * What the rest of the hub gets is `attachmentsPortFor(app)`: resolve ids, put a
  * person's files where an agent can read them, and take back what the agent wrote.
  */
-import type { Readable } from 'node:stream';
+import { Readable } from 'node:stream';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import type { Server as SocketServer } from 'socket.io';
 import multipart from '@fastify/multipart';
@@ -43,6 +47,7 @@ import { KnowledgeItems, type ItemKind } from './items.js';
 import { KnowledgeService, type AttachmentScope } from './service.js';
 import { attachmentUrl, toAttachment } from './serialize.js';
 import type { AttachmentRow } from './store.js';
+import { registerWorkspaceFileRoutes } from './workspace-files-routes.js';
 
 export { KnowledgeItems } from './items.js';
 export type { ItemKind, ItemQuery, KnowledgeItem } from './items.js';
@@ -89,6 +94,11 @@ export interface AttachmentsPort {
     scope: { workspace: string; userId: string },
     file: { path: string; relativePath: string; sizeBytes: number },
     sourceId: string,
+  ): Promise<{ id: string; name: string; mime: string; sizeBytes: number; kind: string }>;
+  /** Keep bytes the hub wrote for the caller (a transcript) as an attachment of theirs. */
+  store(
+    scope: { workspace: string; userId: string },
+    file: { name: string; mime: string; bytes: Buffer },
   ): Promise<{ id: string; name: string; mime: string; sizeBytes: number; kind: string }>;
 }
 
@@ -147,6 +157,19 @@ export function attachmentsPort(app: FastifyInstance): AttachmentsPort {
         { workspace: scope.workspace, profile: '', userId: scope.userId },
         file,
         sourceId,
+      );
+      return summary(row);
+    },
+    // Bytes the hub wrote for the caller (a transcript): an upload of theirs in every way.
+    async store(scope, file) {
+      const row = await service().upload(
+        { workspace: scope.workspace, profile: '', userId: scope.userId },
+        {
+          filename: file.name,
+          declaredMime: file.mime,
+          purpose: 'message',
+          body: Readable.from([file.bytes]),
+        },
       );
       return summary(row);
     },
@@ -401,6 +424,10 @@ export const knowledgeModule = defineModule({
         return toAttachment(row, scope.profile);
       },
     });
+
+    // ------------------------------------------- the profile's working files (§65)
+
+    registerWorkspaceFileRoutes(app, deps, knowledge);
   },
   registerEvents(_io) {
     // This module does not stream (ARCHITECTURE §Realtime).

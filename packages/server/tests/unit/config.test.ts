@@ -24,6 +24,15 @@ describe('config', () => {
       'COREHUB_SETUP_OPEN_MINUTES',
       'COREHUB_RESET_OWNER',
       'COREHUB_TASK_AUTO_START_MAX',
+      'COREHUB_PUSH_CONTACT',
+      'COREHUB_FCM_SERVICE_ACCOUNT',
+      'COREHUB_APNS_KEY_ID',
+      'COREHUB_APNS_TEAM_ID',
+      'COREHUB_APNS_BUNDLE_ID',
+      'COREHUB_APNS_KEY',
+      'COREHUB_APNS_ENVIRONMENT',
+      'COREHUB_WEB_TERMINAL',
+      'COREHUB_WEB_TERMINAL_IDLE_MINUTES',
     ]);
     const picked = pickEnv({
       DATA_DIR: '/x',
@@ -61,6 +70,24 @@ describe('config', () => {
     expect(loadConfig({ COREHUB_TASK_AUTO_START_MAX: '5' }).taskAutoStartMax).toBe(5);
     expect(() => loadConfig({ COREHUB_TASK_AUTO_START_MAX: '0' })).toThrow(
       /COREHUB_TASK_AUTO_START_MAX/,
+    );
+  });
+
+  it('the web terminal is off by default, closes idle sessions after 15 minutes, three at most', () => {
+    expect(loadConfig({}).webTerminal).toEqual({
+      enabled: false,
+      idleMs: 15 * 60_000,
+      maxSessions: 3,
+    });
+    expect(loadConfig({ COREHUB_WEB_TERMINAL: '0' }).webTerminal.enabled).toBe(false);
+    expect(loadConfig({ COREHUB_WEB_TERMINAL: '1' }).webTerminal.enabled).toBe(true);
+    expect(
+      loadConfig({ COREHUB_WEB_TERMINAL: '1', COREHUB_WEB_TERMINAL_IDLE_MINUTES: '5' }).webTerminal
+        .idleMs,
+    ).toBe(5 * 60_000);
+    expect(() => loadConfig({ COREHUB_WEB_TERMINAL: 'yes' })).toThrow(/COREHUB_WEB_TERMINAL/);
+    expect(() => loadConfig({ COREHUB_WEB_TERMINAL_IDLE_MINUTES: '0' })).toThrow(
+      /COREHUB_WEB_TERMINAL_IDLE_MINUTES/,
     );
   });
 

@@ -24,7 +24,7 @@ import type { FastifyBaseLogger } from 'fastify';
 import type { ModuleDb } from '../../lib/db.js';
 import { REALTIME_NAMESPACES } from '../../lib/module.js';
 import type { Realtime } from '../../lib/realtime.js';
-import { agentUnavailable, conflict, notFound, stateInvalid } from '../../lib/errors.js';
+import { HubError, agentUnavailable, conflict, notFound, stateInvalid } from '../../lib/errors.js';
 import { newUlid } from '../../db/ids.js';
 import { t, type Language } from '../../i18n/index.js';
 import type { AuditService, JobRow, JobRunner } from '../audit/index.js';
@@ -37,8 +37,22 @@ import {
   type CatalogEntry,
 } from './catalog/index.js';
 import type { AdapterSet } from './adapters/index.js';
-import type { AdapterKind, AgentProbe, AgentTarget, SettingsSection } from './adapters/types.js';
+import type {
+  AdapterKind,
+  AgentProbe,
+  AgentTarget,
+  FallbackModel,
+  SettingsSection,
+} from './adapters/types.js';
 import type { AgentInstaller } from './installer.js';
+import {
+  compareVersions,
+  isStableVersion,
+  newerOf,
+  type PackageRegistry,
+  type UpdateCandidate,
+  type UpdatePolicyStore,
+} from './update-policy.js';
 import type { AgentModelsPort } from './ports.js';
 import { agents, agentSettings, agentAdapters } from './schema.js';
 import {
@@ -83,7 +97,20 @@ export interface AgentsServiceOptions {
   catalog?: readonly CatalogEntry[];
   language?: Language;
   now?: () => Date;
+  /**
+   * Where `check-update` and the periodic check ask for a newer version
+   * (`update-policy.ts`). Absent: the hub knows only the catalog's pins.
+   */
+  registry?: PackageRegistry;
+  /**
+   * The profile a change nobody asked for is announced in and its job filed under — an
+   * auto-update. The hub's default workspace; absent or `null`, no auto-update starts.
+   */
+  systemScope?: () => WorkspaceScope | null;
 }
+
+/** How long a run asked for during an install or update waits for it (`settled`). */
+export const HOLD_FOR_UPDATE_MS = 15 * 60_000;
 
 export interface AgentPatchInput {
   name?: string;
@@ -116,8 +143,12 @@ export interface AgentSelection {
   providerId: string | null;
 }
 
-export class AgentsService {
+export class AgentsService implements UpdatePolicyStore {
   private readonly catalog: readonly CatalogEntry[];
+  /** Install and update jobs in flight, by agent row id, for `settled()`. */
+  private readonly lifecycles = new Map<string, Promise<void>>();
+  /** Called once an install or update of an agent has ended, whatever its outcome. */
+  private readonly settledListeners: ((agentId: string) => void)[] = [];
   private readonly language: Language;
   private readonly now: () => Date;
   /** Runtime probes are process state, not rows: they live for the life of the server. */
@@ -349,28 +380,47 @@ export class AgentsService {
       },
       async (handle) => {
         handle.progress(30, t('jobs.check_started', this.language));
-        // The catalog's pin is what "up to date" means: the hub never installs a version
-        // the owner did not approve, so it never advertises one either.
+        // The catalog's pin is the tested baseline and the floor of "latest"; the registry
+        // is asked for anything newer, without installing it (`update-policy.ts`).
         const pinned = pinnedVersion(entry);
-        const health = isManaged(entry) ? await this.options.installer.health(entry) : null;
+        const managed = isManaged(entry) && row.source === 'managed';
+        const health = managed ? await this.options.installer.health(entry) : null;
         const at = this.now();
         this.db
           .update(agents)
           .set({
-            latestVersion: pinned,
+            latestVersion: newerOf(pinned, stable(row.latestVersion)),
             version: health?.version ?? row.version,
-            checkedAt: at,
             lastError: health?.error ?? null,
             updatedAt: at,
           })
           .where(eq(agents.id, row.id))
           .run();
+        if (managed && this.options.registry && entry.install.kind === 'npm') {
+          handle.progress(60, t('jobs.check_started', this.language));
+          let latest: string | null;
+          try {
+            latest = await this.options.registry.latest('npm', entry.install.package);
+          } catch (error) {
+            this.announce(this.loadAgent(row.id), scope);
+            throw new HubError('service_unavailable', {
+              message: `could not ask the registry about ${entry.install.package}: ${
+                error instanceof Error ? error.message : String(error)
+              }`,
+              details: { agent_id: row.id, reason: 'registry_unreachable' },
+            });
+          }
+          this.recordLatest(row.id, latest);
+        } else {
+          this.db.update(agents).set({ checkedAt: at }).where(eq(agents.id, row.id)).run();
+        }
         const fresh = this.loadAgent(row.id);
         this.announce(fresh, scope);
         handle.progress(100, t('jobs.check_done', this.language));
         return {
-          latest_version: pinned,
-          update_available: !!pinned && !!fresh.version && pinned !== fresh.version,
+          latest_version: fresh.latestVersion,
+          pinned_version: pinned,
+          update_available: updateAvailable(fresh),
         };
       },
     );
@@ -470,6 +520,7 @@ export class AgentsService {
     actor: Actor,
     id: string,
     kind: 'install' | 'update' | 'uninstall',
+    trigger: 'user' | 'auto' = 'user',
   ): JobRow {
     const { row, entry } = this.loadCatalogued(id);
     if (!isManaged(entry)) {
@@ -502,6 +553,29 @@ export class AgentsService {
       .run();
     this.announce(this.loadAgent(row.id), scope);
 
+    // A run asked for while this job works waits for it (`settled`, `AgentRunner.start`).
+    let settle: () => void = () => undefined;
+    if (kind !== 'uninstall') {
+      this.lifecycles.set(
+        row.id,
+        new Promise<void>((resolve) => {
+          settle = resolve;
+        }),
+      );
+    }
+    const finish = () => {
+      if (kind === 'uninstall') return;
+      this.lifecycles.delete(row.id);
+      settle();
+      for (const listener of this.settledListeners) {
+        try {
+          listener(row.id);
+        } catch (error) {
+          this.options.log.warn({ err: error, agent: row.slug }, 'agents: settle listener failed');
+        }
+      }
+    };
+
     const job = this.options.jobs.start(
       {
         kind: `agents.${kind}`,
@@ -533,8 +607,11 @@ export class AgentsService {
               .where(eq(agents.id, row.id))
               .run();
           } else {
-            const outcome = await this.options.installer.install(entry, async (percent, message) =>
-              handle.progress(percent, message),
+            const versions = kind === 'update' ? await this.updateTarget(row, entry) : undefined;
+            const outcome = await this.options.installer.install(
+              entry,
+              async (percent, message) => handle.progress(percent, message),
+              versions,
             );
             const at = this.now();
             this.db
@@ -544,8 +621,8 @@ export class AgentsService {
                 source: 'managed',
                 executablePath: outcome.executablePath,
                 version: outcome.version,
-                latestVersion: pinnedVersion(entry),
-                checkedAt: at,
+                // What the registry named is still true after taking it; the pin is the floor.
+                latestVersion: newerOf(pinnedVersion(entry), stable(row.latestVersion)),
                 installJobId: null,
                 lastError: null,
                 updatedAt: at,
@@ -568,12 +645,15 @@ export class AgentsService {
             .where(eq(agents.id, row.id))
             .run();
           this.announce(this.loadAgent(row.id), scope);
+          finish();
           throw error;
         }
         const fresh = this.loadAgent(row.id);
         this.announce(fresh, scope);
+        finish();
         this.options.audit.record({
-          actorKind: 'user',
+          // An auto-update is the hub's own doing, on the owner's standing instruction.
+          actorKind: trigger === 'auto' ? 'system' : 'user',
           actorId: actor.userId,
           ownerId: actor.userId,
           workspace: scope.id,
@@ -581,7 +661,11 @@ export class AgentsService {
           entityKind: 'agent',
           entityId: fresh.id,
           summary: `${fresh.name} ${kind}`,
-          data: { version: fresh.version },
+          data: {
+            version: fresh.version,
+            pinned_version: pinnedVersion(entry),
+            ...(trigger === 'auto' ? { trigger } : {}),
+          },
         });
         handle.progress(100, done);
         return { version: fresh.version };
@@ -595,6 +679,121 @@ export class AgentsService {
       .where(and(eq(agents.id, row.id), inArray(agents.installState, ['installing', 'updating'])))
       .run();
     return job;
+  }
+
+  // --------------------------------------------------------- update policy
+
+  /**
+   * Resolves once no install or update of this agent is in flight — at once when none is,
+   * and after `timeoutMs` at the latest, so a stuck job cannot hold a run for ever.
+   */
+  async settled(agentId: string, timeoutMs = HOLD_FOR_UPDATE_MS): Promise<void> {
+    const pending = this.lifecycles.get(agentId);
+    if (!pending) return;
+    let timer: NodeJS.Timeout | undefined;
+    await Promise.race([
+      pending,
+      new Promise<void>((resolve) => {
+        timer = setTimeout(resolve, timeoutMs);
+        timer.unref?.();
+      }),
+    ]);
+    if (timer) clearTimeout(timer);
+  }
+
+  /** Called with the agent's row id each time one of its installs or updates ends. */
+  onSettled(listener: (agentId: string) => void): void {
+    this.settledListeners.push(listener);
+  }
+
+  /** Installed agents the hub itself installed and so can update (`update-policy.ts`). */
+  updateCandidates(): UpdateCandidate[] {
+    const candidates: UpdateCandidate[] = [];
+    for (const row of this.db.select().from(agents).where(isNull(agents.archivedAt)).all()) {
+      if (row.installState !== 'installed' || row.source !== 'managed') continue;
+      const entry = this.catalog.find((candidate) => candidate.id === row.slug);
+      if (!entry || entry.install.kind !== 'npm') continue;
+      candidates.push({
+        agentId: row.id,
+        slug: row.slug,
+        registry: 'npm',
+        package: entry.install.package,
+        pinned: entry.install.version,
+        installed: row.version,
+        autoUpdate: row.autoUpdate,
+      });
+    }
+    return candidates;
+  }
+
+  /**
+   * Writes what the registry answered. `latest_version` is the newer of that answer and
+   * the pin — the registry going backwards, or answering nothing, never advertises a
+   * downgrade. Returns whether the agent now has an update available.
+   */
+  recordLatest(agentId: string, latest: string | null): boolean {
+    const row = this.loadAgent(agentId);
+    const entry = this.catalog.find((candidate) => candidate.id === row.slug);
+    const pinned = entry ? pinnedVersion(entry) : null;
+    const at = this.now();
+    this.db
+      .update(agents)
+      .set({
+        latestVersion: newerOf(pinned, stable(latest)),
+        checkedAt: at,
+        updatedAt: at,
+      })
+      .where(eq(agents.id, agentId))
+      .run();
+    const fresh = this.loadAgent(agentId);
+    const scope = this.options.systemScope?.();
+    if (scope && fresh.latestVersion !== row.latestVersion) this.announce(fresh, scope);
+    return updateAvailable(fresh);
+  }
+
+  /**
+   * Starts the update of an idle agent on the owner's standing `auto_update`. The caller
+   * (`AgentUpdateChecker`) has already made sure no run of it is in flight; from here the
+   * row is `updating`, so a run asked for now waits instead of starting.
+   */
+  autoUpgrade(agentId: string): boolean {
+    const scope = this.options.systemScope?.();
+    if (!scope) return false;
+    const row = this.loadAgent(agentId);
+    if (!row.autoUpdate || !updateAvailable(row)) return false;
+    try {
+      this.lifecycleJob(scope, { userId: row.ownerId }, agentId, 'update', 'auto');
+      return true;
+    } catch (error) {
+      this.options.log.warn({ err: error, agent: row.slug }, 'agents: auto-update did not start');
+      return false;
+    }
+  }
+
+  /**
+   * The exact versions an update installs: the newest the registry named for the agent's
+   * own package, if it is past the pin — otherwise the pin. A companion package (Pi's ACP
+   * adapter) follows: at its pin when the agent stays at its pin, at its own newest stable
+   * release when the agent moves past it.
+   */
+  private async updateTarget(
+    row: AgentRow,
+    entry: CatalogEntry,
+  ): Promise<Record<string, string> | undefined> {
+    if (entry.install.kind !== 'npm') return undefined;
+    const pinned = entry.install.version;
+    const latest = stable(row.latestVersion);
+    if (!latest || compareVersions(latest, pinned) <= 0) return undefined;
+    const versions: Record<string, string> = { [entry.install.package]: latest };
+    for (const companion of entry.install.companions ?? []) {
+      const registry = this.options.registry;
+      // An unreachable registry keeps the companion at its pin rather than failing the update.
+      const next = registry
+        ? await registry.latest('npm', companion.package).catch(() => null)
+        : null;
+      versions[companion.package] = newerOf(companion.version, stable(next)) ?? companion.version;
+    }
+    return versions;
   }
 
   // --------------------------------------------------------------- helpers
@@ -757,6 +956,37 @@ export class AgentsService {
   }
 
   /**
+   * Where a turn on `selection` moves on to when its model fails (contract decision §54): the
+   * profile's chain, without the model the turn already runs on. Empty when the provider
+   * store cannot answer — a turn is never stopped for want of a fallback.
+   */
+  fallbacksFor(workspaceId: string, selection: AgentSelection): FallbackModel[] {
+    const port = this.options.models?.() ?? null;
+    if (!port?.fallbackChain) return [];
+    try {
+      return port
+        .fallbackChain(workspaceId)
+        .filter(
+          (member) =>
+            !(member.providerId === selection.providerId && member.model === selection.model),
+        );
+    } catch {
+      return [];
+    }
+  }
+
+  /** The hub's slug for the provider of a selection, for naming the model that answered. */
+  providerSlugOf(workspaceId: string, selection: AgentSelection): string | null {
+    const port = this.options.models?.() ?? null;
+    if (!port?.providerSlug || !selection.providerId) return null;
+    try {
+      return port.providerSlug(workspaceId, selection.providerId);
+    } catch {
+      return null;
+    }
+  }
+
+  /**
    * The environment a process agent inherits (ADR 0010 §Propagation).
    *
    * The workspace's shared provider keys come first, under the names this agent's
@@ -909,7 +1139,8 @@ export class AgentsService {
           adapterKind: entry.adapter,
           command: [entry.binary, ...entry.protocolArgs],
           packageName: entry.install.kind === 'npm' ? entry.install.package : null,
-          latestVersion: pinnedVersion(entry),
+          // A newer version the registry named survives a restart; a new pin past it wins.
+          latestVersion: newerOf(pinnedVersion(entry), stable(existing.latestVersion)),
           capabilities: entry.capabilities,
           sections: entry.sections,
           selectable: this.options.adapters.byKind(entry.adapter).selectable,
@@ -1052,4 +1283,16 @@ function order(row: AgentRow): number {
   if (row.adapterKind === 'hermes') return 0;
   if (row.adapterKind === 'builtin') return 1;
   return 2;
+}
+
+/** A version the hub may offer: stable, or nothing. */
+function stable(value: string | null | undefined): string | null {
+  return isStableVersion(value) ? value : null;
+}
+
+/** Whether a row's installed version is older than the newest version it knows of. */
+export function updateAvailable(row: Pick<AgentRow, 'version' | 'latestVersion'>): boolean {
+  return (
+    !!row.version && !!row.latestVersion && compareVersions(row.latestVersion, row.version) > 0
+  );
 }
