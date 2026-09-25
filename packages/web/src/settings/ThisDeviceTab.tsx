@@ -67,6 +67,32 @@ export function ThisDeviceTab() {
     { key: 'hub', label: t('this_device.hub'), value: state.hubUrl ?? '—', ltr: true },
     { key: 'hub-state', label: t('this_device.hub_state'), value: hubState, ltr: false },
     { key: 'version', label: t('this_device.app_version'), value: state.appVersion, ltr: true },
+    ...(state.local
+      ? [
+          {
+            key: 'data-dir',
+            label: t('this_device.data_dir'),
+            value: state.local.dataDir,
+            ltr: true,
+          },
+          {
+            key: 'hermes',
+            label: t('this_device.hermes'),
+            value: t(`this_device.hermes_${state.local.hermes}`),
+            ltr: false,
+          },
+          ...(state.local.hermesProgram
+            ? [
+                {
+                  key: 'hermes-path',
+                  label: t('this_device.hermes_path'),
+                  value: state.local.hermesProgram,
+                  ltr: true,
+                },
+              ]
+            : []),
+        ]
+      : []),
     {
       key: 'platform',
       label: t('this_device.platform'),

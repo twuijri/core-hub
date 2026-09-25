@@ -17,7 +17,10 @@ const PASSWORD = 'e2e-owner-password';
 const shots = path.join(appDir, 'test-results', 'shots');
 mkdirSync(shots, { recursive: true });
 
-async function launch(language: 'ar' | 'en'): Promise<ElectronApplication> {
+async function launch(
+  language: 'ar' | 'en',
+  env: Record<string, string> = {},
+): Promise<ElectronApplication> {
   const userData = mkdtempSync(path.join(os.tmpdir(), 'corehub-desktop-'));
   writeFileSync(path.join(userData, 'desktop.json'), JSON.stringify({ language }));
   return electron.launch({
@@ -33,6 +36,7 @@ async function launch(language: 'ar' | 'en'): Promise<ElectronApplication> {
       WAYLAND_DISPLAY: '',
       COREHUB_DESKTOP_USER_DATA: userData,
       COREHUB_DESKTOP_NO_TRAY: '1',
+      ...env,
     },
   });
 }
@@ -127,6 +131,46 @@ test('pairing: a link from a signed-in device signs this computer in', async ({ 
       })
     ).json();
     expect(claimed.status).toBe('claimed');
+  } finally {
+    await app.close();
+  }
+});
+
+test('local mode: no Hermes found → the hub starts on this computer anyway → first-run setup', async () => {
+  // A computer with no Hermes: an empty home, and no gateway where one would answer.
+  const home = mkdtempSync(path.join(os.tmpdir(), 'corehub-home-'));
+  const app = await launch('ar', {
+    HOME: home,
+    HERMES_HOME: path.join(home, '.hermes'),
+    COREHUB_DESKTOP_HERMES_GATEWAY: 'http://127.0.0.1:9/health',
+  });
+  try {
+    const welcome = await app.firstWindow();
+    await welcome.getByTestId('choose-local').click();
+    // The app offers Hermes's own installer and says exactly what would run.
+    const missing = welcome.getByTestId('hermes-missing');
+    await expect(missing).toBeVisible();
+    await expect(missing).toContainText('hermes-agent.nousresearch.com/install.sh');
+    await expect(missing.getByRole('button', { name: 'تثبيت هرمز' })).toBeVisible();
+    await welcome.screenshot({ path: path.join(shots, 'local-no-hermes-ar.png') });
+
+    const [page] = await Promise.all([
+      app.waitForEvent('window'),
+      welcome.getByTestId('local-without-hermes').click(),
+    ]);
+    // The embedded hub has no owner yet: the web client's first-run setup, on the app's origin.
+    await expect(page).toHaveURL(/\/setup$/, { timeout: 60_000 });
+    await page.getByLabel('اسم المستخدم', { exact: true }).fill('tariq');
+    await page.getByLabel('كلمة المرور', { exact: true }).fill('local-owner-password');
+    await page.getByLabel('تأكيد كلمة المرور', { exact: true }).fill('local-owner-password');
+    await page.getByRole('button', { name: 'أنشئ الحساب وادخل' }).click();
+    await expect(page).toHaveURL(/\/chat$/);
+
+    await page.goto(new URL('/settings/this-device', page.url()).toString());
+    await expect(page.getByTestId('this-device-mode')).toHaveText('يعمل على هذا الحاسوب');
+    await expect(page.getByTestId('this-device-hermes')).toContainText('غير موجود');
+    await expect(page.getByTestId('this-device-data-dir')).toContainText('local-hub');
+    await page.screenshot({ path: path.join(shots, 'this-device-local-ar.png') });
   } finally {
     await app.close();
   }

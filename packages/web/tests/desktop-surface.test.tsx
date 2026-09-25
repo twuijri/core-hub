@@ -44,6 +44,7 @@ function fakeBridge(over: Partial<DesktopState> = {}) {
     hubUrl: 'https://hub.example',
     closeToTray: true,
     trayAvailable: true,
+    local: null,
     ...over,
   };
   const bridge = {
@@ -237,6 +238,40 @@ describe('This device', () => {
     const toggle = await screen.findByRole('switch');
     expect(toggle.hasAttribute('disabled')).toBe(true);
     expect(screen.getByText(/no tray/)).toBeTruthy();
+  });
+});
+
+describe('This device in local mode', () => {
+  it('says where the hub keeps its data and which Hermes it runs', async () => {
+    withBridge(
+      fakeBridge({
+        mode: 'local',
+        hubUrl: 'http://127.0.0.1:40123',
+        local: {
+          dataDir: '/home/t/.config/Core Hub/local-hub',
+          hermes: 'program',
+          hermesProgram: '/home/t/.local/bin/hermes',
+        },
+      }),
+    );
+    mountThisDevice();
+    await waitFor(() =>
+      expect(screen.getByTestId('this-device-mode').textContent).toBe('Running on this computer'),
+    );
+    expect(screen.getByTestId('this-device-data-dir').textContent).toBe(
+      '/home/t/.config/Core Hub/local-hub',
+    );
+    expect(screen.getByTestId('this-device-hermes').textContent).toBe('Installed on this computer');
+    expect(screen.getByTestId('this-device-hermes-path').textContent).toBe(
+      '/home/t/.local/bin/hermes',
+    );
+  });
+
+  it('has no Hermes rows in remote mode', async () => {
+    withBridge(fakeBridge());
+    mountThisDevice();
+    await screen.findByTestId('this-device-hub');
+    expect(screen.queryByTestId('this-device-hermes')).toBeNull();
   });
 });
 

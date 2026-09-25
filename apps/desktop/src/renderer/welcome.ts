@@ -5,7 +5,13 @@
  */
 import type { Language } from '../shared/config.js';
 import { direction, translate } from '../shared/i18n.js';
-import type { WelcomeApi, WelcomeError, WelcomeInit } from '../shared/ipc.js';
+import type {
+  HermesMissing,
+  LocalResult,
+  WelcomeApi,
+  WelcomeError,
+  WelcomeInit,
+} from '../shared/ipc.js';
 
 declare global {
   interface Window {
@@ -18,9 +24,11 @@ const root = document.getElementById('root') as HTMLElement;
 
 let init: WelcomeInit;
 let language: Language = 'en';
-let view: 'choose' | 'remote' = 'choose';
+let view: 'choose' | 'remote' | 'local' = 'choose';
 let error: WelcomeError | null = null;
-let busy: 'connect' | 'pair' | null = null;
+let busy: 'connect' | 'pair' | 'local' | 'install' | null = null;
+let hermesMissing: HermesMissing | null = null;
+const installLog: string[] = [];
 let address = '';
 let pairText = '';
 
@@ -107,19 +115,124 @@ function chooseView(): HTMLElement[] {
           class: 'choice',
           type: 'button',
           'data-testid': 'choose-local',
-          'aria-disabled': init.localAvailable ? 'false' : 'true',
-          onclick: async () => {
-            const result = await api.chooseLocal();
-            error = result.ok ? null : result.error;
-            render();
-          },
+          disabled: busy !== null,
+          onclick: () => void local(),
         },
         h('strong', {}, t('welcome.local.title')),
         h('span', { class: 'muted' }, t('welcome.local.body')),
-        !init.localAvailable && h('span', { class: 'muted' }, t('welcome.local.unavailable')),
+        busy === 'local' && h('span', { class: 'muted' }, t('local.starting')),
       ),
     ),
     errorBox(),
+  ].filter((node): node is HTMLElement => node !== null);
+}
+
+function settle(result: LocalResult): void {
+  busy = null;
+  if (result.ok) return;
+  error = result.error;
+  if (result.hermesMissing) {
+    hermesMissing = result.hermesMissing;
+    view = 'local';
+  }
+  render();
+}
+
+async function local(withoutHermes = false): Promise<void> {
+  busy = 'local';
+  error = null;
+  render();
+  settle(await api.chooseLocal({ withoutHermes }));
+}
+
+async function install(): Promise<void> {
+  busy = 'install';
+  error = null;
+  installLog.length = 0;
+  render();
+  settle(await api.installHermes());
+}
+
+function localView(): HTMLElement[] {
+  const missing = hermesMissing;
+  const log =
+    installLog.length > 0
+      ? h(
+          'pre',
+          { class: 'log ltr', 'aria-label': t('local.log'), 'data-testid': 'install-log' },
+          installLog.join('\n'),
+        )
+      : null;
+  return [
+    h(
+      'div',
+      {},
+      h(
+        'button',
+        {
+          class: 'link',
+          type: 'button',
+          disabled: busy === 'install',
+          onclick: () => {
+            view = 'choose';
+            error = null;
+            render();
+          },
+        },
+        t('welcome.back'),
+      ),
+    ),
+    h(
+      'section',
+      { class: 'card', 'data-testid': 'hermes-missing' },
+      h('h2', {}, t('local.no_hermes_title')),
+      h('p', {}, t('local.no_hermes_body')),
+      missing && h('p', { class: 'muted' }, t('local.install_command')),
+      missing && h('code', { class: 'ltr command' }, missing.command),
+      h(
+        'div',
+        { class: 'row' },
+        h(
+          'button',
+          {
+            class: 'primary',
+            type: 'button',
+            disabled: busy !== null,
+            'data-testid': 'install-hermes',
+            onclick: () => void install(),
+          },
+          busy === 'install' ? t('local.installing') : t('local.install'),
+        ),
+        missing &&
+          h(
+            'a',
+            { class: 'link', href: missing.docs, target: '_blank', rel: 'noreferrer' },
+            t('local.docs'),
+          ),
+      ),
+      log,
+    ),
+    errorBox(),
+    h(
+      'section',
+      { class: 'card' },
+      h('p', { class: 'muted' }, t('local.without_hint')),
+      h(
+        'div',
+        {},
+        h(
+          'button',
+          {
+            class: 'secondary',
+            type: 'button',
+            disabled: busy !== null,
+            'data-testid': 'local-without-hermes',
+            onclick: () => void local(true),
+          },
+          busy === 'local' ? t('local.starting') : t('local.without'),
+        ),
+      ),
+    ),
   ].filter((node): node is HTMLElement => node !== null);
 }
 
@@ -271,7 +384,7 @@ function render(): void {
   const focused = document.activeElement?.id;
   root.replaceChildren(
     header(),
-    ...(view === 'choose' ? chooseView() : remoteView()),
+    ...(view === 'choose' ? chooseView() : view === 'remote' ? remoteView() : localView()),
     h('footer', { class: 'ltr' }, `${t('app.name')} ${init.appVersion}`),
   );
   if (focused) document.getElementById(focused)?.focus();
@@ -281,8 +394,18 @@ void api.init().then((value) => {
   init = value;
   language = value.language;
   address = value.prefill ?? value.remoteUrl ?? '';
+  error = value.notice;
   if (value.prefill) view = 'remote';
   render();
+});
+api.onInstallLog((line) => {
+  installLog.push(line);
+  if (installLog.length > 400) installLog.shift();
+  const box = document.querySelector<HTMLElement>('[data-testid="install-log"]');
+  if (box) {
+    box.textContent = installLog.join('\n');
+    box.scrollTop = box.scrollHeight;
+  } else render();
 });
 api.onPrefill((url) => {
   address = url;

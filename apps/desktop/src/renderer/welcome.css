@@ -157,3 +157,28 @@ footer {
   color: var(--ch-color-text-faint);
   font-size: var(--ch-font-size-xs);
 }
+.command {
+  display: block;
+  padding: var(--ch-space-2) var(--ch-space-3);
+  border-radius: var(--ch-radius-md);
+  background: var(--ch-color-code-bg);
+  color: var(--ch-color-code-text);
+  font-family: var(--ch-font-mono);
+  font-size: var(--ch-font-size-sm);
+  overflow-wrap: anywhere;
+}
+.log {
+  margin: 0;
+  max-block-size: 14rem;
+  overflow: auto;
+  padding: var(--ch-space-2) var(--ch-space-3);
+  border-radius: var(--ch-radius-md);
+  background: var(--ch-color-code-bg);
+  color: var(--ch-color-code-text);
+  font-family: var(--ch-font-mono);
+  font-size: var(--ch-font-size-xs);
+  white-space: pre-wrap;
+}
+a.link {
+  text-decoration: none;
+}
