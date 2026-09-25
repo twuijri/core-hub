@@ -119,6 +119,17 @@ $ PLAYWRIGHT_CHANNEL=chrome pnpm --filter @corehub/web exec playwright test zz-d
   3 passed (20.2s)
 ```
 
+CI على #117 بعد الإصلاح (التشغيل 36087606942، الالتزام `5927832`) — كلها خضراء:
+
+```
+Docker image builds and answers /health               pass  4m33s
+Lint, typecheck, contracts, tests, build              pass  18m5s
+PR adds or updates a change record                    pass  10s
+PR leaves graphify-out/ to the code-map bot           pass  7s
+Web smoke journeys (Playwright against the real hub)  pass  5m28s
+db:generate + db:migrate (SQLite and PostgreSQL)      pass  57s
+```
+
 ## المخاطر والرجوع
 - **الذاكرة**: 5000 سطر × حتى 4000 حرف لكل مصدر هو الحد الأعلى النظري؛ عمليًّا الأسطر قصيرة
   (مئات البايتات)، أي نحو 1–2 MB لكل مصدر. عدد المصادر محدود بـ 64.
