@@ -33,6 +33,7 @@ import {
   Textarea,
 } from '../ui/index.js';
 import { IconSettings } from '../ui/icons.js';
+import { versionNotes } from './versionNotes.js';
 
 /** The adapter's own words, in the reading language. */
 function localised(text: { ar: string; en: string } | string, language: string): string {
@@ -80,7 +81,8 @@ export function AgentSettingsScreen() {
  * Updates, for an agent the hub installed rather than one it ships.
  *
  * Three things and no more (owner, 2026-09-22): ask the registry whether there is a newer
- * version, take it, and decide whether to take it automatically. An agent whose adapter
+ * version, take it, and decide whether to take it automatically. Since 2026-09-25 the card
+ * also names the tested version and says when a version is past it (`versionNotes`). An agent whose adapter
  * says it cannot update itself does not get the switch — `auto_update_supported` is the
  * adapter's answer, not ours to guess.
  */
@@ -92,6 +94,7 @@ function UpdatesCard({ agent }: { agent: Agent }) {
   const [error, setError] = useState<unknown>(null);
   // A bundled agent has no registry behind it: it arrives with the image.
   if (agent.install.source === 'builtin' || agent.install.source === 'none') return null;
+  const notes = versionNotes(agent.install);
 
   const refresh = () => queryClient.invalidateQueries({ queryKey: keys.agents(profile) });
   const run = async (kind: 'check' | 'upgrade') => {
@@ -131,9 +134,26 @@ function UpdatesCard({ agent }: { agent: Agent }) {
         title={t('agents.updates')}
         subtitle={t('agents.version_now', { version: agent.install.version ?? '—' })}
       />
-      {agent.install.update_available ? (
+      {notes.tested && (
+        <p className="mb-2 text-xs text-muted" data-testid="agent-version-tested">
+          {t('agents.version_tested', { version: notes.tested })}
+        </p>
+      )}
+      {notes.newerThanTested && (
+        <Notice tone="warning">
+          <span data-testid="agent-newer-than-tested">
+            {t('agents.newer_than_tested_hint', { version: notes.tested ?? '' })}
+          </span>
+        </Notice>
+      )}
+      {notes.update ? (
         <Notice tone="info">
-          {t('agents.update_available', { version: agent.install.latest_version ?? '' })}
+          {t(
+            notes.updateUntested ? 'agents.update_available_untested' : 'agents.update_available',
+            {
+              version: notes.update,
+            },
+          )}
         </Notice>
       ) : (
         <p className="text-xs text-muted">{t('agents.up_to_date')}</p>

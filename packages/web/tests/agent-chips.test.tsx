@@ -178,7 +178,17 @@ describe("the agents' marks", () => {
   // own mark. Adding an entry there without adding one here fails this test rather than
   // shipping a chip that says a letter — which is what the owner asked us to leave behind.
   it('ships a mark for every agent in the catalog', () => {
-    for (const slug of ['hermes', 'direct', 'claude-code', 'codex', 'gemini-cli', 'opencode'])
+    for (const slug of [
+      'hermes',
+      'direct',
+      'claude-code',
+      'codex',
+      'gemini-cli',
+      'opencode',
+      'qwen-code',
+      'kimi-code',
+      'pi',
+    ])
       expect(agentMark(slug), slug).not.toBeNull();
   });
 

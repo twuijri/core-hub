@@ -417,10 +417,10 @@ describe('update policy: the installer', () => {
 
 describe('update policy: through the hub', () => {
   /** Gemini CLI installed at its pin, as the volume would hold it after a fresh install. */
-  const installedAtPin = (gate: Promise<void> = Promise.resolve()) => {
+  const installedAtPin = (gate: Promise<void> = Promise.resolve(), id = 'gemini-cli') => {
     const installs: Array<Readonly<Record<string, string>> | undefined> = [];
     const installer = fakeInstaller({
-      isPresent: (entry: CatalogEntry) => entry.id === 'gemini-cli',
+      isPresent: (entry: CatalogEntry) => entry.id === id,
       health: async (entry: CatalogEntry) => ({
         ok: true,
         version: pinnedVersion(entry),
@@ -430,7 +430,9 @@ describe('update policy: through the hub', () => {
         installs.push(versions);
         await gate;
         return {
-          version: versions?.['@google/gemini-cli'] ?? pinnedVersion(entry),
+          version:
+            (entry.install.kind === 'npm' ? versions?.[entry.install.package] : undefined) ??
+            pinnedVersion(entry),
           executablePath: `/tmp/corehub-test-agents/${entry.id}/bin/${entry.binary}`,
         };
       },
@@ -536,6 +538,38 @@ describe('update policy: through the hub', () => {
         update_available: false,
         newer_than_tested: true,
       });
+    } finally {
+      await hub.close();
+    }
+  });
+
+  it("Pi's adapter follows Pi past the pin, each at an exact version", async () => {
+    const { installer, installs } = installedAtPin(Promise.resolve(), 'pi');
+    const hub = await signedInHub(
+      {},
+      {
+        agents: {
+          installer,
+          updates: {
+            registry: registryOf({
+              '@earendil-works/pi-coding-agent': '0.88.0',
+              'pi-acp': '0.0.35',
+            }),
+          },
+        },
+      },
+    );
+    try {
+      const listed = await authed(hub, hub.token, { method: 'GET', url: '/api/v1/agents' });
+      const pi = (listed.json() as { items: Array<{ id: string; slug: string }> }).items.find(
+        (item) => item.slug === 'pi',
+      )!;
+      expect((await agentUpdatesFor(hub.app).checkAll()).available).toEqual(['pi']);
+      await authed(hub, hub.token, { method: 'POST', url: `/api/v1/agents/${pi.id}/update` });
+      await drainJobs(hub.app);
+      expect(installs).toEqual([
+        { '@earendil-works/pi-coding-agent': '0.88.0', 'pi-acp': '0.0.35' },
+      ]);
     } finally {
       await hub.close();
     }
