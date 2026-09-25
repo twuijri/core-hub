@@ -99,7 +99,24 @@ Android 36152196140 — success
 يُرمَّز فلا يخرج من المسار)؛ الرمز hex؛ نصوص الحالات موجودة بالعربية والإنجليزية. تسقط كلها على الكود
 القديم (الأصناف غير موجودة).
 
-CI على #144 بعد الدمج في فرع الليلة: يُضاف أدناه.
+تشغيلان يدويان للبناء الموقّع على `night/2026-09-26` بعد الدمج (`c6526f8`)، بالأسرار الحقيقية،
+`keep_artifacts=false` و`upload_testflight=false` (صفر مخرجات مرفوعة في كليهما، ولا رفع إلى TestFlight):
+```
+iOS signed build 36153130744 — success
+  reusing profile "CoreHub CI com twuijri corehub 43A76MJ69R"
+  ** ARCHIVE SUCCEEDED **   ** EXPORT SUCCEEDED **   Version 0.1.0 (6)
+  "application-identifier" => "58QWJ228ZE.com.twuijri.corehub"
+  "aps-environment" => "production"
+  Signed .ipa: 5.6M          artifacts: 0
+Android signed build 36153126725 — success
+  package: name='com.twuijri.corehub' versionCode='7' versionName='0.1.0'
+  Verified using v2 scheme (APK Signature Scheme v2): true   jar verified.
+  Signed APK: 3.0M, AAB: 6.3M          artifacts: 0
+```
+ملف التعريف الموجود كان يحمل قدرة Push أصلًا (معرّف التطبيق مفعّلة فيه)، فلم يُصنع ملف جديد.
+
+CI على #144 عند `c6526f8` (الدمج في فرع الليلة): كل الفحوص ناجحة (١٧ pass)، ومنها «Android build, unit
+tests, lint» و«Build and test on the iOS simulator» و«Generate the Swift client (CoreHubClient)».
 
 ## المخاطر والرجوع
 - **الرجوع**: revert للطلب. لا ترحيل، لا عقد، لا خادم. الجلسات المحفوظة تقرأ `deviceId`/`deviceID` كحقل
