@@ -382,6 +382,14 @@ its approval.
   at iPhone 6.9" 1320 × 2868 and iPad 13" 2064 × 2752 in both languages — **28 taken and looked at
   in a run on the branch**. Uploading the listing and screenshots (fastlane deliver, never a build or
   a submission) is behind an `upload` switch and **has not been run**; nothing has been submitted.
+- **Download page** (`site/`, since 2026-09-26): one static page for
+  https://twuijri.github.io/core-hub/, Arabic first with an English toggle, light and dark with the
+  system, no trackers. The browser reads the latest release from the GitHub API and offers its
+  `.exe`, Apple silicon `.dmg`, AppImage, `.deb` and `.apk` with version, date and sizes. It
+  highlights the visitor's system, falls back to the releases page when the API cannot be read,
+  shows the Microsoft Store, Google Play and App Store as *Coming soon* behind switches in
+  `site/src/config.js`, and has a "Run your own hub" section. `pages.yml` deploys it; **it is not
+  live until the owner sets Settings → Pages → Source to "GitHub Actions"** (`docs/RELEASING.md`).
 
 ## Name
 Since 2026-09-24 the product is **Core Hub** («كور هب», ADR 0017): packages `@corehub/*`, the

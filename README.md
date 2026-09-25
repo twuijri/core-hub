@@ -7,6 +7,9 @@
 
 # Core Hub
 
+**[Download the apps](https://twuijri.github.io/core-hub/)** for Windows, macOS, Linux and
+Android, or run your own hub with Docker (below).
+
 **One self-hosted hub for every AI agent you use: chat, tasks, schedules and workflows,
 from the web today and from the desktop and your phone next.**
 

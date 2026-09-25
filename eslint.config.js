@@ -55,6 +55,11 @@ export default tseslint.config(
     languageOptions: { globals: { ...globals.browser } },
   },
   {
+    // The download page (site/, GitHub Pages) runs in the browser; its build and tests on Node.
+    files: ['site/src/**/*.js'],
+    languageOptions: { globals: { ...globals.browser } },
+  },
+  {
     files: [
       'packages/web/{tests,e2e}/**/*.{ts,tsx}',
       'packages/web/*.ts',
