@@ -130,13 +130,13 @@ export interface DeliveryResult extends PushOutcome {
 }
 
 const STORED = '[stored]';
+const DEFAULT_CONTACT = 'https://github.com/twuijri/core-hub';
 
 /** One value for a set of relay tokens, whatever their order. */
 function relayDigest(tokens: Array<{ platform: string; token: string }>): string {
   const lines = tokens.map((t) => `${t.platform}:${t.token}`).sort();
   return createHash('sha256').update(lines.join('\n')).digest('hex');
 }
-const DEFAULT_CONTACT = 'https://github.com/twuijri/core-hub';
 
 /** A value that is the content itself, or a path to a file holding it. */
 function contentOrFile(value: string, looksLikeContent: (text: string) => boolean): string {
@@ -529,7 +529,9 @@ export class PushService {
    * sign-ins, unlinked devices, local credentials that took over). One at a time; never throws.
    */
   syncRelay(): Promise<void> {
-    this.syncing ??= (async () => {
+    if (this.syncing) return this.syncing;
+    // `finally` runs after the assignment even when there is nothing to do.
+    const run = (async () => {
       try {
         if (!this.relay.usable()) return;
         const tokens = this.relayTokens();
@@ -537,11 +539,12 @@ export class PushService {
         this.syncedDigest = relayDigest(tokens);
       } catch {
         // Recorded in the relay's status; the next tick tries again.
-      } finally {
-        this.syncing = null;
       }
-    })();
-    return this.syncing;
+    })().finally(() => {
+      this.syncing = null;
+    });
+    this.syncing = run;
+    return run;
   }
 
   /**

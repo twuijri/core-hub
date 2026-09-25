@@ -233,6 +233,23 @@ describe('push relay: zero setup', () => {
     expect(relay.bindings.size).toBe(0);
   });
 
+  it('syncs again after a sync that had nothing to do', async () => {
+    const { hub, relay } = await relayHub();
+    const phone = await pairPhone(hub);
+    await registerApns(hub, phone);
+    const push = pushFor(hub.app);
+    const toggle = (enabled: boolean) =>
+      authed(hub, hub.token, { method: 'PUT', url: '/api/v1/push/relay', payload: { enabled } });
+    await toggle(false);
+    await push.syncRelay(); // off: returns at once
+    await toggle(true);
+    const stale = `apns:${'c'.repeat(64)}`;
+    relay.bindings.set(stale, relayRow(hub)!.hubId!);
+    await push.syncRelay();
+    expect(relay.bindings.has(stale)).toBe(false);
+    expect(relay.bindings.has(`apns:${APNS}`)).toBe(true);
+  });
+
   it('says a token is bound to another hub instead of pushing', async () => {
     const { hub, relay } = await relayHub();
     const phone = await pairPhone(hub);

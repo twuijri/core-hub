@@ -70,7 +70,7 @@ DECISIONS **§81**:
   `push_relay`)، `senders.ts` (حقل `locale` اختياري في `PushMessage` فقط)، `testing/fake-relay.ts` (جديد)،
   `app/config.ts` (`COREHUB_PUSH_RELAY_URL`، `COREHUB_PUSH_RELAY`)، الترحيل `drizzle/0025_push_relay.sql`
   (+ اللقطة والسجل).
-- الاختبارات: `tests/unit/devices-push-relay.test.ts` (جديد، ١١ حالة)، `tests/unit/config.test.ts`،
+- الاختبارات: `tests/unit/devices-push-relay.test.ts` (جديد، ١٢ حالة)، `tests/unit/config.test.ts`،
   `tests/contract/devices.contract.test.ts`.
 - الويب: مفتاح ترجمة واحد `devices.push.source.relay` (ar/en) فقط — بلا تغيير في الشاشات.
 - الوثائق: `docs/adr/0024-push-relay.md`، `docs/contracts/DECISIONS.md` (§81)، `docs/domain/devices.md`،
@@ -109,6 +109,14 @@ $ pnpm db:generate                   → No schema changes, nothing to migrate
      × offers FCM and APNs through the relay, registers on first need and binds the token
      × pushes a notice through the relay with the words, or privately with none
      … والـ١١ كلها ×   (Failed Tests 11)
+```
+مراجعة الفرق بعد فتح الطلب وجدت خطأً: `syncRelay` التي لا عمل لها (المرحّل مطفأ) كانت تترك وعدًا منتهيًا
+عالقًا فلا تُزامن بعدها أبدًا. أُصلح، واختبار «syncs again after a sync that had nothing to do» يسقط على
+النسخة السابقة وينجح الآن:
+```
+     × syncs again after a sync that had nothing to do      (قبل الإصلاح)
+ Test Files  1 passed (1)
+      Tests  12 passed (12)                                   (بعده، الملف كله)
 ```
 اختبارات المرحّل تغطي: توقيع JWT (ES256 لـAPNs وRS256 لـFCM) بمفاتيح تُولَّد في الاختبار والتحقق منها
 بالمفتاح العام، التخزين المؤقت وتجديد رمز APNs بعد ٥١ دقيقة ورمز FCM بعد 401، HMAC (بلا توقيع، توقيع خاطئ،
