@@ -1,0 +1,99 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- English strings. Every key exists in values-ar/strings.xml too (StringsParityTest). The
+     navigation terms (term_*) and app_name are generated from the repository, not written here. -->
+<resources>
+    <string name="back">Back</string>
+    <string name="cancel">Cancel</string>
+    <string name="loading">Loading…</string>
+    <string name="menu_open">Open the menu</string>
+    <string name="menu_close">Close the menu</string>
+    <string name="phone_not_yet">This page is not in the phone app yet. It arrives in the next update; until then it is on the web.</string>
+
+    <string name="error_offline">The hub could not be reached. Check the address and the connection.</string>
+    <string name="error_not_built">The hub does not do this yet.</string>
+    <string name="error_code">The hub refused: %1$s</string>
+    <string name="error_unknown">Something went wrong.</string>
+
+    <string name="connect_title">Connect to your hub</string>
+    <string name="connect_scan_body">On the web or the desktop app, open Settings → Device connections and choose to pair a device. Then scan the code it shows.</string>
+    <string name="connect_scan">Scan the pairing code</string>
+    <string name="connect_scan_prompt">Point the camera at the pairing code</string>
+    <string name="connect_pairing_invalid">That is not a Core Hub pairing code, or it has expired. Make a new one and scan again.</string>
+    <string name="connect_paste_open">Paste a pairing code instead</string>
+    <string name="connect_paste_label">Pairing code or link</string>
+    <string name="connect_paste_claim">Pair this phone</string>
+    <string name="connect_or_address">Or sign in with the hub\'s address</string>
+    <string name="connect_hub_label">Hub address</string>
+    <string name="connect_hub_invalid">Type the hub\'s address, like hub.example.com or http://192.168.1.10:8787</string>
+    <string name="connect_continue">Continue</string>
+    <string name="connect_username">Username</string>
+    <string name="connect_password">Password</string>
+    <string name="connect_other_hub">Use another hub</string>
+
+    <string name="setup_open_body">This hub has no owner yet. Whoever sets it up now becomes its owner.</string>
+    <string name="setup_token_body">This hub has no owner yet. Enter the setup token from the hub\'s log or from setup-token.txt in its data folder.</string>
+    <string name="setup_display_name">Your name</string>
+    <string name="setup_confirm">Password again</string>
+    <string name="setup_token">Setup token</string>
+    <string name="setup_create">Create the owner</string>
+
+    <string name="pair_switch_title">Pair with another hub?</string>
+    <string name="pair_switch_body">This phone is signed in. Pairing with %1$s signs it out here first.</string>
+    <string name="pair_switch_confirm">Sign out and pair</string>
+
+    <string name="profile_label">Profile</string>
+    <string name="chats_all_profiles">All profiles</string>
+    <string name="chats_search">Search chats</string>
+    <string name="chats_active">Active</string>
+    <string name="chats_archived">Archived</string>
+    <string name="chats_all">All</string>
+    <string name="chats_pinned">Pinned</string>
+    <string name="chats_recent">Recent · %1$d</string>
+    <string name="chats_empty">No chats yet.</string>
+    <string name="rooms_empty">No rooms yet.</string>
+
+    <string name="theme_light">Light</string>
+    <string name="theme_dark">Dark</string>
+    <string name="theme_system">System</string>
+
+    <string name="chat_you">You</string>
+    <string name="chat_greeting">What shall we work on?</string>
+    <string name="chat_in_profile">In the profile %1$s</string>
+    <string name="chat_no_agents">No agent to talk to</string>
+    <string name="chat_no_agents_body">No agent is installed in this profile. An owner or admin installs one from Agents.</string>
+    <string name="chat_placeholder">Message</string>
+    <string name="chat_placeholder_agent">Message %1$s</string>
+    <string name="chat_send">Send</string>
+    <string name="chat_stop">Stop</string>
+    <string name="chat_copy">Copy</string>
+    <string name="chat_copy_code">Copy the code</string>
+    <string name="chat_thinking">Thinking</string>
+    <string name="chat_queued">Waiting in the queue</string>
+    <string name="chat_seconds_short">%1$ds</string>
+    <string name="chat_seconds">%1$.1f s</string>
+    <string name="chat_thought_for">Thought for %1$ds</string>
+    <string name="chat_reasoning">Reasoning</string>
+    <string name="chat_loading_older">Loading earlier messages…</string>
+    <string name="chat_run_failed">The run failed.</string>
+    <string name="chat_tool_done">Done</string>
+    <string name="chat_tool_failed">Failed</string>
+    <string name="chat_tool_arguments">Arguments</string>
+    <string name="chat_tool_output">Output</string>
+
+    <string name="approval_tool">%1$s wants to run this</string>
+    <string name="approval_memory">%1$s wants to write to its memory</string>
+    <string name="approval_skill">%1$s wants to change a skill</string>
+    <string name="approval_plan">%1$s asks you to approve a plan</string>
+    <string name="approval_step">A workflow step waits for you</string>
+    <string name="approval_once">Allow once</string>
+    <string name="approval_session">Allow in this chat</string>
+    <string name="approval_always">Always allow</string>
+    <string name="approval_deny">Deny</string>
+
+    <string name="question_title">The agent asks</string>
+    <string name="question_left">%1$s left</string>
+    <string name="question_skip">Skip</string>
+    <string name="question_own">Your own answer</string>
+    <string name="question_send">Send</string>
+    <string name="question_recommended">Recommended</string>
+</resources>

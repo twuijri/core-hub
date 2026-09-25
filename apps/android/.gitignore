@@ -1,0 +1,13 @@
+# Gradle and Android Studio
+.gradle/
+build/
+local.properties
+.idea/
+*.iml
+.kotlin/
+captures/
+
+# The repository's root .gitignore drops every `data/` folder (a hub's local data); the app's
+# `data` source packages are code, not data.
+!app/src/main/java/hub/core/android/data/
+!app/src/test/java/hub/core/android/data/

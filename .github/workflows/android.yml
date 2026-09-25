@@ -1,0 +1,74 @@
+name: Android
+
+# The Android client (apps/android): generate the Kotlin client from the contract, then build,
+# unit-test and lint the app, and keep the debug APK as a workflow artifact. Nothing is published
+# or signed for release here.
+on:
+  push:
+    branches: [main, test]
+    paths:
+      - apps/android/**
+      - packages/contracts/**
+      - packages/ui-tokens/tokens.json
+      - docs/clients/navigation.json
+      - .github/workflows/android.yml
+  pull_request:
+    paths:
+      - apps/android/**
+      - packages/contracts/**
+      - packages/ui-tokens/tokens.json
+      - docs/clients/navigation.json
+      - .github/workflows/android.yml
+  workflow_dispatch:
+
+concurrency:
+  group: android-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  android:
+    name: Android build, unit tests, lint
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - name: Enable pnpm
+        run: corepack enable
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      # The Ubuntu runner image carries the Android SDK (ANDROID_HOME) with its licences accepted;
+      # AGP fetches any platform it lacks.
+      - uses: gradle/actions/setup-gradle@v4
+      - run: pnpm install --frozen-lockfile
+      - name: Generate the Kotlin client from the contract
+        run: pnpm --filter @corehub/contracts generate:native
+      - name: Build, test and lint
+        working-directory: apps/android
+        run: ./gradlew --max-workers=2 assembleDebug test lint
+      - name: APK size
+        run: |
+          apk=apps/android/app/build/outputs/apk/debug/app-debug.apk
+          echo "Debug APK: $(du -h "$apk" | cut -f1) ($(stat -c %s "$apk") bytes)" | tee -a "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: corehub-android-debug-apk
+          path: apps/android/app/build/outputs/apk/debug/app-debug.apk
+          retention-days: 14
+          if-no-files-found: error
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: android-reports
+          path: |
+            apps/android/app/build/reports/
+            apps/android/app/build/test-results/
+          retention-days: 7

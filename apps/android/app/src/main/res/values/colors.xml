@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Only what Android draws before Compose starts: the window and the launcher icon.
+         They repeat tokens.json's `bg` and `accent` (checked by TokensMirrorTest). -->
+    <color name="window_bg">#F4F3EF</color>
+    <color name="icon_bg">#0B6B5D</color>
+</resources>
