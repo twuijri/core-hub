@@ -284,23 +284,30 @@ function handleConnection(context: TerminalContext, socket: Socket): void {
         cols: input.cols,
         rows: input.rows,
       });
-      context.audit.record({
-        actorKind: 'user',
-        actorId: ownerId,
-        ownerId,
-        workspace: workspace.id,
-        action: 'terminal.opened',
-        entityKind: 'terminal',
-        entityId: session.id,
-        summary: `terminal opened in ${cwd}`,
-        data: {
-          cwd,
-          profile: workspace.slug,
-          pty: context.manager.pty,
-          shell: context.manager.shell,
-          ip: socket.handshake.address,
-        },
-      });
+      // No session without its line in the audit log: if the line cannot be written, the
+      // shell is closed again and the owner is told.
+      try {
+        context.audit.record({
+          actorKind: 'user',
+          actorId: ownerId,
+          ownerId,
+          workspace: workspace.id,
+          action: 'terminal.opened',
+          entityKind: 'terminal',
+          entityId: session.id,
+          summary: `terminal opened in ${cwd}`,
+          data: {
+            cwd,
+            profile: workspace.slug,
+            pty: context.manager.pty,
+            shell: context.manager.shell,
+            ip: socket.handshake.address,
+          },
+        });
+      } catch (error) {
+        context.manager.close(ownerId, session.id);
+        throw error;
+      }
       void socket.join(roomOf(session.id));
       reply(ack, { ok: true, session: serialize(context, session) });
     } catch (error) {
