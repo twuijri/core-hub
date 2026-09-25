@@ -98,7 +98,33 @@ $ pnpm typecheck   # exit 0
 في XML): العلامة البيضاء داخل دائرة الأمان ٦٦ dp على خلفية الأيقونة، وأيقونة الإشعار تملأ ٢٠ من
 ٢٤ dp.
 
-CI على #144: يُضاف بعد الدمج في فرع الليلة.
+**CI على #144** (الـcommit `8a2ba16`): كل الفحوص الـ١٧ نجحت، ومنها «Build and test on the iOS
+simulator» و«Android build, unit tests, lint» و«Installers» الثلاثة (ubuntu وmacos وwindows) و
+«Desktop app smoke». من سجل xcodebuild للمحاكي (Xcode 26.6):
+
+```
+actool …/CoreHub/Resources/Assets.xcassets --compile … --app-icon AppIcon …
+…/assetcatalog_output/thinned/AppIcon60x60@2x.png
+…/assetcatalog_output/thinned/AppIcon76x76@2x~ipad.png
+…/assetcatalog_output/thinned/Assets.car
+Test Case '-[CoreHubTests.AppIconTests testTheBuiltAppNamesItsIcon]' passed (0.009 seconds).
+```
+
+ولا تحذير ولا ملاحظة من actool في السجل.
+
+**البناء الموقّع** (`ios-signed.yml` يدويًا على `night/2026-09-26`، `upload_testflight=false`،
+`keep_artifacts=false`، التشغيل 36155731011): نجح.
+
+```
+** ARCHIVE SUCCEEDED **
+** EXPORT SUCCEEDED **
+Version 0.1.0 (7)
+Signed .ipa: 5.6M
+```
+
+لم يُرفع شيء إلى TestFlight ولم يُحفظ الـ.ipa. ملاحظة: خطوات هذا الـworkflow لا تطبع محتوى
+الأيقونة داخل الـ.ipa، فالدليل على وجودها هو نجاح actool بالخيار `--app-icon AppIcon` في البناء
+نفسه واختبار `AppIconTests` على المحاكي؛ الفحص النهائي هو قبول App Store Connect عند أول رفع.
 
 ## المخاطر والرجوع
 - مظهرا iOS 18 الداكن والملوّن يحتاجان Xcode 16؛ على Xcode أقدم يتجاهلهما actool أو يحذّر.
@@ -107,5 +133,5 @@ CI على #144: يُضاف بعد الدمج في فرع الليلة.
 - الرجوع: استرجاع هذا الـcommit يعيد شكل «المحور» في أندرويد وتطبيق iOS بلا أيقونة.
 
 ## التسليم والخطوة التالية
-يُدمج في `night/2026-09-26` (#144). بعده: تشغيل `ios-signed.yml` يدويًا على فرع الليلة (بلا رفع
-وبلا حفظ ملفات) للتأكد من أن التصدير يمر بالأيقونة، ثم رفع TestFlight حين يقرر المالك.
+مدموج في `night/2026-09-26` (#144). الخطوة التالية للمالك: أول رفع إلى TestFlight
+(`upload_testflight=true`) حين يقرر، وهو الذي يؤكد أن App Store Connect يقبل الأيقونة.
