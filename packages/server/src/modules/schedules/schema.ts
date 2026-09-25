@@ -138,11 +138,34 @@ export type WorkflowEdge = {
   route: 'always' | 'success' | 'failure';
 };
 
+/**
+ * What one run may take (the contract's `WorkflowLimits`, DECISIONS §57), stored in the
+ * contract's own words inside the definition — a workflow's in `workflows.definition`, a
+ * run's effective ones in `workflow_runs.definition_snapshot` — so no column had to be added.
+ */
+export type WorkflowLimits = {
+  max_duration_seconds: number | null;
+  max_cost: { amount: string; currency: string } | null;
+  step_timeout_seconds: number | null;
+};
+
+/** How much of its limits a run has used, carried across a pause at an approval. */
+export type WorkflowBudgetUse = {
+  /** Time the run has worked, waiting for people left out. */
+  workedMs: number;
+  /** The hub's estimate of what its agent turns cost. */
+  costMicroUsd: number;
+  /** Whether any of those turns had a price at all. */
+  priced: boolean;
+};
+
 /** A paused run's place (`workflow_runs.resume_state`). */
 export type WorkflowResumeState = {
   queue: string[];
   ran: string[];
   steps: Record<string, { output: unknown }>;
+  /** Absent in a place written before limits existed: nothing used yet. */
+  used?: WorkflowBudgetUse;
 };
 
 export type WorkflowDefinition = {
@@ -150,6 +173,8 @@ export type WorkflowDefinition = {
   edges: WorkflowEdge[];
   /** Where the workflow's agents work, when it is tied to a checkout. */
   workingDir?: string | null;
+  /** Absent in a definition saved before limits existed: none. */
+  limits?: WorkflowLimits;
 };
 
 export const schedules = sqliteTable(

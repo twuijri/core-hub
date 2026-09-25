@@ -27,6 +27,16 @@
  * error. Nothing here evaluates code — templates and conditions are `expr.ts`, which walks
  * paths and compares values.
  *
+ * **Limits** (DECISIONS §57): a run works under a time budget, a cost budget and a per-step
+ * timeout (`limits.ts`), each optional. A step is raced against them: the time budget and
+ * the step timeout are timers, the cost budget is the hub's per-turn estimate of the agent
+ * step's run, read every few seconds while it works and once when it ends. When the time or
+ * the cost budget runs out the step working is cancelled (an agent's run stopped as the
+ * chat's Stop does) and the run ends `failed`, saying which limit and how much; a step past
+ * its timeout fails like any failed step, so a `failure` edge can take it, and only a
+ * timeout nothing handles ends the run. Time spent waiting for a person at an approval is
+ * not work and counts toward nothing: what was used is written down with the run's place.
+ *
  * The engine keeps its place in memory while a step works. A restart fails the runs that
  * were going (`failInterruptedRuns`) instead of leaving them "running" forever — except a
  * run waiting at an approval: that one's place is written down (`resume_state`: the nodes
@@ -35,7 +45,14 @@
  */
 import type { FastifyBaseLogger } from 'fastify';
 import { ConditionError, evaluate, parseCondition, render, type Context } from './expr.js';
-import type { WorkflowDefinition, WorkflowEdge, WorkflowNode } from './schema.js';
+import { NO_LIMITS, dollars, duration, microUsdOf, moneyOfMicro } from './limits.js';
+import type {
+  WorkflowBudgetUse,
+  WorkflowDefinition,
+  WorkflowEdge,
+  WorkflowLimits,
+  WorkflowNode,
+} from './schema.js';
 import type {
   NodeRunRow,
   SchedulesService,
@@ -58,6 +75,22 @@ export interface AgentTurnResult {
   error: string | null;
 }
 
+/**
+ * How the engine follows an agent's turn while it works: it learns the turn's ids as soon
+ * as it starts (to read its cost), and aborting `signal` stops the turn — a limit ran out.
+ */
+export interface TurnControl {
+  signal: AbortSignal;
+  started(ids: { sessionId: string; runId: string }): void;
+}
+
+/** The hub's estimate of what one agent turn cost so far (`Usage.cost`). */
+export interface TurnCost {
+  microUsd: number;
+  /** False when no model call of the turn had a price. */
+  priced: boolean;
+}
+
 /** What the engine needs from the rest of the hub. Composed in `modules/index.ts`. */
 export interface WorkflowPorts {
   /** One whole agent turn; `null` when this hub composes no sessions. */
@@ -65,8 +98,14 @@ export interface WorkflowPorts {
     | ((
         scope: RunScope,
         input: { agentId: string; prompt: string; title: string },
+        control?: TurnControl,
       ) => Promise<AgentTurnResult>)
     | null;
+  /**
+   * What a turn has cost so far, by the hub's per-turn estimate. Absent, the cost budget
+   * sees nothing to count and never stops a run.
+   */
+  cost?: ((scope: RunScope, runId: string) => TurnCost) | null;
   /** A notice in the run owner's inbox. */
   notice: ((scope: Scope, input: { title: string; body: string | null }) => void) | null;
   /**
@@ -107,6 +146,11 @@ export type RunFinished = (
 export const MAX_DELAY_SECONDS = 3600;
 /** A drawing with a loop cannot run forever: each node runs once, and this is the cap. */
 const MAX_STEPS = 200;
+/** How often an agent step's cost is read while it works, when the run has a cost budget. */
+export const COST_POLL_MS = 2_000;
+
+/** The limit that ended a run (`WorkflowRun.stopped_by`). */
+export type StoppedBy = 'max_duration' | 'max_cost' | 'step_timeout';
 
 type Emit = (profile: string, event: string, payload: Record<string, unknown>) => void;
 
@@ -119,11 +163,103 @@ interface StepResult {
   runId?: string | null;
   /** The step waits for a person: the run pauses here. */
   waiting?: { stepId: string; approvalId: string };
+  /** The run's time or cost budget ran out while this step worked: the run stops. */
+  stop?: 'max_duration' | 'max_cost';
+  /** The step ran past its own timeout (it failed; a `failure` edge may take it). */
+  timedOut?: boolean;
 }
 
 interface Live {
   cancelled: boolean;
   wake: (() => void) | null;
+  budget: Budget;
+}
+
+/**
+ * A live run's limits and what it has used of them. `workedMs` is the work before this
+ * stretch; the stretch started at `since` — a pause at an approval ends one stretch and
+ * the answer starts the next, so the wait is never counted.
+ */
+class Budget {
+  private since = Date.now();
+  constructor(
+    readonly limits: WorkflowLimits,
+    private workedMs: number,
+    public costMicroUsd: number,
+    public priced: boolean,
+  ) {}
+
+  static of(limits: WorkflowLimits | undefined, used?: WorkflowBudgetUse): Budget {
+    return new Budget(
+      limits ?? NO_LIMITS,
+      used?.workedMs ?? 0,
+      used?.costMicroUsd ?? 0,
+      used?.priced ?? false,
+    );
+  }
+
+  worked(): number {
+    return this.workedMs + (Date.now() - this.since);
+  }
+
+  /** Time left in the run's budget, in ms; `null` without one. */
+  timeLeft(): number | null {
+    const max = this.limits.max_duration_seconds;
+    return max === null ? null : max * 1000 - this.worked();
+  }
+
+  maxCost(): number | null {
+    return this.limits.max_cost ? microUsdOf(this.limits.max_cost.amount) : null;
+  }
+
+  add(cost: TurnCost | null): void {
+    if (!cost) return;
+    this.costMicroUsd += cost.microUsd;
+    this.priced ||= cost.priced;
+  }
+
+  /** Nothing left of a budget: the run must not start another step. */
+  spent(): 'max_duration' | 'max_cost' | null {
+    const left = this.timeLeft();
+    if (left !== null && left <= 0) return 'max_duration';
+    const max = this.maxCost();
+    if (max !== null && this.costMicroUsd >= max) return 'max_cost';
+    return null;
+  }
+
+  /** What was used, to write down when the run pauses. */
+  used(): WorkflowBudgetUse {
+    return { workedMs: this.worked(), costMicroUsd: this.costMicroUsd, priced: this.priced };
+  }
+
+  /** The run's `output` fields for what it cost (`WorkflowRun.cost`). */
+  output(): { cost_micro_usd: number; priced: boolean } {
+    return { cost_micro_usd: this.costMicroUsd, priced: this.priced };
+  }
+
+  /** The words a person reads when a budget stopped the run. */
+  reason(stop: 'max_duration' | 'max_cost'): string {
+    if (stop === 'max_duration') {
+      return `stopped: the run went over its time limit of ${duration(this.limits.max_duration_seconds ?? 0)}`;
+    }
+    return `stopped: the run went over its cost limit of ${dollars(this.maxCost() ?? 0)} (it cost about ${dollars(this.costMicroUsd)})`;
+  }
+}
+
+/** The run's cost as the contract says it (`WorkflowRun.cost`): `null` until a turn had a price. */
+export function costOf(output: unknown): { amount: string; currency: 'USD' } | null {
+  const fields = (output ?? {}) as { cost_micro_usd?: number; priced?: boolean };
+  return fields.priced ? moneyOfMicro(fields.cost_micro_usd ?? 0) : null;
+}
+
+/** Which limit ended a run, from its `output` (`WorkflowRun.stopped_by`). */
+export function stoppedByOf(output: unknown): StoppedBy | null {
+  const value = (output ?? {}) as { stopped_by?: unknown };
+  return value.stopped_by === 'max_duration' ||
+    value.stopped_by === 'max_cost' ||
+    value.stopped_by === 'step_timeout'
+    ? value.stopped_by
+    : null;
 }
 
 export class WorkflowEngine {
@@ -154,6 +290,8 @@ export class WorkflowEngine {
       scheduleId?: string | null;
       startNodeIds?: readonly string[] | null;
       steps?: Record<string, { output: unknown }>;
+      /** This run's limits (`limits.ts` → `runLimits`); the workflow's when not given. */
+      limits?: WorkflowLimits;
     },
   ): WorkflowRunRow {
     const run = service.createWorkflowRun(scope, workflow, {
@@ -161,8 +299,13 @@ export class WorkflowEngine {
       triggerKind: options.triggerKind,
       triggerRef: options.triggerRef ?? null,
       scheduleId: options.scheduleId ?? null,
+      ...(options.limits ? { limits: options.limits } : {}),
     });
-    const state: Live = { cancelled: false, wake: null };
+    const state: Live = {
+      cancelled: false,
+      wake: null,
+      budget: Budget.of((run.definitionSnapshot as WorkflowDefinition).limits),
+    };
     this.live.set(run.id, state);
     this.emit(scope.profile, 'workflow_run.started', {
       workflow_run_id: run.id,
@@ -207,7 +350,12 @@ export class WorkflowEngine {
       steps: { ...place.steps },
       input: input.input ?? '',
     };
-    const state: Live = { cancelled: false, wake: null };
+    // The wait for the person is over: the budget goes on from what was used before it.
+    const state: Live = {
+      cancelled: false,
+      wake: null,
+      budget: Budget.of(definition.limits, place.used),
+    };
     this.live.set(run.id, state);
     this.follow(service, run, state, async () => {
       service.updateWorkflowRun(run.id, {
@@ -316,10 +464,17 @@ export class WorkflowEngine {
     }
     const { queue, ran } = place;
     let unhandled: string | null = null;
+    let stoppedBy: StoppedBy | null = null;
     let steps = ran.size;
 
     /** After a step: its output is readable, its edges fire; `false` ends the run. */
     const advance = (node: WorkflowNode, result: StepResult): boolean => {
+      if (result.stop) {
+        // A budget ran out while this step worked: nothing after it runs.
+        stoppedBy = result.stop;
+        unhandled = state.budget.reason(result.stop);
+        return false;
+      }
       ctx.steps[node.id] = { output: result.output };
       const edges = outgoing.get(node.id) ?? [];
       for (const edge of edges) {
@@ -329,6 +484,14 @@ export class WorkflowEngine {
       // handles ends the run with its own words.
       if (!result.ok && !edges.some((edge) => edge.route !== 'success')) {
         unhandled = `${node.title || node.id}: ${result.error ?? 'failed'}`;
+        if (result.timedOut) stoppedBy = 'step_timeout';
+        return false;
+      }
+      // A budget used up by the step that just ended: the run stops before the next one.
+      const spent = queue.length > 0 ? state.budget.spent() : null;
+      if (spent) {
+        stoppedBy = spent;
+        unhandled = state.budget.reason(spent);
         return false;
       }
       return true;
@@ -343,6 +506,12 @@ export class WorkflowEngine {
         unhandled = `the run stopped after ${MAX_STEPS} steps`;
         break;
       }
+      const spent = state.budget.spent();
+      if (spent) {
+        stoppedBy = spent;
+        unhandled = state.budget.reason(spent);
+        break;
+      }
       ran.add(id);
       service.updateWorkflowRun(run.id, { activeNodeKeys: [id] });
       const result = await this.step(service, scope, run, node, ctx, state);
@@ -354,6 +523,7 @@ export class WorkflowEngine {
           queue: [...queue],
           ran: [...ran],
           steps: { ...ctx.steps },
+          used: state.budget.used(),
         });
         const step = service.stepsOf(run.id).find((row) => row.id === result.waiting!.stepId);
         this.emit(scope.profile, 'step.waiting', {
@@ -377,13 +547,18 @@ export class WorkflowEngine {
       status: failed ? 'failed' : 'succeeded',
       error: failed,
       activeNodeKeys: [],
-      output: { steps: summarize(ctx.steps) },
+      output: {
+        steps: summarize(ctx.steps),
+        ...state.budget.output(),
+        stopped_by: stoppedBy as StoppedBy | null,
+      },
       finishedAt: now,
     });
     this.emit(scope.profile, failed ? 'workflow_run.failed' : 'workflow_run.completed', {
       workflow_run_id: run.id,
       workflow_id: run.workflowId,
       error: failed,
+      stopped_by: stoppedBy as StoppedBy | null,
     });
     this.announceFinished(run, { status: failed ? 'failed' : 'succeeded', error: failed });
   }
@@ -423,7 +598,7 @@ export class WorkflowEngine {
         result = fail('this hub cannot ask anyone for approval');
       }
     } else {
-      result = await this.attempt(scope, node, rendered, ctx, state);
+      result = await this.attempt(service, scope, run, node, rendered, ctx, state);
     }
     return this.finish(service, scope, run, node, row, result, state);
   }
@@ -452,23 +627,94 @@ export class WorkflowEngine {
     } else {
       service.resumeStep(row.id);
       const rendered = (row.input as { input?: string }).input ?? '';
-      result = await this.attempt(scope, node, rendered, ctx, state);
+      result = await this.attempt(service, scope, run, node, rendered, ctx, state);
     }
     return this.finish(service, scope, run, node, row, result, state);
   }
 
+  /**
+   * One step's work, raced against the run's limits. Whichever comes first ends the step:
+   * its own result, its timeout, the run's time budget, or the run's cost budget read from
+   * the agent turn it is waiting on. A limit that wins aborts the work — an agent's turn is
+   * stopped, a delay woken — and what the turn cost until then is still counted.
+   */
   private async attempt(
+    service: SchedulesService,
     scope: RunScope,
+    run: WorkflowRunRow,
     node: WorkflowNode,
     rendered: string,
     ctx: Context,
     state: Live,
   ): Promise<StepResult> {
-    try {
-      return await this.perform(scope, node, rendered, ctx, state);
-    } catch (error) {
-      return fail(error instanceof Error ? error.message : String(error));
+    const budget = state.budget;
+    const abort = new AbortController();
+    const timers: ReturnType<typeof setTimeout>[] = [];
+    let poll: ReturnType<typeof setInterval> | null = null;
+    let turn: { runId: string } | null = null;
+    const turnCost = (): TurnCost | null =>
+      turn && this.ports.cost ? this.ports.cost(scope, turn.runId) : null;
+
+    let trip: (result: StepResult) => void = () => undefined;
+    const tripped = new Promise<StepResult>((resolve) => {
+      trip = (result) => {
+        if (abort.signal.aborted) return;
+        abort.abort();
+        resolve(result);
+      };
+    });
+    const stepLimit = budget.limits.step_timeout_seconds;
+    if (stepLimit !== null) {
+      timers.push(
+        setTimeout(
+          () => trip({ ...fail(`timed out after ${duration(stepLimit)}`), timedOut: true }),
+          stepLimit * 1000,
+        ),
+      );
     }
+    const left = budget.timeLeft();
+    if (left !== null) {
+      timers.push(
+        setTimeout(
+          () => trip({ ...fail(budget.reason('max_duration')), stop: 'max_duration' }),
+          Math.max(0, left),
+        ),
+      );
+    }
+    const maxCost = budget.maxCost();
+    const control: TurnControl = {
+      signal: abort.signal,
+      started: (ids) => {
+        turn = { runId: ids.runId };
+        if (maxCost === null || !this.ports.cost || poll) return;
+        poll = setInterval(() => {
+          const now = turnCost();
+          if (now && budget.costMicroUsd + now.microUsd > maxCost) {
+            trip({ ...fail(budget.reason('max_cost')), stop: 'max_cost' });
+          }
+        }, COST_POLL_MS);
+      },
+    };
+
+    const work = this.perform(scope, node, rendered, ctx, state, control).catch(
+      (error: unknown) => fail(error instanceof Error ? error.message : String(error)),
+    );
+    let result = await Promise.race([work, tripped]);
+    for (const timer of timers) clearTimeout(timer);
+    if (poll) clearInterval(poll);
+    if (!abort.signal.aborted) abort.abort();
+
+    // What the turn cost, however it ended, and whether that was over the budget.
+    const cost = turnCost();
+    if (cost) {
+      budget.add(cost);
+      service.updateWorkflowRun(run.id, { output: budget.output() });
+      if (result.stop === 'max_cost' && result.error) {
+        result = { ...result, error: budget.reason('max_cost') };
+      }
+    }
+    if (turn && !result.runId) result = { ...result, runId: (turn as { runId: string }).runId };
+    return result;
   }
 
   private finish(
@@ -481,7 +727,8 @@ export class WorkflowEngine {
     state: Live,
   ): StepResult {
     service.finishStep(row.id, {
-      status: state.cancelled ? 'cancelled' : result.ok ? 'succeeded' : 'failed',
+      // A budget that stopped the run cancelled the step working then; its error says why.
+      status: state.cancelled || result.stop ? 'cancelled' : result.ok ? 'succeeded' : 'failed',
       output: result.ok || result.route === 'failure' ? { value: result.output } : null,
       error: result.error,
       runId: result.runId ?? null,
@@ -501,6 +748,7 @@ export class WorkflowEngine {
     rendered: string,
     ctx: Context,
     state: Live,
+    control: TurnControl,
   ): Promise<StepResult> {
     switch (node.kind) {
       case 'condition': {
@@ -522,10 +770,13 @@ export class WorkflowEngine {
         }
         await new Promise<void>((resolve) => {
           const timer = setTimeout(resolve, seconds * 1000);
-          state.wake = () => {
+          const wake = () => {
             clearTimeout(timer);
             resolve();
           };
+          state.wake = wake;
+          // A limit that ran out ends the wait too.
+          control.signal.addEventListener('abort', wake, { once: true });
         });
         state.wake = null;
         return succeed(seconds);
@@ -541,11 +792,15 @@ export class WorkflowEngine {
         if (!node.agent_id) return fail('this step names no agent');
         if (!rendered.trim()) return fail('this step has no prompt for the agent');
         if (!this.ports.agentTurn) return fail('this hub cannot run an agent');
-        const turn = await this.ports.agentTurn(scope, {
-          agentId: node.agent_id,
-          prompt: rendered,
-          title: node.title || node.id,
-        });
+        const turn = await this.ports.agentTurn(
+          scope,
+          {
+            agentId: node.agent_id,
+            prompt: rendered,
+            title: node.title || node.id,
+          },
+          control,
+        );
         return turn.status === 'succeeded'
           ? { ...succeed(turn.output), runId: turn.runId }
           : {
