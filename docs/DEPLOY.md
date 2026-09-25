@@ -34,8 +34,9 @@ sets:
 | `DATABASE_URL` | Optional PostgreSQL instead of the SQLite file. |
 | `COREHUB_SETUP_OPEN_MINUTES` | Optional. Minutes after the hub starts, while it has no owner, in which setup is open without the token. Default `60`; `0` = token only (§2). |
 | `COREHUB_RESET_OWNER` | Optional, recovery only. `1` disables the owner on the next boot and reopens setup (§2). Remove it afterwards. |
+| `COREHUB_TASK_AUTO_START_MAX` | Optional. How many task runs the hub starts **by itself** (a task's "Start automatically") at once in one profile; the rest wait their turn. Default `2`. A person's "Assign and start" is never held back by it. |
 
-These six are the whole configuration (ARCHITECTURE invariant 5). There is
+These seven are the whole configuration (ARCHITECTURE invariant 5). There is
 no variable for model provider keys either — they are added once on the Models
 screen and the hub carries them to every agent (§3).
 

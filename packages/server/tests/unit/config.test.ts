@@ -23,6 +23,7 @@ describe('config', () => {
       'COREHUB_VERSION',
       'COREHUB_SETUP_OPEN_MINUTES',
       'COREHUB_RESET_OWNER',
+      'COREHUB_TASK_AUTO_START_MAX',
     ]);
     const picked = pickEnv({
       DATA_DIR: '/x',
@@ -53,6 +54,14 @@ describe('config', () => {
     expect(config.port).toBe(8080);
     expect(config.database).toEqual({ kind: 'sqlite', file: '/tmp/hub-data/hub.sqlite' });
     expect(config.bootstrapAdminPassword).toBeUndefined();
+  });
+
+  it('starts at most two tasks by itself per profile unless told otherwise', () => {
+    expect(loadConfig({}).taskAutoStartMax).toBe(2);
+    expect(loadConfig({ COREHUB_TASK_AUTO_START_MAX: '5' }).taskAutoStartMax).toBe(5);
+    expect(() => loadConfig({ COREHUB_TASK_AUTO_START_MAX: '0' })).toThrow(
+      /COREHUB_TASK_AUTO_START_MAX/,
+    );
   });
 
   it('first-run setup is open for 60 minutes by default; 0 is token only; reset is opt-in (ADR 0019)', () => {

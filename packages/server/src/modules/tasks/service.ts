@@ -766,6 +766,10 @@ export class TasksService {
       .set({
         currentRunId: null,
         status: current.status === 'running' ? 'ready' : current.status,
+        // A person who stops a task wants it stopped: it waits in `ready` and does not start
+        // again by itself (DECISIONS §46). A reassignment is not a stop — the new agent's
+        // start follows.
+        ...(note === 'reassigned' ? {} : { autoStart: false }),
         updatedAt: new Date(),
       })
       .where(eq(tasks.id, id))
@@ -824,7 +828,12 @@ export class TasksService {
           ? { status: 'ready' as const, reason: outcome.reason }
           : { status: 'blocked' as const, reason: outcome.reason };
     this.moveTask(scope, actor, id, { ...move, runId });
-    this.db.update(tasks).set({ currentRunId: null }).where(eq(tasks.id, id)).run();
+    this.db
+      .update(tasks)
+      // Stopped from the chat is a stop like the board's: back in `ready`, not started again.
+      .set(outcome.status === 'cancelled' ? { currentRunId: null, autoStart: false } : { currentRunId: null })
+      .where(eq(tasks.id, id))
+      .run();
     return { row: this.task(scope, id), from: current.status };
   }
 
@@ -1144,47 +1153,184 @@ export class TasksService {
       .get();
   }
 
+  worktreeById(id: string): WorktreeRow | undefined {
+    return this.db.select().from(worktrees).where(eq(worktrees.id, id)).get();
+  }
+
   /**
-   * Record the worktree a task works in. The hub does not create a git worktree here —
-   * that belongs to the worker that runs the task — so the row is created in `creating`
-   * and whoever does the work says when it is `ready`.
+   * The row for a worktree about to be made, in `creating`. A task that had one before (it
+   * was removed, or making it failed) gets the same row back — the same folder and the same
+   * branch, which git kept — so a task has one worktree history, not a pile of rows.
    */
-  createWorktree(
+  beginWorktree(
     scope: Scope,
-    taskId: string,
-    input: { branch?: string | null; base_branch?: string | null },
+    task: TaskRow,
+    input: { path: string; branch: string; base: string },
   ): WorktreeRow {
-    const task = this.task(scope, taskId);
-    const existing = this.worktreeOf(taskId);
-    if (existing) throw conflict({ reason: 'worktree_exists', task_id: taskId });
-    const project = this.project(scope, task.projectId);
-    const branch = input.branch?.trim() || `task/${project.key.toLowerCase()}-${task.number}`;
+    const previous = this.db
+      .select()
+      .from(worktrees)
+      .where(eq(worktrees.taskId, task.id))
+      .orderBy(desc(worktrees.createdAt))
+      .get();
+    const now = new Date();
+    if (previous) {
+      this.db
+        .update(worktrees)
+        .set({
+          status: 'creating',
+          removedAt: null,
+          error: null,
+          baseRef: previous.removedAt ? input.base : (previous.baseRef ?? input.base),
+          workspace: task.workspace,
+          updatedAt: now,
+        })
+        .where(eq(worktrees.id, previous.id))
+        .run();
+      return this.worktreeById(previous.id)!;
+    }
+    // A folder another row still names (a task deleted long ago) is not taken over.
+    const taken = this.db
+      .select({ id: worktrees.id })
+      .from(worktrees)
+      .where(eq(worktrees.path, input.path))
+      .get();
     const id = newUlid();
     this.db
       .insert(worktrees)
       .values({
         id,
         ownerId: scope.userId,
-        workspace: scope.workspace,
-        projectId: project.id,
-        taskId,
-        path: `${project.localPath ?? ''}/../worktrees/${branch}`.replace(/\/+/g, '/'),
-        branch,
-        baseRef: input.base_branch ?? project.defaultBranch,
+        workspace: task.workspace,
+        projectId: task.projectId,
+        taskId: task.id,
+        path: taken ? `${input.path}-${id.slice(-6).toLowerCase()}` : input.path,
+        branch: input.branch,
+        baseRef: input.base,
         status: 'creating',
       })
       .run();
-    return this.db.select().from(worktrees).where(eq(worktrees.id, id)).get()!;
+    return this.worktreeById(id)!;
   }
 
-  removeWorktree(scope: Scope, taskId: string): void {
-    const row = this.worktreeOf(taskId);
-    if (!row) throw notFound({ resource: 'worktree', id: taskId });
+  /** What git answered: `ready`/`dirty` with its numbers, or `failed` with git's message. */
+  settleWorktree(
+    id: string,
+    outcome:
+      | {
+          status: 'ready' | 'dirty';
+          stats: { changedFiles: number; ahead: number; behind: number; head: string | null };
+        }
+      | { status: 'failed'; error: string },
+  ): WorktreeRow {
+    const now = new Date();
     this.db
       .update(worktrees)
-      .set({ removedAt: new Date(), status: 'removed', updatedAt: new Date() })
-      .where(eq(worktrees.id, row.id))
+      .set(
+        outcome.status === 'failed'
+          ? { status: 'failed', error: outcome.error, updatedAt: now }
+          : {
+              status: outcome.status,
+              error: null,
+              headSha: outcome.stats.head,
+              stats: {
+                changedFiles: outcome.stats.changedFiles,
+                ahead: outcome.stats.ahead,
+                behind: outcome.stats.behind,
+              },
+              lastSyncedAt: now,
+              updatedAt: now,
+            },
+      )
+      .where(eq(worktrees.id, id))
       .run();
+    return this.worktreeById(id)!;
+  }
+
+  /** The folder is gone and git forgot it; the branch stays. */
+  worktreeRemoved(id: string): void {
+    const now = new Date();
+    this.db
+      .update(worktrees)
+      .set({ removedAt: now, status: 'removed', error: null, updatedAt: now })
+      .where(eq(worktrees.id, id))
+      .run();
+  }
+
+  /** Every live worktree of a project, for deleting the project. */
+  liveWorktreesOfProject(scope: Scope, projectId: string): WorktreeRow[] {
+    return this.db
+      .select()
+      .from(worktrees)
+      .where(
+        and(
+          eq(worktrees.workspace, scope.workspace),
+          eq(worktrees.projectId, projectId),
+          isNull(worktrees.removedAt),
+        ),
+      )
+      .all();
+  }
+
+  /** Live worktrees whose task is archived (or gone): what the weekly archive leaves behind. */
+  orphanedWorktrees(workspaces: readonly string[]): WorktreeRow[] {
+    if (workspaces.length === 0) return [];
+    return this.db
+      .select({ worktree: worktrees })
+      .from(worktrees)
+      .leftJoin(tasks, eq(tasks.id, worktrees.taskId))
+      .where(
+        and(
+          inArray(worktrees.workspace, [...workspaces]),
+          isNull(worktrees.removedAt),
+          or(isNull(tasks.id), eq(tasks.status, 'archived')),
+        ),
+      )
+      .all()
+      .map((row) => row.worktree);
+  }
+
+  // ------------------------------------------------------------ auto_start
+
+  /**
+   * The tasks waiting to start on their own in one workspace, top of the column first:
+   * `auto_start`, `ready`, given to an agent, on no run, and the hub's own card.
+   */
+  autoStartable(workspace: string): TaskRow[] {
+    return this.db
+      .select()
+      .from(tasks)
+      .where(
+        and(
+          eq(tasks.workspace, workspace),
+          eq(tasks.autoStart, true),
+          eq(tasks.status, 'ready'),
+          eq(tasks.assigneeKind, 'agent'),
+          isNull(tasks.currentRunId),
+          isNull(tasks.externalSource),
+          isNull(tasks.archivedAt),
+        ),
+      )
+      .orderBy(asc(tasks.position), asc(tasks.id))
+      .all();
+  }
+
+  /** The workspaces that have a task waiting to start on its own — what a restart looks at. */
+  autoStartWorkspaces(): string[] {
+    return this.db
+      .selectDistinct({ workspace: tasks.workspace })
+      .from(tasks)
+      .where(
+        and(
+          eq(tasks.autoStart, true),
+          eq(tasks.status, 'ready'),
+          eq(tasks.assigneeKind, 'agent'),
+          isNull(tasks.currentRunId),
+          isNull(tasks.externalSource),
+        ),
+      )
+      .all()
+      .map((row) => row.workspace);
   }
 
   /** Tasks by id, for the bulk endpoints. */
