@@ -48,6 +48,8 @@ jobs:
           java-version: '21'
       - run: pnpm install --frozen-lockfile --filter @corehub/contracts
       - run: pnpm --filter @corehub/contracts generate:native
+      - name: Tokens.swift, Product.swift and InfoPlist.strings match their sources
+        run: node apps/ios/scripts/generate-swift.mjs --check
       - uses: actions/upload-artifact@v4
         with:
           name: corehub-swift-client
@@ -69,9 +71,38 @@ jobs:
         run: |
           xcodebuild -version
           swift --version
-          xcrun simctl list runtimes
-      - name: The generated client builds for the simulator
-        working-directory: packages/contracts/generated/swift
+      - name: XcodeGen
+        run: brew install xcodegen
+      - name: Generate the Xcode project from project.yml
+        working-directory: apps/ios
+        run: xcodegen generate
+      - name: Pick an iPhone simulator
+        id: sim
         run: |
-          set -o pipefail
-          xcodebuild -scheme CoreHubClient -destination 'generic/platform=iOS Simulator' -skipPackagePluginValidation build > build.log 2>&1 || { grep -E 'error:' build.log | sort -u | head -150; exit 1; }
+          udid=$(xcrun simctl list devices available -j \
+            | jq -r '[.devices | to_entries[] | select(.key | test("iOS")) | .value[] | select(.name | test("^iPhone"))] | last | .udid')
+          test -n "$udid" && test "$udid" != null
+          echo "udid=$udid" >> "$GITHUB_OUTPUT"
+          xcrun simctl list devices available | grep "$udid"
+      - name: Build and run the unit tests (XCTest)
+        working-directory: apps/ios
+        run: |
+          mkdir -p build
+          xcodebuild \
+            -project CoreHub.xcodeproj \
+            -scheme CoreHub \
+            -destination "id=${{ steps.sim.outputs.udid }}" \
+            -skipPackagePluginValidation \
+            -resultBundlePath build/CoreHub.xcresult \
+            CODE_SIGNING_ALLOWED=NO \
+            build test > build/xcodebuild.log 2>&1 || status=$?
+          grep -E "error:|warning: .*(isolat|Sendable)|Test Case .* (passed|failed)|Executed [0-9]+ tests|\*\* (BUILD|TEST) " build/xcodebuild.log | grep -v "^\s*$" | sort -u | head -300
+          exit "${status:-0}"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: ios-test-results
+          path: |
+            apps/ios/build/xcodebuild.log
+            apps/ios/build/CoreHub.xcresult
+          retention-days: 5

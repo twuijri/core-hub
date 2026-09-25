@@ -13,6 +13,7 @@ const LOCALE_SETS = [
   { name: 'cli', dir: 'packages/cli/src/i18n', required: true },
   { name: 'web', dir: 'packages/web/src/i18n', required: true },
   { name: 'desktop', dir: 'apps/desktop/src/i18n', required: false },
+  { name: 'ios', dir: 'apps/ios/CoreHub/i18n', required: false },
 ];
 
 const OLD_WORD = { en: /\bworkspaces?\b/i, ar: /مساح(?:ة|ات) (?:ال)?عمل/ };
