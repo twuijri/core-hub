@@ -20,6 +20,7 @@ import { overrideAgents } from '../../server/src/modules/agents/index.js';
 import { overrideModels } from '../../server/src/modules/models/index.js';
 import type { AgentInstaller, HermesApiCall } from '../../server/src/modules/agents/index.js';
 import { createSessionsModule } from '../../server/src/modules/sessions/index.js';
+import { attachmentsPort } from '../../server/src/modules/knowledge/index.js';
 import { SessionsStore } from '../../server/src/modules/sessions/store.js';
 import { sessions as sessionRows } from '../../server/src/modules/sessions/schema.js';
 import { requireSqlite } from '../../server/src/lib/db.js';
@@ -832,6 +833,9 @@ registerChannelSource(() => (channelsOn ? hermesChannels : null));
 const sessions = createSessionsModule({
   agents: { find: async (_workspace, agentId) => fakeHermes(agentId) },
   runner: new ScriptedRunner(),
+  // The real file store, as the composition root wires it: a chat's attachments, and the
+  // transcript "Continue in Core Hub" keeps (§58).
+  attachments: attachmentsPort,
   // The real wiring, not a stub: the journeys then prove that a finished run actually
   // reaches the inbox, which is the only claim worth making about notifications. The
   // scope resolver has to be the real one too — the derived one invents a local owner id,

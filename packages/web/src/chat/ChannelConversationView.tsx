@@ -2,6 +2,7 @@
 // the chat screen's own look — the person on the channel on one side, the agent's replies on the
 // other — but read-only: the hub cannot write to it, so where the composer would be there is the
 // banner saying where the reply is made. It is read again every half minute while open.
+// "Continue in Core Hub" (§58) carries it into a new hub chat with the transcript attached.
 import { describeError } from '../auth/client.js';
 import { useAuth } from '../auth/context.js';
 import { useI18n } from '../i18n/context.js';
@@ -18,6 +19,7 @@ import {
 import { Avatar, Badge, EmptyState, Notice, SkeletonText } from '../ui/index.js';
 import { IconGlobe } from '../ui/icons.js';
 import { Markdown } from './Markdown.js';
+import { ContinueChannel } from './ContinueChannel.js';
 
 export function ChannelConversationView({ id }: { id: string }) {
   const { t } = useI18n();
@@ -82,8 +84,11 @@ export function ChannelConversationView({ id }: { id: string }) {
         </div>
         {/* Where the composer would be: why there is none, and where the reply is made. */}
         {conversation && (
-          <div className="composer-dock" data-testid="channel-readonly">
-            <Notice tone="info">{t('sessions.channels.readonly_banner', { channel })}</Notice>
+          <div className="composer-dock flex flex-col gap-2">
+            <div data-testid="channel-readonly">
+              <Notice tone="info">{t('sessions.channels.readonly_banner', { channel })}</Notice>
+            </div>
+            <ContinueChannel id={id} channel={channel} />
           </div>
         )}
       </div>

@@ -46,11 +46,16 @@ function fill(text: string, values: Record<string, string | number>): string {
   );
 }
 
-/** The span the messages cover, earliest and latest; the conversation's own when empty. */
-function spanOf(read: ChannelRead): { from: string; to: string } {
+/**
+ * The span the messages cover, earliest and latest; the conversation's own when empty. In
+ * Arabic text each time is isolated left-to-right (LRI … PDI), or the bidirectional algorithm
+ * shows `2026-09-25` as `25-09-2026`.
+ */
+function spanOf(read: ChannelRead, language: Language): { from: string; to: string } {
   const first = read.items[0]?.created_at ?? read.conversation.started_at;
   const last = read.items[read.items.length - 1]?.created_at ?? read.conversation.last_message_at;
-  return { from: stamp(first), to: stamp(last) };
+  const isolate = (text: string) => (language === 'ar' ? `\u2066${text}\u2069` : text);
+  return { from: isolate(stamp(first)), to: isolate(stamp(last)) };
 }
 
 /** The chat's title: the channel and the other party, as the list shows them. */
@@ -70,7 +75,7 @@ export function transcriptOf(
   const channel = channelLabel(conversation.channel, language);
   const peer = peerOf(conversation);
   const agent = t('sessions.continue.agent', language);
-  const { from, to } = spanOf(read);
+  const { from, to } = spanOf(read, language);
   const lines = [
     `# ${channel} — ${peer}`,
     '',
@@ -99,7 +104,7 @@ export function transcriptOf(
 
 /** The first message's words: the facts, where the transcript is, and the person's note. */
 export function summaryOf(read: ChannelRead, language: Language, note: string | null): string {
-  const { from, to } = spanOf(read);
+  const { from, to } = spanOf(read, language);
   const values = {
     channel: channelLabel(read.conversation.channel, language),
     peer: peerOf(read.conversation),

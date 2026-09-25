@@ -1111,3 +1111,36 @@ schema, which ADR 0015 chose not to depend on); showing them as `Session`s with 
 (every operation on a session — rename, archive, run, delete — would have to refuse them).
 Not built: "Continue in Core Hub" (a hub chat seeded with the transcript as context) — proposed
 as the next step.
+
+## 58. "Continue in Core Hub" is a new chat whose first message carries the transcript
+
+§55 left a channel conversation read-only and named "Continue in Core Hub" as the next step.
+Proposed here — owner to confirm:
+
+- **`sessions.continueChannelConversation`** (`POST /channel-conversations/{id}/continue`, body
+  `{agent_id, note?}`) reads the conversation from Hermes as `listChannelMessages` does (the
+  latest 500 messages), keeps its transcript as a Markdown attachment of the caller's, and makes
+  an ordinary `chat` session in the same profile with that agent, titled "<channel>: <the other
+  party>" (a title the agent's own naming does not replace). It answers `201` with the
+  `session` and `first_message`. The channel conversation is not touched.
+- **The context is the first user message, not a system message.** An agent only ever receives
+  the prompt of the turn it is running (`AgentRunRequest.prompt`) and its own session; a system
+  or context message written into the hub's transcript without a run would never reach it. So
+  the first message is a `text` block — a factual summary in the caller's language (the channel,
+  the other party, how many messages, over what time, "the full transcript is in the attached
+  file; read it first"), then the person's note — and a `file` block with the transcript, which
+  the hub puts in the run's input folder like any attachment.
+- **The hub does not send it; the client does.** A run started by the hub before the client
+  watches the chat would stream to nobody (a new chat's first message waits for the
+  subscription for the same reason), so the answer carries `first_message` and the client sends
+  it as the chat's first run as soon as it is listening. A client that never sends it leaves an
+  empty chat, as a new chat nobody typed in does.
+- **The summary is facts, not a model's summary** — no extra turn to pay for, nothing to get
+  wrong; the agent reads the whole transcript in that first turn.
+- **The web picks the profile's Hermes** (the agent the channel was talking to), or the first
+  agent that can answer; the dialog takes an optional note ("what should the agent do with it?").
+
+Rejected: copying the messages into the new chat's transcript (the agent would not see them, and
+the chat would claim turns nobody ran); a system message (the same, and the contract has no
+system role a client could send); forking into Hermes's own channel session (the hub cannot write
+there, §55); starting the first run on the hub (lost opening deltas).

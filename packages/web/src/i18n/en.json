@@ -211,7 +211,15 @@
       "unreachable": "Couldn't read the channel conversations from Hermes just now; showing what was last read.",
       "untitled": "A {channel} conversation",
       "has_more": "Only the latest 500 messages of this conversation are shown.",
-      "no_messages": "No text messages in this conversation yet."
+      "no_messages": "No text messages in this conversation yet.",
+      "continue": {
+        "button": "Continue in Core Hub",
+        "title": "Continue this conversation in Core Hub",
+        "hint": "A new chat in this profile starts with this conversation attached for the agent to read. The conversation on {channel} stays as it is.",
+        "note": "What should the agent do with it? (optional)",
+        "go": "Continue",
+        "no_agent": "No agent in this profile can take it. Install one from Agents first."
+      }
     }
   },
   "search": {
