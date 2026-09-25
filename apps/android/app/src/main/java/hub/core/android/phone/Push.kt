@@ -6,6 +6,7 @@ import hub.core.android.data.SessionStore
 import hub.core.android.data.StoredSession
 import hub.core.android.data.TokenKind
 import hub.core.android.data.hubCall
+import hub.core.client.model.DevicePatch
 import hub.core.client.model.DeviceRegistration
 import hub.core.client.model.Locale
 import hub.core.client.model.PushProvider
@@ -95,6 +96,32 @@ class PushRegistrar(
                 continue
             }
             return Outcome.Failed(error)
+        }
+    }
+
+    /**
+     * At each launch (and after the notification permission is answered): tells the hub what
+     * this phone is now — model, Android and app versions, what stops push. A password sign-in
+     * that has no device row yet registers one, which says all of it; a row removed on the web
+     * is registered again, once. Best effort: nothing waits for it.
+     */
+    suspend fun report(patch: DevicePatch): Boolean {
+        val session = store.current ?: return false
+        val api = apis(session)
+        var retried = false
+        while (true) {
+            val known = store.current?.takeIf { same(it, session) }?.deviceId
+            if (known == null && session.kind == TokenKind.SESSION) return deviceId(session, api).isSuccess
+            val id = deviceId(session, api).getOrElse { return false }
+            val result = hubCall { api.devices.devicesUpdate(id, patch) }
+            if (result.isSuccess) return true
+            val error = result.exceptionOrNull() as? HubError
+            if (error?.status == 404 && session.kind == TokenKind.SESSION && !retried) {
+                retried = true
+                remember(session, null)
+                continue
+            }
+            return false
         }
     }
 

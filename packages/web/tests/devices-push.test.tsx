@@ -1,5 +1,5 @@
 // Devices and browser push in the web client: turning notifications on in this browser (the
-// browser's objects played by fakes), the Devices tab (rename, revoke, last seen, push), the
+// browser's objects played by fakes), the device list (rename, remove, last active, push), the
 // admin's push senders, and the per-kind push switch on the Notifications page.
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { cleanup, render, screen, waitFor, within } from '@testing-library/react';
@@ -61,19 +61,29 @@ function device(over: Record<string, unknown> = {}) {
     kind: 'phone',
     brand: 'Google',
     model: 'Pixel 9',
+    os_version: '15',
     app_version: '1.0.2',
     connection: 'lan',
     online: false,
     last_seen_at: '2026-09-25T09:00:00Z',
+    paired_at: '2026-09-24T09:00:00Z',
     app_token_id: '01J8QK3ZR2W7M5N4P6T8V9X0AK',
     capabilities: [],
     push: { provider: 'fcm', locale: 'ar', registered_at: '2026-09-25T08:00:00Z' },
+    push_blocker: 'none',
     this_device: false,
     created_at: '2026-09-24T09:00:00Z',
     updated_at: '2026-09-25T09:00:00Z',
     ...over,
   };
 }
+
+const ACCOUNT = JSON.stringify({
+  type: 'service_account',
+  project_id: 'core-hub-66772',
+  client_email: 'push@core-hub-66772.iam.gserviceaccount.com',
+  private_key: '-----BEGIN PRIVATE KEY-----\nMIIE\n-----END PRIVATE KEY-----\n',
+});
 
 const SENDERS = {
   items: [
@@ -274,15 +284,15 @@ describe('browser push, in this browser', () => {
   });
 });
 
-describe('the Devices tab', () => {
+describe('the device list', () => {
   it('lists devices with last seen and push, renames and revokes after asking', async () => {
     const user = userEvent.setup();
     const { fetchImpl, sent } = hub([device()]);
     mount(fetchImpl, <DevicesPanel isAdmin />);
     const row = await screen.findByTestId('device-row');
     expect(within(row).getByText('هاتف طارق')).toBeTruthy();
-    expect(within(row).getByTestId('device-push').textContent).toContain('FCM (Android)');
-    expect(within(row).getByTestId('device-seen').textContent).toMatch(/^Last seen /);
+    expect(within(row).getByTestId('device-push').textContent).toBe('Push on · FCM (Android)');
+    expect(within(row).getByTestId('device-seen').textContent).toMatch(/^Last active /);
 
     await user.click(within(row).getByTestId('device-rename'));
     const field = await screen.findByLabelText('Name');
@@ -296,7 +306,7 @@ describe('the Devices tab', () => {
     await user.click(within(row).getByTestId('device-revoke'));
     expect(sent.some((s) => s.method === 'DELETE')).toBe(false);
     const dialog = await screen.findByTestId('confirm-dialog');
-    await user.click(within(dialog).getByRole('button', { name: 'Revoke' }));
+    await user.click(within(dialog).getByRole('button', { name: 'Remove' }));
     await waitFor(() =>
       expect(sent.find((s) => s.method === 'DELETE')?.path).toBe(
         '/devices/01J8QK3ZR2W7M5N4P6T8V9X0DV',
@@ -308,9 +318,16 @@ describe('the Devices tab', () => {
     const { fetchImpl } = hub([]);
     mount(fetchImpl, <DevicesPanel isAdmin />);
     expect(await screen.findByText('No devices yet')).toBeTruthy();
+    // Folded under the devices: one line, and nothing about fields or environment variables.
+    const section = await screen.findByTestId('push-senders');
+    expect(section.hasAttribute('open')).toBe(false);
+    await waitFor(() =>
+      expect(screen.getByTestId('push-senders-summary').textContent).toContain('APNs (iPhone)'),
+    );
     const fcm = await screen.findByTestId('push-sender-fcm');
     expect(fcm.getAttribute('data-state')).toBe('not_configured');
-    expect(fcm.textContent).toContain('Missing: service_account');
+    expect(section.textContent).not.toContain('service_account');
+    expect(section.textContent).not.toContain('COREHUB_');
     expect(screen.getByTestId('push-sender-webpush').getAttribute('data-state')).toBe('ready');
   });
 
@@ -318,16 +335,33 @@ describe('the Devices tab', () => {
     const user = userEvent.setup();
     const { fetchImpl, sent } = hub([]);
     mount(fetchImpl, <DevicesPanel isAdmin />);
+    await user.click(await screen.findByTestId('push-senders-summary'));
+    expect(screen.getByTestId('push-senders').hasAttribute('open')).toBe(true);
     await user.click(await screen.findByTestId('push-sender-edit-fcm'));
     const dialog = await screen.findByTestId('push-sender-dialog');
+    // The environment is the other way, told inside the dialog only.
+    const env = within(dialog).getByTestId('push-sender-env');
+    expect(env.textContent).toContain('COREHUB_FCM_SERVICE_ACCOUNT');
+    expect(within(env).getByRole('link', { name: 'docs/DEPLOY.md' }).getAttribute('href')).toBe(
+      'https://github.com/twuijri/core-hub/blob/main/docs/DEPLOY.md',
+    );
     expect(within(dialog).getByTestId('push-sender-save').hasAttribute('disabled')).toBe(true);
+    // The file is the way in; the text field waits behind "Paste instead".
+    expect(within(dialog).queryByLabelText('Service account JSON')).toBeNull();
+    await user.click(within(dialog).getByTestId('push-sender-paste'));
     await user.click(within(dialog).getByLabelText('Service account JSON'));
     await user.paste('{"project_id":"p"}');
+    expect(within(dialog).getByTestId('push-sender-save').hasAttribute('disabled')).toBe(true);
+    await user.clear(within(dialog).getByLabelText('Service account JSON'));
+    await user.paste(ACCOUNT);
+    expect(within(dialog).getByTestId('push-sender-file-ok').textContent).toContain(
+      'core-hub-66772',
+    );
     await user.click(within(dialog).getByTestId('push-sender-save'));
     await waitFor(() =>
       expect(sent.find((s) => s.method === 'PUT' && s.path === '/push/senders/fcm')?.body).toEqual({
         enabled: true,
-        service_account: '{"project_id":"p"}',
+        service_account: ACCOUNT,
       }),
     );
   });

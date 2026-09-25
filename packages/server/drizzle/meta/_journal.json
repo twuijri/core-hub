@@ -183,6 +183,13 @@
       "when": 1790360538187,
       "tag": "0025_channel_identities",
       "breakpoints": true
+    },
+    {
+      "idx": 26,
+      "version": "6",
+      "when": 1790364851110,
+      "tag": "0026_device_report",
+      "breakpoints": true
     }
   ]
 }
