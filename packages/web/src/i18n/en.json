@@ -343,6 +343,9 @@
     "install": "Install",
     "remove": "Remove",
     "restart": "Restart",
+    "restart_named": "Restart {name}",
+    "restart_done": "Restarted",
+    "restart_failed": "The restart failed",
     "limited": "This agent runs through the process harness and is limited.",
     "update_available": "Update available: {version}",
     "under_agent": "Under the agent",
@@ -631,9 +634,10 @@
       },
       "gateway_reloaded": {
         "ok": "The runtime restarted after the last change.",
-        "missing": "The runtime has not restarted since the last change."
+        "missing": "Settings changed after Hermes last started — restart it to apply them."
       },
       "all_ok": "Everything works",
+      "restart_now": "Restart now",
       "show": "Show checks",
       "hide": "Hide checks"
     }

@@ -15,9 +15,10 @@ import { useAuth } from '../auth/context.js';
 import { useAgents } from '../hub/queries.js';
 import { useI18n } from '../i18n/context.js';
 import { agentRoute, navigation, routeOf, termKey } from '../navigation/manifest.js';
-import { IconArrowStart } from '../ui/icons.js';
+import { IconArrowStart, IconRestart } from '../ui/icons.js';
 import {
   Avatar,
+  Button,
   agentMark,
   Notice,
   SidebarGroup,
@@ -26,6 +27,7 @@ import {
   SkeletonGroup,
 } from '../ui/index.js';
 import { agentSections } from './sections.js';
+import { canRestart, useRestartAgent } from './useRestartAgent.js';
 
 /** «رجوع إلى الوكلاء»: where the rail was, the way Settings has «رجوع إلى المحادثات». */
 export function AgentBackRow({ onNavigate }: { onNavigate?: (() => void) | undefined }) {
@@ -64,6 +66,9 @@ export function AgentNav({
   const { user } = useAuth();
   const agents = useAgents();
   const agent = agents.data?.find((entry) => entry.id === agentId);
+  // Beside the name, for whoever may restart it (owner, 2026-09-25): «خل جنب كلمة هرمز
+  // والايقونه زر ريستارت … اذا ضغطته يدور واذا اكتمل يوقف ويطلع تنبيه انه دن».
+  const restarter = useRestartAgent(agent?.id);
 
   if (agents.isPending)
     return (
@@ -88,6 +93,27 @@ export function AgentNav({
         <span className="min-w-0 truncate font-semibold" dir="auto">
           {agent.name}
         </span>
+        {canRestart(agent, user?.role) && (
+          <Button
+            variant="ghost"
+            size="sm"
+            iconOnly
+            className="ms-auto"
+            aria-label={t('agents.restart_named', { name: agent.name })}
+            tooltip={t('agents.restart_named', { name: agent.name })}
+            aria-busy={restarter.pending}
+            disabled={restarter.pending}
+            icon={
+              <IconRestart
+                size={16}
+                className={restarter.pending ? 'animate-spin' : undefined}
+                data-testid="agent-restart-icon"
+              />
+            }
+            onClick={() => void restarter.restart()}
+            data-testid="agent-restart"
+          />
+        )}
       </div>
       <SidebarGroup testId="agent-sections">
         <nav aria-label={t('agents.sections', { name: agent.name })}>

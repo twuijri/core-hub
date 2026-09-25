@@ -306,3 +306,9 @@ export const IconUnarchive = (p: IconProps) => (
     <path d="M12 17v-5m0 0-2.5 2.5M12 12l2.5 2.5" />
   </Svg>
 );
+export const IconRestart = (p: IconProps) => (
+  <Svg {...p}>
+    <path d="M20 12a8 8 0 1 1-2.34-5.66" />
+    <path d="M20 4v4.5h-4.5" />
+  </Svg>
+);

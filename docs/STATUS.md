@@ -94,6 +94,14 @@ its approval.
   goes to its own profile, and a task's conversation opens there
   (`?profile=`) without moving the selector. Both pages hear every profile in
   realtime.
+  Since 2026-09-25 **a failed run's error sits under the turn that failed** (its reply, or the
+  person's message when the agent wrote nothing) with a dismiss ×, never above the composer, so a
+  later successful run no longer looks failed; after a reload the failed turn still shows it (read
+  from `sessions.listRuns?status=failed`). The Models screen's Runtime card says a pending restart
+  as an amber warning — «غيّرت الإعدادات بعد آخر تشغيل لـ Hermes — أعد تشغيله لتطبيقها» — with
+  «إعادة التشغيل الآن» for an admin, and an agent's side list has a Restart icon beside Hermes's
+  name (admins only) that spins until the restart job ends and says «تمّت إعادة التشغيل» or the
+  error in a toast; both use one hook over `agents.restart`.
 - **Terminal** (`packages/cli`): the reference client — `setup`, login, pairing,
   agents, models, sessions, an interactive `chat` with resume and approvals.
 - Desktop, Android and iOS: not started (ADR 0007, ADR 0009).
