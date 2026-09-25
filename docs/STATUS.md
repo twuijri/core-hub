@@ -215,7 +215,10 @@ its approval.
   unsigned, built by
   `.github/workflows/desktop.yml` as artifacts and never published; This device checks GitHub
   releases once a day (switchable) or on demand and links the installer — nothing is downloaded
-  or installed by the app. Not yet: code signing (owner's decision), voice (the page says so).
+  or installed by the app. Since 2026-09-26 the `appId` is `com.twuijri.corehub` and
+  `.github/workflows/desktop-signed.yml` (by hand or a release tag, never on a pull request)
+  signs the macOS dmg with Developer ID and notarises it (docs/RELEASING.md); Windows is still
+  unsigned. Not yet: voice (the page says so).
   Tests:
   unit tests of the main process logic, the loopback proxy, Hermes detection per platform, the
   installer runner, the hub supervisor, the helper (folder rule with links, tools, the MCP
@@ -231,6 +234,10 @@ its approval.
   Markdown and code, tool-call cards, approvals and the agent's questions, the thinking indicator;
   Arabic (RTL) and English. The generated Kotlin client reads all 219 response examples of the
   contract. CI builds the debug APK (`.github/workflows/android.yml`); nothing is published.
+  Since 2026-09-26 the `applicationId` is `com.twuijri.corehub` (the Kotlin packages stay
+  `hub.core.android`), and `.github/workflows/android-signed.yml` (by hand or a release tag)
+  builds a signed APK and AAB with Firebase's `google-services.json` from a secret — proven by a
+  run on the branch; the app does not register with FCM yet (docs/RELEASING.md).
   Part 2 (2026-09-25): search across every profile (a global-agent hit opens the global agent),
   the Agents cards and each agent's pages (read-only), the Tasks board one column at a time (move,
   assign, start, open the conversation), Schedules (run now, pause, resume, history), and Settings
@@ -272,7 +279,11 @@ its approval.
   that works once the app is signed); dictation into the composer with the phone's speech
   recognition; replies read aloud; This device holds the voice input, dictation language, spoken
   replies and notification permission, kept on the phone. Built and unit-tested on a macOS
-  runner's simulator; **never run on a device or against the owner's hub**, and nothing is signed.
+  runner's simulator; **never run on a device or against the owner's hub**. Since 2026-09-26 the
+  bundle ids are `com.twuijri.corehub` and `com.twuijri.corehub.share` with the App Group
+  `group.com.twuijri.corehub`, and `.github/workflows/ios-signed.yml` (by hand or a release tag)
+  archives and exports a signed App Store `.ipa`, with an optional TestFlight upload (off by
+  default; not tried — no app icon yet) — proven by a run on the branch (docs/RELEASING.md).
 
 ## Name
 Since 2026-09-24 the product is **Core Hub** («كور هب», ADR 0017): packages `@corehub/*`, the

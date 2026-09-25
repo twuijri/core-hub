@@ -98,7 +98,7 @@ jobs:
       - name: Check the signature, the notarisation and the app id
         run: |
           set -euo pipefail
-          app=$(ls -d apps/desktop/release/mac*/"Core Hub.app" | head -1)
+          app=$(ls -d apps/desktop/release/mac*/*.app | head -1)
           test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$app/Contents/Info.plist")" = com.twuijri.corehub
           codesign --verify --deep --strict --verbose=2 "$app"
           codesign -dv "$app" 2>&1 | grep -E '^(Identifier|TeamIdentifier|Authority|Runtime Version)='
