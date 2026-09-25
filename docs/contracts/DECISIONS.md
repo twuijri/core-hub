@@ -1025,7 +1025,7 @@ Rejected: a new `source` field on `SessionCreate` (a client could then make any 
 them, and would have to list-then-create with a race); `sessions.list?source=global_agent` as
 the way in (the list is the profile's, not the person's, so it would hand one person another's).
 
-## 56. Messaging platforms are declared once; linking one is its credentials, checked where the platform can say
+## 64. Messaging platforms are declared once; linking one is its credentials, checked where the platform can say
 
 2026-09-25, the owner: link more messaging platforms from the Channels page, like Telegram (§41).
 Proposed here — owner to confirm:

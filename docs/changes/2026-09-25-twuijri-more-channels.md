@@ -74,7 +74,7 @@
    لاحق سيتجاوزه. تبقى تُنزَّل عند أول تشغيل، والصفحة تقول ذلك. إضافتها لاحقًا كلمة واحدة في
    `IMAGE_CHANNELS`.
 
-قرار العقد: `docs/contracts/DECISIONS.md` §56.
+قرار العقد: `docs/contracts/DECISIONS.md` §64.
 
 ## العقد (ما تغيّر في packages/contracts، أو «لا شيء»)
 - عملية جديدة `agents.listChannelPlatforms` (`GET /agents/{agent_id}/channel-platforms` →
@@ -107,7 +107,7 @@
     `tests/contract/channels.contract.test.ts`، `tests/unit/channels.real.test.ts` (هرمز الحقيقي).
     وعُدّلت ثلاثة مواضع في اختبارين قديمين كانت تستعمل Slack مثالًا لمنصة «غير مدعومة»، فصار المثال `webhook`.
   - الويب: `tests/channels-platforms.test.tsx`.
-- الوثائق: `docs/STATUS.md`، `docs/DEPLOY.md`، `docs/contracts/DECISIONS.md` §56، هذا السجل.
+- الوثائق: `docs/STATUS.md`، `docs/DEPLOY.md`، `docs/contracts/DECISIONS.md` §64، هذا السجل.
 
 **الحجم** (`docker save … | gzip -1 | wc -c`، الصورتان من هذا الفرع، والفرق الوحيد `IMAGE_CHANNELS`):
 
