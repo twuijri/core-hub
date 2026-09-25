@@ -92,10 +92,28 @@ $ COREHUB_DESKTOP_SMOKE_EXECUTABLE=…/release/linux-unpacked/corehub xvfb-run -
 ```
 الحجم قبل تقليم لغات Chromium كان 128.4 MB وAppImage و101.9 MB للـdeb. من 298 MB غير مضغوطة، 219 MB
 ملف Electron التنفيذي وحده، وحصة التطبيق (الويب والعملية الرئيسية والمركز المضمَّن) نحو 16 MB.
-أحجام ماك وويندوز تأتي من أول تشغيل للسير في CI. اختبارات التحديث لا تسأل GitHub (جلب مزيَّف)، والتطبيق
+وأحجام الأنظمة الثلاثة من سير «Desktop installers» في CI (التشغيل 36087111669):
+```
+| Core-Hub-Setup-0.0.0-x64.exe   | 105.5 MB |   (Windows, NSIS)
+| Core-Hub-0.0.0-arm64.dmg       | 118.4 MB |   (macOS, Apple silicon)
+| Core-Hub-0.0.0-x86_64.AppImage | 125.8 MB |   (Linux)
+| corehub_0.0.0_amd64.deb        |  99.7 MB |   (Linux)
+``` اختبارات التحديث لا تسأل GitHub (جلب مزيَّف)، والتطبيق
 في اختبارات الدخان لا يتحقق وحده (`COREHUB_DESKTOP_NO_AUTO_UPDATE=1`).
 
-CI: يُملأ بعد الدفع.
+CI على #116 — كلها ناجحة، ومنها المثبّتات الثلاثة، واختبار الدخان على تطبيق لينكس المحزوم:
+```
+pass  Installers (ubuntu-latest)     (AppImage + deb، ثم اختبارات الدخان الثلاثة على المحزوم)
+pass  Installers (macos-latest)      (dmg arm64 — التشغيل الأول سقط: argon2 بلا darwin-x64، فصار arm64 فقط)
+pass  Installers (windows-latest)    (NSIS x64)
+pass  Lint, typecheck, contracts, tests, build
+pass  Desktop app smoke (Electron under Xvfb against the real hub)
+pass  Web smoke journeys (Playwright against the real hub)
+pass  Docker image builds and answers /health
+pass  db:generate + db:migrate (SQLite and PostgreSQL)
+pass  PR adds or updates a change record
+pass  PR leaves graphify-out/ to the code-map bot
+```
 
 ## المخاطر والرجوع
 - مثبّتات غير موقّعة: تحذير عند الفتح على ماك وويندوز حتى يقرر المالك التوقيع.

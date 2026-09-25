@@ -36,15 +36,16 @@ silent auto-update without his decision.
    answer is a notice — in This device, and once per version from the OS — with a link to the
    installer and the release notes. **Nothing is downloaded or installed by the app.**
 
-## Measured (Linux x64, this machine, 2026-09-25, version 0.0.0)
-| Installer | Size |
-|---|---|
-| `Core-Hub-0.0.0-x86_64.AppImage` | 125.8 MB |
-| `corehub_0.0.0_amd64.deb` | 99.9 MB |
+## Measured (2026-09-25, version 0.0.0)
+| Installer | Size | Where |
+|---|---|---|
+| `Core-Hub-Setup-0.0.0-x64.exe` (Windows, NSIS) | 105.5 MB | CI |
+| `Core-Hub-0.0.0-arm64.dmg` (macOS, Apple silicon) | 118.4 MB | CI |
+| `Core-Hub-0.0.0-x86_64.AppImage` (Linux) | 125.8 MB | CI and this machine |
+| `corehub_0.0.0_amd64.deb` (Linux) | 99.7 MB (99.9 MB here) | CI and this machine |
 
-Of the unpacked 298 MB → ~290 MB after pruning, 219 MB is the Electron binary itself; the
-app's own part (web client, main process, embedded hub) is ~16 MB. macOS and Windows sizes
-come from the first run of the workflow.
+Of ~290 MB unpacked on Linux, 219 MB is the Electron binary itself; the app's own part (web
+client, main process, embedded hub) is ~16 MB. Pruning Chromium's locales saved ~2.5 MB.
 
 ## Alternatives rejected
 - **electron-updater (silent background updates)**: needs signed builds on macOS, a feed

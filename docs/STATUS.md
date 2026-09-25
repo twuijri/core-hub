@@ -119,7 +119,8 @@ its approval.
   address and key, and the last calls, and in local mode adds it to Hermes's MCP servers in one
   click. A hub on a server cannot reach it (the screen says so). Since 2026-09-25 also
   **installers and an update check** (ADR 0023, proposed): AppImage + deb (Linux x64: 125.8 MB
-  and 99.9 MB), dmg (macOS, Apple silicon only) and NSIS (Windows x64), unsigned, built by
+  and 99.7 MB), dmg (macOS, Apple silicon only: 118.4 MB) and NSIS (Windows x64: 105.5 MB),
+  unsigned, built by
   `.github/workflows/desktop.yml` as artifacts and never published; This device checks GitHub
   releases once a day (switchable) or on demand and links the installer — nothing is downloaded
   or installed by the app. Not yet: code signing (owner's decision), voice (the page says so).
