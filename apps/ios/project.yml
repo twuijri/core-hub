@@ -50,6 +50,8 @@ targets:
         CFBundleLocalizations: [ar, en]
         LSRequiresIPhoneOS: true
         UILaunchScreen: {}
+        # Only the system's HTTPS/TLS — exempt, so App Store Connect never asks for export compliance.
+        ITSAppUsesNonExemptEncryption: false
         CFBundleShortVersionString: $(MARKETING_VERSION)
         CFBundleVersion: $(CURRENT_PROJECT_VERSION)
         UIApplicationSceneManifest:

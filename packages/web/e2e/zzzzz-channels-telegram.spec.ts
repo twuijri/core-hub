@@ -3,13 +3,14 @@
  * سويت الا واتساب وانا احتاج تليجرام») — against the real hub, with Telegram's `getMe` and
  * Hermes's pairing scripted (`e2e/hub.ts`):
  *
- * - «ربط تيليجرام» explains @BotFather in plain steps; a token Telegram refuses is said in words;
- * - the right token links the bot, named with its @username, and the page says how to start —
+ * - «ربط منصة» → Telegram explains @BotFather in plain steps; a token Telegram refuses is said in
+ *   words;
+ * - the right token links the bot, named with its @username, and its card says how to start —
  *   open t.me/<bot>, send a message, approve the request below;
  * - the Telegram stranger waiting for approval is approved in the same list as WhatsApp's;
  * - Telegram's settings: «إظهار تفكير النموذج» and «الرد عند الإشارة فقط» in groups are switched
  *   on, saved together, and read back after a reload;
- * - Unlink, behind a confirm, forgets the bot and brings «ربط تيليجرام» back.
+ * - Unlink, behind a confirm, forgets the bot and the row leaves the list.
  */
 import { mkdirSync } from 'node:fs';
 import path from 'node:path';
@@ -43,10 +44,9 @@ test('31. Telegram linked by a bot token: the steps, the bot named, approvals, a
 }) => {
   await login(page);
   await openChannels(page);
-  await expect(page.getByTestId('pairing-section')).toBeVisible();
-
-  // ---- The steps, in plain words; a refused token is said in words.
-  await page.getByTestId('telegram-link-open').click();
+  // ---- «ربط منصة», then Telegram: the steps, in plain words; a refused token is said in words.
+  await page.getByTestId('platform-picker-open').click();
+  await page.getByTestId('platform-option-telegram').click();
   const dialog = page.getByTestId('telegram-link');
   await expect(dialog).toContainText('@BotFather');
   await expect(dialog).toContainText('/newbot');
@@ -68,17 +68,18 @@ test('31. Telegram linked by a bot token: the steps, the bot named, approvals, a
     'href',
     'https://t.me/corehub_e2e_bot',
   );
-  await expect(page.getByTestId('telegram-how-to-use')).toContainText('رمز اقتران');
-  await expect(page.getByTestId('telegram-link-open')).toHaveCount(0);
+  await expect(page.getByTestId('channel-list').getByTestId('telegram-how-to-use')).toContainText(
+    'رمز اقتران',
+  );
 
   // ---- The stranger who messaged the bot waits here, and is approved.
   const noura = page.getByTestId('pairing-request-5d1e2f3a4b5c6d7e');
-  await expect(noura).toContainText('telegram', { timeout: 15_000 });
+  await expect(noura).toContainText('تيليجرام', { timeout: 15_000 });
   await expect(noura).toContainText('Noura');
   await shot(page, 'agent-channels-telegram-linked-ar-light');
   await page.getByTestId('pairing-approve-5d1e2f3a4b5c6d7e').click();
   await expect(noura).toHaveCount(0);
-  await expect(page.getByTestId('pairing-sender-555666777')).toContainText('telegram');
+  await expect(page.getByTestId('pairing-sender-555666777')).toContainText('تيليجرام');
 
   // ---- Telegram's own settings: show the model's thinking, and answer in groups only when
   // mentioned — saved together, read back from the profile's files.
@@ -112,7 +113,8 @@ test('31. Telegram linked by a bot token: the steps, the bot named, approvals, a
   await page.getByTestId('channel-unlink-telegram').click();
   await expect(page.getByTestId('confirm-dialog')).toContainText('BotFather');
   await page.getByTestId('confirm-yes').click();
-  await expect(page.getByTestId('channel-link-telegram')).toHaveText('غير مربوط');
-  await expect(page.getByTestId('telegram-link-open')).toBeVisible();
+  await expect(page.getByTestId('channel-unlinked')).toBeVisible();
+  await expect(page.getByTestId('channel-link-telegram')).toHaveCount(0);
   await expect(page.getByTestId('telegram-how-to-use')).toHaveCount(0);
+  await expect(page.getByTestId('platform-picker-open')).toBeVisible();
 });
