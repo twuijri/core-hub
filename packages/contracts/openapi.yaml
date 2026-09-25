@@ -2786,14 +2786,14 @@ paths:
       tags: [sessions]
       summary: List the files of a conversation for preview
       description: |
-        The conversation's files (contract decision §47): what its agent wrote or edited through
+        The conversation's files (contract decision §48): what its agent wrote or edited through
         a tool (the paths in the tool calls' arguments), what is in its working folder, and the
         files attached to its messages — the person's and the ones the agent handed back. One
         entry per file, newest first; a file both in the folder and named by a tool call is one
         entry with both `sources`.
 
-        Only the session's own working folder is listed (a task's session works in its own
-        folder too; a git worktree joins when the hub makes one). The folder is read to a
+        Only the session's own working folder is listed — for a task's session, the folder its
+        run works in, which is the task's git worktree when it has one. The folder is read to a
         bounded depth and count (`truncated` says the cap was hit); hidden folders
         (`.git`, the hub's own run folders) and `node_modules` are skipped unless a tool call
         named a file inside them. Symbolic links are never followed.
@@ -2853,7 +2853,7 @@ paths:
       tags: [sessions]
       summary: Read one file of a conversation's working folder, for preview or download
       description: |
-        The bytes of one file in the session's working folder (contract decision §47), read-only.
+        The bytes of one file in the session's working folder (contract decision §48), read-only.
         `path` is relative to the folder (as `sessions.listFiles` gives it) or absolute inside
         it. Refused with `400 validation_failed` (`details.reason`): a path outside the folder
         (`outside_root`), through or to a symbolic link (`symlink`), or not a regular file

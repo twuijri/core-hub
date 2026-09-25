@@ -1,5 +1,5 @@
 /**
- * `sessions.listFiles` and `sessions.readFile` over the real routes (decision §47): a run
+ * `sessions.listFiles` and `sessions.readFile` over the real routes (decision §48): a run
  * whose tool call wrote a file lists it with the call, in the contract shape; the bytes come
  * back with the type chosen from the name, never sniffed, sandboxed; a path out of the folder,
  * through a link, or over its kind's preview limit is refused; another profile sees nothing.

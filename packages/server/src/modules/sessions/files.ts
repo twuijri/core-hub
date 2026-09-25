@@ -1,6 +1,6 @@
 /**
  * A conversation's files, for preview (contract `sessions.listFiles` / `sessions.readFile`,
- * decision §47).
+ * decision §48).
  *
  * Three places a file of a conversation comes from, and one rule over all of them: the hub
  * reads only inside the session's own working folder, never follows a symbolic link, and

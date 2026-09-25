@@ -510,7 +510,7 @@ export function createAcpAdapter(options: AcpAdapterOptions): AgentAdapter {
 /**
  * What an ACP tool call was given, as the hub records it: the agent's `rawInput`, plus the
  * files the call touches — ACP's `locations` and the paths of its `diff` content — as
- * `locations`, so the chat can open those files (decision §47). `{}` when neither is there.
+ * `locations`, so the chat can open those files (decision §48). `{}` when neither is there.
  */
 export function acpToolInput(update: Record<string, unknown>): Record<string, unknown> {
   const raw = update.rawInput;

@@ -1,5 +1,5 @@
 /**
- * An agent's HTML page, shown without letting it into the client (decision §47).
+ * An agent's HTML page, shown without letting it into the client (decision §48).
  *
  * It is rendered in an `<iframe sandbox="allow-scripts">` from `srcdoc`: no `allow-same-origin`,
  * so the page runs in an opaque origin of its own and cannot read the client's storage, its

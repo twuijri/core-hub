@@ -1,6 +1,6 @@
 /**
  * A conversation's files from the hub (contract `sessions.listFiles`, `sessions.readFile`,
- * decision §47): the list, one file's bytes, saving one.
+ * decision §48): the list, one file's bytes, saving one.
  *
  * Bytes are fetched with the bearer header and handed to the page as a `Blob` — never as a
  * URL with the token in it (the contract forbids that), which is also why a plain link

@@ -1035,7 +1035,7 @@ summary.tool-head:hover {
 }
 
 /* ------------------------------------------------------------- the files of a conversation
-   Decision §47: the Files list, the links that open a file (a tool call, a word in a reply,
+   Decision §48: the Files list, the links that open a file (a tool call, a word in a reply,
    an attachment), and the panel beside the chat that shows it. */
 .tool-file,
 .file-link {

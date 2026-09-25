@@ -56,7 +56,7 @@ function argumentsOf(call: ToolCall): string | null {
 
 /**
  * The files this call wrote or named, as links that open them beside the chat (decision
- * §47). Inside the row's `<summary>` a click must not also fold the row.
+ * §48). Inside the row's `<summary>` a click must not also fold the row.
  */
 function ToolFiles({ call }: { call: ToolCall }) {
   const { t } = useI18n();

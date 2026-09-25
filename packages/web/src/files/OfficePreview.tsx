@@ -1,5 +1,5 @@
 /**
- * Word, Excel and PowerPoint files, read in the browser from their XML (decision §47): a
+ * Word, Excel and PowerPoint files, read in the browser from their XML (decision §48): a
  * workbook's sheets as tables, a document's text with its headings, lists and tables, a
  * deck as an outline of its slides. Loaded on first use (`lazy`), with the ZIP reader.
  */

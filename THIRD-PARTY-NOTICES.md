@@ -37,6 +37,32 @@ SST and Nous Research. Core Hub shows each one only to identify the agent it nam
 what a trademark is for. Core Hub is not affiliated with, endorsed by, or a product of any
 of them. The sixth mark, for our own `direct` agent, is drawn by us.
 
+## fflate — reading Office files in the web client
+
+The web client bundles [`fflate`](https://github.com/101arrowz/fflate) `0.8.3` (an npm
+dependency, not a copied file) to unpack XLSX, DOCX and PPTX files for the file preview
+beside the chat (contract decision §48). Only `unzipSync` is used, in a chunk loaded the first
+time an Office file is opened (about 13 KB, 6 KB compressed).
+
+MIT License · Copyright (c) 2026 Arjun Barrett (as the package's `LICENSE` says)
+
+> Permission is hereby granted, free of charge, to any person obtaining a copy of this
+> software and associated documentation files (the "Software"), to deal in the Software
+> without restriction, including without limitation the rights to use, copy, modify,
+> merge, publish, distribute, sublicense, and/or sell copies of the Software, and to
+> permit persons to whom the Software is furnished to do so, subject to the following
+> conditions:
+>
+> The above copyright notice and this permission notice shall be included in all copies or
+> substantial portions of the Software.
+>
+> THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED,
+> INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR
+> PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE
+> LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT
+> OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
+> OTHER DEALINGS IN THE SOFTWARE.
+
 ## Ideas taken, code not taken
 
 Two entries would be expected here by a reader of `packages/web/src/ui/` and are

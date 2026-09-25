@@ -236,7 +236,7 @@ function scriptFor(prompt: string): Step[] {
     ];
   }
   if (/اكتب الملفات|write the files/i.test(prompt)) {
-    // Files beside the chat (journey 32, decision §47): three files written by a tool in the
+    // Files beside the chat (journey 32, decision §48): three files written by a tool in the
     // session's folder, named in the reply so the words become links. `تحديث` writes the
     // report again, so an open tab has something to follow.
     const again = /تحديث/.test(prompt);

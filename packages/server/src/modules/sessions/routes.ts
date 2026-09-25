@@ -298,7 +298,7 @@ export function registerSessionRoutes(app: FastifyInstance, deps: RouteDeps): vo
     const file = deps.service(request).openFile(scope, session_id, query.path, query.download);
     const name = file.relative.split('/').at(-1) ?? 'file';
     // Opened directly, an HTML file still runs nothing in the hub's origin: the sandbox
-    // gives it an origin of its own and `default-src 'none'` loads nothing (decision §47).
+    // gives it an origin of its own and `default-src 'none'` loads nothing (decision §48).
     return reply
       .header('content-type', file.type.contentType)
       .header('content-length', String(file.size))

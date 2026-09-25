@@ -429,7 +429,7 @@ describe('the adapter set', () => {
   });
 });
 
-// Decision §47: the files an ACP tool call touches are recorded with it, so the chat can
+// Decision §48: the files an ACP tool call touches are recorded with it, so the chat can
 // open them.
 describe('acpToolInput', () => {
   it("keeps the agent's rawInput and adds the paths it touches as locations", () => {

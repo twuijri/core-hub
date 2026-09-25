@@ -416,7 +416,7 @@ function OpenSession({ sessionId }: { sessionId: string }) {
                   {describeError(patch.error, t)}
                 </span>
               )}
-              {/* The conversation's files, once it has begun (decision §47). */}
+              {/* The conversation's files, once it has begun (decision §48). */}
               {messageCount > 0 && <FilesButton />}
               {/* Only once there is something to trace: an empty chat is an invitation. */}
               {messageCount > 0 && (

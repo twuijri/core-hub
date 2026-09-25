@@ -1,6 +1,6 @@
 /**
  * A rehype plugin: in a reply, a word that names one of the conversation's files becomes a
- * link that opens it beside the chat (decision §47). Only exact names count — a listed
+ * link that opens it beside the chat (decision §48). Only exact names count — a listed
  * path, or the bare name of a file that is the only one with that name — and never inside
  * code blocks or existing links; inline code is left to the `code` renderer, which asks
  * `fileForMention` itself.

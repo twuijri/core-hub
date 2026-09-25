@@ -1,5 +1,5 @@
 /**
- * The files of a conversation, beside the chat (decision §47; owner, 2026-09-25: «وبذات اني
+ * The files of a conversation, beside the chat (decision §48; owner, 2026-09-25: «وبذات اني
  * اقدر استعرض الملفات بالمحادثه»).
  *
  * The pure rules first — CSV, which word names a file, when the list is read again, the

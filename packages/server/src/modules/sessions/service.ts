@@ -533,7 +533,7 @@ export class SessionsService {
   }
 
   /**
-   * The conversation's files for preview (contract `sessions.listFiles`, decision §47): what
+   * The conversation's files for preview (contract `sessions.listFiles`, decision §48): what
    * its tool calls named, what is in its working folder, and its messages' attachments.
    * Tool calls are read from the store, where a live run writes each one as it happens.
    */

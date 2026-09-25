@@ -1,6 +1,6 @@
 /**
  * 32. Files beside the chat (owner, 2026-09-25: «وبذات اني اقدر استعرض الملفات بالمحادثه»;
- *     contract decision §47): a scripted run writes `report.html`, `data.csv` and `notes.md`
+ *     contract decision §48): a scripted run writes `report.html`, `data.csv` and `notes.md`
  *     in the session's folder. The person opens each from the Files list and from the tool
  *     card's link: the page renders in a sandboxed frame (its script runs, apart from the
  *     app), the CSV is a table, the Markdown is rendered — then a word in the reply opens a

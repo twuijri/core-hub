@@ -1,5 +1,5 @@
 /**
- * A conversation's files (decision §47): the read stays inside the working folder — no
+ * A conversation's files (decision §48): the read stays inside the working folder — no
  * traversal, no symbolic link on the way, only regular files — the kind and type come from
  * the name, the folder is read bounded, and tool calls name their files.
  */

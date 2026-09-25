@@ -129,7 +129,7 @@ function FileLink({
  * Streamed markdown: GFM tables/lists, highlighted fenced code, links in a new tab.
  * `mark` wraps each occurrence of a searched word in `<mark>` (anchor.ts), after the
  * code has been highlighted, so neither changes the other. Inside a conversation, a word
- * or an inline code span that names one of its files opens that file (decision §47).
+ * or an inline code span that names one of its files opens that file (decision §48).
  */
 export function Markdown({ text, mark }: { text: string; mark?: string | null | undefined }) {
   const files = useSessionFilesOptional();

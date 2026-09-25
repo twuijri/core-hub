@@ -73,7 +73,7 @@ function Attachments({ message }: { message: Message }) {
           block.type === 'location'
             ? `${t('chat.location')} ${block.latitude.toFixed(4)}, ${block.longitude.toFixed(4)}`
             : (block.name ?? block.type);
-        // An attachment opens beside the chat, like any other file of it (decision §47).
+        // An attachment opens beside the chat, like any other file of it (decision §48).
         const key = 'attachment_id' in block ? `attachment:${block.attachment_id}` : null;
         const file = key && files ? files.fileOf(key) : undefined;
         return (
