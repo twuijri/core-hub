@@ -90,6 +90,11 @@ export interface TurnInput {
   provider?: string | null | undefined;
   /** The entity the turn serves; its id lands on the session and the run (`origin`). */
   origin?: { kind: 'task' | 'workflow' | 'schedule'; id: string | null } | undefined;
+  /**
+   * The folder the session works in — a task's git worktree. Checked like a person's
+   * `working_dir` (inside the profile's folder); without one the session gets its own.
+   */
+  workingDir?: string | null | undefined;
 }
 
 /** How a turn ended and what the agent said in it. */
@@ -730,6 +735,7 @@ export class SessionsService {
         title: input.title,
         model: input.model ?? null,
         provider: input.provider ?? null,
+        working_dir: input.workingDir ?? null,
       },
       input.origin
         ? { source: input.source, kind: input.origin.kind, id: input.origin.id }

@@ -409,6 +409,7 @@ registerTaskRunner((app) => {
         model: input.model,
         provider: input.provider,
         origin: { kind: 'task', id: input.taskId },
+        workingDir: input.workingDir,
       }),
     cancel: (scope, sessionId, runId) => runs.cancel(scope, sessionId, runId),
     outcome: (workspace, runId) => runs.outcome(workspace, runId),

@@ -23,8 +23,10 @@
  *   hub that restarts settles, at boot, every task it finds `running` — by what the run's
  *   record says if it ended, and to `blocked` with the reason if it did not.
  *
- * Not here yet (stage 2): a git worktree per task, reporting into a room, and starting
- * an `auto_start` task on its own.
+ * Since stage 2 a task of a project with a repository runs in its own git worktree (the
+ * session is opened with the worktree as its folder), and a task with `auto_start` starts
+ * on its own — at most `COREHUB_TASK_AUTO_START_MAX` of those at once per profile, which
+ * this class counts (`autoRunning`). Still not here: reporting into a room.
  */
 import { PRODUCT } from '@corehub/contracts';
 import type { FastifyBaseLogger } from 'fastify';
@@ -61,6 +63,8 @@ export interface TaskRunPort {
       title: string;
       model: string | null;
       provider: string | null;
+      /** The task's git worktree, when its project has a repository. */
+      workingDir: string | null;
     },
   ): Promise<{
     sessionId: string;
@@ -150,6 +154,12 @@ type Render = (scope: Scope, id: string) => Record<string, unknown>;
 
 export class TaskRuns {
   private readonly following = new Set<Promise<void>>();
+  /** Runs the hub started on its own (`auto_start`): task id → run id. */
+  private readonly auto = new Map<string, { workspace: string; runId: string }>();
+  /** One auto-start pass at a time per workspace, so two passes never both take the last place. */
+  private readonly passes = new Map<string, Promise<void>>();
+  /** Called after a run's ending has moved its task (the worktree's numbers, the next start). */
+  afterSettle: ((scope: TaskRunScope, taskId: string) => void) | null = null;
 
   constructor(
     private readonly port: TaskRunPort | null,
@@ -178,6 +188,7 @@ export class TaskRuns {
       model: string | null;
       provider: string | null;
       instructions: string | null;
+      workingDir: string | null;
     },
   ) {
     if (!this.port) throw new Error('no task runner');
@@ -196,13 +207,63 @@ export class TaskRuns {
       title: `${project.key}-${task.number} · ${task.title}`.slice(0, 200),
       model: input.model,
       provider: input.provider,
+      workingDir: input.workingDir,
     });
+  }
+
+  /** Remember that the hub, not a person, started this run. */
+  markAutoStarted(workspace: string, taskId: string, runId: string): void {
+    this.auto.set(taskId, { workspace, runId });
+  }
+
+  /**
+   * How many runs the hub started on its own are still going in `workspace`. Read against
+   * the tasks as they are now — one that ended, was stopped or was moved no longer counts —
+   * and a restart starts at zero, which is right: a restart ends every run.
+   */
+  autoRunning(workspace: string): number {
+    const service = new TasksService(this.db());
+    let count = 0;
+    for (const [taskId, entry] of this.auto) {
+      const row = service.many({ workspace: entry.workspace, profile: '', userId: '' }, [
+        taskId,
+      ])[0];
+      if (!row || row.status !== 'running' || row.currentRunId !== entry.runId) {
+        this.auto.delete(taskId);
+        continue;
+      }
+      if (entry.workspace === workspace) count += 1;
+    }
+    return count;
+  }
+
+  /**
+   * Run `pass` after any pass already going in this workspace, and follow it like a run, so
+   * `settled()` waits for it too.
+   */
+  serially(workspace: string, pass: () => Promise<void>): Promise<void> {
+    const previous = this.passes.get(workspace) ?? Promise.resolve();
+    const next = previous
+      .then(pass)
+      .catch((error: unknown) => {
+        this.log.error({ err: error, workspace }, 'tasks: starting tasks automatically failed');
+      })
+      .finally(() => {
+        if (this.passes.get(workspace) === next) this.passes.delete(workspace);
+        this.following.delete(next);
+      });
+    this.passes.set(workspace, next);
+    this.following.add(next);
+    return next;
   }
 
   /** Watch a run to its end, then move the task the way the ending says. */
   follow(scope: TaskRunScope, taskId: string, runId: string, done: Promise<TaskRunOutcome>): void {
     const followed = done
-      .then((outcome) => this.settle(scope, taskId, runId, outcome, scope.language))
+      .then((outcome) => {
+        this.settle(scope, taskId, runId, outcome, scope.language);
+        this.afterSettle?.(scope, taskId);
+      })
       .catch((error: unknown) => {
         this.log.error({ err: error, taskId, runId }, 'tasks: settling a finished run failed');
       })

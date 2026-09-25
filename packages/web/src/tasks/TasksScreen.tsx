@@ -60,10 +60,19 @@ import {
   useConfirm,
   usePrompt,
 } from '../ui/index.js';
-import { IconGrip, IconMore, IconPlus, IconSchedules, IconStop, IconTrash } from '../ui/icons.js';
+import {
+  IconGrip,
+  IconMore,
+  IconPlus,
+  IconSchedules,
+  IconSettings,
+  IconStop,
+  IconTrash,
+} from '../ui/icons.js';
 import { AssignDialog } from './AssignDialog.js';
 import { describeTaskError } from './errors.js';
 import { HandOverDialog } from './HandOverDialog.js';
+import { ProjectDialog } from './ProjectDialog.js';
 import { TaskDialog } from './TaskDialog.js';
 import {
   COLUMNS,
@@ -142,6 +151,8 @@ export function TasksScreen() {
   const [editing, setEditing] = useState<Task | null>(null);
   /** The Hermes card being handed to another workspace. */
   const [handing, setHanding] = useState<Task | null>(null);
+  /** The project settings (its repository) are open. */
+  const [projectOpen, setProjectOpen] = useState(false);
   const { ask, dialog } = useConfirm();
   const { ask: askText, dialog: textDialog } = usePrompt();
   const [draft, setDraft] = useState('');
@@ -307,6 +318,18 @@ export function TasksScreen() {
             testId="project-filter"
           />
         )}
+        {/* The project's repository: where a started task gets its own git worktree. */}
+        {projectItems.length > 0 && (
+          <Button
+            size="sm"
+            variant="ghost"
+            icon={<IconSettings size={14} />}
+            onClick={() => setProjectOpen(true)}
+            data-testid="project-settings"
+          >
+            {t('tasks.project_settings.open')}
+          </Button>
+        )}
         <Badge>{t('tasks.count', { count: board.data?.counts.total ?? 0 })}</Badge>
         <span className="ms-auto flex items-center gap-2">
           <Input
@@ -449,6 +472,11 @@ export function TasksScreen() {
       <InProfile profile={handing?.profile}>
         <HandOverDialog task={handing} onClose={() => setHanding(null)} />
       </InProfile>
+      <ProjectDialog
+        open={projectOpen}
+        projectId={projectId || null}
+        onClose={() => setProjectOpen(false)}
+      />
       {dialog}
       {textDialog}
     </AppShell>

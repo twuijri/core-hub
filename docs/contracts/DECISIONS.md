@@ -1024,3 +1024,48 @@ did not say how many there are or who owns one. Proposed here — owner to confi
 Rejected: a new `source` field on `SessionCreate` (a client could then make any number of
 them, and would have to list-then-create with a race); `sessions.list?source=global_agent` as
 the way in (the list is the profile's, not the person's, so it would hand one person another's).
+
+## 47. A task works in its own git worktree, and `auto_start` starts it — a few at a time
+
+Tasks stage 2 (2026-09-25). The contract already had `Project.working_dir`, `Worktree`, the three
+worktree operations, `worktree.updated` and `Task.auto_start`; nothing made a worktree and nothing
+read `auto_start`. What the fields now mean (descriptions only — no field, operation or event added):
+
+- **`Project.working_dir` is a git work tree inside the profile's own folder**
+  (`${DATA_DIR}/workspaces/<profile>`, the one folder that profile's sessions may work in). A
+  relative path is taken from that folder. Checked on write: outside it, missing, through a
+  symbolic link, or not a git work tree is `400 validation_failed` with `details.field:
+  working_dir`, `details.reason` (`outside_root`, `not_found`, `symlink`, `not_a_git_repo`) and
+  git's words in `details.message`. Written without `default_branch`, the branch checked out there
+  becomes the project's base. Inside the profile because a task's session must be able to work in
+  the worktree, and a session's folder never leaves the profile (sessions' `working-dir.ts`).
+- **Starting a task of such a project makes a real `git worktree`** at
+  `${DATA_DIR}/workspaces/<profile>/worktrees/<short id>-<slug>` on the branch
+  `task/<short id>-<slug>` (short id = the project key and task number, `core-12`, or the end of
+  the task id when the key is not ASCII; slug = the title's ASCII words). The row goes `creating`
+  → `ready` (or `dirty`), or `error` with git's own message; the task's session is opened with the
+  worktree as its folder, so every agent (Hermes and the ACP coding agents) gets it as its working
+  directory. A worktree git refused stops the start: `409 conflict`, `details.reason:
+  worktree_failed`, the task unchanged. Every git call is an argument array (`execFile`).
+- **Removed, branch kept,** when the task is deleted or archived (including the weekly archive of
+  Done), when its project is deleted, and by `tasks.deleteWorktree` — refused `409 task_running`
+  while the task's run works in it. Made again (`tasks.createWorktree` or the next start) it comes
+  back on the same branch. `tasks.createWorktree` refuses `409 no_repository` /
+  `worktree_exists` before any job.
+- **`auto_start`** starts a task on its own when it is `ready` and given to an agent — created so,
+  assigned (without `start`), moved to `ready` by a person, or switched on while so. At most
+  `COREHUB_TASK_AUTO_START_MAX` (default 2) runs started this way at once **per profile**; the
+  rest wait, top of the Ready column first, and start as places free (a run ending, a restart).
+  A person's "assign and start" is never held back. Stopping a task (board or chat) switches its
+  `auto_start` off, so a stopped task does not start again by itself. A task that cannot start
+  (unknown agent, worktree refused) goes to `blocked` with the reason instead of being retried.
+
+Proposed, owner to confirm: the limit as an optional environment variable rather than a Settings
+field (invariant 5 still holds — the hub starts without it); switching `auto_start` off on stop;
+the `.corehub/` run-files line the hub adds to the repository's local `info/exclude` (never a
+tracked file) so a run does not make its worktree `dirty`.
+
+Rejected: running a repository task in the session's own folder when git refuses (the agent
+would work on an empty folder and look successful); a per-project limit (the owner asked per
+profile); a migration to make `worktrees.path` unique only among live rows — a task's removed
+worktree row is reused instead, which also keeps one history per task.

@@ -11,6 +11,7 @@ export const ENV_KEYS = [
   'COREHUB_VERSION',
   'COREHUB_SETUP_OPEN_MINUTES',
   'COREHUB_RESET_OWNER',
+  'COREHUB_TASK_AUTO_START_MAX',
 ] as const;
 export type EnvKey = (typeof ENV_KEYS)[number];
 export type EnvSource = Partial<Record<EnvKey, string | undefined>> & {
@@ -65,6 +66,17 @@ const envSchema = z.object({
       message: 'COREHUB_RESET_OWNER must be 1 (reset) or 0',
     })
     .optional(),
+  /**
+   * Tasks: how many runs the hub starts **on its own** (`auto_start`) at once in one profile.
+   * A person's "assign and start" is never held back by it; an automatic start waits for a
+   * free place instead (DECISIONS §47).
+   */
+  COREHUB_TASK_AUTO_START_MAX: z.coerce
+    .number()
+    .int('COREHUB_TASK_AUTO_START_MAX must be a whole number')
+    .min(1, 'COREHUB_TASK_AUTO_START_MAX must be at least 1')
+    .max(50, 'COREHUB_TASK_AUTO_START_MAX must be at most 50')
+    .default(2),
 });
 
 export type DatabaseConfig = { kind: 'sqlite'; file: string } | { kind: 'postgres'; url: string };
@@ -105,6 +117,8 @@ export interface HubConfig {
   setupOpenMinutes: number;
   /** `COREHUB_RESET_OWNER=1`: disable the owner and reopen setup on this boot (once). */
   resetOwner: boolean;
+  /** Runs started by `auto_start` at once per profile (`COREHUB_TASK_AUTO_START_MAX`, 2). */
+  taskAutoStartMax: number;
 }
 
 export class ConfigError extends Error {
@@ -139,6 +153,7 @@ export function loadConfig(
     deprecatedEnv: source.deprecated ?? [],
     setupOpenMinutes: env.COREHUB_SETUP_OPEN_MINUTES,
     resetOwner: env.COREHUB_RESET_OWNER === '1' || env.COREHUB_RESET_OWNER === 'true',
+    taskAutoStartMax: env.COREHUB_TASK_AUTO_START_MAX,
   };
 }
 

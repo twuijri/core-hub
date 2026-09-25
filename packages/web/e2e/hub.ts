@@ -1,6 +1,7 @@
 // The e2e hub: the real server (auth, sessions, realtime, static web client) with a scripted
 // agent runner in place of the adapters, so the smoke journeys run without a model.
 // The script an agent plays is chosen by the text of the prompt (see `scriptFor`).
+import { execFileSync } from 'node:child_process';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
@@ -794,6 +795,25 @@ const app = await buildServer({
   logger: createLogger({ level: 'warn' }),
   modules: defaultModules.map((module) => (module.name === 'sessions' ? sessions : module)),
   webDir: path.resolve(here, '..', 'dist'),
+});
+
+// Test-only control: a real git repository in the default profile's folder (tasks stage 2).
+// Made when the worktree journey asks, not at boot, so no other journey sees the folder.
+app.post('/__e2e/git-repo', async () => {
+  const repo = path.join(dataDir, 'workspaces', 'default', 'e2e-repo');
+  if (!existsSync(path.join(repo, '.git'))) {
+    mkdirSync(repo, { recursive: true });
+    const git = (...args: string[]) =>
+      execFileSync('git', ['-c', 'user.name=e2e', '-c', 'user.email=e2e@example.com', ...args], {
+        cwd: repo,
+        stdio: 'ignore',
+      });
+    git('init', '-q', '-b', 'main');
+    writeFileSync(path.join(repo, 'README.md'), '# e2e\n');
+    git('add', 'README.md');
+    git('commit', '-q', '-m', 'first');
+  }
+  return { path: repo };
 });
 
 // Test-only control: drop every sessions socket, like a hub restart (journey 3).

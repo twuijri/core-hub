@@ -13,10 +13,18 @@
  * Without `start` the task is only assigned, and `TaskAssigned` says so with `null` ids.
  * A task on Hermes's own kanban is never started here: Hermes's dispatcher owns it.
  *
- * Still not done by the hub (stage 2): a git worktree per task — the row is recorded in
- * `creating` and the run works in the session's ordinary folder under the workspace — and
- * reporting into a project's room, which waits on `rooms`.
+ * Since stage 2 (2026-09-25): a task whose project has a repository (`working_dir`, a git
+ * work tree inside the profile's folder) is started in **its own git worktree**, on a branch
+ * of its own, and its session works there — Hermes and the coding agents alike get it as
+ * their working directory. The worktree goes when the task is deleted or archived (the
+ * branch stays), and can be removed from the task's details. A task without a repository
+ * keeps the session's own folder. And a task with `auto_start` starts **on its own** when it
+ * is `ready` and given to an agent — at most `COREHUB_TASK_AUTO_START_MAX` such runs at once
+ * per profile; the rest wait their turn (DECISIONS §47).
+ *
+ * Still not done: reporting into a project's room, which waits on `rooms`.
  */
+import { existsSync } from 'node:fs';
 import type { FastifyInstance, FastifyRequest } from 'fastify';
 import type { Server as SocketServer } from 'socket.io';
 import { PRODUCT, loadOpenApiDocument } from '@corehub/contracts';
@@ -39,6 +47,7 @@ import { jobRunnerFor } from '../audit/index.js';
 import {
   defaultWorkspace,
   findUser,
+  findWorkspace,
   listWorkspacesFor,
   requireRole,
   requireUser,
@@ -56,6 +65,18 @@ import {
   type TaskRow,
 } from './serialize.js';
 import { TASK_STATUSES } from './schema.js';
+import {
+  addWorktree,
+  checkRepository,
+  createGit,
+  profileRoot,
+  removeWorktree,
+  unsafeRef,
+  worktreeNames,
+  worktreeStats,
+  type Git,
+} from './git-worktrees.js';
+import type { ProjectRow, WorktreeRow } from './serialize.js';
 
 export { TasksService } from './service.js';
 export type { Actor, Scope, TaskStatus } from './service.js';
@@ -216,8 +237,344 @@ export function taskRunsFor(app: FastifyInstance): TaskRuns {
       renderTask(new TasksService(requireSqlite(app.hub.database)), scope, id, namesOf(app)),
     app.log,
   );
+  // A run's ending moved its task: read the worktree's numbers again (what the agent
+  // changed), then let the next task waiting to start on its own take the freed place.
+  created.afterSettle = (scope, taskId) => {
+    void created.serially(scope.workspace, async () => {
+      await refreshWorktree(app, scope, taskId);
+      await autoStartPass(app, scope.workspace, scope.language);
+    });
+  };
   workers.set(app.hub.io, created);
   return created;
+}
+
+function emitTasks(
+  app: FastifyInstance,
+  profile: string,
+  event: string,
+  payload: Record<string, unknown>,
+): void {
+  realtimeOf(app).emit(REALTIME_NAMESPACES.tasks, event, { profile }, payload);
+}
+
+// ------------------------------------------------------------------ worktrees
+
+const gits = new WeakMap<SocketServer, Git>();
+function gitOf(app: FastifyInstance): Git {
+  const existing = gits.get(app.hub.io);
+  if (existing) return existing;
+  const created = createGit(app.hub.config.hostEnv.inherited);
+  gits.set(app.hub.io, created);
+  return created;
+}
+
+/** `worktree.updated`, with the worktree as the contract has it (`null` once removed). */
+function emitWorktree(
+  app: FastifyInstance,
+  profile: string,
+  taskId: string | null,
+  row: WorktreeRow | undefined,
+): void {
+  if (!taskId) return;
+  emitTasks(app, profile, 'worktree.updated', { task_id: taskId, worktree: toWorktree(row) });
+}
+
+/**
+ * Make (or make again) a task's worktree: the row goes to `creating`, git makes the folder
+ * on the task's branch, and the row ends `ready` (or `dirty`) — or `failed` with git's own
+ * message. Answers the row as it ended; it never throws for git's refusal.
+ */
+async function makeWorktree(
+  app: FastifyInstance,
+  service: TasksService,
+  scope: Scope,
+  task: TaskRow,
+  project: ProjectRow,
+  base: string | null,
+): Promise<WorktreeRow> {
+  const git = gitOf(app);
+  const root = profileRoot(app.hub.config.dataDir, scope.profile);
+  const names = worktreeNames(root, task, project.key);
+  const row = service.beginWorktree(scope, task, {
+    path: names.path,
+    branch: names.branch,
+    base: base ?? project.defaultBranch,
+  });
+  emitWorktree(app, scope.profile, task.id, row);
+  const settle = async (): Promise<WorktreeRow> => {
+    const baseRef = row.baseRef ?? project.defaultBranch;
+    // The folder is there already (made before a restart cut the row short): if git says
+    // it is this task's branch, it is the worktree; anything else is git's to refuse.
+    if (existsSync(row.path)) {
+      const head = await git(['-C', row.path, 'rev-parse', '--abbrev-ref', 'HEAD']);
+      if (!head.ok || head.stdout.trim() !== row.branch) {
+        return service.settleWorktree(row.id, {
+          status: 'failed',
+          error: head.ok ? `${row.path} already exists and is not on ${row.branch}` : head.message,
+        });
+      }
+    } else {
+      if (unsafeRef(baseRef)) {
+        return service.settleWorktree(row.id, {
+          status: 'failed',
+          error: `invalid base branch: ${baseRef}`,
+        });
+      }
+      const added = await addWorktree(git, {
+        repo: project.localPath!,
+        path: row.path,
+        branch: row.branch,
+        base: baseRef,
+      });
+      if (!added.ok)
+        return service.settleWorktree(row.id, { status: 'failed', error: added.message });
+    }
+    const stats = await worktreeStats(git, { path: row.path, base: baseRef });
+    return service.settleWorktree(row.id, {
+      status: stats && stats.changedFiles > 0 ? 'dirty' : 'ready',
+      stats: stats ?? { changedFiles: 0, ahead: 0, behind: 0, head: null },
+    });
+  };
+  const ended = await settle();
+  emitWorktree(app, scope.profile, task.id, ended);
+  return ended;
+}
+
+/**
+ * The folder a task's run works in: its worktree when its project has a repository (made
+ * now if it has none, or its last one failed or was removed), else `null` — the session's
+ * own folder, as before. A worktree git refused to make stops the start with git's words.
+ */
+async function worktreeFor(
+  app: FastifyInstance,
+  service: TasksService,
+  scope: Scope,
+  task: TaskRow,
+): Promise<string | null> {
+  const project = service.project(scope, task.projectId);
+  if (!project.localPath) return null;
+  const live = service.worktreeOf(task.id);
+  if (live && (live.status === 'ready' || live.status === 'dirty') && existsSync(live.path)) {
+    return live.path;
+  }
+  const made = await makeWorktree(app, service, scope, task, project, null);
+  if (made.status === 'failed') {
+    throw new HubError('conflict', {
+      details: { reason: 'worktree_failed', task_id: task.id, message: made.error ?? '' },
+    });
+  }
+  return made.path;
+}
+
+/**
+ * Remove a worktree and keep its branch. Removed: the row says so. Git refused: the row
+ * stays, `failed`, with git's message — shown in the task's details, where Remove can be
+ * tried again.
+ */
+const releasing = new Set<string>();
+async function releaseWorktree(
+  app: FastifyInstance,
+  service: TasksService,
+  profile: string,
+  row: WorktreeRow,
+): Promise<{ ok: boolean; message: string }> {
+  // Two openings of the board can both find the same archived task's worktree: one removal.
+  if (releasing.has(row.id)) return { ok: true, message: '' };
+  releasing.add(row.id);
+  try {
+    return await releaseNow(app, service, profile, row);
+  } finally {
+    releasing.delete(row.id);
+  }
+}
+
+async function releaseNow(
+  app: FastifyInstance,
+  service: TasksService,
+  profile: string,
+  row: WorktreeRow,
+): Promise<{ ok: boolean; message: string }> {
+  let repo: string | null;
+  try {
+    repo =
+      service.project({ workspace: row.workspace, profile, userId: '' }, row.projectId).localPath ??
+      null;
+  } catch {
+    repo = null;
+  }
+  const out = await removeWorktree(gitOf(app), { repo, path: row.path });
+  if (out.ok) {
+    service.worktreeRemoved(row.id);
+    emitWorktree(app, profile, row.taskId, undefined);
+  } else {
+    emitWorktree(
+      app,
+      profile,
+      row.taskId,
+      service.settleWorktree(row.id, { status: 'failed', error: out.message }),
+    );
+  }
+  return { ok: out.ok, message: out.message };
+}
+
+/** Best effort, for a task that is going (deleted, archived): logged, never thrown. */
+async function releaseQuietly(
+  app: FastifyInstance,
+  service: TasksService,
+  profile: string,
+  row: WorktreeRow | undefined,
+): Promise<void> {
+  if (!row) return;
+  try {
+    const out = await releaseWorktree(app, service, profile, row);
+    if (!out.ok) {
+      app.log.warn({ path: row.path, message: out.message }, 'tasks: removing a worktree failed');
+    }
+  } catch (error) {
+    app.log.warn({ err: error, path: row.path }, 'tasks: removing a worktree failed');
+  }
+}
+
+/** Read how a task's worktree stands now (after a run, or when it is asked for). */
+async function refreshWorktree(app: FastifyInstance, scope: Scope, taskId: string): Promise<void> {
+  const service = new TasksService(requireSqlite(app.hub.database));
+  const row = service.worktreeOf(taskId);
+  if (!row || (row.status !== 'ready' && row.status !== 'dirty')) return;
+  const stats = await worktreeStats(gitOf(app), { path: row.path, base: row.baseRef });
+  if (!stats) return;
+  const fresh = service.settleWorktree(row.id, {
+    status: stats.changedFiles > 0 ? 'dirty' : 'ready',
+    stats,
+  });
+  emitWorktree(app, scope.profile, taskId, fresh);
+}
+
+// ------------------------------------------------------------------ starting a run
+
+const SYSTEM: Actor = { kind: 'system', id: null, name: null };
+
+/**
+ * Start a task's run: its worktree first (when its project has a repository), then its
+ * session and run — both before anything about the task changes, so a worktree git refused
+ * or an agent that cannot take the turn leaves the task as it was — then the task goes to
+ * `running` and the run is followed to its end.
+ */
+async function startTaskRun(
+  app: FastifyInstance,
+  service: TasksService,
+  scope: TaskRunScope,
+  current: TaskRow,
+  input: {
+    agentId: string;
+    model: string | null;
+    provider: string | null;
+    instructions: string | null;
+  },
+  actor: Actor,
+  how: { assign: boolean; auto: boolean },
+): Promise<{ job_id: string; run_id: string; session_id: string }> {
+  const runs = taskRunsFor(app);
+  const workingDir = await worktreeFor(app, service, scope, current);
+  const handle = await runs.open(scope, service, current, { ...input, workingDir });
+  if (how.assign) {
+    service.assign(scope, actor, current.id, {
+      agent_id: input.agentId,
+      instructions: input.instructions,
+    });
+  }
+  const { from } = service.startRun(scope, actor, current.id, {
+    sessionId: handle.sessionId,
+    runId: handle.runId,
+  });
+  const started = renderTask(service, scope, current.id, namesOf(app));
+  if (how.assign) emitTasks(app, scope.profile, 'task.assigned', { task: started });
+  emitTasks(app, scope.profile, 'task.moved', {
+    task: started,
+    from,
+    to: 'running',
+    actor: authorOf(actor),
+  });
+  if (how.auto) runs.markAutoStarted(scope.workspace, current.id, handle.runId);
+  runs.follow(scope, current.id, handle.runId, handle.done);
+  return { job_id: handle.jobId, run_id: handle.runId, session_id: handle.sessionId };
+}
+
+const AUTO_START_FAILED = {
+  ar: 'تعذّر بدء المهمة تلقائيًا',
+  en: 'The task could not start automatically',
+} as const;
+
+/**
+ * Start the tasks of one workspace that wait to start on their own, top of the column first,
+ * while fewer than `COREHUB_TASK_AUTO_START_MAX` runs the hub started itself are going there.
+ * A task that cannot start goes to `blocked` with the reason, so it is not tried again and
+ * again and a person sees why. Run one at a time per workspace (`TaskRuns.serially`).
+ */
+async function autoStartPass(
+  app: FastifyInstance,
+  workspace: string,
+  language: 'ar' | 'en',
+): Promise<void> {
+  const runs = taskRunsFor(app);
+  if (!runs.available) return;
+  const db = requireSqlite(app.hub.database);
+  const service = new TasksService(db);
+  const home = findWorkspace(db, workspace);
+  if (!home) return;
+  const max = app.hub.config.taskAutoStartMax;
+  const mirror = mirrorOf(app);
+  for (const row of service.autoStartable(workspace)) {
+    if (runs.autoRunning(workspace) >= max) return;
+    const agentId = row.assigneeAgentId;
+    // Hermes's agent starts its cards from its own board.
+    if (!agentId || mirror?.isHermesAgent(workspace, agentId)) continue;
+    const scope: TaskRunScope = {
+      workspace,
+      profile: home.slug,
+      // The run is the task's owner's, as if they had pressed "assign and start".
+      userId: row.ownerId,
+      userName: findUser(db, row.ownerId)?.username ?? '',
+      language,
+    };
+    try {
+      await startTaskRun(
+        app,
+        service,
+        scope,
+        row,
+        { agentId, model: null, provider: null, instructions: null },
+        SYSTEM,
+        { assign: false, auto: true },
+      );
+    } catch (error) {
+      const said =
+        error instanceof HubError
+          ? ((error.details as { message?: string } | undefined)?.message ?? error.code)
+          : error instanceof Error
+            ? error.message
+            : String(error);
+      const reason = `${AUTO_START_FAILED[language]}: ${said}`;
+      try {
+        const moved = service.moveTask(scope, SYSTEM, row.id, { status: 'blocked', reason });
+        emitTasks(app, scope.profile, 'task.moved', {
+          task: renderTask(service, scope, moved.id, namesOf(app)),
+          from: row.status,
+          to: 'blocked',
+          actor: authorOf(SYSTEM),
+        });
+      } catch (moveError) {
+        app.log.warn({ err: moveError, taskId: row.id }, 'tasks: could not block a task');
+      }
+    }
+  }
+}
+
+/** Something may have made a task ready to start on its own: look, after any pass going. */
+function kickAutoStart(app: FastifyInstance, workspace: string, language: 'ar' | 'en'): void {
+  const runs = taskRunsFor(app);
+  if (!runs.available) return;
+  void runs.serially(workspace, () => autoStartPass(app, workspace, language));
 }
 
 function renderTask(
@@ -296,6 +653,14 @@ export const tasksModule = defineModule({
           app.log.warn({ tasks: settled }, 'tasks: settled runs a restart cut short');
       } catch (error) {
         app.log.warn({ err: error }, 'tasks: could not settle tasks left running');
+      }
+      // Tasks that were waiting for a place to start on their own still are: a restart
+      // ended every run, so the places are free again.
+      try {
+        const waiting = new TasksService(requireSqlite(app.hub.database)).autoStartWorkspaces();
+        for (const workspace of waiting) kickAutoStart(app, workspace, 'ar');
+      } catch (error) {
+        app.log.warn({ err: error }, 'tasks: could not look for tasks to start on their own');
       }
     });
 
@@ -508,32 +873,26 @@ export const tasksModule = defineModule({
             actor: authorOf(actor),
           });
         }
+        // Given to an agent and `ready`: a task set to start on its own starts now.
+        if (!hermes && assigned.auto_start === true) {
+          kickAutoStart(request.server, scope.workspace, scope.language);
+        }
         return { job_id: null, run_id: null, session_id: null };
       }
-      const handle = await runs.open(scope, service, current, {
-        agentId: input.agent_id,
-        model: input.model ?? null,
-        provider: input.provider ?? null,
-        instructions: input.instructions ?? null,
-      });
-      service.assign(scope, actor, id, {
-        agent_id: input.agent_id,
-        instructions: input.instructions ?? null,
-      });
-      const { from } = service.startRun(scope, actor, id, {
-        sessionId: handle.sessionId,
-        runId: handle.runId,
-      });
-      const started = task(request, service, scope, id);
-      announce(request, 'task.assigned', { task: started });
-      announce(request, 'task.moved', {
-        task: started,
-        from,
-        to: 'running',
-        actor: authorOf(actor),
-      });
-      runs.follow(scope, id, handle.runId, handle.done);
-      return { job_id: handle.jobId, run_id: handle.runId, session_id: handle.sessionId };
+      return startTaskRun(
+        request.server,
+        service,
+        scope,
+        current,
+        {
+          agentId: input.agent_id,
+          model: input.model ?? null,
+          provider: input.provider ?? null,
+          instructions: input.instructions ?? null,
+        },
+        actor,
+        { assign: true, auto: false },
+      );
     };
 
     // ------------------------------------------------------------ projects
@@ -554,13 +913,49 @@ export const tasksModule = defineModule({
       },
     });
 
+    /**
+     * A project's repository, checked before it is stored: inside the profile's folder, and a
+     * git work tree. Stored as the absolute path; the branch checked out there becomes the
+     * project's base branch unless one is given with it.
+     */
+    const checkedRepository = async (
+      request: FastifyRequest,
+      body: Record<string, unknown>,
+    ): Promise<Record<string, unknown>> => {
+      const out = { ...body };
+      if (typeof out.default_branch === 'string' && unsafeRef(out.default_branch.trim())) {
+        throw new HubError('validation_failed', {
+          details: { field: 'default_branch', reason: 'invalid' },
+        });
+      }
+      if (out.working_dir === undefined || out.working_dir === null) return out;
+      const asked = String(out.working_dir).trim();
+      if (asked === '') {
+        out.working_dir = null;
+        return out;
+      }
+      const root = profileRoot(request.server.hub.config.dataDir, scopeOf(request).profile);
+      const checked = await checkRepository(gitOf(request.server), root, asked);
+      if (!checked.ok) {
+        throw new HubError('validation_failed', {
+          details: { field: 'working_dir', reason: checked.reason, message: checked.message, root },
+        });
+      }
+      out.working_dir = checked.path;
+      if (out.default_branch === undefined && checked.branch) out.default_branch = checked.branch;
+      return out;
+    };
+
     defineRoute(app, deps, {
       operationId: 'tasks.createProject',
       status: 201,
-      handler: (request, { body }) => {
+      handler: async (request, { body }) => {
         const scope = scopeOf(request);
         const service = serviceOf(request);
-        const row = service.createProject(scope, body as Record<string, unknown>);
+        const row = service.createProject(
+          scope,
+          await checkedRepository(request, body as Record<string, unknown>),
+        );
         const project = toProject(row, scope.profile, service.countsFor(scope, row.id));
         announce(request, 'project.created', { project });
         return project;
@@ -579,13 +974,14 @@ export const tasksModule = defineModule({
 
     defineRoute(app, deps, {
       operationId: 'tasks.updateProject',
-      handler: (request, { params, body }) => {
+      handler: async (request, { params, body }) => {
         const scope = scopeOf(request);
         const service = serviceOf(request);
+        service.project(scope, params.project_id as string);
         const row = service.updateProject(
           scope,
           params.project_id as string,
-          body as Record<string, unknown>,
+          await checkedRepository(request, body as Record<string, unknown>),
         );
         const project = toProject(row, scope.profile, service.countsFor(scope, row.id));
         announce(request, 'project.updated', { project });
@@ -596,9 +992,15 @@ export const tasksModule = defineModule({
     defineRoute(app, deps, {
       operationId: 'tasks.deleteProject',
       status: 204,
-      handler: (request, { params }) => {
+      handler: async (request, { params }) => {
         const scope = scopeOf(request);
-        serviceOf(request).deleteProject(scope, params.project_id as string);
+        const service = serviceOf(request);
+        service.project(scope, params.project_id as string);
+        // Its tasks' worktrees go with it; their branches stay in the repository.
+        for (const row of service.liveWorktreesOfProject(scope, params.project_id as string)) {
+          await releaseQuietly(request.server, service, scope.profile, row);
+        }
+        service.deleteProject(scope, params.project_id as string);
         announce(request, 'project.deleted', { project_id: params.project_id });
         return null;
       },
@@ -664,6 +1066,11 @@ export const tasksModule = defineModule({
         }
         // Done for a week goes to the archive, so Done is the recent week (owner, 2026-09-23).
         service.archiveDoneBefore(ids, new Date(Date.now() - ARCHIVE_AFTER_MS));
+        // An archived task keeps no worktree: the weekly archive's are removed in the
+        // background, so the board never waits on git.
+        for (const row of service.orphanedWorktrees(ids)) {
+          void releaseQuietly(request.server, service, slugOf.get(row.workspace) ?? '', row);
+        }
 
         const projectId = (query.project_id as string | undefined) ?? undefined;
         const agentId = (query.agent_id as string | undefined) ?? undefined;
@@ -841,6 +1248,10 @@ export const tasksModule = defineModule({
         }
         const created = task(request, service, scope, row.id);
         announce(request, 'task.created', { task: created });
+        // Created ready, given to an agent and set to start on its own: it starts.
+        if (row.autoStart && !HermesMirror.isHermes(row)) {
+          kickAutoStart(request.server, scope.workspace, runScopeOf(request).language);
+        }
         return created;
       },
     });
@@ -884,6 +1295,9 @@ export const tasksModule = defineModule({
               refuseOnHermesCard(row, 'bulk_update');
             }
             service.bulkUpdate(scope, actorOf(request), [id], patch);
+            if (patch.archived === true) {
+              await releaseQuietly(request.server, service, scope.profile, service.worktreeOf(id));
+            }
             results.push({ id, ok: true, error: null });
           } catch (error) {
             // One bad id must not lose the other ninety-nine: the caller is told which.
@@ -898,6 +1312,9 @@ export const tasksModule = defineModule({
           }
         }
         announce(request, 'task.updated', { task_ids: input.task_ids });
+        if (input.patch.auto_start === true) {
+          kickAutoStart(request.server, scope.workspace, runScopeOf(request).language);
+        }
         return { results };
       },
     });
@@ -918,7 +1335,9 @@ export const tasksModule = defineModule({
             const hermes = hermesApiOf(request.server, row);
             if (hermes) await hermes.api.remove(hermes.id).catch(refusedByHermes);
             else refuseOnHermesCard(row, 'delete');
+            const worktree = service.worktreeOf(id);
             service.deleteTask(scope, id);
+            await releaseQuietly(request.server, service, scope.profile, worktree);
             results.push({ id, ok: true, error: null });
           } catch (error) {
             const code = error instanceof HubError ? error.code : 'not_found';
@@ -1026,6 +1445,10 @@ export const tasksModule = defineModule({
         service.updateTask(scope, actorOf(request), params.task_id as string, patch);
         const updated = task(request, service, scope, params.task_id as string);
         announce(request, 'task.updated', { task: updated });
+        // Switched to start on its own while already ready and given to an agent: it starts.
+        if (patch.auto_start === true && !HermesMirror.isHermes(current)) {
+          kickAutoStart(request.server, scope.workspace, runScopeOf(request).language);
+        }
         return updated;
       },
     });
@@ -1041,7 +1464,8 @@ export const tasksModule = defineModule({
         const hermes = hermesApiOf(request.server, current);
         if (hermes) await hermes.api.remove(hermes.id).catch(refusedByHermes);
         else refuseOnHermesCard(current, 'delete');
-        // A task deleted mid-run takes its run with it.
+        // A task deleted mid-run takes its run with it, and its worktree (not its branch).
+        const worktree = service.worktreeOf(current.id);
         await leaveRun(
           request,
           () => {
@@ -1050,6 +1474,7 @@ export const tasksModule = defineModule({
           },
           current,
         );
+        await releaseQuietly(request.server, service, scope.profile, worktree);
         announce(request, 'task.deleted', { task_id: params.task_id });
         return null;
       },
@@ -1088,8 +1513,21 @@ export const tasksModule = defineModule({
         } else {
           moveIt();
         }
+        // Archived: its worktree goes (the branch stays). Moved to Ready by a person: a task
+        // set to start on its own starts.
+        if (move.status === 'archived' && !HermesMirror.isHermes(current)) {
+          await releaseQuietly(
+            request.server,
+            service,
+            scope.profile,
+            service.worktreeOf(current.id),
+          );
+        }
         const moved = task(request, service, scope, params.task_id as string);
         announce(request, 'task.moved', { task: moved });
+        if (move.status === 'ready' && !HermesMirror.isHermes(current)) {
+          kickAutoStart(request.server, scope.workspace, runScopeOf(request).language);
+        }
         return moved;
       },
     });
@@ -1278,14 +1716,15 @@ export const tasksModule = defineModule({
 
     defineRoute(app, deps, {
       operationId: 'tasks.getWorktree',
-      handler: (request, { params }) => {
+      handler: async (request, { params }) => {
         const scope = scopeOf(request);
         const service = serviceOf(request);
         const id = params.task_id as string;
         service.task(scope, id);
-        const row = service.worktreeOf(id);
-        if (!row) throw notFound({ resource: 'worktree', id });
-        return toWorktree(row);
+        if (!service.worktreeOf(id)) throw notFound({ resource: 'worktree', id });
+        // Asked for on its own: the numbers as git has them now.
+        await refreshWorktree(request.server, scope, id);
+        return toWorktree(service.worktreeOf(id));
       },
     });
 
@@ -1296,7 +1735,28 @@ export const tasksModule = defineModule({
         const scope = scopeOf(request);
         const service = serviceOf(request);
         const id = params.task_id as string;
-        const input = (body ?? {}) as { branch?: string | null; base_branch?: string | null };
+        const current = service.task(scope, id);
+        const input = (body ?? {}) as { base_branch?: string | null };
+        const base = input.base_branch?.trim() || null;
+        if (base && unsafeRef(base)) {
+          throw new HubError('validation_failed', {
+            details: { field: 'base_branch', reason: 'invalid' },
+          });
+        }
+        const project = service.project(scope, current.projectId);
+        // Refused before any job: a project with no repository has nothing to make one from.
+        if (!project.localPath) {
+          throw new HubError('conflict', {
+            details: { reason: 'no_repository', project_id: project.id },
+          });
+        }
+        const live = service.worktreeOf(id);
+        if (
+          live &&
+          (live.status === 'ready' || live.status === 'dirty' || live.status === 'creating')
+        ) {
+          throw new HubError('conflict', { details: { reason: 'worktree_exists', task_id: id } });
+        }
         const job = jobRunnerFor(request.server).start(
           {
             workspace: scope.workspace,
@@ -1305,12 +1765,12 @@ export const tasksModule = defineModule({
             entityKind: 'task',
             entityId: id,
           },
-          () => {
-            const row = service.createWorktree(scope, id, input);
+          async () => {
+            const row = await makeWorktree(request.server, service, scope, current, project, base);
             announce(request, 'task.updated', { task_id: id });
-            // `creating`, and it stays there: making a git worktree belongs to whatever
-            // runs the task, and this hub does not pretend to have made one.
-            return Promise.resolve({ worktree_id: row.id, status: row.status });
+            // The job fails with git's own words when git refused.
+            if (row.status === 'failed') throw new Error(row.error ?? 'git worktree add failed');
+            return { path: row.path, branch: row.branch, status: row.status };
           },
         );
         return { job_id: job.id };
@@ -1324,6 +1784,13 @@ export const tasksModule = defineModule({
         const scope = scopeOf(request);
         const service = serviceOf(request);
         const id = params.task_id as string;
+        const current = service.task(scope, id);
+        const row = service.worktreeOf(id);
+        if (!row) throw notFound({ resource: 'worktree', id });
+        // Not from under a run that is working in it: stop the task first.
+        if (current.status === 'running') {
+          throw new HubError('conflict', { details: { reason: 'task_running', task_id: id } });
+        }
         const job = jobRunnerFor(request.server).start(
           {
             workspace: scope.workspace,
@@ -1332,10 +1799,11 @@ export const tasksModule = defineModule({
             entityKind: 'task',
             entityId: id,
           },
-          () => {
-            service.removeWorktree(scope, id);
+          async () => {
+            const out = await releaseWorktree(request.server, service, scope.profile, row);
             announce(request, 'task.updated', { task_id: id });
-            return Promise.resolve({ removed: true });
+            if (!out.ok) throw new Error(out.message || 'git worktree remove failed');
+            return { removed: true, branch: row.branch };
           },
         );
         return { job_id: job.id };

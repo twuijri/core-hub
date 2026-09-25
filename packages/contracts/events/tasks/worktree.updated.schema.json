@@ -61,8 +61,8 @@
       "payload": {
         "task_id": "01J8QK3ZR2W7M5N4P6T8V9X0TK",
         "worktree": {
-          "path": "/home/agent/worktrees/corehub/task-01J8QK3ZR2W7M5N4P6T8V9X0TK",
-          "branch": "task/settings-page",
+          "path": "/data/workspaces/work/worktrees/core-12-settings-page",
+          "branch": "task/core-12-settings-page",
           "base_branch": "main",
           "status": "ready",
           "ahead": 3,

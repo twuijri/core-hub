@@ -775,6 +775,49 @@
       "no_workspaces": "There is no other profile to hand it to.",
       "confirm_running": "Hand over “{title}” while it runs?",
       "confirm_running_body": "Hermes stops its current run first, then hands the card over."
+    },
+    "project_settings": {
+      "open": "Project settings",
+      "title": "Project settings",
+      "hint": "With a repository, each task you start gets its own git worktree on a branch of its own, and the agent works there.",
+      "repository": "Repository path",
+      "branch": "Base branch",
+      "branch_hint": "New task branches start from it. Empty: the branch checked out in the repository."
+    },
+    "repo": {
+      "hint": "A git repository inside this profile's folder. A relative path starts from that folder. Leave it empty for no repository.",
+      "placeholder": "my-repo",
+      "invalid": {
+        "outside_root": "The repository must be inside this profile's folder: {message}",
+        "not_found": "That folder does not exist: {message}",
+        "symlink": "The path goes through a symbolic link, which is not allowed: {message}",
+        "not_a_git_repo": "That folder is not a git repository: {message}"
+      }
+    },
+    "auto_start": {
+      "label": "Start automatically",
+      "hint": "Starts on its own once it is in Ready and given to an agent. Stopping it turns this off."
+    },
+    "worktree": {
+      "title": "Worktree",
+      "branch": "Branch",
+      "path": "Folder",
+      "changes": "Changes",
+      "counts": "{files} changed files · {ahead} commits ahead of {base}",
+      "remove": "Remove worktree",
+      "confirm_remove": "Remove this task's worktree?",
+      "confirm_remove_body": "The folder is removed. The branch {branch} stays in the repository, and uncommitted changes are lost.",
+      "running": "The task is running in this worktree. Stop it first.",
+      "failed": "Git could not make the task's worktree: {message}",
+      "no_repository": "This task's project has no repository. Set one in Project settings.",
+      "status": {
+        "creating": "Being made",
+        "ready": "Ready",
+        "dirty": "Has changes",
+        "merged": "Merged",
+        "removed": "Removed",
+        "error": "Git refused"
+      }
     }
   },
   "schedules": {

@@ -469,6 +469,28 @@
   color: var(--ch-color-text-muted);
 }
 /* What the agent said when its run ended: a few lines; the conversation has the rest. */
+/* A task's git worktree in its details: facts in two columns, git's refusal verbatim. */
+.task-worktree-facts {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: var(--ch-space-1) var(--ch-space-3);
+  align-items: baseline;
+  margin: 0;
+}
+.task-worktree-facts dd {
+  margin: 0;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+.task-worktree-error {
+  margin: 0;
+  padding: var(--ch-space-2);
+  border: 1px solid var(--ch-color-border);
+  border-radius: var(--ch-radius-sm);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: var(--ch-font-size-xs);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
 .task-card-summary {
   display: -webkit-box;
   margin-block-start: var(--ch-space-1);

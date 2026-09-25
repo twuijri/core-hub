@@ -50,6 +50,7 @@ export const TASK_EVENTS = [
   'task.assigned',
   'task.unassigned',
   'task.commented',
+  'worktree.updated',
 ] as const;
 
 /** `/rt/schedules`: the Schedules page only listens, and refreshes on any of these. */

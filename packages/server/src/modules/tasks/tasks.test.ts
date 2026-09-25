@@ -20,7 +20,9 @@ async function boardHub() {
   const project = await authed(hub, hub.token, {
     method: 'POST',
     url: '/api/v1/projects',
-    payload: { name: 'Hub Rewrite', working_dir: '/srv/hub' },
+    // No repository: a `working_dir` must be a git work tree inside the profile's folder
+    // (task-worktrees.test.ts), which these board tests do not need.
+    payload: { name: 'Hub Rewrite' },
   });
   return { hub, project: project.json() as Json };
 }
@@ -48,7 +50,7 @@ describe('tasks: projects', () => {
     try {
       expect(project).toMatchObject({
         name: 'Hub Rewrite',
-        working_dir: '/srv/hub',
+        working_dir: null,
         status: 'active',
       });
       expect(project.counts).toEqual({ total: 0, by_status: {} });

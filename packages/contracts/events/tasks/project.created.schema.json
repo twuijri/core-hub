@@ -60,7 +60,7 @@
           "status": "active",
           "color": "#4a90d9",
           "repo_url": null,
-          "working_dir": "/home/agent/projects/corehub",
+          "working_dir": "/data/workspaces/work/core-hub",
           "default_branch": "main",
           "default_agent_id": null,
           "report_room_id": null,
