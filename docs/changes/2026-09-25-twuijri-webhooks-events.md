@@ -117,7 +117,15 @@ $ PLAYWRIGHT_CHANNEL=chrome pnpm --filter @corehub/web exec playwright test e2e/
 الخمسة التي نجحت مع إيقاف التمرير هي: رفض اسم خارج القائمة، وعدم تمرير ما ليس فيها، والخطاف الموقوف،
 وحساب التأخير، والتقاط ما كان مستحقًا عند التشغيل — وكلها لا تعتمد على الالتقاط.
 
-CI: يُملأ بعد الدفع (انظر «التسليم»).
+CI على PR #119 (الدفعة `984f95d`): كل الفحوص خضراء.
+```
+Lint, typecheck, contracts, tests, build                 pass  18m5s
+Web smoke journeys (Playwright against the real hub)     pass  5m29s
+Docker image builds and answers /health                  pass  2m28s
+db:generate + db:migrate (SQLite and PostgreSQL)         pass  1m4s
+PR adds or updates a change record                       pass  9s
+PR leaves graphify-out/ to the code-map bot              pass  11s
+```
 
 ## المخاطر والرجوع
 - `listWebhookEvents` صارت تعرض ١٤ حدثًا بدل كل الأسماء؛ خطاف محفوظ بأسماء أخرى يبقى ولا يُرسل له
