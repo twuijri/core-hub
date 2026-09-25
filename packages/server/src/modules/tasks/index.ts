@@ -372,7 +372,24 @@ async function worktreeFor(
  * stays, `failed`, with git's message — shown in the task's details, where Remove can be
  * tried again.
  */
+const releasing = new Set<string>();
 async function releaseWorktree(
+  app: FastifyInstance,
+  service: TasksService,
+  profile: string,
+  row: WorktreeRow,
+): Promise<{ ok: boolean; message: string }> {
+  // Two openings of the board can both find the same archived task's worktree: one removal.
+  if (releasing.has(row.id)) return { ok: true, message: '' };
+  releasing.add(row.id);
+  try {
+    return await releaseNow(app, service, profile, row);
+  } finally {
+    releasing.delete(row.id);
+  }
+}
+
+async function releaseNow(
   app: FastifyInstance,
   service: TasksService,
   profile: string,
