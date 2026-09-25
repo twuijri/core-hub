@@ -97,9 +97,32 @@ One streamed agent turn. Lifecycle in `README.md` §run.
 | interrupt_requested_at | ms? | user pressed stop; adapter acknowledges later |
 | cancel_reason | text(200)? | |
 | error_code, error_message | | `{ error, code }` for clients |
+| timing | json? | the model's turns as the hub saw them (contract decision §43) |
+| changes | json? | what the run changed in its working folder, summed: source (`git`/`snapshot`), complete, files, additions, deletions, truncated, recorded at (contract decision §49); `null` when nothing was recorded |
 
 Indexes: (session_id, created_at); (workspace, status) for "what is running";
 (origin_kind, origin_id).
+
+## run_file_change (scoped)
+
+One file a run changed, written when the run ends with the diff it recorded then
+(contract decision §49): the answer stays what that run did, whatever the file became.
+At most 200 per run, the first by path.
+
+| column | type | meaning |
+|---|---|---|
+| run_id | ulid → run (FK, cascade) | |
+| seq | int | order inside the run (by path); unique per run |
+| path | text | relative to the working folder; where a deleted file was |
+| old_path | text? | where a renamed file was |
+| change | enum(added, modified, deleted, renamed) | |
+| additions, deletions | int? | `null` when the hub could not count (binary, no copy of before) |
+| binary | bool | |
+| diff_state | enum(available, binary, too_large, unavailable) | |
+| diff | text? | the unified diff's hunks, at most 256 KB, 2 MB a run |
+| diff_truncated | bool | cut at a line to stay under the cap |
+
+Indexes: unique (run_id, seq).
 
 ## tool_call (scoped)
 
