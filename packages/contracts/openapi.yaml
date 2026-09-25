@@ -3244,6 +3244,158 @@ paths:
           $ref: '#/components/responses/Unauthorized'
         '404':
           $ref: '#/components/responses/NotFound'
+  # ------------------------------------------------------- channel conversations
+  /channel-conversations:
+    get:
+      operationId: sessions.listChannelConversations
+      tags: [sessions]
+      summary: List conversations held on messaging channels (Telegram, WhatsApp…)
+      description: |
+        Conversations people have with the agent on a messaging channel live in Hermes's own
+        session store, not in the hub's: the gateway receives them and Hermes keeps them. This
+        reads them, **read-only**, through Hermes's internal server (ADR 0015), in the Hermes
+        profile each hub profile is (ADR 0014). A reply is made on the channel itself.
+
+        Up to the 100 most recent live conversations per profile, most recent first; Hermes's
+        archived ones are left out. With `profiles=all` every profile the caller may enter is
+        read (ADR 0016), each item naming its `profile`, and the whole list is ordered by
+        `last_message_at`. The hub keeps what it read for a short while and asks Hermes again
+        only when Hermes's store has been written since (contract decision §55); clients poll
+        this every 30–60 s while the list is on screen, since Hermes announces nothing.
+
+        Where the hub cannot read them — it does not supervise Hermes, a profile has no Hermes
+        profile, or Hermes did not answer — the answer is still `200`: `items` holds what could
+        be read and `unavailable` says, per profile, why the rest is missing.
+      parameters:
+        - $ref: '#/components/parameters/Profile'
+        - name: profiles
+          in: query
+          description: >-
+            `all` reads every profile the caller may enter instead of the one in the header.
+          schema:
+            type: string
+            enum: [all]
+        - name: channel
+          in: query
+          description: Only this platform's conversations (`telegram`, `whatsapp`…).
+          schema:
+            type: string
+            pattern: '^[a-z][a-z0-9_]{0,31}$'
+      x-rt-events: []
+      responses:
+        '200':
+          description: The conversations that could be read, and why any profile could not be.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items, unavailable]
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/ChannelConversation'
+                  unavailable:
+                    type: array
+                    description: Empty when every profile asked for was read.
+                    items:
+                      $ref: '#/components/schemas/ChannelConversationsUnavailable'
+              example:
+                items:
+                  - id: 20260925_091500_3f9a1c2b
+                    profile: default
+                    channel: telegram
+                    title: 'موعد التسليم'
+                    peer_name: 'أحمد'
+                    peer_id: '123456789'
+                    chat_type: dm
+                    last_message:
+                      role: assistant
+                      text: 'تم، أرسلت لك الملف.'
+                    preview: 'متى موعد التسليم؟'
+                    message_count: 6
+                    started_at: '2026-09-25T09:15:00Z'
+                    last_message_at: '2026-09-25T09:20:41Z'
+                unavailable: []
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /channel-conversations/{conversation_id}/messages:
+    get:
+      operationId: sessions.listChannelMessages
+      tags: [sessions]
+      summary: Read one channel conversation (read-only)
+      description: |
+        The conversation, as Hermes keeps it, in the profile named by `X-Hub-Profile`: what the
+        person on the channel wrote and what the agent answered, oldest first — the latest 500
+        messages at most. Tool calls, tool results and system text are left out. Only a
+        conversation that came from a messaging channel is found here; any other id is
+        `404` (`resource: channel_conversation`). `503 service_unavailable` when Hermes cannot
+        be asked (`details.reason: hermes_api_unavailable`, or `hermes_not_managed` where the
+        hub does not supervise Hermes).
+      parameters:
+        - $ref: '#/components/parameters/Profile'
+        - name: conversation_id
+          in: path
+          required: true
+          description: Hermes's own session id.
+          schema:
+            type: string
+            pattern: '^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$'
+      x-rt-events: []
+      responses:
+        '200':
+          description: The conversation and its messages.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [conversation, items, has_more]
+                properties:
+                  conversation:
+                    $ref: '#/components/schemas/ChannelConversation'
+                  items:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/ChannelMessage'
+                  has_more:
+                    type: boolean
+                    description: Older messages exist that this answer does not carry.
+              example:
+                conversation:
+                  id: 20260925_091500_3f9a1c2b
+                  profile: default
+                  channel: telegram
+                  title: 'موعد التسليم'
+                  peer_name: 'أحمد'
+                  peer_id: '123456789'
+                  chat_type: dm
+                  last_message:
+                    role: assistant
+                    text: 'تم، أرسلت لك الملف.'
+                  preview: 'متى موعد التسليم؟'
+                  message_count: 2
+                  started_at: '2026-09-25T09:15:00Z'
+                  last_message_at: '2026-09-25T09:20:41Z'
+                items:
+                  - id: '41'
+                    role: user
+                    text: 'متى موعد التسليم؟'
+                    created_at: '2026-09-25T09:15:00Z'
+                  - id: '44'
+                    role: assistant
+                    text: 'تم، أرسلت لك الملف.'
+                    created_at: '2026-09-25T09:20:41Z'
+                has_more: false
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
   # ---------------------------------------------------------------- attachments
   /attachments:
     post:
@@ -13996,6 +14148,119 @@ components:
         position:
           type: integer
           minimum: 0
+    # ------------------------------------------------------- channel conversations
+    ChannelConversation:
+      type: object
+      description: |
+        A conversation held on a messaging channel, read from Hermes's session store (contract
+        decision §55). Not a `Session`: the hub does not own it and cannot write to it.
+      required:
+        [
+          id,
+          profile,
+          channel,
+          title,
+          peer_name,
+          peer_id,
+          chat_type,
+          last_message,
+          preview,
+          message_count,
+          started_at,
+          last_message_at,
+        ]
+      properties:
+        id:
+          type: string
+          description: Hermes's session id.
+          pattern: '^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$'
+        profile:
+          $ref: '#/components/schemas/ProfileSlug'
+        channel:
+          type: string
+          description: >-
+            The platform (`telegram`, `whatsapp`, `discord`…). WhatsApp's cloud API is
+            `whatsapp` too.
+        title:
+          type: [string, 'null']
+          maxLength: 200
+          description: The title Hermes gave the conversation, when it has one.
+        peer_name:
+          type: [string, 'null']
+          maxLength: 200
+          description: The other party as the channel names them (the person, or the group).
+        peer_id:
+          type: [string, 'null']
+          maxLength: 200
+          description: The other party's id on the channel, when there is no name or beside it.
+        chat_type:
+          type: [string, 'null']
+          description: As the channel says it — `dm`, `group`, `channel`, `thread`.
+        last_message:
+          oneOf:
+            - $ref: '#/components/schemas/ChannelMessagePreview'
+            - type: 'null'
+          description: >-
+            The latest message with text, when the hub has read it; `null` until then
+            (`preview` stands in).
+        preview:
+          type: [string, 'null']
+          maxLength: 300
+          description: Hermes's own preview — the first thing the person on the channel wrote.
+        message_count:
+          type: integer
+          minimum: 0
+        started_at:
+          $ref: '#/components/schemas/Timestamp'
+        last_message_at:
+          $ref: '#/components/schemas/Timestamp'
+    ChannelMessagePreview:
+      type: object
+      required: [role, text]
+      properties:
+        role:
+          type: string
+          enum: [user, assistant]
+        text:
+          type: string
+          maxLength: 300
+    ChannelMessage:
+      type: object
+      description: One message of a channel conversation, as Hermes keeps it.
+      required: [id, role, text, created_at]
+      properties:
+        id:
+          type: string
+          description: Hermes's message id, unique within the conversation.
+        role:
+          type: string
+          enum: [user, assistant]
+          description: '`user` is the person on the channel; `assistant` is the agent.'
+        text:
+          type: string
+          description: Markdown as the agent wrote it; plain text as the person did. Cut at 20 000 characters.
+        created_at:
+          $ref: '#/components/schemas/Timestamp'
+    ChannelConversationsUnavailable:
+      type: object
+      description: Why one profile's channel conversations could not be read.
+      required: [profile, reason, message]
+      properties:
+        profile:
+          oneOf:
+            - $ref: '#/components/schemas/ProfileSlug'
+            - type: 'null'
+          description: '`null` when the reason holds for every profile (`hermes_not_managed`).'
+        reason:
+          type: string
+          enum: [hermes_not_managed, profile_not_in_hermes, hermes_unreachable]
+          description: |
+            `hermes_not_managed`: this hub does not supervise Hermes, so it has no way to read
+            Hermes's store. `profile_not_in_hermes`: Hermes has no profile for this hub profile.
+            `hermes_unreachable`: Hermes's server did not answer or refused; `message` has its words.
+        message:
+          type: [string, 'null']
+          description: Hermes's own words, when it said something.
     # ---------------------------------------------------------------- messages
     Author:
       type: object

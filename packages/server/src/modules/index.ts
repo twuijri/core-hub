@@ -1,4 +1,5 @@
 // The module list the app composes, in mount order. Every module in ARCHITECTURE §Modules is here.
+import { statSync } from 'node:fs';
 import path from 'node:path';
 import type { FastifyInstance } from 'fastify';
 import type { HubModule } from '../lib/module.js';
@@ -38,8 +39,11 @@ import {
   registerAgentAttachments,
 } from './agents/index.js';
 import {
+  ChannelSourceRefusal,
+  ChannelSourceUnavailable,
   attachmentReferences,
   createSessionsModule,
+  registerChannelSource,
   registerWorkflowGate,
   sessionRunsFor,
   sessionTurnsFor,
@@ -195,6 +199,62 @@ function hermesAgentId(app: FastifyInstance, workspace: string): string | null {
     .find((agent) => agent.slug === 'hermes');
   return found?.id ?? null;
 }
+
+/**
+ * Conversations on Telegram, WhatsApp… live in Hermes's own store, not the hub's (contract
+ * decision §55). `sessions` reads them through Hermes's server (ADR 0015) — only where the hub
+ * supervises Hermes, so anywhere else there is no source and the list says why. `auth` says
+ * which Hermes profile a workspace is (ADR 0014), and the store file's size and time tell
+ * `sessions` whether anything was written since it last read.
+ */
+registerChannelSource((app) => {
+  const dashboard = hermesDashboardFor(app);
+  const root = hermesRuntimeFor(app).status().home;
+  if (!dashboard || !root) return null;
+  const homeOf = (profile: string) =>
+    profile === RUNTIME_DEFAULT_PROFILE ? root : path.join(root, 'profiles', profile);
+  return {
+    hermesProfile(workspace) {
+      const row = listWorkspacesFor(requireSqlite(app.hub.database), {
+        id: '',
+        role: 'owner',
+      }).find((each) => each.id === workspace);
+      if (!row) return null;
+      const profile = row.isDefault ? RUNTIME_DEFAULT_PROFILE : row.slug;
+      try {
+        return statSync(homeOf(profile)).isDirectory() ? profile : null;
+      } catch {
+        return null;
+      }
+    },
+    async get<T>(apiPath: string): Promise<T> {
+      try {
+        return await dashboard.request<T>('GET', apiPath);
+      } catch (error) {
+        if (error instanceof HermesDashboardRefusal) {
+          throw new ChannelSourceRefusal(error.status, error.message);
+        }
+        if (error instanceof HermesDashboardUnavailable) {
+          throw new ChannelSourceUnavailable(error.message);
+        }
+        throw error;
+      }
+    },
+    stamp(profile) {
+      const parts: string[] = [];
+      for (const name of ['state.db', 'state.db-wal']) {
+        try {
+          const info = statSync(path.join(homeOf(profile), name));
+          parts.push(`${info.size}@${info.mtimeMs}`);
+        } catch {
+          parts.push('-');
+        }
+      }
+      // No store at all yet: nothing to compare, so what was read is simply kept briefly.
+      return parts.every((part) => part === '-') ? null : parts.join('|');
+    },
+  };
+});
 
 /**
  * A workspace is a Hermes profile (ADR 0014). `auth` owns workspaces, `agents` knows where

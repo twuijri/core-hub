@@ -27,6 +27,7 @@ import { parse } from '../../lib/validate.js';
 import type { EngineScope } from './engine.js';
 import type { ScopeResolver } from './scope.js';
 import type { SessionsService } from './service.js';
+import type { ChannelConversations } from './channel-conversations.js';
 import { DEFAULT_LIMIT, MAX_LIMIT } from './store.js';
 
 const ulid = z.string().regex(/^[0-7][0-9A-HJKMNP-TV-Z]{25}$/, 'must be a ULID');
@@ -121,6 +122,8 @@ function pathId(params: unknown, name: string, resource: string): string {
 export interface RouteDeps {
   service(request: FastifyRequest): SessionsService;
   scopes: ScopeResolver;
+  /** Channel conversations read from Hermes (§55). */
+  channels(request: FastifyRequest): ChannelConversations;
 }
 
 export function registerSessionRoutes(app: FastifyInstance, deps: RouteDeps): void {
@@ -419,5 +422,43 @@ export function registerSessionRoutes(app: FastifyInstance, deps: RouteDeps): vo
     const category_id = pathId(request.params, 'category_id', 'session_category');
     deps.service(request).deleteCategory(scope, category_id);
     return reply.status(204).send();
+  });
+
+  // ------------------------------------------------- channel conversations
+  // Contract decision §55: Telegram, WhatsApp… conversations as Hermes keeps them, read-only.
+
+  app.get('/channel-conversations', async (request) => {
+    const scope = await scopeOf(request);
+    const query = parse(
+      z.object({
+        profiles: z.enum(['all']).optional(),
+        channel: z
+          .string()
+          .regex(/^[a-z][a-z0-9_]{0,31}$/)
+          .optional(),
+      }),
+      request.query,
+      'query',
+    );
+    // "All" is `auth`'s rule (ADR 0016), as for `/sessions`; the header is checked first.
+    const scopes =
+      query.profiles === 'all' && deps.scopes.enterable
+        ? (await deps.scopes.enterable(request)).map((entry) => ({
+            workspace: entry.workspaceId,
+            profile: entry.profile,
+          }))
+        : [{ workspace: scope.workspace, profile: scope.profile }];
+    return deps.channels(request).list(scopes, query.channel);
+  });
+
+  app.get('/channel-conversations/:conversation_id/messages', async (request) => {
+    const scope = await scopeOf(request);
+    const id = (request.params as { conversation_id?: unknown }).conversation_id;
+    return deps
+      .channels(request)
+      .messages(
+        { workspace: scope.workspace, profile: scope.profile },
+        typeof id === 'string' ? id : '',
+      );
   });
 }
