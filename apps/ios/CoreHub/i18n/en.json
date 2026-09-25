@@ -40,7 +40,8 @@
     "setup": "First-run setup",
     "back_to_agents": "Back to agents",
     "skills_usage": "Skills usage",
-    "files": "Files"
+    "files": "Files",
+    "terminal": "Terminal"
   },
   "common": {
     "cancel": "Cancel",

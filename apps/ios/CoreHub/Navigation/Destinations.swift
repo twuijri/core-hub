@@ -63,7 +63,7 @@ enum DestinationID: String, CaseIterable, Hashable, Identifiable {
     /// Owners and admins only (`roles: ["admin"]`).
     var adminOnly: Bool {
         switch self {
-        case .agentManager, .users, .webhooks, .performance, .workspaces, .updates, .plugins, .files,
+        case .agentManager, .users, .webhooks, .logs, .performance, .workspaces, .updates, .plugins, .files,
              .agentSkills, .agentMcp, .agentMemory, .agentJobs, .agentChannels, .agentPlugins, .agentSettings:
             return true
         default:

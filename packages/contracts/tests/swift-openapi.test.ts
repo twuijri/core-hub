@@ -47,6 +47,14 @@ describe('prepareForSwift', () => {
     expect(text).not.toContain('"#/components/schemas/Locale"');
   });
 
+  it('leaves the webhooks out and pins no boolean', () => {
+    const doc = prepared() as ReturnType<typeof prepared> & { webhooks?: unknown };
+    expect(doc.webhooks).toBeUndefined();
+    expect(doc.components.schemas.PendingWriteApplied!.properties!.applied).toEqual({
+      type: 'boolean',
+    });
+  });
+
   it('never rewrites the source document', () => {
     const before = JSON.stringify(loadDocument());
     prepared();

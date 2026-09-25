@@ -166,8 +166,63 @@ export function inlineFormEnums(doc) {
   }
 }
 
+/**
+ * A boolean pinned to one value (`applied: { type: boolean, const: true }` in
+ * `PendingWriteApplied`) comes out as `enum class Applied(val value: Boolean) { TRUE("true") }`
+ * in Kotlin, which does not compile, and as `enum Applied: Bool` in Swift, which does not
+ * either. The pin is dropped and the property stays a plain boolean; the hub still sends
+ * only the pinned value.
+ */
+export function plainBooleans(node) {
+  if (Array.isArray(node)) {
+    node.forEach(plainBooleans);
+    return;
+  }
+  if (!node || typeof node !== 'object') return;
+  const types = Array.isArray(node.type) ? node.type : [node.type];
+  if (types.includes('boolean') && types.every((t) => t === 'boolean' || t === 'null')) {
+    delete node.const;
+    if (Array.isArray(node.enum) && node.enum.every((v) => typeof v === 'boolean' || v === null))
+      delete node.enum;
+  }
+  for (const value of Object.values(node)) plainBooleans(value);
+}
+
+/**
+ * An `integer` without a `format` is a 32-bit `Int` in Kotlin, and a byte count does not fit:
+ * `GET /audit/performance/live` answers `memory_total_bytes: 16777216000` (16 GB), which the
+ * client refused to read. Every integer property named `*_bytes` becomes `int64` (`Long`).
+ * Swift's `Int` is already 64-bit, so only the Kotlin copy is widened.
+ */
+export function wideByteCounts(node) {
+  if (Array.isArray(node)) {
+    node.forEach(wideByteCounts);
+    return;
+  }
+  if (!node || typeof node !== 'object') return;
+  for (const [name, prop] of Object.entries(node.properties ?? {})) {
+    if (!name.endsWith('_bytes') || !prop || typeof prop !== 'object' || prop.format) continue;
+    const types = Array.isArray(prop.type) ? prop.type : [prop.type];
+    if (types.includes('integer')) prop.format = 'int64';
+  }
+  for (const value of Object.values(node)) wideByteCounts(value);
+}
+
+/**
+ * `webhooks` are requests the hub makes, never ones a client calls. The generator still turns
+ * them into an API class named after their tag, so `webhook.hubEvent` (tag `notify`) wrote a
+ * `NotifyApi` that replaced the one holding every `notify.*` operation the apps call. They are
+ * left out; the payload models they use stay under `components`.
+ */
+export function dropWebhooks(doc) {
+  if (doc && typeof doc === 'object') delete doc.webhooks;
+}
+
 export function prepareForKotlin(doc) {
   const components = doc?.components?.schemas ?? {};
+  dropWebhooks(doc);
+  plainBooleans(doc);
+  wideByteCounts(doc);
   inlinePathParameters(doc);
   inlineFormEnums(doc);
   flattenDiscriminated(components);

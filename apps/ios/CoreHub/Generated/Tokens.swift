@@ -53,6 +53,12 @@ struct Palette: Equatable {
     let statusScheduled: RGBA
     let statusReview: RGBA
     let statusReady: RGBA
+    let chart1: RGBA
+    let chart2: RGBA
+    let chart3: RGBA
+    let chart4: RGBA
+    let chart5: RGBA
+    let chart6: RGBA
     let reviewSoft: RGBA
     let reviewSoftText: RGBA
     let link: RGBA
@@ -110,6 +116,12 @@ extension Palette {
         statusScheduled: RGBA(0.6588, 0.3843, 0.0000, 1.0000),
         statusReview: RGBA(0.4784, 0.2471, 0.7529, 1.0000),
         statusReady: RGBA(0.1686, 0.4039, 0.6902, 1.0000),
+        chart1: RGBA(0.1647, 0.4706, 0.8392, 1.0000),
+        chart2: RGBA(0.9216, 0.4078, 0.2039, 1.0000),
+        chart3: RGBA(0.1059, 0.6863, 0.4784, 1.0000),
+        chart4: RGBA(0.9294, 0.6314, 0.0000, 1.0000),
+        chart5: RGBA(0.9098, 0.4824, 0.6431, 1.0000),
+        chart6: RGBA(0.0000, 0.5137, 0.0000, 1.0000),
         reviewSoft: RGBA(0.9373, 0.8980, 0.9804, 1.0000),
         reviewSoftText: RGBA(0.3569, 0.1647, 0.5686, 1.0000),
         link: RGBA(0.0588, 0.3608, 0.5490, 1.0000),
@@ -166,6 +178,12 @@ extension Palette {
         statusScheduled: RGBA(0.9490, 0.7137, 0.2902, 1.0000),
         statusReview: RGBA(0.7647, 0.6078, 0.9608, 1.0000),
         statusReady: RGBA(0.5608, 0.7765, 1.0000, 1.0000),
+        chart1: RGBA(0.2235, 0.5294, 0.8980, 1.0000),
+        chart2: RGBA(0.8510, 0.3490, 0.1490, 1.0000),
+        chart3: RGBA(0.0980, 0.6196, 0.4392, 1.0000),
+        chart4: RGBA(0.7882, 0.5216, 0.0000, 1.0000),
+        chart5: RGBA(0.8353, 0.3176, 0.5059, 1.0000),
+        chart6: RGBA(0.0000, 0.5137, 0.0000, 1.0000),
         reviewSoft: RGBA(0.1765, 0.1294, 0.2510, 1.0000),
         reviewSoftText: RGBA(0.8627, 0.7686, 0.9843, 1.0000),
         link: RGBA(0.5608, 0.7765, 1.0000, 1.0000),
@@ -189,7 +207,7 @@ extension Palette {
     )
 
     /// The token keys in tokens.json order, for the tests.
-    static let tokenKeys: [String] = ["bg", "bg-raised", "surface", "surface-2", "surface-3", "control-track", "control-raised", "text", "text-muted", "text-faint", "border", "border-strong", "accent", "accent-strong", "accent-text", "accent-soft", "accent-soft-text", "danger", "danger-text", "danger-soft", "danger-soft-text", "warning-soft", "warning-soft-text", "success-soft", "success-soft-text", "info-soft", "info-soft-text", "status-running", "status-running-sweep", "status-blocked", "status-scheduled", "status-review", "status-ready", "review-soft", "review-soft-text", "link", "focus", "user-bubble", "user-bubble-text", "user-bubble-border", "agent-bubble", "agent-bubble-text", "agent-bubble-border", "thinking", "thinking-track", "code-bg", "code-text", "code-keyword", "code-string", "code-comment", "code-number", "scrim", "glassTint"]
+    static let tokenKeys: [String] = ["bg", "bg-raised", "surface", "surface-2", "surface-3", "control-track", "control-raised", "text", "text-muted", "text-faint", "border", "border-strong", "accent", "accent-strong", "accent-text", "accent-soft", "accent-soft-text", "danger", "danger-text", "danger-soft", "danger-soft-text", "warning-soft", "warning-soft-text", "success-soft", "success-soft-text", "info-soft", "info-soft-text", "status-running", "status-running-sweep", "status-blocked", "status-scheduled", "status-review", "status-ready", "chart-1", "chart-2", "chart-3", "chart-4", "chart-5", "chart-6", "review-soft", "review-soft-text", "link", "focus", "user-bubble", "user-bubble-text", "user-bubble-border", "agent-bubble", "agent-bubble-text", "agent-bubble-border", "thinking", "thinking-track", "code-bg", "code-text", "code-keyword", "code-string", "code-comment", "code-number", "scrim", "glassTint"]
 }
 
 /// One level of the glass scale (0 solid … 3 full); only floating chrome uses it.

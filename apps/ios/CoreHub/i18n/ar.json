@@ -40,7 +40,8 @@
     "setup": "تهيئة أول تشغيل",
     "back_to_agents": "رجوع إلى الوكلاء",
     "skills_usage": "استخدام المهارات",
-    "files": "الملفات"
+    "files": "الملفات",
+    "terminal": "الطرفية"
   },
   "common": {
     "cancel": "إلغاء",
