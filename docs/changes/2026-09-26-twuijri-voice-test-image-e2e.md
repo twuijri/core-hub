@@ -212,6 +212,10 @@ $ pnpm typecheck            → exit 0
 $ pnpm i18n:check
 i18n:check  OK
 ```
+نتيجة CI على #144 عند `e632a2a` (فيه هذه المهمة): ١٧ من ١٧ ناجحة — CI (lint وtypecheck والعقد واختبارات العملاء
+والبناء، وشرائح الخادم الثلاث، وdb:migrate على SQLite وPostgreSQL، وصورة Docker، ورحلات الويب ٧د٢٤ث، وسطح المكتب)،
+وAndroid وiOS وInstallers الثلاثة وChange record.
+
 **لم أشغّل** (قواعد السرعة؛ CI يشغّلها): حزم الخادم والويب كاملة، و`pnpm build`، ورحلات Playwright (رحلة
 `zzzzzzz-voice.spec.ts` تنتظر أن يُفعَّل الزر أصلًا).
 
