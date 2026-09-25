@@ -98,7 +98,16 @@ $ curl http://127.0.0.1:18799/api/v1/meta
 و«هذا الجهاز» يقول «يعمل على هذا الحاسوب» ويعرض مجلد البيانات.
 
 لم يُشغَّل مثبّت هرمز الحقيقي في أي اختبار (يُنزِّل ويُثبّت على الجهاز)؛ مساره مختبَر بتنزيل وتشغيل
-مزيَّفين. CI: يُملأ بعد الدفع.
+مزيَّفين. CI على #113 — كلها ناجحة، ومنها اختبار الدخان تحت Xvfb (مع الوضع المحلي):
+```
+pass  Lint, typecheck, contracts, tests, build
+pass  Desktop app smoke (Electron under Xvfb against the real hub)   1m13s
+pass  Web smoke journeys (Playwright against the real hub)  5m23s
+pass  Docker image builds and answers /health                3m6s
+pass  db:generate + db:migrate (SQLite and PostgreSQL)       1m9s
+pass  PR adds or updates a change record                    7s
+pass  PR leaves graphify-out/ to the code-map bot           11s
+```
 
 ## المخاطر والرجوع
 - بوابة هرمز شخصية تعمل على 8642 يستخدمها المركز كما هي، ومفتاحه لن يطابقها؛ صفحة الوكلاء تقول

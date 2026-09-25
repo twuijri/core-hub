@@ -106,7 +106,16 @@ WebSocket من خلال الأصل المحلي، ثم «هذا الجهاز» �
 التشغيل الأول والعنوان محفوظ؛ والاختبار الثاني يربط حاسوبًا ثانيًا برابط الربط فيدخل بلا كلمة
 مرور، والمركز يقول `claimed`.
 
-CI: يُملأ بعد الدفع.
+CI على #111 (التشغيل 36083937801) — كلها ناجحة:
+```
+pass  Lint, typecheck, contracts, tests, build              17m57s
+pass  Desktop app smoke (Electron under Xvfb against the real hub)   1m26s
+pass  Web smoke journeys (Playwright against the real hub)  5m23s
+pass  Docker image builds and answers /health                3m26s
+pass  db:generate + db:migrate (SQLite and PostgreSQL)       1m3s
+pass  PR adds or updates a change record                    11s
+pass  PR leaves graphify-out/ to the code-map bot           9s
+```
 
 ## المخاطر والرجوع
 - حجم المثبّت (Chromium) نحو 95–110 MB مضغوطًا؛ يُقاس فعليًا في الجزء ٤.
