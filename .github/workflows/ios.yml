@@ -74,7 +74,4 @@ jobs:
         working-directory: packages/contracts/generated/swift
         run: |
           set -o pipefail
-          ls
-          cat Package.swift
-          find . -name '*.swift' | head -40
-          xcodebuild -scheme CoreHubClient -destination 'generic/platform=iOS Simulator' -skipPackagePluginValidation build | tail -60
+          xcodebuild -scheme CoreHubClient -destination 'generic/platform=iOS Simulator' -skipPackagePluginValidation build > build.log 2>&1 || { grep -E 'error:' build.log | sort -u | head -150; exit 1; }
