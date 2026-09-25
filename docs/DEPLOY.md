@@ -231,12 +231,15 @@ boot. The endpoint is the Hermes agent's `gateway.endpoint` setting
 | `/data/keys/hermes-dashboard.secret` | the session token of Hermes's dashboard API, which the hub starts on demand on the loopback (ADR 0015) |
 | `/data/hermes/` | Hermes's home: `.env`, `config.yaml`, memories, skills, sessions, cron |
 | `/data/agents/<id>/` | coding agents installed from the catalog |
-| `/data/hermes-packages/` | optional Python packages Hermes installs the first time a feature needs them (Edge voices, Bedrock, Vertex …). Telegram's client is not among them: it ships in the image |
+| `/data/hermes-packages/` | optional Python packages Hermes installs the first time a feature needs them (Edge voices, Bedrock, Vertex, and the Matrix, Feishu, DingTalk, Teams and Google Chat channels …). Telegram's, Discord's and Slack's clients are not among them: they ship in the image |
 | `/data/hermes/…/scripts/whatsapp-bridge/` | a profile's copy of Hermes's WhatsApp bridge (about 220 KB), made by the hub before the profile's gateway or the pairing screen starts it; its `node_modules` is a link to the dependencies the image ships, so linking a phone downloads nothing |
 | `/data/workspaces/<profile>/` | each chat's working folder |
 
-Linking Telegram or WhatsApp needs no download from PyPI or npm: both channels'
-dependencies are in the image (docs/changes/2026-09-25-twuijri-image-channel-deps.md). A
+Linking Telegram, WhatsApp, Discord or Slack needs no download from PyPI or npm: their
+dependencies are in the image (docs/changes/2026-09-25-twuijri-image-channel-deps.md,
+docs/changes/2026-09-25-twuijri-more-channels.md); Mattermost and Email need nothing beyond
+Hermes. Matrix's library did not fit the image-size budget: Hermes downloads it once, the first
+time a Matrix channel starts, so that first start needs PyPI. A
 profile that linked WhatsApp before keeps the bridge Hermes installed in it until a new image
 changes the bridge; then its copy is replaced by the link.
 
