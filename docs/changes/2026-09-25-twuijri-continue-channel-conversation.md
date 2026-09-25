@@ -95,7 +95,15 @@ $ pnpm build && PLAYWRIGHT_CHANNEL=chrome pnpm --filter @corehub/web exec playwr
 `first_message` كما هي دورًا حقيقيًا (`202`). واختبار الويب يتحقق أن الشاشة الجديدة **ترسل** أول رسالة بعد
 الاشتراك. الاختبارات الجديدة تفشل على الكود القديم (لا مسار `continue` ولا زر).
 
-CI: (يُملأ بعد الدفع)
+CI على #136 (التشغيل 36106845838)، كلها ناجحة:
+```
+Lint, typecheck, contracts, tests, build              pass
+Web smoke journeys (Playwright against the real hub)  pass
+Docker image builds and answers /health               pass
+db:generate + db:migrate (SQLite and PostgreSQL)      pass
+PR adds or updates a change record                    pass
+PR leaves graphify-out/ to the code-map bot           pass
+```
 
 ## المخاطر والرجوع
 - **محادثة فارغة** إن أُغلق التبويب بين الإنشاء والإرسال — كما في «محادثة جديدة» لم يُكتب فيها.
