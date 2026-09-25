@@ -1701,7 +1701,6 @@
     "finished": "Finished in the last 24 hours ({count})",
     "stop": "Stop",
     "open_item": "Open",
-    "untitled": "Untitled conversation",
     "kind": {
       "chat_run": "Chat",
       "task_run": "Task",

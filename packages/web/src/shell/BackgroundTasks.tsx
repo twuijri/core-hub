@@ -159,7 +159,7 @@ function BackgroundRow({
   const ms = elapsedMs(item, now);
   const title =
     item.title.trim() ||
-    (item.kind === 'job' && item.job_kind ? item.job_kind : t('background.untitled'));
+    (item.kind === 'job' && item.job_kind ? item.job_kind : t('sessions.untitled'));
   return (
     <li
       className="background-row"

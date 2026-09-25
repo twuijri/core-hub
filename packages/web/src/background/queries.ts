@@ -75,7 +75,11 @@ export function useBackground() {
     for (const name of SESSION_CHANGES) sessions.on(name, refresh);
     for (const name of SCHEDULE_CHANGES) schedules.on(name, refresh);
     for (const name of JOB_EVENTS) jobs.on(name, refresh);
-    for (const socket of [sessions, schedules, jobs]) if (!socket.connected) socket.connect();
+    // Only a socket that is neither connected nor on its way: a second `connect()` while the
+    // first is in flight sends the namespace's CONNECT twice, and the hub drops the connection.
+    for (const socket of [sessions, schedules, jobs]) {
+      if (!socket.connected && !socket.active) socket.connect();
+    }
     return () => {
       for (const name of SESSION_CHANGES) sessions.off(name, refresh);
       for (const name of SCHEDULE_CHANGES) schedules.off(name, refresh);

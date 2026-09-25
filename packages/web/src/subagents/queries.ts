@@ -57,7 +57,7 @@ export function useSubagents(sessionId: string) {
       if (!queryClient.getQueryData(key)) void queryClient.invalidateQueries({ queryKey: key });
     };
     for (const name of SUBAGENT_EVENTS) socket.on(name, onEvent);
-    if (!socket.connected) socket.connect();
+    if (!socket.connected && !socket.active) socket.connect();
     return () => {
       for (const name of SUBAGENT_EVENTS) socket.off(name, onEvent);
     };
