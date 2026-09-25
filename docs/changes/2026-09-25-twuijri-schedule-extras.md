@@ -106,6 +106,9 @@ $ vitest run src/modules/schedules/workflow-limits.test.ts            (server)
 $ vitest run src/modules/schedules tests/unit/workflow-approvals.test.ts tests/unit/status.test.ts
  Test Files  1 failed | 8 passed | 1 skipped (10)     ← status.test قبل تحديث STATUS (264 → 265)؛ بعده:
  Test Files  9 passed | 1 skipped (10)
+      Tests  108 passed | 3 skipped (111)
+$ pnpm change-record:check
+change-record  OK — 1 record(s) valid
 $ vitest run tests/schedule-extras.test.tsx tests/schedule-runs.test.tsx tests/schedule-run-options.test.tsx tests/tasks-schedules-profiles.test.tsx tests/i18n.test.ts tests/logical-css.test.ts   (web)
  Test Files  6 passed (6)
       Tests  195 passed (195)
