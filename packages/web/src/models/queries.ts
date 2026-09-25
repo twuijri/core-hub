@@ -94,11 +94,29 @@ export function useCatalogue() {
   const { client, profile, session } = useAuth();
   return useQuery({
     queryKey: modelKeys.catalogue(profile),
-    queryFn: async () =>
-      (await client.request('get', '/models', { query: { limit: 200 } })).data.items as Model[],
+    // Every page, not the first: a hub with OpenRouter has more than one page of models, and
+    // a model past the first was missing from every picker (the fallback list among them).
+    queryFn: async () => {
+      const models: Model[] = [];
+      let cursor: string | null = null;
+      for (let page = 0; page < CATALOGUE_MAX_PAGES; page += 1) {
+        const data = (
+          await client.request('get', '/models', {
+            query: { limit: 200, ...(cursor ? { cursor } : {}) },
+          })
+        ).data as { items: Model[]; next_cursor?: string | null };
+        models.push(...data.items);
+        cursor = data.next_cursor ?? null;
+        if (!cursor) break;
+      }
+      return models;
+    },
     enabled: !!session,
   });
 }
+
+/** 200 models a page: ten pages is a catalogue of 2 000, far past any provider's list. */
+const CATALOGUE_MAX_PAGES = 10;
 
 /**
  * Everything the screen writes invalidates the same reads: one rule, no drift. In **every**

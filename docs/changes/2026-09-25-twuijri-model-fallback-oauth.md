@@ -77,7 +77,7 @@ model=gemini-3.8-flash-high)` — عطل عند الوسيط المتوافق م
   `service.ts` (`fallbacksFor`، `providerSlugOf`).
 - الخادم — sessions: `ports.ts`، `run-reducer.ts`، `engine.ts` (يحدّث نموذج التشغيل ويحفظ ما
   فشل في `runs.timing` — بلا ترحيل قاعدة بيانات)، `mappers.ts`، `schema.ts`، `trajectory.ts`.
-- الويب: `models/FallbackList.tsx` و`models/fallbacks.ts` و`models/SignInPanel.tsx` (جديدة)،
+- الويب: `models/queries.ts` (`useCatalogue` يقرأ كل الصفحات)، `models/FallbackList.tsx` و`models/fallbacks.ts` و`models/SignInPanel.tsx` (جديدة)،
   `models/ModelsScreen.tsx`، `models/AddProviderDialog.tsx`، `models/queries.ts`،
   `chat/MessageView.tsx`، `chat/fallback.ts` و`chat/useRunHistory.ts` (جديدان)،
   `chat/ChatScreen.tsx`، `chat/TrajectoryView.tsx`، `types.ts`، `i18n/{ar,en}.json`.
@@ -138,6 +138,18 @@ $ playwright test smoke.spec.ts zzzzzzz-model-fallback.spec.ts         22 passed
 $ playwright test zzz-chat-history.spec.ts                             3 passed (21.4s)
 $ vitest run tests/integration/cli.test.ts (packages/cli)              Tests  19 passed (19)
 ```
+
+التشغيل الثاني (36085747900) نجح كله إلا الرحلة 34: نموذج `gpt-backup` لم يكن في القائمة أصلًا —
+`useCatalogue` في الويب كان يقرأ الصفحة الأولى فقط (200 نموذج)، والرحلات السابقة تترك مزوّدًا بـ
+443 نموذجًا. هذا خلل قائم في كل منتقي نموذج (يصيب المالك مع OpenRouter)، فأصلحته هنا: القراءة
+تتبع `next_cursor` حتى عشر صفحات. محليًا، بعد رحلة المزوّدين التي تضيف الـ 443:
+```
+$ playwright test zzzzz-providers-scopes.spec.ts zzzzzzz-model-fallback.spec.ts   2 passed (12.1s)
+$ vitest run tests/models-screen tests/model-fallback-signin tests/composer        Tests  53 passed (53)
+```
+محاولة تشغيل مجموعة Playwright كاملة محليًا توقّفت لأن مركز الاختبار أُغلق في منتصفها
+(`ERR_CONNECTION_REFUSED` من الرحلة 20 فصاعدًا، والجهاز مشغول بمجموعات وكلاء آخرين) — لا تُعدّ
+نتيجة؛ CI هو الحَكَم.
 
 أثناء الكتابة كشف اختبار الويب حلقة استطلاع لا تنتهي (إبطال `['models']` كان يشمل استعلام
 الدخول نفسه) فأُصلحت قبل الدفع.
