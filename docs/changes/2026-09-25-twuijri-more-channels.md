@@ -200,7 +200,16 @@ mattermost: connecting
 الحالة `connecting` لأن لا شبكة، والمهم أن المحوّلين بدآ من مكتبات الصورة. وعلى صورة تيليجرام وحده
 فشل الاختبار الثاني بعد 120 ثانية: لم يظهر Discord ولا Slack في ملف حالة البوابة.
 
-CI: يُلحق بعد الدفع.
+CI على #129 (الالتزام `9f234ce`، التشغيل 36099771693): كل الفحوص الستة خضراء.
+```
+Docker image builds and answers /health                 pass  3m9s
+Lint, typecheck, contracts, tests, build                pass  17m50s
+PR adds or updates a change record                      pass  13s
+PR leaves graphify-out/ to the code-map bot             pass  8s
+Web smoke journeys (Playwright against the real hub)    pass  4m25s
+db:generate + db:migrate (SQLite and PostgreSQL)        pass  1m2s
+```
+`main` لم يتحرّك منذ تفرّع هذا الفرع (`git log HEAD..origin/main` فارغ)، فلا دمج مطلوب.
 
 ## المخاطر والرجوع
 - **الحجم** +7.6 MB مضغوطة (292.0 MB، داخل 100–300).
