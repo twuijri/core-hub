@@ -107,7 +107,17 @@ $ pnpm build && PLAYWRIGHT_CHANNEL=chrome pnpm --filter @corehub/web exec playwr
   1 passed (8.7s)
 ```
 
-CI على طلب الدمج: يُضاف أدناه بعد اكتماله.
+CI على طلب الدمج #117، الدفعة الأولى: فشل فحصان كشفا ما لم يُشغَّل محليًّا —
+`tests/unit/status.test.ts` (`expected 264 to be 266`: العدّ في رأس STATUS لم يُحدَّث) ورحلة
+`zz-design.spec.ts` (كانت تنتظر `audit-days-7` في صفحة السجلات القديمة). أُصلحا ثم شُغّلا محليًّا:
+
+```
+$ pnpm --filter @corehub/server exec vitest run --project unit tests/unit/status.test.ts
+      Tests  1 passed (1)
+$ PLAYWRIGHT_CHANNEL=chrome pnpm --filter @corehub/web exec playwright test zz-design.spec.ts
+  ✓  3 [chromium] › e2e/zz-design.spec.ts:217:3 › the rebuilt screens › agents, models, sessions, settings and the sign-in door are made of the kit (2.9s)
+  3 passed (20.2s)
+```
 
 ## المخاطر والرجوع
 - **الذاكرة**: 5000 سطر × حتى 4000 حرف لكل مصدر هو الحد الأعلى النظري؛ عمليًّا الأسطر قصيرة
