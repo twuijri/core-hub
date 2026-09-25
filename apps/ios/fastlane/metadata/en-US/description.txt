@@ -1,0 +1,28 @@
+Core Hub is the iPhone and iPad app for your own Core Hub server: a self-hosted hub where your AI agents live, work and keep their memory. Talk to your agents, follow their work and approve what they want to do, from anywhere.
+
+You need a Core Hub server of your own, or one that someone runs for you. The app connects only to the server you choose. Core Hub is open source: github.com/twuijri/core-hub
+
+CHAT WITH YOUR AGENTS
+• Replies stream in as they are written, with Markdown, the tools the agent used and how long it thought
+• Approve or deny an agent's action, and answer its questions, right in the chat
+• Attach photos from your library or camera, and files
+• Dictate a message, and have replies read aloud
+• Share text and links from other apps into a new chat
+• English and Arabic, left-to-right and right-to-left
+
+KEEP TRACK
+• Every chat in one list, across your profiles, with search, pins and an archive
+• The tasks board: see what each agent is working on, move a task, open its conversation
+• Schedules: see what runs when, and run one now
+• Notifications when a reply is ready or an agent is waiting for you
+
+LOOK AFTER YOUR HUB
+• Each agent's skills, MCP servers, memory, jobs, channels and plugins
+• Profiles, users, models, knowledge, logs, usage and performance
+• Pair another phone with a QR code
+
+SIGN IN YOUR WAY
+• Enter your server's address with your username and password
+• Or scan the pairing code your hub shows on the web, or paste it
+
+Privacy: the developer of Core Hub collects no data. The app talks only to the server you choose; the privacy policy explains notifications and dictation.

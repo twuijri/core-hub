@@ -36,6 +36,14 @@ const logFile = arg('log', '');
  * Hermes in a room passes the turn and a summary comes back. Otherwise one fixed answer.
  */
 const script = arg('script', '');
+/**
+ * `--script images-copy` (the reply-files proof, 2026-09-26): the chat model behaves like the
+ * owner's `gemini-3.8-flash-high` turn — `image_generate`, then `execute_code` to copy the picture
+ * into the run's output folder under a name of its own (`flying_cat.png`), then a reply that says
+ * where it put it: by name when the hub's prompt asks for that, by its absolute path otherwise.
+ * Everything else is `--script images`.
+ */
+const drawing = script === 'images' || script === 'images-copy';
 
 /** The words of the last user message of a chat request. */
 function lastUser(body) {
@@ -64,10 +72,9 @@ function answerFor(body) {
 let rejecting = false;
 
 /** Opaque ids: a vendor prefix, and a `:free` suffix that is part of the name, not a flag. */
-const MODELS =
-  script === 'images'
-    ? ['lab/tiny-1:free', 'gpt-image-1', 'gemini-3.1-flash-image']
-    : ['lab/tiny-1:free', 'lab/tiny-2'];
+const MODELS = drawing
+  ? ['lab/tiny-1:free', 'gpt-image-1', 'gemini-3.1-flash-image']
+  : ['lab/tiny-1:free', 'lab/tiny-2'];
 
 // ---------------------------------------------------------------- pictures (`--script images`)
 const CRC_TABLE = Array.from({ length: 256 }, (_, n) => {
@@ -158,6 +165,7 @@ function imagesTurn(body) {
         ? toolAnswer.content
         : JSON.stringify(toolAnswer.content ?? '');
     note(`   tool answered= ${said.slice(0, 400)}`);
+    if (script === 'images-copy') return copyTurn(messages, said);
     return { text: 'Here is the red fox you asked for.' };
   }
   // Only the person's own request draws; the hub's "Name this conversation" (a tool-free
@@ -176,6 +184,54 @@ function imagesTurn(body) {
     };
   }
   return { text: 'the lab endpoint answered' };
+}
+
+/** Every user message's words, joined: where the hub named the output folder. */
+const allUserText = (messages) =>
+  messages
+    .filter((m) => m?.role === 'user')
+    .map((m) =>
+      typeof m.content === 'string'
+        ? m.content
+        : Array.isArray(m.content)
+          ? m.content.map((part) => part?.text ?? '').join('')
+          : '',
+    )
+    .join('\n');
+
+/**
+ * `--script images-copy`, after a tool answered: once the picture is drawn, copy it into the
+ * output folder the hub named with `execute_code` (as the owner's model did); once that answered,
+ * say where the file is — with the absolute path, as a real model does unless told otherwise.
+ */
+function copyTurn(messages, said) {
+  const asked = messages.flatMap((m) =>
+    m?.role === 'assistant' && Array.isArray(m.tool_calls)
+      ? m.tool_calls.map((call) => call?.function?.name ?? '')
+      : [],
+  );
+  const folder = /download into: (\S+)/.exec(allUserText(messages))?.[1] ?? null;
+  const target = folder ? `${folder.replace(/\/$/, '')}/flying_cat.png` : null;
+  if (!asked.includes('execute_code')) {
+    const drawn = /"image":\s*"(\/[^"]+)"/.exec(said)?.[1] ?? null;
+    note(`   copying= ${drawn} -> ${target}`);
+    if (!drawn || !target) return { text: 'I could not find the picture or the folder.' };
+    const code =
+      'import os, shutil\n' +
+      `os.makedirs(${JSON.stringify(folder)}, exist_ok=True)\n` +
+      `shutil.copy(${JSON.stringify(drawn)}, ${JSON.stringify(target)})\n` +
+      `print("saved", ${JSON.stringify(target)}, os.path.getsize(${JSON.stringify(target)}))\n`;
+    return { call: { name: 'execute_code', arguments: { code } } };
+  }
+  // A model that is told to name its files does; one that is not prints where it wrote them,
+  // as the owner's did.
+  const toldToName = /by its name only/.test(allUserText(messages));
+  note(`   told to name files= ${toldToName}`);
+  return {
+    text: toldToName
+      ? 'I generated the image and saved it as flying_cat.png.'
+      : `I generated the image and saved it to: ${target}`,
+  };
 }
 
 const note = (line) => {
@@ -235,7 +291,7 @@ const server = createServer(async (req, res) => {
     return;
   }
 
-  if (script === 'images' && url.pathname.startsWith('/v1/images/')) {
+  if (drawing && url.pathname.startsWith('/v1/images/')) {
     // `/generations` is JSON; `/edits` is multipart, where the form fields are read as text.
     const transparent = /"background":\s*"transparent"|name="background"\r\n\r\ntransparent/.test(
       raw,
@@ -249,7 +305,7 @@ const server = createServer(async (req, res) => {
     return;
   }
 
-  if (script === 'images' && url.pathname === '/v1/chat/completions' && /image/.test(model ?? '')) {
+  if (drawing && url.pathname === '/v1/chat/completions' && /image/.test(model ?? '')) {
     // A chat model that draws, answered the way cli-proxy-api answers for gemini-*-image.
     const body = JSON.parse(raw || '{}');
     const asked = userParts(body);
@@ -292,7 +348,7 @@ const server = createServer(async (req, res) => {
     } catch {
       streaming = false;
     }
-    const turn = script === 'images' ? imagesTurn(body) : { text: answerFor(body) };
+    const turn = drawing ? imagesTurn(body) : { text: answerFor(body) };
     const answer = turn.text ?? '';
     const toolCalls = turn.call
       ? [

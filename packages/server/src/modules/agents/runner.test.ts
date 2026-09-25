@@ -15,7 +15,9 @@
  * The pure translation is asserted separately (`toRunnerEvent`).
  */
 import {
+  copyFileSync,
   existsSync,
+  mkdirSync,
   mkdtempSync,
   readFileSync,
   readdirSync,
@@ -32,8 +34,10 @@ import type { HermesRunEvent } from './adapters/hermes.js';
 import {
   AgentRunner,
   approvalChoices,
+  dropDuplicateHandOvers,
   failureCode,
   handOver,
+  promptText,
   toRunnerEvent,
   toolKindOf,
 } from './runner.js';
@@ -760,6 +764,108 @@ describe('agent runner: a picture an agent tool saved outside the run (decision 
     expect(handOver(picture, out)).toEqual({ ok: true, path: path.join(out, 'a-2.png') });
     expect(readFileSync(path.join(out, 'a.png'), 'utf8')).toBe('one');
     expect(readFileSync(path.join(out, 'a-2.png'), 'utf8')).toBe('two');
+  });
+});
+
+describe('agent runner: files the agent leaves for the person (reply files, 2026-09-26)', () => {
+  const folder = () => mkdtempSync(path.join(tmpdir(), 'corehub-replyfiles-'));
+
+  /** A runner over one scripted session whose stream is `script`. */
+  const runnerOver = (script: () => AsyncIterable<AgentEvent>) => {
+    const adapter = {
+      async start() {
+        return {
+          id: 'stored-1',
+          async send() {
+            return { stopReason: 'completed' };
+          },
+          stream: script,
+          async respond() {},
+          async interrupt() {},
+          async close() {},
+        };
+      },
+    };
+    const service = {
+      loadAgent: () => ({ id: 'agent-1', installState: 'installed', adapterKind: 'hermes' }),
+      selectionFor: () => ({ model: null, provider: null, providerId: null }),
+      fallbacksFor: () => [],
+      providerSlugOf: () => null,
+      targetFor: () => ({ sessionRef: null }),
+    };
+    return new AgentRunner({
+      service: service as unknown as AgentsService,
+      adapters: { byKind: () => adapter } as unknown as AdapterSet,
+      log: capturingLogger().logger,
+    });
+  };
+
+  it('keeps one picture when the agent copies the drawn one into the folder under its own name', async () => {
+    const cache = folder();
+    const work = folder();
+    const out = path.join(work, 'out');
+    const picture = path.join(cache, 'corehub_20260926_1.png');
+    writeFileSync(picture, 'png-bytes');
+    const runner = runnerOver(async function* () {
+      yield { type: 'tool.started', id: 't1', title: 'image_generate', kind: 'image_generate' };
+      yield { type: 'tool.completed', id: 't1', title: 'image_generate', output: '{}' };
+      yield { type: 'file.produced', path: picture, toolId: 't1' };
+      // The model's `execute_code`: shutil.copy(<cache>, <out>/flying_cat.png).
+      yield { type: 'tool.started', id: 't2', title: 'execute_code', kind: 'execute_code' };
+      copyFileSync(picture, path.join(out, 'flying_cat.png'));
+      yield { type: 'tool.completed', id: 't2', title: 'execute_code', output: 'saved' };
+      yield { type: 'message.delta', text: 'I saved it as flying_cat.png' };
+      yield { type: 'run.completed', stopReason: 'completed' };
+    });
+    await runner.start({
+      runId: 'r1',
+      sessionId: 'S1',
+      workspace: 'w',
+      agentId: 'agent-1',
+      agentSessionRef: null,
+      workingDir: work,
+      model: null,
+      provider: null,
+      reasoningEffort: null,
+      prompt: [{ type: 'text' as const, text: 'سوي صورة قط يطير' }],
+      files: { inputDir: path.join(work, 'in'), outputDir: out },
+      allowedTools: [],
+    });
+    const events = [];
+    for await (const event of runner.stream('r1')) events.push(event);
+    expect(events.at(-1)).toMatchObject({ type: 'completed' });
+    // By the time the engine hears the end, the folder holds the agent's file alone.
+    expect(readdirSync(out)).toEqual(['flying_cat.png']);
+    expect(existsSync(picture)).toBe(true);
+  });
+
+  it('removes only its own copy, only for identical bytes, and looks into sub-folders', () => {
+    const out = folder();
+    mkdirSync(path.join(out, 'art'));
+    writeFileSync(path.join(out, 'a.png'), 'AAAA');
+    writeFileSync(path.join(out, 'b.png'), 'BBBB');
+    writeFileSync(path.join(out, 'c.png'), 'CCCC');
+    // The agent's own files: a copy of `a` in a sub-folder, same size as `b` but other bytes.
+    writeFileSync(path.join(out, 'art', 'cat.png'), 'AAAA');
+    writeFileSync(path.join(out, 'mine.png'), 'bbbb');
+    const copies = ['a.png', 'b.png', 'c.png'].map((name) => path.join(out, name));
+    expect(dropDuplicateHandOvers(copies, out)).toEqual([path.join(out, 'a.png')]);
+    expect(readdirSync(out).sort()).toEqual(['art', 'b.png', 'c.png', 'mine.png']);
+    // Two copies of the same drawing are both the hub's: neither removes the other.
+    writeFileSync(path.join(out, 'c-2.png'), 'CCCC');
+    expect(
+      dropDuplicateHandOvers([path.join(out, 'c.png'), path.join(out, 'c-2.png')], out),
+    ).toEqual([]);
+    expect(dropDuplicateHandOvers(copies, null)).toEqual([]);
+  });
+
+  it('tells the agent to name its files, not their path', () => {
+    const text = promptText([{ type: 'text', text: 'hi' }], {
+      inputDir: '/w/.corehub/runs/R/in',
+      outputDir: '/w/.corehub/runs/R/out',
+    });
+    expect(text).toContain('download into: /w/.corehub/runs/R/out');
+    expect(text).toContain('Refer to such a file by its name only');
   });
 });
 

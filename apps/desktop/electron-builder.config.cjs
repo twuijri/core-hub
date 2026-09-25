@@ -1,6 +1,11 @@
 // Installers for the desktop app (ADR 0020). Built by `pnpm --filter @corehub/desktop package`
-// after `pnpm build`. Nothing here publishes: `publish: null`, and CI keeps the files as
-// workflow artifacts only.
+// after `pnpm build`. Nothing here publishes: `publish: null`; CI keeps the files as workflow
+// artifacts, and publish-release.yml attaches them to a tag's GitHub release (docs/RELEASING.md).
+//
+// Windows ships two ways (owner, 2026-09-25): the NSIS `.exe` (unsigned, GitHub releases, the
+// app's own update check) and the Microsoft Store MSIX (`appx` below; the Store signs it). The
+// MSIX is a second packaging run, `COREHUB_CHANNEL=store … package --win` (scripts/package.mjs),
+// which stamps `corehubChannel: store` so that build never checks GitHub for updates.
 //
 // macOS signing (docs/RELEASING.md): only when a Developer ID certificate is named through
 // electron-builder's own variables — CSC_LINK / CSC_KEY_PASSWORD, or CSC_NAME with CSC_KEYCHAIN as
@@ -60,7 +65,27 @@ module.exports = {
   win: {
     target: [{ target: 'nsis', arch: ['x64'] }],
     icon: 'assets/icon.ico',
-    // TODO(owner): Authenticode signing. Unsigned installers show a SmartScreen warning.
+    // Unsigned: SmartScreen asks "More info → Run anyway" (docs/RELEASING.md). SignPath
+    // Foundation's free signing for open source is the option noted for later.
+  },
+  // The Microsoft Store package. The identity is the product's in Partner Center (public values).
+  // The Store signs what it publishes, so the build stays unsigned. Tiles: assets/appx, made by
+  // scripts/icons/build-icons.mjs. Version X.Y.Z.0: package.mjs stamps the plain X.Y.Z and
+  // `setBuildNumber: false` keeps the fourth part 0, as the Store requires.
+  appx: {
+    identityName: 'AbdulazizAltuwijri.CoreHub',
+    publisher: 'CN=814A0A23-0E7E-4406-8883-4E483DF08BDA',
+    publisherDisplayName: 'Abdulaziz Altuwijri',
+    applicationId: 'CoreHub',
+    displayName: 'Core Hub',
+    languages: ['en-US', 'ar'],
+    backgroundColor: 'transparent',
+    setBuildNumber: false,
+    // MSIX needs Windows 10 1809; tested up to Windows 11 24H2.
+    minVersion: '10.0.17763.0',
+    maxVersionTested: '10.0.26100.0',
+    electronUpdaterAware: false,
+    artifactName: 'Core-Hub-${version}-${arch}.msix',
   },
   nsis: {
     oneClick: false,

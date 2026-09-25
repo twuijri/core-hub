@@ -4,6 +4,9 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import hub.core.android.AppGraph
 import hub.core.android.chat.AttachmentTray
+import hub.core.android.chat.AttachmentUploader
+import hub.core.android.chat.HubAttachmentBackend
+import hub.core.android.chat.mimeOf
 import hub.core.android.chat.ChatAttachment
 import hub.core.android.chat.ChatMessage
 import hub.core.android.chat.ChatReducer
@@ -16,7 +19,6 @@ import hub.core.client.model.AgentStatus
 import hub.core.client.model.Approval
 import hub.core.client.model.ApprovalDecision
 import hub.core.client.model.ApprovalResponse
-import hub.core.client.api.SessionsApi
 import hub.core.client.model.MessageRole
 import hub.core.client.model.RunCreate
 import hub.core.client.model.SessionCreate
@@ -69,7 +71,7 @@ class ChatViewModel(
         viewModelScope,
         upload = { file ->
             val api = apis ?: throw HubError(401, "unauthorized", null)
-            api.sessions.sessionsUploadAttachment(profile, file, SessionsApi.PurposeSessionsUploadAttachment.MESSAGE)
+            AttachmentUploader(HubAttachmentBackend(api, profile)).upload(file, mimeOf(file))
         },
         discard = { attachment -> hubCall { apis?.sessions?.sessionsDeleteAttachment(attachment.profile, attachment.id) } },
     )
@@ -166,7 +168,7 @@ class ChatViewModel(
      */
     fun send(text: String, onCreated: (sessionId: String, profile: String) -> Unit = { _, _ -> }) {
         if (tray.uploading) return
-        val outgoing = Outgoing(text, tray.attachments)
+        val outgoing = tray.message(text)
         if (outgoing.isEmpty) return
         tray.clear()
         send(outgoing, onCreated)

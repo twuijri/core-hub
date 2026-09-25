@@ -20,7 +20,15 @@
  */
 import { derived } from '@corehub/contracts';
 import type { FastifyBaseLogger } from 'fastify';
-import { constants as fsConstants, copyFileSync, lstatSync, mkdirSync } from 'node:fs';
+import {
+  constants as fsConstants,
+  copyFileSync,
+  lstatSync,
+  mkdirSync,
+  readFileSync,
+  readdirSync,
+  unlinkSync,
+} from 'node:fs';
 import path from 'node:path';
 import { HubError, agentUnavailable } from '../../lib/errors.js';
 import type { AdapterSet } from './adapters/index.js';
@@ -95,6 +103,8 @@ interface LiveRun {
   tools: Map<string, { name: string; input: unknown }>;
   /** Where files for the person go this turn (`sessions`' output folder), if anywhere. */
   outputDir: string | null;
+  /** The copies `handOver` made into `outputDir` this turn, settled as the turn ends. */
+  handedOver: string[];
 }
 
 export interface AgentRunnerDeps {
@@ -144,6 +154,7 @@ export class AgentRunner implements AgentRunnerPort {
       questions: new Set(),
       tools: new Map(),
       outputDir: request.files?.outputDir ?? null,
+      handedOver: [],
     };
     this.runs.set(request.runId, run);
     // From here until the run ends, a call to the hub's own tools from this profile may act
@@ -531,6 +542,7 @@ export class AgentRunner implements AgentRunnerPort {
     if (event.type === 'file.produced') {
       const copied = handOver(event.path, run.outputDir);
       if (copied.ok) {
+        run.handedOver.push(copied.path);
         this.deps.log.debug({ runId: run.runId, file: copied.path }, 'agents: produced file');
       } else {
         this.deps.log.warn(
@@ -583,6 +595,16 @@ export class AgentRunner implements AgentRunnerPort {
 
   private push(run: LiveRun, event: RunnerEvent): void {
     if (run.ended) return;
+    if (event.type === 'completed' || event.type === 'failed') {
+      // Before the engine hears the end and reads the output folder.
+      const dropped = dropDuplicateHandOvers(run.handedOver, run.outputDir);
+      if (dropped.length > 0) {
+        this.deps.log.debug(
+          { runId: run.runId, files: dropped },
+          'agents: the agent kept its own copy of a produced file',
+        );
+      }
+    }
     const waiter = run.waiting.shift();
     if (waiter) waiter({ value: event, done: false });
     else run.queue.push(event);
@@ -713,7 +735,9 @@ export function promptText(blocks: RunnerPromptBlock[], files?: RunnerFileExchan
   if (files) {
     parts.push(
       `Write any file the user should be able to download into: ${files.outputDir}\n` +
-        'Files left there when the turn ends are attached to your reply automatically.',
+        'Files left there when the turn ends are attached to your reply automatically, and the ' +
+        'user sees them under it. Refer to such a file by its name only (for example ' +
+        '`chart.png`), never by this folder or any other path on this machine.',
     );
   }
   return parts.join('\n\n');
@@ -900,6 +924,69 @@ export function toRunnerEvent(event: AgentEvent, ctx: TranslateContext): RunnerE
       // engine attaches it to the reply when the run ends.
       return null;
   }
+}
+
+/** How deep `dropDuplicateHandOvers` looks for the agent's own copy, as the collector reads. */
+const HANDOVER_SCAN_DEPTH = 3;
+
+/**
+ * As the turn ends: a copy `handOver` made is removed when the agent left the same bytes in the
+ * output folder under a name of its own — the model that copies the drawn picture to
+ * `out/flying_cat.png` would otherwise get the picture twice on its reply. Only the hub's own
+ * copies are ever removed, and only for an identical file; anything unreadable is kept.
+ * Returns the copies it removed.
+ */
+export function dropDuplicateHandOvers(
+  copies: readonly string[],
+  outputDir: string | null,
+): string[] {
+  if (!outputDir || copies.length === 0) return [];
+  const mine = new Set(copies);
+  const theirs: Array<{ path: string; size: number }> = [];
+  const walk = (dir: string, depth: number): void => {
+    let entries;
+    try {
+      entries = readdirSync(dir, { withFileTypes: true });
+    } catch {
+      return;
+    }
+    for (const entry of entries) {
+      const full = path.join(dir, entry.name);
+      if (entry.isDirectory()) {
+        if (depth < HANDOVER_SCAN_DEPTH) walk(full, depth + 1);
+      } else if (entry.isFile() && !mine.has(full)) {
+        try {
+          theirs.push({ path: full, size: lstatSync(full).size });
+        } catch {
+          // Gone between the listing and the look: not a copy of anything.
+        }
+      }
+    }
+  };
+  walk(outputDir, 1);
+  const dropped: string[] = [];
+  for (const copy of copies) {
+    let size: number;
+    let bytes: Buffer | null = null;
+    try {
+      size = lstatSync(copy).size;
+    } catch {
+      continue;
+    }
+    for (const other of theirs) {
+      if (other.size !== size) continue;
+      try {
+        bytes ??= readFileSync(copy);
+        if (!bytes.equals(readFileSync(other.path))) continue;
+        unlinkSync(copy);
+        dropped.push(copy);
+      } catch {
+        // Unreadable either side: keep the copy, the person gets the picture twice at worst.
+      }
+      break;
+    }
+  }
+  return dropped;
 }
 
 /** What an image or other file a tool made is allowed to be before it is handed over. */

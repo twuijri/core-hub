@@ -1,0 +1,8 @@
+The first release of Core Hub on the App Store.
+
+• Sign in to your own Core Hub server with its address, username and password, or by scanning the pairing code it shows on the web
+• Chat with your agents: replies stream in, with Markdown, tools, thinking time, approvals and questions
+• Attach photos and files, dictate messages and hear replies read aloud
+• Chats, tasks and schedules across every profile, with search
+• Notifications when a reply is ready or an agent is waiting for you
+• English and Arabic, light and dark

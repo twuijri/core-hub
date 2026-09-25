@@ -4,7 +4,8 @@
 //
 // Where the voice comes from (owner, 2026-09-25), as on the web: the hub's speech providers of
 // the chat's profile when it has them (`models.transcribe`, `models.synthesize`), else this
-// phone's own recognizer and voice. «Voice: Core Hub / This phone» chooses; Core Hub by default.
+// phone's own recognizer and voice. «Voice: Core Hub / This phone» chooses; This phone by default
+// (owner, 2026-09-26: «خل الأساسي حق الجوال ويقدر يغير المستخدم»).
 import AVFoundation
 import CoreHubClient
 import Foundation
@@ -23,11 +24,21 @@ final class DeviceSettings {
         var id: String { rawValue }
     }
 
+    /// How a photo from the library or the camera is sent (Telegram's choice).
+    enum PhotoQuality: String, CaseIterable, Identifiable {
+        /// ≤ 2048 px, JPEG 0.8, as an image.
+        case compressed
+        /// The untouched file, as a file.
+        case original
+
+        var id: String { rawValue }
+    }
+
     /// Whose speech dictation and spoken replies use.
     enum VoiceSource: String, CaseIterable, Identifiable {
         /// The hub's STT / TTS providers, when the profile has them; the phone otherwise.
         case hub
-        /// Always the phone's own recognizer and voice.
+        /// Always the phone's own recognizer and voice — the default (owner, 2026-09-26).
         case phone
 
         var id: String { rawValue }
@@ -36,7 +47,10 @@ final class DeviceSettings {
     var voiceInput: Bool { didSet { defaults.set(voiceInput, forKey: Keys.voiceInput) } }
     var dictationLanguage: DictationLanguage { didSet { defaults.set(dictationLanguage.rawValue, forKey: Keys.dictation) } }
     var spokenReplies: Bool { didSet { defaults.set(spokenReplies, forKey: Keys.spoken) } }
+    /// Written only when the person picks it (`didSet` does not run in `init`), so an install
+    /// that never chose takes whatever the default is now.
     var voiceSource: VoiceSource { didSet { defaults.set(voiceSource.rawValue, forKey: Keys.voiceSource) } }
+    var photoQuality: PhotoQuality { didSet { defaults.set(photoQuality.rawValue, forKey: Keys.photoQuality) } }
     /// Look for the hub's notices now and then while the app is closed.
     var backgroundChecks: Bool { didSet { defaults.set(backgroundChecks, forKey: Keys.background) } }
 
@@ -47,6 +61,7 @@ final class DeviceSettings {
         static let dictation = Product.storagePrefix + "device.dictation_language"
         static let spoken = Product.storagePrefix + "device.spoken_replies"
         static let voiceSource = Product.storagePrefix + "device.voice_source"
+        static let photoQuality = Product.storagePrefix + "device.photo_quality"
         static let background = Product.storagePrefix + "device.background_checks"
     }
 
@@ -55,7 +70,8 @@ final class DeviceSettings {
         voiceInput = defaults.object(forKey: Keys.voiceInput) as? Bool ?? true
         dictationLanguage = defaults.string(forKey: Keys.dictation).flatMap(DictationLanguage.init(rawValue:)) ?? .app
         spokenReplies = defaults.bool(forKey: Keys.spoken)
-        voiceSource = defaults.string(forKey: Keys.voiceSource).flatMap(VoiceSource.init(rawValue:)) ?? .hub
+        voiceSource = defaults.string(forKey: Keys.voiceSource).flatMap(VoiceSource.init(rawValue:)) ?? .phone
+        photoQuality = defaults.string(forKey: Keys.photoQuality).flatMap(PhotoQuality.init(rawValue:)) ?? .compressed
         backgroundChecks = defaults.object(forKey: Keys.background) as? Bool ?? true
     }
 

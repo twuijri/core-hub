@@ -1,0 +1,158 @@
+name: Publish release
+
+# The GitHub release of a version tag (docs/RELEASING.md). On a `v*` tag on main — or by hand
+# for a tag that already exists (Actions → Publish release → Run workflow, `tag`), e.g. to make
+# the release a tag never got — it builds every file the release carries, then one job creates
+# or updates the tag's release, attaches them and marks it latest:
+#   - Windows .exe (NSIS, unsigned) and .msix (the Microsoft Store package), Linux AppImage and
+#     .deb — desktop.yml;
+#   - the signed and notarised macOS dmg — desktop-signed.yml;
+#   - the signed Android APK — android-signed.yml.
+# One workflow with job dependencies rather than workflow_run: the release job starts only when
+# every build of this same run succeeded, for this tag's commit, and reads their artifacts
+# directly. The server image (release.yml) and iOS (ios-signed.yml → TestFlight) still run on
+# the tag on their own; iOS puts no file on the release. Only the last job may write: it alone
+# gets `contents: write`, through GITHUB_TOKEN.
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'The existing release tag to build and publish (e.g. v1.1.0)'
+        required: true
+
+concurrency:
+  group: publish-release-${{ inputs.tag || github.ref_name }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  resolve:
+    name: Release tag
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    outputs:
+      tag: ${{ steps.tag.outputs.tag }}
+      ref: ${{ steps.tag.outputs.ref }}
+      version: ${{ steps.tag.outputs.version }}
+    steps:
+      - name: The tag
+        id: tag
+        env:
+          TAG: ${{ inputs.tag || github.ref_name }}
+        run: |
+          set -euo pipefail
+          if ! [[ "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "::error::\"$TAG\" is not a release tag (vX.Y.Z)."
+            exit 1
+          fi
+          {
+            echo "tag=$TAG"
+            echo "ref=refs/tags/$TAG"
+            echo "version=${TAG#v}"
+          } | tee -a "$GITHUB_OUTPUT"
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ steps.tag.outputs.ref }}
+      - name: Refuse tags that are not on main
+        run: |
+          git fetch --no-tags origin main
+          if ! git merge-base --is-ancestor HEAD origin/main; then
+            echo '::error::Release tags must point at a commit on main.'
+            exit 1
+          fi
+      # One version for every deliverable: the tag must say the root package.json's.
+      - name: The tag matches the root package.json version
+        run: node scripts/version-check.mjs --tag "${{ steps.tag.outputs.tag }}"
+
+  desktop:
+    name: Windows and Linux
+    needs: resolve
+    uses: ./.github/workflows/desktop.yml
+    with:
+      ref: ${{ needs.resolve.outputs.ref }}
+      version: ${{ needs.resolve.outputs.version }}
+      targets: '[{"os":"ubuntu-latest","target":"--linux"},{"os":"windows-latest","target":"--win"}]'
+
+  macos:
+    name: macOS signed
+    needs: resolve
+    uses: ./.github/workflows/desktop-signed.yml
+    with:
+      ref: ${{ needs.resolve.outputs.ref }}
+      version: ${{ needs.resolve.outputs.version }}
+      keep_artifacts: true
+    secrets: inherit
+
+  android:
+    name: Android signed
+    needs: resolve
+    uses: ./.github/workflows/android-signed.yml
+    with:
+      ref: ${{ needs.resolve.outputs.ref }}
+      keep_artifacts: true
+    secrets: inherit
+
+  publish:
+    name: GitHub release
+    needs: [resolve, desktop, macos, android]
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: write
+    env:
+      TAG: ${{ needs.resolve.outputs.tag }}
+      VERSION: ${{ needs.resolve.outputs.version }}
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      GH_REPO: ${{ github.repository }}
+    steps:
+      # This workflow's own commit (the tag's, or main's on a manual run) for the release tooling,
+      # with every tag for the notes' range.
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+      - uses: actions/download-artifact@v4
+        with:
+          path: ${{ runner.temp }}/artifacts
+          pattern: corehub-*
+      # A tag whose code predates the Microsoft Store package (v1.1.0) has no .msix to attach.
+      - name: What this tag's code builds
+        run: |
+          if git cat-file -e "$TAG:apps/desktop/scripts/msix-smoke.ps1" 2>/dev/null; then
+            echo 'WITHOUT=' >> "$GITHUB_ENV"
+          else
+            echo "::notice::$TAG predates the MSIX: its release has no Microsoft Store package."
+            echo 'WITHOUT=--without=windows-msix' >> "$GITHUB_ENV"
+          fi
+      - name: The release files, under their release names
+        run: node apps/desktop/scripts/release-assets.mjs collect "$VERSION" "$RUNNER_TEMP/artifacts" "$RUNNER_TEMP/release" $WITHOUT
+      # The merged pull requests since the previous version tag, as GitHub lists them, kept short
+      # under an English heading with the downloads and the SmartScreen step.
+      - name: Release notes
+        run: |
+          set -euo pipefail
+          previous=$(git tag --list 'v[0-9]*' --sort=-v:refname | awk -v t="$TAG" 'found { print; exit } $0 == t { found = 1 }')
+          args=(-f "tag_name=$TAG")
+          if [ -n "$previous" ]; then args+=(-f "previous_tag_name=$previous"); fi
+          gh api "repos/$GH_REPO/releases/generate-notes" "${args[@]}" --jq .body > "$RUNNER_TEMP/generated.md"
+          node apps/desktop/scripts/release-assets.mjs notes "$TAG" "$RUNNER_TEMP/generated.md" "$RUNNER_TEMP/notes.md" "$GH_REPO" $WITHOUT
+          cat "$RUNNER_TEMP/notes.md" >> "$GITHUB_STEP_SUMMARY"
+      - name: Create or update the release and mark it latest
+        run: |
+          set -euo pipefail
+          title="Core Hub $VERSION"
+          if gh release view "$TAG" > /dev/null 2>&1; then
+            gh release edit "$TAG" --title "$title" --notes-file "$RUNNER_TEMP/notes.md" \
+              --draft=false --prerelease=false --latest
+            gh release upload "$TAG" "$RUNNER_TEMP"/release/* --clobber
+          else
+            gh release create "$TAG" "$RUNNER_TEMP"/release/* --verify-tag --title "$title" \
+              --notes-file "$RUNNER_TEMP/notes.md" --latest
+          fi
+          gh release view "$TAG" --json url,assets --jq '"\(.url)\n" + ([.assets[].name] | join("\n"))' | tee -a "$GITHUB_STEP_SUMMARY"
