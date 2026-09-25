@@ -44,9 +44,11 @@ import type {
   AgentSession,
   AgentTarget,
   DiscoveredAgent,
+  OneshotRequest,
   PromptInput,
   SettingsSection,
 } from './types.js';
+import { OneshotUnavailable } from './types.js';
 
 export const HERMES_ADAPTER_VERSION = '1.1.0';
 
@@ -741,6 +743,31 @@ export function createHermesAdapter(options: HermesAdapterOptions): AgentAdapter
         modelProvider: target.modelProvider ?? null,
         reasoningEffort: target.reasoningEffort ?? null,
       });
+    },
+
+    /**
+     * A one-shot outside any conversation (`OneshotRequest`), over the TUI gateway only: a
+     * session is created in the target's profile on the target's model — which writes nothing
+     * to `state.db` until a prompt is submitted, and none is — its model answers through
+     * `llm.oneshot`, and it is closed again. The API server's run surface has no tool-free
+     * call, so a Hermes reached that way cannot do this (`OneshotUnavailable`).
+     */
+    async oneshot(target: AgentTarget, request: OneshotRequest): Promise<string | null> {
+      const tui = options.tui?.() ?? null;
+      if (!tui)
+        throw new OneshotUnavailable('the Hermes TUI gateway is not running beside the hub');
+      const profile = target.profile ?? null;
+      if (profile && profile !== 'default') await options.ensureProfile?.(profile);
+      const session = await HermesTuiSession.open(tui, null, {
+        model: target.model ?? null,
+        provider: target.modelProvider ?? null,
+        profile,
+      });
+      try {
+        return await session.oneshot(request);
+      } finally {
+        await session.close().catch(() => undefined);
+      }
     },
   };
 }

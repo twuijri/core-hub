@@ -443,6 +443,15 @@ a failure costs the caller nothing. The fallback, whenever that call is refused
 or unsupported by the adapter, is the first user message trimmed on a word
 boundary.
 
+The one-shot offers the model **no tools** and leaves nothing in the agent's
+history (2026-09-26): a title is not worth a model writing a file or sending a
+message on its way to six words. Hermes answers it with its own tool-free
+`llm.oneshot` on the conversation's model (the open conversation lends it, or a
+throwaway session in the same profile does, and no prompt is ever submitted);
+an agent without such a call is not handed a turn — the conversation's model is
+asked directly through the provider the hub knows, and without one the fallback
+names it.
+
 No field was added for it. A person's own title is one they sent in
 `SessionPatch.title`, so the hub marks the row when the patch carries a
 non-empty string and never overwrites it afterwards; `title: null` hands the

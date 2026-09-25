@@ -957,3 +957,79 @@ describe('Hermes subagents over the TUI gateway (§56)', () => {
     ]);
   });
 });
+
+describe('Hermes over the TUI gateway: a one-shot (naming a conversation)', () => {
+  it('waits for the agent to be built, asks `llm.oneshot` on this session, and submits no turn', async () => {
+    const gateway = fakeGateway((method, params, api) => {
+      if (method === 'session.create') {
+        // Hermes answers at once and builds the agent afterwards, then says so.
+        setTimeout(() => api.event('live1', 'session.info', { model: 'fake-1' }), 20);
+        return { session_id: 'live1', stored_session_id: 'stored-1' };
+      }
+      if (method === 'llm.oneshot') return { text: '  Streaming explained \n' };
+      return {};
+    });
+    const session = await HermesTuiSession.open(channelOver(gateway), null, {
+      model: 'fake-1',
+      provider: 'corehub-fake',
+      profile: 'work',
+    });
+    const answer = await session.oneshot({
+      prompt: 'Name this conversation.',
+      maxTokens: 512,
+      timeoutMs: 5_000,
+    });
+    expect(answer).toBe('Streaming explained');
+    const methods = gateway.api.received.map((frame) => frame.method).filter(Boolean);
+    expect(methods).toEqual(['session.create', 'llm.oneshot']);
+    const call = gateway.api.received.find((frame) => frame.method === 'llm.oneshot') as {
+      params?: Json;
+    };
+    expect(call.params).toEqual({
+      session_id: 'live1',
+      input: 'Name this conversation.',
+      task: 'title_generation',
+      max_tokens: 512,
+    });
+    await session.close();
+  });
+
+  it('lends a conversation that has already run a turn without waiting again', async () => {
+    const gateway = fakeGateway((method, _params, api) => {
+      if (method === 'session.create')
+        return { session_id: 'live1', stored_session_id: 'stored-1' };
+      if (method === 'prompt.submit') {
+        setImmediate(() =>
+          api.event('live1', 'message.complete', { text: 'hi', status: 'complete' }),
+        );
+        return {};
+      }
+      if (method === 'llm.oneshot') return { text: 'A title' };
+      return {};
+    });
+    const session = await HermesTuiSession.open(channelOver(gateway), null);
+    const reading = collect(session, terminal);
+    await session.send({ text: 'hello' });
+    await reading;
+    await expect(
+      session.oneshot({ prompt: 'Name this conversation.', maxTokens: 512, timeoutMs: 1_000 }),
+    ).resolves.toBe('A title');
+    await session.close();
+  });
+
+  it('answers nothing when the agent could not be built, and never calls the model', async () => {
+    const gateway = fakeGateway((method, _params, api) => {
+      if (method === 'session.create') {
+        setTimeout(() => api.event('live1', 'error', { message: 'agent init failed: no key' }), 10);
+        return { session_id: 'live1', stored_session_id: 'stored-1' };
+      }
+      return {};
+    });
+    const session = await HermesTuiSession.open(channelOver(gateway), null);
+    await expect(
+      session.oneshot({ prompt: 'Name this conversation.', maxTokens: 512, timeoutMs: 5_000 }),
+    ).resolves.toBeNull();
+    expect(gateway.api.received.some((frame) => frame.method === 'llm.oneshot')).toBe(false);
+    await session.close();
+  });
+});

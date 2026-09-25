@@ -24,11 +24,12 @@ import { constants as fsConstants, copyFileSync, lstatSync, mkdirSync } from 'no
 import path from 'node:path';
 import { HubError, agentUnavailable } from '../../lib/errors.js';
 import type { AdapterSet } from './adapters/index.js';
-import type {
-  AgentEvent,
-  AgentSession,
-  ApprovalOption,
-  PromptInput as RunnerPromptInput,
+import {
+  OneshotUnavailable,
+  type AgentEvent,
+  type AgentSession,
+  type ApprovalOption,
+  type PromptInput as RunnerPromptInput,
 } from './adapters/types.js';
 import type {
   AgentRunnerPort,
@@ -56,6 +57,12 @@ import type { RunLeases } from './hub-tools/leases.js';
  * Ekko). The card shows it counting down; at zero the hub answers Hermes with a skip.
  */
 export const QUESTION_WAIT_MS = 5 * 60_000;
+
+/**
+ * The ceiling for a one-shot's answer. A title is a handful of tokens; the rest is room for a
+ * model that reasons before it answers and counts that against the same limit.
+ */
+export const ASK_MAX_TOKENS = 512;
 
 /** How a hub decision maps onto the options an agent offered, per approval. */
 type DecisionMap = Map<RunnerDecision, string>;
@@ -369,33 +376,77 @@ export class AgentRunner implements AgentRunnerPort {
   }
 
   /**
-   * One question, answered once, in a conversation of its own that is closed again
-   * immediately (`RunnerAskRequest`). The hub names a session with it.
+   * One question answered by the model alone (`RunnerAskRequest`): the hub names a session
+   * with it. It is never a turn of an agent that has tools — a title is not worth the risk of
+   * a model writing a file or sending a message on its way to six words (the defect of
+   * 2026-09-26: every profile tool was offered to the naming request). In order:
    *
-   * Three things make it safe to run beside a live chat:
+   * 1. The agent's own tool-free one-shot on the model of the conversation being named: the
+   *    live conversation lends its model when it is open (Hermes: `llm.oneshot` with its
+   *    session), else the adapter opens a throwaway one in the same profile and model.
+   * 2. Otherwise the conversation's model directly, through the provider the hub knows (the
+   *    `builtin` adapter, which offers no tools), when the selection names one.
+   * 3. Otherwise `null`, and the caller names the session from its first message.
    *
-   * - its agent session is **never** put in `this.sessions`, and its ref is not the hub
-   *   session's, so the question is not appended to the conversation it asks about and
-   *   nothing evicts the live one;
-   * - it produces no `LiveRun`, so `busy` stays false and the models module may still
-   *   recycle the runtime — a title is not work worth blocking a provider change for;
-   * - it is bounded. Past `timeoutMs` the session is closed and the caller gets `null`,
-   *   which every caller must already handle.
+   * Nothing here produces a `LiveRun`, so `busy` stays false; nothing is put in
+   * `this.sessions`; and it is bounded by `timeoutMs` — past it the caller gets `null`.
    */
   async ask(request: RunnerAskRequest): Promise<string | null> {
-    const { service, adapters } = this.deps;
     const row = await this.readyRow(request.agentId);
     if (row.installState !== 'installed') return null;
+    try {
+      return await withDeadline(this.askToolFree(row, request), request.timeoutMs);
+    } catch (error) {
+      this.deps.log.info(
+        { err: error, agentId: row.id, sessionId: request.sessionId },
+        'agents: the agent answered no question',
+      );
+      return null;
+    }
+  }
+
+  private async askToolFree(
+    row: ReturnType<AgentsService['loadAgent']>,
+    request: RunnerAskRequest,
+  ): Promise<string | null> {
+    const { service, adapters } = this.deps;
+    const oneshot = {
+      prompt: request.prompt,
+      maxTokens: ASK_MAX_TOKENS,
+      timeoutMs: request.timeoutMs,
+    };
+
+    const live = this.sessions.get(request.sessionId);
+    if (live && !isClosed(live.session) && live.session.oneshot) {
+      return live.session.oneshot(oneshot);
+    }
+
     const target = service.targetFor(row, request.workspace, {
-      // A conversation of its own: `-ask-` keeps it apart from the chat's own ref for
-      // every adapter that keys conversations by the id we hand it.
-      sessionRef: mintSessionRef(row.adapterKind, `ask-${request.sessionId}`),
+      sessionRef: null,
       cwd: null,
       model: request.model,
       provider: request.provider,
       reasoningEffort: null,
     });
-    const session = await adapters.byKind(row.adapterKind).start(target);
+    const adapter = adapters.byKind(row.adapterKind);
+    if (adapter.oneshot) {
+      try {
+        return await adapter.oneshot(target, oneshot);
+      } catch (error) {
+        if (!(error instanceof OneshotUnavailable)) throw error;
+      }
+    }
+
+    // The conversation's model straight from its provider: the `builtin` adapter is one model
+    // request with no tools, whatever agent the conversation itself runs on.
+    if (!target.modelProviderId || !target.model) return null;
+    const direct = adapters.byKind('builtin');
+    const session = await direct.start({
+      ...target,
+      // The agent's own settings (a system prompt, for the `builtin` agent) are not the question.
+      settings: {},
+      sessionRef: null,
+    });
     let text = '';
     try {
       const collect = (async () => {
@@ -404,29 +455,15 @@ export class AgentRunner implements AgentRunnerPort {
           if (event.type === 'run.completed' || event.type === 'run.failed') return;
         }
       })();
-      const selection = service.selectionFor(row, request.workspace, {
-        model: request.model,
-        provider: request.provider,
-      });
-      await withDeadline(
-        Promise.all([
-          session.send({
-            text: request.prompt,
-            model: selection.model,
-            modelProvider: selection.provider,
-            modelProviderId: selection.providerId,
-            // A title is worth the same fallback a turn gets (contract decision §54).
-            fallbacks: service.fallbacksFor(request.workspace, selection),
-          }),
-          collect,
-        ]),
-        request.timeoutMs,
-      );
-    } catch (error) {
-      this.deps.log.info(
-        { err: error, agentId: row.id, sessionId: request.sessionId },
-        'agents: the agent answered no question',
-      );
+      await Promise.all([
+        session.send({
+          text: request.prompt,
+          model: target.model,
+          modelProvider: target.modelProvider ?? null,
+          modelProviderId: target.modelProviderId,
+        }),
+        collect,
+      ]);
     } finally {
       await session.close().catch(() => undefined);
     }

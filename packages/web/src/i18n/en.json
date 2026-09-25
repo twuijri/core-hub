@@ -1429,14 +1429,7 @@
     "cost": "Cost",
     "cost_unknown": "No published price",
     "model": "Model",
-    "by_model": "By model",
-    "no_entries": "Nothing in this period.",
-    "uptime": "Uptime",
-    "seconds": "{count} seconds",
-    "memory": "Memory",
-    "node": "Node",
-    "no_samples": "No samples stored yet.",
-    "samples_n": "{count} samples"
+    "by_model": "By model"
   },
   "usage": {
     "profile": "Profile",

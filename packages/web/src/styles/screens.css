@@ -652,23 +652,6 @@
   color: var(--ch-color-text-muted);
 }
 
-/* --------------------------------------------------------------- the logs */
-.log-entry {
-  display: flex;
-  align-items: center;
-  gap: var(--ch-space-2);
-  padding-inline: var(--ch-space-2);
-  padding-block: var(--ch-space-1);
-  border-radius: var(--ch-radius-sm);
-  background: var(--ch-color-surface-2);
-  font-size: var(--ch-font-size-xs);
-}
-.log-entry-time {
-  color: var(--ch-color-text-faint);
-  font-variant-numeric: tabular-nums;
-  unicode-bidi: isolate;
-}
-
 /* ------------------------------------------------------------ notifications
    A notice is a row you can act on, so it is a button — but it must read as a line of
    text, not as a control. The unread mark is a dot in its own column rather than bold

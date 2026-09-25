@@ -1429,14 +1429,7 @@
     "cost": "الكلفة",
     "cost_unknown": "بلا سعر معروف",
     "model": "النموذج",
-    "by_model": "حسب النموذج",
-    "no_entries": "لا شيء في هذه المدة.",
-    "uptime": "مدة التشغيل",
-    "seconds": "{count} ثانية",
-    "memory": "الذاكرة",
-    "node": "Node",
-    "no_samples": "لا قياسات محفوظة بعد.",
-    "samples_n": "{count} قياس"
+    "by_model": "حسب النموذج"
   },
   "usage": {
     "profile": "البروفايل",

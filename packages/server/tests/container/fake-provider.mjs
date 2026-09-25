@@ -160,8 +160,8 @@ function imagesTurn(body) {
     note(`   tool answered= ${said.slice(0, 400)}`);
     return { text: 'Here is the red fox you asked for.' };
   }
-  // Only the person's own request draws; the hub's "Name this conversation" (which reaches
-  // Hermes with the same tools) is answered in words, as any model would.
+  // Only the person's own request draws; the hub's "Name this conversation" (a tool-free
+  // one-shot since 2026-09-26, so no tools reach it) is answered in words.
   if (/^Name this conversation/.test(userParts(body).text)) return { text: 'A red fox' };
   const drawing = { prompt: 'a red fox in flat style', aspect_ratio: 'square' };
   if (names.includes('image_generate')) {
