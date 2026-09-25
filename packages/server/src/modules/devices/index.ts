@@ -106,6 +106,8 @@ export function overrideDevices(next: DevicesOverrides): void {
 }
 
 let ports: DevicesPorts | null = null;
+/** How often the hub checks whether its tokens are due to be re-stated to the push relay. */
+const RELAY_SYNC_TICK_MS = 60_000;
 const services = new WeakMap<SocketServer, PushService>();
 /** Each hub's database, for the socket handlers (a socket has no request). */
 const databases = new WeakMap<SocketServer, ModuleDb>();
@@ -402,7 +404,18 @@ export function createDevicesModule(lent: DevicesPorts): HubModule {
       if (!document) throw new Error('packages/contracts/openapi.yaml is required (ADR 0003)');
       const deps = { contract: createContractIndex(document), guards: lent.guards };
       databases.set(app.hub.io, requireSqlite(app.hub.database));
+      // Clean-ups that end a sign-in (auth) do not call the relay; a quiet re-statement of the
+      // hub's tokens every few minutes lets go of theirs there (ADR 0024 §6).
+      const relaySync = setInterval(() => {
+        try {
+          void pushFor(app).syncRelayIfNeeded();
+        } catch {
+          // The next tick tries again.
+        }
+      }, RELAY_SYNC_TICK_MS);
+      relaySync.unref();
       app.addHook('onClose', async () => {
+        clearInterval(relaySync);
         services.get(app.hub.io)?.close();
         closeRequests(app);
       });

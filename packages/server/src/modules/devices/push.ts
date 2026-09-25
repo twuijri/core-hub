@@ -16,6 +16,7 @@
  * FCM or APNs with no credentials here goes through the Core Hub push relay instead
  * (`relay.ts`, ADR 0024), unless it is turned off. Local credentials always win.
  */
+import { createHash } from 'node:crypto';
 import { existsSync, readFileSync } from 'node:fs';
 import { and, eq } from 'drizzle-orm';
 import type { ModuleDb } from '../../lib/db.js';
@@ -129,6 +130,12 @@ export interface DeliveryResult extends PushOutcome {
 }
 
 const STORED = '[stored]';
+
+/** One value for a set of relay tokens, whatever their order. */
+function relayDigest(tokens: Array<{ platform: string; token: string }>): string {
+  const lines = tokens.map((t) => `${t.platform}:${t.token}`).sort();
+  return createHash('sha256').update(lines.join('\n')).digest('hex');
+}
 const DEFAULT_CONTACT = 'https://github.com/twuijri/core-hub';
 
 /** A value that is the content itself, or a path to a file holding it. */
@@ -149,6 +156,8 @@ export class PushService {
   private readonly lastSent = new Map<PushProvider, number>();
   private readonly lastError = new Map<PushProvider, string | null>();
   private syncing: Promise<void> | null = null;
+  /** What the relay was last told this hub wants, as a digest; null until the first sync. */
+  private syncedDigest: string | null = null;
   /** The Core Hub push relay (ADR 0024). */
   readonly relay: PushRelay;
 
@@ -494,6 +503,27 @@ export class PushService {
     return this.relay.bind(provider, token, proof);
   }
 
+  /** The tokens this hub wants bound at the relay: its phones' on senders that use it. */
+  private relayTokens(): Array<{ platform: RelayPlatform; token: string }> {
+    const platforms = (['fcm', 'apns'] as const).filter((p) => this.viaRelay(p));
+    const tokens: Array<{ platform: RelayPlatform; token: string }> = [];
+    if (platforms.length === 0) return tokens;
+    for (const row of this.options.db
+      .select()
+      .from(devices)
+      .where(eq(devices.status, 'paired'))
+      .all()) {
+      const platform = platforms.find((p) => p === row.pushProvider);
+      if (!platform || !row.pushToken) continue;
+      try {
+        tokens.push({ platform, token: this.openToken(row.pushToken) });
+      } catch {
+        // An unreadable token is not wanted.
+      }
+    }
+    return tokens;
+  }
+
   /**
    * Tells the relay every token this hub still wants (its clean-ups: sign-outs, revoked
    * sign-ins, unlinked devices, local credentials that took over). One at a time; never throws.
@@ -502,29 +532,33 @@ export class PushService {
     this.syncing ??= (async () => {
       try {
         if (!this.relay.usable()) return;
-        const platforms = (['fcm', 'apns'] as const).filter((p) => this.viaRelay(p));
-        const tokens: Array<{ platform: RelayPlatform; token: string }> = [];
-        for (const row of this.options.db
-          .select()
-          .from(devices)
-          .where(eq(devices.status, 'paired'))
-          .all()) {
-          const platform = platforms.find((p) => p === row.pushProvider);
-          if (!platform || !row.pushToken) continue;
-          try {
-            tokens.push({ platform, token: this.openToken(row.pushToken) });
-          } catch {
-            // An unreadable token is not wanted.
-          }
-        }
+        const tokens = this.relayTokens();
         await this.relay.sync(tokens);
+        this.syncedDigest = relayDigest(tokens);
       } catch {
-        // Recorded in the relay's status; the next change or send tries again.
+        // Recorded in the relay's status; the next tick tries again.
       } finally {
         this.syncing = null;
       }
     })();
     return this.syncing;
+  }
+
+  /**
+   * The minute tick (index.ts): re-states the tokens when they changed since the last time
+   * (a sign-in ended, which does not call the relay itself), and once a day regardless so the
+   * relay knows this hub is alive (ADR 0024 §6).
+   */
+  async syncRelayIfNeeded(): Promise<void> {
+    if (!this.relay.usable() || !this.relay.isRegistered()) return;
+    let digest: string;
+    try {
+      digest = relayDigest(this.relayTokens());
+    } catch {
+      return;
+    }
+    if (digest === this.syncedDigest && !this.relay.syncDue()) return;
+    await this.syncRelay();
   }
 
   /** The contract's `PushConfig`. */
@@ -734,14 +768,6 @@ export class PushService {
       .all()
       .filter((row) => row.pushProvider !== 'none' && row.pushToken);
     const results = await Promise.all(rows.map((row) => this.sendToDevice(row, message)));
-    // Clean-ups made without a call to the relay (a sign-in ended) reach it here, now and then.
-    if (
-      (this.viaRelay('fcm') || this.viaRelay('apns')) &&
-      this.relay.isRegistered() &&
-      this.relay.syncDue()
-    ) {
-      void this.syncRelay();
-    }
     return results.filter((result): result is DeliveryResult => result !== null);
   }
 }

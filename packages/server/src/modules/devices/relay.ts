@@ -101,8 +101,8 @@ export function relaySigningInput(
 }
 
 const CALL_TIMEOUT_MS = 10_000;
-/** How often a hub re-states its tokens to the relay while it keeps sending. */
-export const SYNC_EVERY_MS = 10 * 60_000;
+/** A hub re-states its tokens at least this often, so the relay knows it is alive. */
+export const SYNC_EVERY_MS = 24 * 60 * 60_000;
 
 type Row = typeof pushRelay.$inferSelect;
 

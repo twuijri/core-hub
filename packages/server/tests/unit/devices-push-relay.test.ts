@@ -8,11 +8,11 @@ import { generateKeyPairSync } from 'node:crypto';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { eq } from 'drizzle-orm';
 import { requireSqlite } from '../../src/lib/db.js';
-import { overrideDevices } from '../../src/modules/devices/index.js';
+import { overrideDevices, pushFor } from '../../src/modules/devices/index.js';
 import { devices, pushRelay } from '../../src/modules/devices/schema.js';
 import { fakeFcm } from '../../src/modules/devices/testing/fake-push.js';
 import { fakeRelay, type FakeRelay } from '../../src/modules/devices/testing/fake-relay.js';
-import { authed, signedInHub, type TestHub } from './helpers.js';
+import { TEST_ADMIN_PASSWORD, authed, signedInHub, type TestHub } from './helpers.js';
 
 type Json = Record<string, unknown>;
 type Hub = TestHub & { token: string; userId: string };
@@ -199,6 +199,38 @@ describe('push relay: zero setup', () => {
     });
     expect(unlinked.statusCode).toBe(204);
     await vi.waitFor(() => expect(relay.bindings.size).toBe(0));
+  });
+
+  it('lets go at the relay of a token whose sign-in ended, on the next tick, and only then', async () => {
+    const { hub, relay } = await relayHub();
+    const login = await hub.app.inject({
+      method: 'POST',
+      url: '/api/v1/auth/login',
+      payload: { username: 'admin', password: TEST_ADMIN_PASSWORD },
+    });
+    const phone = (login.json() as { access_token: string }).access_token;
+    const device = await authed(hub, phone, {
+      method: 'POST',
+      url: '/api/v1/devices',
+      payload: { device_key: 'iphone-a', name: 'iPhone', platform: 'ios', kind: 'phone' },
+    });
+    const id = (device.json() as { id: string }).id;
+    await registerApns(hub, { appToken: phone, deviceId: id });
+    expect(relay.bindings.size).toBe(1);
+    const push = pushFor(hub.app);
+    await push.syncRelayIfNeeded();
+    const syncs = () => relay.calls.filter((c) => c.path === '/v1/tokens/sync').length;
+    expect(syncs()).toBe(1);
+    // Nothing changed: nothing is sent.
+    await push.syncRelayIfNeeded();
+    expect(syncs()).toBe(1);
+
+    const out = await authed(hub, phone, { method: 'POST', url: '/api/v1/auth/logout' });
+    expect(out.statusCode).toBe(204);
+    expect(relay.bindings.size).toBe(1);
+    await push.syncRelayIfNeeded();
+    expect(syncs()).toBe(2);
+    expect(relay.bindings.size).toBe(0);
   });
 
   it('says a token is bound to another hub instead of pushing', async () => {

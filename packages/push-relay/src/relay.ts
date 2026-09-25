@@ -461,7 +461,12 @@ async function sync(env: Env, hub: HubRow, body: Record<string, unknown>, now: n
     );
   }
   await env.DB.batch([
-    env.DB.prepare('UPDATE bindings SET seen_at = ?2 WHERE hub_id = ?1').bind(hub.id, now),
+    // Refreshed at most once a day per binding: D1 counts every row written.
+    env.DB.prepare('UPDATE bindings SET seen_at = ?2 WHERE hub_id = ?1 AND seen_at < ?3').bind(
+      hub.id,
+      now,
+      now - 86_400_000,
+    ),
     env.DB.prepare('UPDATE hubs SET last_seen_at = ?2 WHERE id = ?1').bind(hub.id, now),
   ]);
   const missing = [...wanted]
