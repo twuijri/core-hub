@@ -934,9 +934,12 @@ export const agentsModule = defineModule({
     const service = agentsServiceFor(app);
 
     // `Profile.agent_count` comes from the registry, not from a number auth invents.
-    registerWorkspaceStatsProvider((workspaceId) => ({
+    const unregisterStats = registerWorkspaceStatsProvider((workspaceId) => ({
       agentCount: service.countEnabled(workspaceId),
     }));
+    // Taken back on close, or every hub a process ever built (the test suite builds hundreds)
+    // stays reachable through this one closure, routes and schemas and all.
+    app.addHook('onClose', async () => unregisterStats());
 
     // First boot seeds the catalog; every boot reconciles it against the data volume.
     // Rows the hub creates for itself are attributed to the owner account (domain README).
