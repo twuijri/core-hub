@@ -133,7 +133,7 @@ final class NavigationParityTests: XCTestCase {
     // 7: the agent level is capability-driven, from the adapter — never the client.
     func testTheAgentLevelFollowsCapabilities() throws {
         let m = try manifest()
-        for destination in m.destinations where m.agentLevel.contains(destination.id) {
+        for destination in onIOS(m) where m.agentLevel.contains(destination.id) {
             XCTAssertEqual(DestinationID(rawValue: destination.id)?.capability, destination.capability, destination.id)
         }
         // A fake agent declaring a subset (Claude Code's: skills and MCP) and installed.

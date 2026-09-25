@@ -3,6 +3,7 @@
 import type { Server as SocketServer } from 'socket.io';
 import type { ModuleDb } from '../../lib/db.js';
 import type { FastifyBaseLogger } from 'fastify';
+import type { LinkCodes } from './channel-identities.js';
 
 export interface AuthContext {
   db: ModuleDb;
@@ -24,4 +25,6 @@ export interface AuthContext {
    * (an owner exists, or the window is 0 = token only).
    */
   setupOpenUntil: number | null;
+  /** One-time codes that link a messaging account to a person (contract decision §79). */
+  linkCodes: LinkCodes;
 }

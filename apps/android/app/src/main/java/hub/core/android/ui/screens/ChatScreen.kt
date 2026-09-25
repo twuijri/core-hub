@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.gestures.scrollBy
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.MaterialTheme
@@ -28,7 +29,9 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -37,13 +40,20 @@ import hub.core.android.R
 import hub.core.android.chat.Turns
 import hub.core.android.graph
 import hub.core.android.phone.VoiceButton
+import hub.core.android.chat.AttachmentTray
 import hub.core.android.ui.components.ApprovalCard
+import hub.core.android.ui.components.AttachButton
+import hub.core.android.ui.components.AttachmentChips
 import hub.core.android.ui.components.Composer
 import hub.core.android.ui.components.EmptyState
 import hub.core.android.ui.components.ErrorNotice
 import hub.core.android.ui.components.Loading
 import hub.core.android.ui.components.Notice
 import hub.core.android.ui.components.QuestionCard
+import hub.core.android.ui.components.dismissKeyboardOnTap
+import hub.core.android.ui.components.keyboardSink
+import hub.core.android.ui.components.rememberDismissKeyboardOnScroll
+import hub.core.android.ui.components.rememberKeyboardDismisser
 import hub.core.android.ui.components.ThinkingIndicator
 import hub.core.android.ui.components.Tone
 import hub.core.android.ui.components.TurnView
@@ -86,13 +96,37 @@ fun ChatScreen(
     LaunchedEffect(turns.size, turns.lastOrNull()?.messages?.lastOrNull()?.text?.length) {
         if (turns.isNotEmpty() && (atBottom || listState.firstVisibleItemIndex == 0)) listState.scrollToItem(turns.lastIndex + 1)
     }
+    // The keyboard opening shrinks the list from below: a reader at the latest message stays
+    // there, above the composer. `following` is where the reader left the list after their own
+    // scroll (or ours), so the shrink itself never turns it off.
+    var following by remember { mutableStateOf(true) }
+    LaunchedEffect(listState) {
+        snapshotFlow { listState.isScrollInProgress }.collect { if (!it) following = !listState.canScrollForward }
+    }
+    LaunchedEffect(listState) {
+        var previous = 0
+        snapshotFlow { listState.layoutInfo.viewportSize.height }.collect { height ->
+            val shrunk = previous - height
+            previous = height
+            if (shrunk > 0 && following) listState.scrollBy(shrunk.toFloat())
+        }
+    }
+    val dismissKeyboard = rememberKeyboardDismisser()
+    val dismissOnScroll = rememberDismissKeyboardOnScroll(dismissKeyboard)
     // Reaching the top reads the page before.
     LaunchedEffect(listState) {
         snapshotFlow { listState.firstVisibleItemIndex }.collect { if (it == 0 && ui.hasOlder) vm.loadOlder() }
     }
 
     Column(Modifier.fillMaxSize().imePadding()) {
-        Box(Modifier.weight(1f).fillMaxWidth()) {
+        // A tap on the conversation, or a drag of it, puts the keyboard away.
+        Box(
+            Modifier.weight(1f).fillMaxWidth()
+                .nestedScroll(dismissOnScroll)
+                .dismissKeyboardOnTap(dismissKeyboard)
+                .keyboardSink(dismissKeyboard)
+                .testTag("chat.transcript"),
+        ) {
             when {
                 ui.loading -> Loading()
                 sessionId == null -> DraftIntro(profileName, ui, vm::selectAgent)
@@ -121,19 +155,27 @@ fun ChatScreen(
             ThinkingIndicator(chat.runStartedAt, chat.currentStep, queued = chat.activeRun?.status == RunStatus.QUEUED)
         }
         val agentName = ui.agents.firstOrNull { it.id == ui.agentId }?.name
+        val files by vm.tray.items.collectAsState()
+        AttachmentChips(files, onRemove = vm.tray::remove)
+        val uploading = files.any { it.state == AttachmentTray.State.Uploading }
+        val ready = files.any { it.state is AttachmentTray.State.Ready }
         Composer(
             text = draft,
             onText = { draft = it },
             placeholder = if (agentName != null) stringResource(R.string.chat_placeholder_agent, agentName) else stringResource(R.string.chat_placeholder),
             running = chat.running,
-            sending = ui.sending || (sessionId == null && ui.agentId == null),
+            sending = ui.sending || uploading || (sessionId == null && ui.agentId == null),
             onSend = {
                 val text = draft
                 draft = ""
                 vm.send(text, onCreated)
             },
             onStop = vm::stop,
-            extra = { VoiceButton { spoken -> draft = if (draft.isBlank()) spoken else "$draft $spoken" } },
+            extra = {
+                AttachButton(vm.tray)
+                VoiceButton(profile) { spoken -> draft = if (draft.isBlank()) spoken else "$draft $spoken" }
+            },
+            hasAttachments = ready,
         )
     }
 }

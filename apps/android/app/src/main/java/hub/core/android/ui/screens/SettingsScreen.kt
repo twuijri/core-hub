@@ -169,6 +169,8 @@ private fun NotificationsPage(onOpen: (Route) -> Unit) {
     val scope = rememberCoroutineScope()
     val notices = rememberLoad { context.graph.apis(context.graph.store.current!!).notify.notifyListNotices(limit = 100).items }
     Column(Modifier.fillMaxSize()) {
+        // Whether this phone can show them at all comes first.
+        Column(Modifier.padding(horizontal = 12.dp, vertical = 6.dp)) { hub.core.android.phone.NotificationRows() }
         TextButton(onClick = {
             scope.launch {
                 hubCall { context.graph.apis(context.graph.store.current!!).notify.notifyMarkAllRead(NotifyMarkAllReadRequest()) }

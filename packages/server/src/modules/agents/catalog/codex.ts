@@ -15,7 +15,7 @@ export const codex: CatalogEntry = {
   // Codex talks to OpenAI directly; `OPENAI_BASE_URL` stays the person's business.
   credentials: { openai: 'OPENAI_API_KEY' },
   health: { kind: 'command', args: ['--version'] },
-  capabilities: ['streaming', 'tools', 'approvals', 'mcp'],
+  capabilities: ['streaming', 'tools', 'approvals', 'mcp', 'config_files'],
   sections: ['mcp', 'settings'],
   // codex-acp 0.16 sends no report of Codex's `spawn_agent` delegations (§56).
   subagents: 'none',

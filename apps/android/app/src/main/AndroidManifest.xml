@@ -4,6 +4,8 @@
 
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.CAMERA" />
+    <!-- Dictation the hub transcribes (Voice: Core Hub): the app records the take itself. -->
+    <uses-permission android:name="android.permission.RECORD_AUDIO" />
     <!-- Notices from the hub, shown while no screen of the app is open (Android 13+ asks). -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <!-- Self-update: hand an APK the hub published (and whose SHA-256 matched) to the installer. -->

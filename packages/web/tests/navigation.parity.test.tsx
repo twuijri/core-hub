@@ -147,7 +147,7 @@ describe('navigation parity (web)', () => {
   it('the Agents page and the agent level live under /agents; the old /settings/agents URLs move', () => {
     expect(routeOf('agent_manager')).toBe('/agents');
     for (const id of navigation.agentLevel)
-      expect(routeOf(id)).toMatch(/^\/agents\/:agentId\/[a-z]+$/);
+      expect(routeOf(id)).toMatch(/^\/agents\/:agentId\/[a-z]+(-[a-z]+)*$/);
     expect(agentPageFromPath('/agents/01J8QK3ZR2W7M5N4P6T8V9X0AG/memory')).toEqual({
       id: 'agent_memory',
       agentId: '01J8QK3ZR2W7M5N4P6T8V9X0AG',

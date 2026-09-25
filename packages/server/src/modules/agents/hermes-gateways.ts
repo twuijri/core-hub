@@ -55,6 +55,7 @@
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { createInterface } from 'node:readline';
+import { HUB_ORIGIN_ENV } from './hub-tools/block.js';
 import type { FastifyBaseLogger } from 'fastify';
 import type { RuntimeState } from './adapters/types.js';
 import { activeChannels, ensureWhatsAppBridgePort } from './channels.js';
@@ -257,6 +258,8 @@ class ProfileGateway {
       PYTHONUNBUFFERED: '1',
       // One board, one dispatcher: the default gateway's (see the top of this file).
       HERMES_KANBAN_DISPATCH_IN_GATEWAY: 'false',
+      // A messaging gateway: its calls to the hub's tools are its channel turns' (§79).
+      [HUB_ORIGIN_ENV]: 'gateway',
     });
     let child: SpawnedProcess;
     try {
