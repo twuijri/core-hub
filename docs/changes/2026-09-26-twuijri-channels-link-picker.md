@@ -145,4 +145,7 @@ $ PLAYWRIGHT_CHANNEL=chrome playwright test --workers=1 e2e/zz-agent-tools.spec.
 - PR إلى `main` بالإنجليزية. لا دمج، ولا فرع `test`، ولا صورة.
 - للمالك تأكيده: ترتيب «الأكثر استخدامًا»، وإبقاء Matrix وMattermost بالإنجليزية، و«(Twilio)» في
   اسم الرسائل النصية، وأن إرشادات ديسكورد والبريد خلف زر «كيف تبدأ».
-- نتيجة CI: تُضاف بعد اكتماله.
+- PR: https://github.com/twuijri/core-hub/pull/146
+- CI على الـ PR (`gh pr checks 146`): الفحوص الأربعة عشر كلها `pass`. منها Web smoke journeys
+  (Playwright على المركز الحقيقي، 7m47s)، وServer unit tests بثلاث شرائح، وLint/typecheck/contracts/
+  client tests/build، وAndroid وiOS وDesktop وDocker، وسجل التغيير.
