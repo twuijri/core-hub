@@ -196,6 +196,32 @@ describe("the hub's own tools: the card and the profile's Hermes config", () => 
   });
 });
 
+describe("the hub's own tools: a coding agent over ACP", () => {
+  it('is given the same server with the profile key while the tools are on, and nothing when off', async () => {
+    const { hub: h, agent, root } = await boot();
+    const { hubToolsFor } = await import('../index.js');
+    const workspace = (await authed(h, h.token, { method: 'GET', url: '/api/v1/profiles' }))
+      .json()
+      .items.find((p: { slug: string }) => p.slug === 'default').id as string;
+    expect(hubToolsFor(h.app).acpServersFor(workspace)).toEqual([]);
+    await enable(h, agent, 'default');
+    expect(hubToolsFor(h.app).acpServersFor(workspace)).toEqual([
+      {
+        type: 'http',
+        name: 'corehub',
+        url: 'http://127.0.0.1:8123/api/v1/hub-mcp',
+        headers: [{ name: 'Authorization', value: `Bearer ${keyOf(root)}` }],
+      },
+    ]);
+    await authed(h, h.token, {
+      method: 'PATCH',
+      url: `/api/v1/agents/${agent}/hub-tools`,
+      payload: { enabled: false },
+    });
+    expect(hubToolsFor(h.app).acpServersFor(workspace)).toEqual([]);
+  });
+});
+
 describe("the hub's own tools: the MCP endpoint", () => {
   it('speaks the protocol with the key alone and lists only what the groups offer', async () => {
     const { hub: h, agent, root } = await boot();

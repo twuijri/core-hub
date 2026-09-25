@@ -18,7 +18,9 @@ import type { ModuleDb } from '../../../lib/db.js';
 import { HubError } from '../../../lib/errors.js';
 import { findUser, findWorkspace, type WorkspaceScope } from '../../auth/index.js';
 import { hubToolCalls, hubToolSettings, type HubToolGroupState } from '../schema.js';
-import { HUB_SERVER_NAME, blockInSync, removeBlock, writeBlock } from './block.js';
+import { readEnv } from '../channels.js';
+import type { AcpMcpServer } from '../adapters/acp.js';
+import { HUB_KEY_ENV, HUB_SERVER_NAME, blockInSync, removeBlock, writeBlock } from './block.js';
 import {
   HUB_TOOLS,
   HUB_TOOL_GROUPS,
@@ -234,6 +236,35 @@ export class HubToolsService {
         );
       }
     }
+  }
+
+  /**
+   * The hub's server as a coding agent over ACP is given it in `session/new`: the profile's
+   * own key, read from where the hub wrote it, so the agent acts under the same rules as
+   * Hermes does — the run's owner, that profile only. Nothing while the tools are off.
+   */
+  acpServersFor(workspaceId: string): AcpMcpServer[] {
+    const row = this.row(workspaceId);
+    const url = this.deps.url();
+    if (!row?.enabled || !row.keyHash || !url) return [];
+    const workspace = findWorkspace(this.deps.db, workspaceId);
+    if (!workspace || workspace.id !== workspaceId) return [];
+    const { home } = this.deps.homeOf({
+      id: workspace.id,
+      slug: workspace.slug,
+      name: workspace.name,
+      isDefault: workspace.isDefault,
+    });
+    const key = home ? readEnv(home)[HUB_KEY_ENV] : undefined;
+    if (!key || hashKey(key) !== row.keyHash) return [];
+    return [
+      {
+        type: 'http',
+        name: HUB_SERVER_NAME,
+        url,
+        headers: [{ name: 'Authorization', value: `Bearer ${key}` }],
+      },
+    ];
   }
 
   // -------------------------------------------------------------- the MCP endpoint

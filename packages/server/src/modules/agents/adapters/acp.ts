@@ -140,7 +140,18 @@ export class AcpSession implements AgentSession {
 
   static async connect(
     transport: AcpTransport,
-    options: { cwd: string; clientName: string; clientVersion: string; timeoutMs?: number },
+    options: {
+      cwd: string;
+      clientName: string;
+      clientVersion: string;
+      timeoutMs?: number;
+      /**
+       * MCP servers the hub hands the agent for this session — the hub's own tools (contract
+       * decision §47). An HTTP server goes only to an agent that says it can reach one
+       * (`agentCapabilities.mcpCapabilities.http`); ACP requires every agent to take stdio.
+       */
+      mcpServers?: readonly AcpMcpServer[];
+    },
   ): Promise<{ session: AcpSession; agentCapabilities: Record<string, unknown> }> {
     const client = new AcpSession(transport, '');
     client.listen();
@@ -158,9 +169,17 @@ export class AcpSession implements AgentSession {
         `agent speaks ACP v${String(initialize.protocolVersion)}, the hub speaks v${ACP_PROTOCOL_VERSION}`,
       );
     }
+    const capabilities = initialize.agentCapabilities ?? {};
+    const mcp = (capabilities.mcpCapabilities ?? {}) as { http?: unknown; sse?: unknown };
+    const mcpServers = (options.mcpServers ?? []).filter(
+      (server) =>
+        server.type === 'stdio' ||
+        (server.type === 'http' && mcp.http === true) ||
+        (server.type === 'sse' && mcp.sse === true),
+    );
     const created = (await client.request(
       'session/new',
-      { cwd: options.cwd, mcpServers: [] },
+      { cwd: options.cwd, mcpServers },
       options.timeoutMs,
     )) as { sessionId?: string };
     if (!created.sessionId) throw new Error('agent returned no sessionId');
@@ -373,8 +392,26 @@ function contentText(content: unknown): string | null {
   return null;
 }
 
+/** An MCP server as ACP's `session/new` carries it. */
+export type AcpMcpServer =
+  | {
+      type: 'http' | 'sse';
+      name: string;
+      url: string;
+      headers: Array<{ name: string; value: string }>;
+    }
+  | {
+      type: 'stdio';
+      name: string;
+      command: string;
+      args: string[];
+      env: Array<{ name: string; value: string }>;
+    };
+
 export interface AcpAdapterOptions {
   host: HostEnvironment;
+  /** The MCP servers a session in this target's workspace is given (the hub's own tools). */
+  mcpServers?: (target: AgentTarget) => readonly AcpMcpServer[];
   catalog?: readonly CatalogEntry[];
   clientName?: string;
   clientVersion?: string;
@@ -500,6 +537,7 @@ export function createAcpAdapter(options: AcpAdapterOptions): AgentAdapter {
         cwd: target.cwd ?? process.cwd(),
         clientName,
         clientVersion,
+        mcpServers: options.mcpServers?.(target) ?? [],
       });
       return session;
     },

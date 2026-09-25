@@ -52,7 +52,7 @@ import {
 } from '../auth/index.js';
 import { auditFor, jobRunnerFor } from '../audit/index.js';
 import { createAdapterSet, type AdapterSet, type AdapterSetOptions } from './adapters/index.js';
-import type { AdapterKind } from './adapters/types.js';
+import type { AdapterKind, AgentTarget } from './adapters/types.js';
 import { HERMES_ENTRY } from './catalog/index.js';
 import { HermesRuntime, type HermesRuntimeStatus, type Spawner } from './hermes-runtime.js';
 import { HermesDashboard, type DashboardSpawner } from './hermes-dashboard.js';
@@ -439,6 +439,15 @@ function contextOf(app: FastifyInstance): AgentsContext {
           }
         },
         ...own.adapterOptions?.hermes,
+      },
+      // A coding agent over ACP gets the hub's own tools in its session, when the profile
+      // offers them and the agent can reach an HTTP server (contract decision §47).
+      acp: {
+        mcpServers: (target: AgentTarget) =>
+          target.workspace
+            ? (contexts.get(hub.io)?.hubTools.acpServersFor(target.workspace) ?? [])
+            : [],
+        ...own.adapterOptions?.acp,
       },
       // The hub's own agent reaches the providers through the same port every other
       // agent's credentials come from, looked up per turn because `models` registers it
