@@ -106,6 +106,7 @@ describe('which words are Hermes commands', () => {
       arg: 'look at the diff',
       typed: 'skill code-review',
     });
+    expect(agentCommandOf('/skill Code_Review now')).toMatchObject({ name: 'code-review' });
     for (const text of [
       '/skill',
       '/compress',

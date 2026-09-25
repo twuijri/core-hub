@@ -899,7 +899,25 @@ export function agentCommandOf(
   if (word !== 'skill') return { name: word, arg, typed: word };
   const [skill = ''] = arg.split(/\s+/);
   if (!SKILL_NAME.test(skill)) return null;
-  return { name: skill, arg: arg.slice(skill.length).trim(), typed: `skill ${skill}` };
+  const name = skillCommandName(skill);
+  if (!name) return null;
+  return { name, arg: arg.slice(skill.length).trim(), typed: `skill ${skill}` };
+}
+
+/**
+ * The command Hermes registers a skill under (`agent/skill_commands.py` §slugify_skill_name):
+ * lower case, spaces and underscores as hyphens, anything but word characters and hyphens
+ * dropped, hyphens not doubled nor at the ends. The hub lists a skill by its folder, which is
+ * usually its name already; this makes `Code_Review` and `code-review` the same command.
+ */
+export function skillCommandName(name: string): string {
+  return name
+    .toLowerCase()
+    .replace(/ /g, '-')
+    .replace(/_/g, '-')
+    .replace(/[^\p{L}\p{N}_-]/gu, '')
+    .replace(/-{2,}/g, '-')
+    .replace(/^-+|-+$/g, '');
 }
 
 /** The window Hermes reports with its usage (`context_used` of `context_max`), when it does. */
