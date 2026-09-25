@@ -112,7 +112,7 @@ type OpenAnchor = Anchor & { sessionId: string; phase: AnchorPhase };
  * global agent's page (screens/GlobalAgentScreen.tsx) is this conversation under its own name.
  */
 export function OpenSession(props: OpenSessionProps) {
-  // One voice for the whole conversation: every speaker and voice mode share it (§55).
+  // One voice for the whole conversation: every speaker and voice mode share it (§63).
   return (
     <VoiceProvider>
       <OpenSessionBody {...props} />
@@ -380,7 +380,7 @@ function OpenSessionBody({ sessionId, title: pageTitle, intro }: OpenSessionProp
       null,
   );
 
-  // Voice (contract decision §55): the full-screen stage, and reading replies aloud as
+  // Voice (contract decision §63): the full-screen stage, and reading replies aloud as
   // they finish when the person asked for it — not while the stage speaks them itself.
   const [voiceMode, setVoiceMode] = useState(false);
   const voicePreferences = useVoicePreferences();

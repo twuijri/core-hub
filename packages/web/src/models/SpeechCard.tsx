@@ -1,5 +1,5 @@
 /**
- * The top of the Speech to text and Text to speech tabs (contract decision §55): which
+ * The top of the Speech to text and Text to speech tabs (contract decision §63): which
  * provider this profile speaks through, and that provider's model, language or voice.
  *
  * Before this card the tabs listed providers and said «لم يُختَر مزوّد» with nowhere to

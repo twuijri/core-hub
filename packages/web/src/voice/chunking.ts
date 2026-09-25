@@ -1,5 +1,5 @@
 /**
- * What of a reply is read aloud, and in what pieces (contract decision §55).
+ * What of a reply is read aloud, and in what pieces (contract decision §63).
  *
  * A reply is Markdown. Read as it is, a voice would say "asterisk asterisk", spell out a
  * URL, and recite a whole code block character by character. So before anything reaches

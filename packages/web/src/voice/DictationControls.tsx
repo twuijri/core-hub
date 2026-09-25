@@ -1,5 +1,5 @@
 /**
- * The composer's voice controls (contract decision §55): the microphone, its options menu,
+ * The composer's voice controls (contract decision §63): the microphone, its options menu,
  * and the one line that says what dictation is doing or why it could not.
  *
  * - The mic records while pressed once and transcribes when pressed again; the words land in

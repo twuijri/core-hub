@@ -1,5 +1,5 @@
 /**
- * Voice on a chat screen (contract decision §55): the one player every speaker button and
+ * Voice on a chat screen (contract decision §63): the one player every speaker button and
  * voice mode share, where its sound comes from, and the person's voice preferences.
  *
  * - The sound is the hub's TTS (`models.synthesize`) whenever the profile's provider is
@@ -8,7 +8,7 @@
  *   to Models.
  * - The preferences are the person's own, on the hub: `Preferences.voice`
  *   (`dictation_language`, `auto_speak`). The web leaves `input_mode` / `output_mode` to the
- *   phones (DECISIONS §55).
+ *   phones (DECISIONS §63).
  */
 import {
   createContext,

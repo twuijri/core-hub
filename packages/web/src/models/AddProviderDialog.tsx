@@ -78,7 +78,7 @@ export function AddProviderDialog({
   );
   const [mode, setMode] = useState<'preset' | 'custom'>('preset');
   // A custom endpoint may be a speech server (Whisper-style `audio/transcriptions`,
-  // `audio/speech`): what it is for is asked, never guessed (DECISIONS §55).
+  // `audio/speech`): what it is for is asked, never guessed (DECISIONS §63).
   const [customKind, setCustomKind] = useState<'llm' | 'stt' | 'tts'>(startKind);
   const [presetId, setPresetId] = useState<string>(offered[0]?.id ?? '');
   const preset = offered.find((item) => item.id === presetId);

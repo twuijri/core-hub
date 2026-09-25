@@ -683,7 +683,7 @@ const scriptedProvider: typeof fetch = async (input) => {
       headers: { 'content-type': 'application/json' },
     });
   if (url.endsWith('/models')) return json({ data: bigCatalogue });
-  // Speech (journey 32, DECISIONS §55): a scripted Whisper that hears one sentence, and a
+  // Speech (journey 32, DECISIONS §63): a scripted Whisper that hears one sentence, and a
   // voice that answers with a tenth of a second of real silence the browser can play.
   if (url.endsWith('/audio/transcriptions')) return json({ text: 'لخّص اجتماع اليوم' });
   if (url.endsWith('/audio/speech')) {

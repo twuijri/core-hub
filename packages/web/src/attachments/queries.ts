@@ -21,7 +21,7 @@
  * contract declares no such operation, and a message's own blocks already carry every
  * file it has, so a list would be a second source of truth. And a dictation is **not an
  * attachment**: the composer's mic sends its take to `models.transcribe` (`voice/`), which
- * keeps nothing (DECISIONS §55).
+ * keeps nothing (DECISIONS §63).
  *
  * Upload progress needs `XMLHttpRequest` — `fetch` cannot report how much of a body it
  * has sent — so the one-shot upload does not go through the generated client. It sends
