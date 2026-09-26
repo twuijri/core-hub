@@ -6,7 +6,6 @@ import android.app.Activity
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
@@ -195,9 +194,10 @@ fun railIcon(destination: String): Int = when (destination) {
 }
 
 /**
- * The drawer, as on iOS: the brand and the profile selector, a compact rail, the Chat | Rooms
- * segments, one search field whose filter button holds the profile and archive choices, and the
- * list — which takes the rest of the height and scrolls with the rail — then the footer.
+ * The drawer, as on iOS: the brand, a compact rail, the Chat | Rooms segments, one search field
+ * whose filter button holds the profile and archive choices, and the list — which takes the rest
+ * of the height and scrolls with the rail — then the footer, where the profile selector sits
+ * beside the account name and the connection dot (owner, 2026-09-26; NAVIGATION.md §1).
  */
 @Composable
 private fun Sidebar(shell: ShellViewModel, nav: Navigator, onClose: () -> Unit) {
@@ -212,7 +212,7 @@ private fun Sidebar(shell: ShellViewModel, nav: Navigator, onClose: () -> Unit) 
             Text(stringResource(R.string.app_name), fontSize = FontTokens.sizeLg.sp, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
             HubIconButton(Lucide.X, stringResource(R.string.menu_close), onClose, size = ControlTokens.heightMd.dp, iconSize = 18.dp)
         }
-        ProfileSwitcher(shell, Modifier.padding(horizontal = 16.dp, vertical = 8.dp))
+        Spacer(Modifier.height(8.dp))
         val go: (Route) -> Unit = { route -> nav.go(route); onClose() }
         val rail: @Composable () -> Unit = {
             Column(Modifier.padding(horizontal = 8.dp)) {
@@ -261,10 +261,10 @@ private fun RailRow(destination: String, selected: Boolean, onClick: () -> Unit)
 }
 
 /**
- * The top selector — always one concrete profile, never «all» (ADR 0016). On the phone it lives
- * here at the top of the drawer instead of a permanent top bar (proposed — owner to confirm):
- * it takes no space from the chat or the board, and the new-chat screen names the profile the
- * chat will be made in.
+ * The profile selector — always one concrete profile, never «all» (ADR 0016). On the phone it is
+ * a small chip in the drawer's footer, beside the account name and the connection dot (owner,
+ * 2026-09-26): no permanent top bar takes space from the chat or the board, and the new-chat
+ * screen names the profile the chat will be made in.
  */
 @Composable
 fun ProfileSwitcher(shell: ShellViewModel, modifier: Modifier = Modifier) {
@@ -273,21 +273,21 @@ fun ProfileSwitcher(shell: ShellViewModel, modifier: Modifier = Modifier) {
     val profiles by shell.profiles.collectAsState()
     val s = session ?: return
     var open by remember { mutableStateOf(false) }
-    val shape = RoundedCornerShape(RadiusTokens.md.dp)
+    val shape = RoundedCornerShape(RadiusTokens.full.dp)
     val current = shell.profileName(s.profile)
     val label = stringResource(R.string.profile_label)
     Box(modifier) {
         Row(
-            Modifier.fillMaxWidth().height(ControlTokens.heightMd.dp).clip(shape).background(t.surface, shape).border(0.5.dp, t.border, shape)
+            Modifier.height(ControlTokens.heightSm.dp).clip(shape).background(t.surface2, shape)
                 .clickable(enabled = profiles.size > 1) { open = true }
                 .semantics { contentDescription = "$label: $current" }
-                .padding(horizontal = 12.dp).testTag("shell.profile"),
+                .padding(horizontal = 8.dp).testTag("shell.profile"),
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            horizontalArrangement = Arrangement.spacedBy(4.dp),
         ) {
-            LucideIcon(Lucide.CircleUserRound, null, size = 16.dp, tint = t.textMuted)
-            Text(current, fontSize = FontTokens.sizeSm.sp, fontWeight = FontWeight.Medium, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
-            if (profiles.size > 1) LucideIcon(Lucide.ChevronsUpDown, null, size = 14.dp, tint = t.textMuted)
+            LucideIcon(Lucide.LayoutGrid, null, size = 12.dp, tint = t.textMuted)
+            Text(current, fontSize = FontTokens.sizeXs.sp, fontWeight = FontWeight.Medium, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false))
+            if (profiles.size > 1) LucideIcon(Lucide.ChevronsUpDown, null, size = 11.dp, tint = t.textMuted)
         }
         HubMenu(open, { open = false }) {
             MenuLabel(label)
@@ -495,13 +495,20 @@ private fun Footer(shell: ShellViewModel, nav: Navigator, onClose: () -> Unit) {
     val s = session ?: return
     Column(Modifier.fillMaxWidth().padding(start = 16.dp, end = 8.dp, top = 6.dp, bottom = 6.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            Text(s.user.displayName.ifBlank { s.user.username }, fontSize = FontTokens.sizeSm.sp, fontWeight = FontWeight.Medium, maxLines = 1, overflow = TextOverflow.Ellipsis)
-            StatusDot(
-                if (connected) t.statusRunning else t.statusBlocked,
-                stringResource(if (connected) R.string.shell_connected else R.string.shell_offline),
-                Modifier.testTag("shell.connection"),
-            )
-            Spacer(Modifier.weight(1f))
+            // The person, the connection and the profile they are in, on one line; the name and
+            // the profile share what the two buttons leave.
+            Row(Modifier.weight(1f), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text(
+                    s.user.displayName.ifBlank { s.user.username }, fontSize = FontTokens.sizeSm.sp, fontWeight = FontWeight.Medium,
+                    maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false),
+                )
+                StatusDot(
+                    if (connected) t.statusRunning else t.statusBlocked,
+                    stringResource(if (connected) R.string.shell_connected else R.string.shell_offline),
+                    Modifier.testTag("shell.connection"),
+                )
+                ProfileSwitcher(shell, Modifier.weight(1f, fill = false))
+            }
             HubIconButton(Lucide.Settings, term("settings"), { nav.go(Route.Settings); onClose() }, size = ControlTokens.heightMd.dp, iconSize = 18.dp, modifier = Modifier.testTag("footer.settings"))
             HubIconButton(Lucide.LogOut, term("sign_out"), shell::signOut, size = ControlTokens.heightMd.dp, iconSize = 18.dp, tint = t.danger, modifier = Modifier.testTag("footer.sign_out"))
         }

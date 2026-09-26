@@ -140,9 +140,7 @@ export function NextRuns({ trigger, profile }: { trigger: Trigger; profile: stri
         timeZone: zone,
       }).format(Date.parse(at));
     } catch {
-      return new Intl.DateTimeFormat(intlLocale(language), options).format(
-        Date.parse(at),
-      );
+      return new Intl.DateTimeFormat(intlLocale(language), options).format(Date.parse(at));
     }
   };
 

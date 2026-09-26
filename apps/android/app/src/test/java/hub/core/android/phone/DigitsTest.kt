@@ -38,6 +38,7 @@ class DigitsTest {
     }
 
     @Test fun `Arabic chosen in the app formats every number with Latin digits`() {
+        Locale.setDefault(Locale.forLanguageTag("ar-SA"))
         val context = Digits.wrap(ApplicationProvider.getApplicationContext(), AppLanguage.AR)
         assertEquals("ar", context.resources.configuration.locales[0].language)
         assertEquals("43 ث", context.getString(R.string.tool_activity_seconds, 43))

@@ -121,8 +121,7 @@ export function ContextRing({
     onOpenChange?.(next);
   };
   const [error, setError] = useState<string | null>(null);
-  const format = (value: number) =>
-    new Intl.NumberFormat(intlLocale(language)).format(value);
+  const format = (value: number) => new Intl.NumberFormat(intlLocale(language)).format(value);
   const percent = percentOf(use);
   const circumference = 2 * Math.PI * 7;
   const label = t(

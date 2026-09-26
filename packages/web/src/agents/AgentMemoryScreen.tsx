@@ -212,8 +212,7 @@ function BudgetMeter({
   testId?: string;
 }) {
   const { t, language } = useI18n();
-  const format = (value: number) =>
-    new Intl.NumberFormat(intlLocale(language)).format(value);
+  const format = (value: number) => new Intl.NumberFormat(intlLocale(language)).format(value);
   const tone = toneOf(count, limit);
   return (
     <div

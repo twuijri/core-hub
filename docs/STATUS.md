@@ -53,6 +53,12 @@ live in them.** A workflow step that waits for a person waits until someone answ
 its approval.
 
 ## Clients
+- **Every client** — since 2026-09-27 (DECISIONS §113, decided by the owner 2026-09-26): **digits
+  are Latin (123) in the Arabic UI too** — web `intlLocale` (`ar-u-nu-latn`), iOS
+  `Locale.latinDigits`, Android `Digits` (`-u-nu-latn` on the activity and the process default,
+  also when following an Arabic phone); no catalogue holds Arabic-Indic digits (`pnpm i18n:check`).
+  On the phones the **profile selector is a small chip in the drawer's footer** beside the account
+  name and the connection dot; it left the top of the drawer.
 - **Web** (`packages/web`): first-run setup, login, chat with streaming,
   approvals and resume — since 2026-09-26 (DECISIONS §112, proposed — owner to confirm) **the
   sidebar folds into a rail of icons** on a wide screen (its toggle, or `Ctrl+Shift+S` / `⌘⇧S`;

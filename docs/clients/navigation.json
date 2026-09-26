@@ -655,7 +655,7 @@
     "global_agent": ["search"]
   },
   "topBarChips": {
-    "$comment": "Not destinations: they switch state in place and never navigate. On web and desktop the profile is switched here, at the top of every screen (owner, 2026-09-24); the footer does not repeat it. Phones: place not decided yet — the owner does not want a permanent top bar eating the chat or task space there.",
+    "$comment": "Not destinations: they switch state in place and never navigate. On web and desktop the profile is switched here, at the top of every screen (owner, 2026-09-24); the footer does not repeat it. Phones (iOS, Android): a small chip in the drawer's footer beside the account name and the connection dot, opening the same picker (owner, 2026-09-26, DECISIONS §113) — no permanent top bar eating the chat or task space there.",
     "workspace": "Switches X-Hub-Profile and refetches (ADR 0005)."
   },
   "footerChips": {

@@ -1226,7 +1226,9 @@ function ChannelRow({
             to={channelHref(conversation.id, inLink(conversation.profile))}
             onClick={() => onOpen?.()}
             className="session-link"
-            title={Number.isNaN(when.getTime()) ? undefined : when.toLocaleString(intlLocale(language))}
+            title={
+              Number.isNaN(when.getTime()) ? undefined : when.toLocaleString(intlLocale(language))
+            }
           >
             <span className="session-title-row">
               <span className="min-w-0 truncate" dir="auto">

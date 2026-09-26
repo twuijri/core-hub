@@ -101,7 +101,9 @@ if (existsSync(path.join(repoRoot, ANDROID_AR))) {
     const text = readFileSync(path.join(repoRoot, ANDROID_AR, name), 'utf8');
     text.split('\n').forEach((line, index) => {
       if (EASTERN_DIGITS.test(line))
-        fail(`android: ${ANDROID_AR}/${name}:${index + 1} has Arabic-Indic digits — digits are Latin (123) everywhere`);
+        fail(
+          `android: ${ANDROID_AR}/${name}:${index + 1} has Arabic-Indic digits — digits are Latin (123) everywhere`,
+        );
     });
   }
   console.log('i18n:check  android: Arabic resources use Latin digits');

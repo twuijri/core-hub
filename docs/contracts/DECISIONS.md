@@ -3570,3 +3570,27 @@ to confirm:
   already holds `whisper-1`, or any model somebody chose, keeps it until a person changes it. The
   OpenAI-compatible transcription adapter still asks for `whisper-1` when a row has no model at all,
   which is what self-hosted Whisper servers answer to.
+
+## 113. Latin digits in every client, also in Arabic; the phone's profile chip sits in the drawer's footer
+
+Decided by the owner on 2026-09-26 (before the apps night), not proposed:
+
+- **Latin digits (123) everywhere.** Every client — web, desktop, iOS, Android, the CLI and the hub's
+  own messages — shows numbers, durations, sizes, dates and times, counts, percentages and version
+  numbers with Latin digits, in the Arabic UI too. Arabic words, plural forms and RTL stay («43 ث»,
+  «12 خطوة», «26 سبتمبر 2026»). Android was the odd one: it followed the Arabic locale's digits
+  («٤٣ ث» in the tool-activity row), while the web and iOS mostly showed Latin. It is done once per
+  client, on the locale used for formatting, not per screen: the web's `intlLocale` (`ar-u-nu-latn`
+  for every `Intl` formatter and `toLocale*String`, guarded by a test that reads the source), iOS's
+  `AppLanguage.locale` / `Locale.latinDigits` (`@numbers=latn`, and byte counts through
+  `ByteCountFormatStyle` with that locale instead of the phone's), Android's `Digits` (the
+  activity's configuration and the process default carry `-u-nu-latn`, so `stringResource`,
+  plurals, `String.format`, `Formatter` and `DateUtils` all agree — also when the app follows an
+  Arabic phone). The string catalogues hold no Arabic-Indic digits either; `pnpm i18n:check` fails
+  on one (the JSON catalogues and Android's `values-ar`). Content the person or the agent wrote is
+  shown as written.
+- **The phone's profile selector is a small chip in the drawer's footer**, beside the account name
+  and the connection dot (iOS and Android), opening the same picker; it left the top of the drawer.
+  Web and desktop keep it in the top bar. It stays what NAVIGATION.md rule 4 says: one concrete
+  profile, never «all», it switches `X-Hub-Profile` in place and never navigates. The header of an
+  agent's pages on iOS keeps its full-width selector, because those pages edit one profile.

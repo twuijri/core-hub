@@ -85,7 +85,7 @@ enum AttachmentRules {
 
     /// A readable size: «3.4 MB».
     static func size(_ bytes: Int) -> String {
-        ByteCountFormatter.string(fromByteCount: Int64(bytes), countStyle: .file)
+        ByteCount.text(Int64(bytes), style: .file)
     }
 }
 

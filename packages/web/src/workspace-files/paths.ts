@@ -3,11 +3,11 @@
  * for the folder itself — the contract's form (`WorkspaceFilePath`). The hub decides what
  * is allowed; these only build and split the strings the page shows and sends.
  */
+import { intlLocale } from '../i18n/index.js';
 
 /** `a/b` + `c` = `a/b/c`; the root joins to the bare name. */
 export function joinPath(folder: string, name: string): string {
   return folder === '' ? name : `${folder}/${name}`;
-import { intlLocale } from '../i18n/index.js';
 }
 
 /** The folder a path is in; `''` for anything at the top. */

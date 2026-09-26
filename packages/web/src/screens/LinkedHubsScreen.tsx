@@ -421,7 +421,9 @@ function PeerLog({ peer }: { peer: Peer }) {
     <ul className="flex flex-col gap-1 text-xs" data-testid="peer-log">
       {events.data.map((event) => (
         <li key={event.id} data-testid="peer-log-line" data-ok={String(event.ok)}>
-          <span className="text-muted">{new Date(event.created_at).toLocaleString(intlLocale(language))}</span>{' '}
+          <span className="text-muted">
+            {new Date(event.created_at).toLocaleString(intlLocale(language))}
+          </span>{' '}
           {eventText(t, event.kind)}
           {event.detail && (
             <span className="text-muted" dir="auto">
