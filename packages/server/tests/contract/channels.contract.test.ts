@@ -156,4 +156,31 @@ describe.skipIf(!doc)('contract: messaging platforms linked by credentials', () 
       payload: { mode: 'bot' },
     });
   });
+
+  it('sets the header over WhatsApp replies, and refuses where there is none', async () => {
+    // Linked by the test before: the agent's name went over the replies when it became self-chat.
+    const list = await call('agents.listChannels', 200, { url: `/agents/${agent}/channels` });
+    expect(
+      (list.items as Array<{ platform: string }>).find((c) => c.platform === 'whatsapp'),
+    ).toMatchObject({
+      link: { mode: 'self-chat', reply_title: expect.any(String) },
+    });
+    const custom = await call('agents.setChannelReplyHeader', 200, {
+      url: `/agents/${agent}/channels/whatsapp/reply-header`,
+      payload: { use: 'custom', title: 'Office assistant' },
+    });
+    expect(custom).toMatchObject({ link: { reply_title: 'Office assistant' } });
+    await call('agents.setChannelReplyHeader', 200, {
+      url: `/agents/${agent}/channels/whatsapp/reply-header`,
+      payload: { use: 'agent_name' },
+    });
+    await call('agents.setChannelReplyHeader', 400, {
+      url: `/agents/${agent}/channels/whatsapp/reply-header`,
+      payload: { use: 'custom', title: '' },
+    });
+    await call('agents.setChannelReplyHeader', 409, {
+      url: `/agents/${agent}/channels/telegram/reply-header`,
+      payload: { use: 'agent_name' },
+    });
+  });
 });

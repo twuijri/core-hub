@@ -137,11 +137,15 @@ function hub(
     applies?: 'now' | 'on_restart';
     mode?: 'bot' | 'self-chat';
     restartNeeded?: boolean;
+    /** The hub does not run Hermes: no gateway to speak for. */
+    unmanaged?: boolean;
+    replyTitle?: string | null;
   } = {},
 ) {
   const sent: Sent[] = [];
   let linked = options.linked ?? true;
   let mode = options.mode ?? 'bot';
+  let replyTitle = options.replyTitle ?? null;
   let pending = [
     {
       platform: 'whatsapp',
@@ -184,6 +188,7 @@ function hub(
           account_phone: '966500000000',
           account_username: null,
           mode,
+          reply_title: mode === 'self-chat' ? replyTitle : null,
         }
       : {
           linked: false,
@@ -222,12 +227,14 @@ function hub(
     if (path.endsWith('/channels') && method === 'GET') {
       return json({
         items: [whatsapp()],
-        gateway: {
-          profile: 'manger',
-          state: linked ? 'running' : 'stopped',
-          applies: options.applies ?? 'now',
-          error: null,
-        },
+        gateway: options.unmanaged
+          ? null
+          : {
+              profile: 'manger',
+              state: linked ? 'running' : 'stopped',
+              applies: options.applies ?? 'now',
+              error: null,
+            },
       });
     }
     if (path.endsWith('/channels/whatsapp/unlink')) {
@@ -236,6 +243,11 @@ function hub(
     }
     if (path.endsWith('/channels/whatsapp/mode') && method === 'PUT') {
       mode = (JSON.parse(String(init.body)) as { mode: 'bot' | 'self-chat' }).mode;
+      return json(whatsapp());
+    }
+    if (path.endsWith('/channels/whatsapp/reply-header') && method === 'PUT') {
+      const body = JSON.parse(String(init.body)) as { use: string; title?: string };
+      replyTitle = body.use === 'custom' ? body.title! : AGENT.name;
       return json(whatsapp());
     }
     if (path.endsWith('/channels/whatsapp/login') && method === 'POST') {
@@ -330,7 +342,9 @@ describe('a linked WhatsApp on the Channels page', () => {
     expect(screen.queryByTestId('channel-login-whatsapp')).toBeNull();
     expect(screen.queryByTestId('channel-pair-whatsapp')).toBeNull();
     expect(screen.getByTestId('channel-unlink-whatsapp')).toBeTruthy();
-    // Plain words: message the number from another account, approve the first request here.
+    // Plain words, behind «كيف تبدأ»: message the number from another account, approve here.
+    expect(screen.queryByTestId('channel-how-to-use')).toBeNull();
+    fireEvent.click(screen.getByTestId('channel-guide-whatsapp'));
     const how = screen.getByTestId('channel-how-to-use');
     expect(how.textContent).toContain('+966500000000');
     // In WhatsApp's own card, not over the page.
@@ -358,9 +372,99 @@ describe('a linked WhatsApp on the Channels page', () => {
   it('in the default profile, says a change waits for the Restart', async () => {
     const { fetchImpl } = hub({ applies: 'on_restart' });
     mount(`/agents/${HERMES}/channels`, fetchImpl);
-    await screen.findByTestId('channel-how-to-use');
+    await screen.findByTestId('channel-guide-whatsapp');
     expect(screen.queryByTestId('channel-gateway-state')).toBeNull();
     expect(screen.getByTestId('channel-gateway-note')).toBeTruthy();
+  });
+});
+
+describe('«كيف تبدأ» and when a change applies', () => {
+  it('is closed on every visit, even with nobody approved and somebody waiting', async () => {
+    const { fetchImpl } = hub();
+    mount(`/agents/${HERMES}/channels`, fetchImpl);
+    const button = await screen.findByTestId('channel-guide-whatsapp');
+    // A sender waits: the card links to the Approvals, the guide stays closed.
+    expect(await screen.findByTestId('channel-waiting-whatsapp')).toBeTruthy();
+    expect(button.getAttribute('aria-expanded')).toBe('false');
+    expect(screen.queryByTestId('channel-how-to-use')).toBeNull();
+    fireEvent.click(button);
+    expect(screen.getByTestId('channel-how-to-use').textContent).toMatch(/«الموافقات»|“Approvals”/);
+  });
+
+  it('where the hub runs Hermes, says nothing about restarting it', async () => {
+    const { fetchImpl } = hub();
+    mount(`/agents/${HERMES}/channels`, fetchImpl);
+    fireEvent.click(await screen.findByTestId('channel-guide-whatsapp'));
+    expect(screen.getByTestId('channel-gateway-note').textContent).not.toMatch(
+      /restart it|أعد تشغيله/,
+    );
+    expect(screen.getByTestId('channel-list').textContent).not.toMatch(
+      /restart Hermes|أعد تشغيل هرمز/,
+    );
+  });
+
+  it('where the hub does not run Hermes, the page says to restart it', async () => {
+    const { fetchImpl } = hub({ unmanaged: true });
+    mount(`/agents/${HERMES}/channels`, fetchImpl);
+    await screen.findByTestId('channel-guide-whatsapp');
+    expect(screen.getByTestId('channel-gateway-note').textContent).toMatch(
+      /restart it for a change|أعد تشغيله ليسري/,
+    );
+    expect(screen.queryByTestId('channel-gateway-state')).toBeNull();
+  });
+});
+
+describe('«عنوان الردود» over the agent’s replies in “Message yourself”', () => {
+  it('is offered in self-chat only', async () => {
+    const { fetchImpl } = hub({ mode: 'bot' });
+    mount(`/agents/${HERMES}/channels`, fetchImpl);
+    await screen.findByTestId('channel-mode-whatsapp');
+    expect(screen.queryByTestId('channel-reply-header-whatsapp')).toBeNull();
+  });
+
+  it('with nothing written, says Hermes’s header shows and saves the agent’s name', async () => {
+    const { fetchImpl, sent } = hub({ mode: 'self-chat', replyTitle: null });
+    mount(`/agents/${HERMES}/channels`, fetchImpl);
+    fireEvent.click(await screen.findByTestId('channel-reply-header-whatsapp'));
+    const dialog = await screen.findByTestId('channel-reply-header-dialog');
+    expect(within(dialog).getByTestId('channel-reply-header-hermes')).toBeTruthy();
+    const radios = within(dialog).getAllByRole('radio');
+    expect(radios).toHaveLength(2);
+    expect(radios[0]!.getAttribute('aria-checked')).toBe('true');
+    expect(radios[0]!.parentElement!.textContent).toContain('Hermes');
+    expect(within(dialog).getByTestId('channel-reply-header-preview').textContent).toContain(
+      '────────────',
+    );
+    fireEvent.click(within(dialog).getByTestId('channel-reply-header-save'));
+    await waitFor(() => expect(screen.queryByTestId('channel-reply-header-dialog')).toBeNull());
+    expect(sent.find((call) => call.path.endsWith('/reply-header'))).toMatchObject({
+      method: 'PUT',
+      profile: 'manger',
+      body: { use: 'agent_name' },
+    });
+  });
+
+  it('takes a typed title, and saving the same one is not a change', async () => {
+    const { fetchImpl, sent } = hub({ mode: 'self-chat', replyTitle: AGENT.name });
+    mount(`/agents/${HERMES}/channels`, fetchImpl);
+    fireEvent.click(await screen.findByTestId('channel-reply-header-whatsapp'));
+    const dialog = await screen.findByTestId('channel-reply-header-dialog');
+    expect(within(dialog).queryByTestId('channel-reply-header-hermes')).toBeNull();
+    const save = within(dialog).getByTestId('channel-reply-header-save') as HTMLButtonElement;
+    expect(save.disabled).toBe(true);
+    fireEvent.click(within(dialog).getAllByRole('radio')[1]!);
+    const input = within(dialog).getByTestId('channel-reply-header-text');
+    // Nothing typed yet: nothing to save.
+    expect(save.disabled).toBe(true);
+    fireEvent.change(input, { target: { value: '  مساعد   المكتب ' } });
+    expect(within(dialog).getByTestId('channel-reply-header-preview').textContent).toContain(
+      'مساعد المكتب',
+    );
+    fireEvent.click(save);
+    await waitFor(() => expect(screen.queryByTestId('channel-reply-header-dialog')).toBeNull());
+    expect(sent.find((call) => call.path.endsWith('/reply-header'))).toMatchObject({
+      body: { use: 'custom', title: 'مساعد المكتب' },
+    });
   });
 });
 
@@ -469,6 +573,7 @@ describe("WhatsApp's mode: «بوت» or «أنا»", () => {
     mount(`/agents/${HERMES}/channels`, fetchImpl);
     const badge = await screen.findByTestId('channel-mode-whatsapp');
     expect(badge.getAttribute('data-mode')).toBe('self-chat');
+    fireEvent.click(screen.getByTestId('channel-guide-whatsapp'));
     const how = await screen.findByTestId('channel-how-to-use');
     expect(how.getAttribute('data-mode')).toBe('self-chat');
     expect(how.textContent).toMatch(/مراسلة نفسي|Message yourself/);

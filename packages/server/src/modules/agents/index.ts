@@ -135,6 +135,9 @@ import {
   unlinkPlatform,
   readEnv,
   setWhatsAppMode,
+  setWhatsAppReplyTitle,
+  defaultReplyTitle,
+  cleanReplyTitle,
   telegramToken,
   TELEGRAM_TOKEN,
   whatsappLink,
@@ -1112,6 +1115,10 @@ export const agentsModule = defineModule({
     const skillHome = (request: FastifyRequest, agentId: string): string =>
       toolHome(request, agentId).home;
 
+    /** The agent's name as the hub shows it to the person asking. */
+    const agentNameOf = (request: FastifyRequest, agentId: string): string =>
+      contextOf(request.server).service.get(scopeOf(request), agentId, request.language).name;
+
     /** Hermes's API for the tools that need Hermes to act, or the reason there is none. */
     const hermesApiOf = (request: FastifyRequest, agentId: string): HermesApiCall => {
       const api = contextOf(request.server).hermesApi();
@@ -1930,6 +1937,7 @@ export const agentsModule = defineModule({
             account_phone: channel.link.accountPhone,
             account_username: channel.link.accountUsername,
             mode: channel.link.mode,
+            reply_title: channel.link.replyTitle ?? null,
           }
         : null,
       fields: channel.fields.map((field) => ({
@@ -2147,11 +2155,65 @@ export const agentsModule = defineModule({
         const { runtime } = contextOf(request.server);
         let channel: Channel;
         try {
-          channel = await runtime.withGatewayStopped(profile, () => setWhatsAppMode(home, mode));
+          channel = await runtime.withGatewayStopped(profile, () => {
+            // Self-chat replies carry a header: the agent's name where none was written yet.
+            if (mode === 'self-chat') defaultReplyTitle(home, agentNameOf(request, agentId));
+            return setWhatsAppMode(home, mode);
+          });
         } catch (error) {
           return channelFault(error);
         }
         request.log.info({ profile, mode }, 'agents: WhatsApp mode changed');
+        return toChannel(channel, channelStatus(request, profile, channel));
+      },
+    });
+
+    /**
+     * The header over the agent's replies in WhatsApp's self-chat (`channels.ts` §replyPrefixFor):
+     * the agent's name as the hub names it, or a title the person typed. Written to the profile's
+     * `.env`; the gateway serving the profile follows like any other channel change.
+     */
+    defineRoute(app, deps, {
+      operationId: 'agents.setChannelReplyHeader',
+      handler: (request, { params, body }) => {
+        const agentId = params.agent_id as string;
+        const platform = params.platform as string;
+        const { home, profile } = toolHome(request, agentId);
+        if (platform !== 'whatsapp') {
+          throw new HubError('state_invalid', {
+            details: { agent_id: agentId, platform, reason: 'reply_header_not_supported' },
+          });
+        }
+        if (!whatsappLink(home).linked) {
+          throw new HubError('state_invalid', {
+            details: { agent_id: agentId, platform, reason: 'not_linked' },
+          });
+        }
+        const input = body as { use: 'agent_name' | 'custom'; title?: string };
+        let title: string | null;
+        if (input.use === 'custom') {
+          title = cleanReplyTitle(input.title ?? '');
+          if (!title) {
+            throw new HubError('validation_failed', {
+              details: { field: 'title', reason: 'reply_title_invalid' },
+            });
+          }
+        } else {
+          title = cleanReplyTitle(agentNameOf(request, agentId));
+          if (!title) {
+            throw new HubError('state_invalid', {
+              details: { agent_id: agentId, platform, reason: 'agent_name_unusable' },
+            });
+          }
+        }
+        let channel: Channel;
+        try {
+          channel = setWhatsAppReplyTitle(home, title);
+        } catch (error) {
+          return channelFault(error);
+        }
+        followChannels(request, profile);
+        request.log.info({ profile, use: input.use }, 'agents: WhatsApp reply header changed');
         return toChannel(channel, channelStatus(request, profile, channel));
       },
     });
@@ -2485,6 +2547,7 @@ export const agentsModule = defineModule({
         // Asked of the person, never guessed from the number; `bot` is what every link was before.
         const mode: WhatsAppMode = (body as { mode?: WhatsAppMode } | undefined)?.mode ?? 'bot';
         const allowedUsers = readEnv(home).WHATSAPP_ALLOWED_USERS;
+        const agentName = agentNameOf(request, agentId);
         const job = jobRunnerFor(request.server).start(
           {
             kind: 'agents.channel_login',
@@ -2506,6 +2569,8 @@ export const agentsModule = defineModule({
             // Linked: the gateway that serves the profile starts, or starts again, now — the
             // default profile's too — so the number is answered without anyone pressing Restart.
             if (outcome.status === 'connected') {
+              // Self-chat replies carry a header: the agent's name where none was written yet.
+              if (mode === 'self-chat') defaultReplyTitle(home, agentName);
               await contextOf(app)
                 .runtime.channelsChanged(profile)
                 .catch((error: unknown) => {

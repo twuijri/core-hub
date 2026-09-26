@@ -38,7 +38,7 @@ import {
 } from '../../../tests/unit/helpers.js';
 import { hermesPythonRunner } from '../agents/index.js';
 import { parseEnv } from './dotenv.js';
-import { liveModels } from './live-models.js';
+import { CODEX_CLIENT_VERSION, codexClientVersion, liveModels } from './live-models.js';
 import { hermesSignInRuntime, type DashboardRequest } from './sign-in.js';
 
 function python(): string | null {
@@ -92,15 +92,21 @@ def resolve_xai_oauth_runtime_credentials(force_refresh=False):
     return {"api_key": os.environ["STUB_TOKEN"], "base_url": os.environ["STUB_XAI_BASE"]}
 `;
 
-/** Codex models per account, in the backend's own shape (`priority`, `visibility`). */
-const CATALOGUES: Record<string, unknown[]> = {
+/**
+ * Codex models per account, in the backend's own shape (`priority`, `visibility`,
+ * `minimal_client_version`). As the backend does since the GPT-6 Sol/Luna rollout, a model newer
+ * than the asking client's `client_version` is left out, and `0.0.0` answers the frozen older
+ * list (every model without a minimal version).
+ */
+const CATALOGUES: Record<string, Record<string, unknown>[]> = {
   'acct-pro': [
     { slug: 'gpt-5.5', priority: 5 },
-    { slug: 'gpt-6-sol', priority: 1 },
+    { slug: 'gpt-6-sol', priority: 1, minimal_client_version: '0.155.0' },
     { slug: 'gpt-6-astra', priority: 2 },
-    { slug: 'gpt-6-luna', priority: 3 },
+    { slug: 'gpt-6-luna', priority: 3, minimal_client_version: '0.155.0' },
     { slug: 'gpt-5.6-sol', priority: 4 },
     { slug: 'codex-auto-review', priority: 0, visibility: 'hide' },
+    { slug: 'gpt-7-preview', priority: 0, minimal_client_version: '0.200.0' },
   ],
   'acct-plus': [
     { slug: 'gpt-5.6-sol', priority: 1 },
@@ -149,9 +155,28 @@ beforeAll(async () => {
       };
       if (token === PRO_EXPIRED) return json(401, { error: { message: 'token expired' } });
       const account = String(request.headers['chatgpt-account-id'] ?? '');
-      if (request.url === '/codex/models?client_version=0.0.0') {
+      const asked = new URL(request.url ?? '/', 'http://codex.test');
+      if (asked.pathname === '/codex/models') {
+        const version = asked.searchParams.get('client_version');
+        if (!version) return json(400, { error: { message: 'client_version is required' } });
+        // An account whose backend refuses a version it does not know (as it once did).
+        if (account === 'acct-strict' && version !== '0.0.0') {
+          return json(400, { error: { message: 'unsupported client_version' } });
+        }
+        const newer = (minimal: unknown) => {
+          if (typeof minimal !== 'string') return false;
+          if (version === '0.0.0') return true;
+          const [a, b] = [minimal, version].map((v) => v.split('.').map(Number));
+          for (let i = 0; i < 3; i += 1) {
+            if (a![i]! !== b![i]!) return a![i]! > b![i]!;
+          }
+          return false;
+        };
+        const catalogue = CATALOGUES[account === 'acct-strict' ? 'acct-pro' : account] ?? [];
         // The real backend answers an empty list, with a 200, to a request without the account.
-        return json(200, { models: CATALOGUES[account] ?? [] });
+        return json(200, {
+          models: catalogue.filter((model) => !newer(model.minimal_client_version)),
+        });
       }
       if (request.url === '/xai/v1/models') return json(200, { data: [{ id: 'grok-5' }] });
       if (request.url === '/codex/responses' && request.method === 'POST') {
@@ -221,6 +246,9 @@ describe.skipIf(!PY)('the providerâ€™s own model list for a signed-in account (Â
     // No `-900k` names and no curated extras: only what the backend listed.
     expect(JSON.stringify(pro)).not.toContain('900k');
     const asked = seen.find((entry) => entry.url.startsWith('/codex/models'));
+    // Asked as the Codex CLI release the hub names, not as `0.0.0`, which the backend answers
+    // with a frozen list that lacks gpt-6-sol and gpt-6-luna.
+    expect(asked?.url).toBe(`/codex/models?client_version=${CODEX_CLIENT_VERSION}`);
     expect(asked?.headers['chatgpt-account-id']).toBe('acct-pro');
     expect(asked?.headers.authorization).toBe(`Bearer ${PRO}`);
 
@@ -230,6 +258,54 @@ describe.skipIf(!PY)('the providerâ€™s own model list for a signed-in account (Â
       'openai-codex',
     );
     expect(plus.ok && plus.models.map((model) => model.id)).toEqual(['gpt-5.6-sol', 'gpt-5.5']);
+  });
+
+  it('sends the Codex client version: a newer one lists more, and the old 0.0.0 lists the frozen set', async () => {
+    const home = mkdtempSync(path.join(work, 'home-'));
+    const ids = async (version: string) => {
+      const listed = await liveModels(
+        runner(() => ({ STUB_TOKEN: PRO })),
+        home,
+        'openai-codex',
+        version,
+      );
+      return listed.ok ? listed.models.map((model) => model.id) : [];
+    };
+    expect(await ids('0.0.0')).toEqual(['gpt-6-astra', 'gpt-5.6-sol', 'gpt-5.5']);
+    expect(await ids('0.157.0')).toEqual([
+      'gpt-6-sol',
+      'gpt-6-astra',
+      'gpt-6-luna',
+      'gpt-5.6-sol',
+      'gpt-5.5',
+    ]);
+    expect(await ids('0.200.0')).toContain('gpt-7-preview');
+    // The version is the Codex CLI's, overridable from the hub's environment, never made up.
+    expect(CODEX_CLIENT_VERSION).toMatch(/^0\.\d+\.\d+$/);
+    expect(codexClientVersion({ COREHUB_CODEX_CLIENT_VERSION: '0.201.0' })).toBe('0.201.0');
+    expect(codexClientVersion({ COREHUB_CODEX_CLIENT_VERSION: 'latest' })).toBe(
+      CODEX_CLIENT_VERSION,
+    );
+    expect(codexClientVersion({})).toBe(CODEX_CLIENT_VERSION);
+  });
+
+  it('asks as 0.0.0 once more when the backend refuses the version', async () => {
+    const home = mkdtempSync(path.join(work, 'home-'));
+    seen.length = 0;
+    const listed = await liveModels(
+      runner(() => ({ STUB_TOKEN: tokenFor('acct-strict', 'fresh') })),
+      home,
+      'openai-codex',
+    );
+    expect(listed.ok && listed.models.map((model) => model.id)).toEqual([
+      'gpt-6-astra',
+      'gpt-5.6-sol',
+      'gpt-5.5',
+    ]);
+    expect(seen.map((entry) => entry.url)).toEqual([
+      `/codex/models?client_version=${CODEX_CLIENT_VERSION}`,
+      '/codex/models?client_version=0.0.0',
+    ]);
   });
 
   it('asks Hermes for a refreshed token once after a 401', async () => {

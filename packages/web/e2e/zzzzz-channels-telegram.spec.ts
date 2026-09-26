@@ -64,6 +64,9 @@ test('31. Telegram linked by a bot token: the steps, the bot named, approvals, a
   await expect(page.getByTestId('channel-link-telegram')).toHaveText('مربوط');
   await expect(page.getByTestId('channel-account-telegram')).toContainText('@corehub_e2e_bot');
   await expect(page.getByTestId('channel-account-telegram')).toContainText('مساعد المركز');
+  // «كيف تبدأ» stays closed until it is pressed (the owner, 2026-09-26).
+  await expect(page.getByTestId('telegram-how-to-use')).toHaveCount(0);
+  await page.getByTestId('channel-guide-telegram').click();
   await expect(page.getByTestId('telegram-bot-link')).toHaveAttribute(
     'href',
     'https://t.me/corehub_e2e_bot',

@@ -12,7 +12,7 @@ import { hubPort } from './playwright.config.js';
 const here = path.dirname(fileURLToPath(import.meta.url));
 const appDir = path.resolve(here, '../..');
 // COREHUB_DESKTOP_SMOKE_EXECUTABLE runs the same journeys against a packaged app
-// (release/linux-unpacked/corehub) instead of the development runtime.
+// (release/linux-unpacked/core-hub) instead of the development runtime.
 const packaged = process.env.COREHUB_DESKTOP_SMOKE_EXECUTABLE;
 const executablePath =
   packaged ?? (createRequire(import.meta.url)('electron') as unknown as string);

@@ -6,13 +6,18 @@ import path from 'node:path';
 import { app } from 'electron';
 import { PRODUCT } from '@corehub/contracts';
 import { SCHEME, deepLinkFromArgv } from '../shared/deep-link.js';
+import { userDataPath } from '../shared/user-data.js';
 import { parseConfigLanguage } from './config-store.js';
 import { DesktopController } from './controller.js';
+import { fixLegacyShortcuts } from './legacy-shortcuts.js';
 
-// Tests and portable setups point the app at their own folder; everything the app keeps
-// (settings, each hub's storage partition) lives under it.
-const userData = process.env.COREHUB_DESKTOP_USER_DATA;
-if (userData) app.setPath('userData', path.resolve(userData));
+// Everything the app keeps (settings, each hub's storage partition, the local hub) lives in one
+// folder: the one every earlier release used, pinned by name (src/shared/user-data.ts), or the
+// folder a test or portable setup names.
+app.setPath(
+  'userData',
+  userDataPath(app.getPath('appData'), process.env.COREHUB_DESKTOP_USER_DATA),
+);
 app.setName(PRODUCT.name);
 // The language picked on the first-run screen is also the one the web client starts in
 // (it reads navigator.language until the person chooses in Display).
@@ -58,6 +63,9 @@ if (!app.requestSingleInstanceLock()) {
   // its manifest (electron-builder writes `protocols` there).
   if (app.isPackaged && process.platform !== 'linux' && !windowsStore)
     app.setAsDefaultProtocolClient(SCHEME);
+  // The installed Windows app is `Core Hub.exe` since 1.1.1's `corehub.exe`; shortcuts a person
+  // made to the old one follow it.
+  if (app.isPackaged && process.platform === 'win32' && !windowsStore) fixLegacyShortcuts();
 
   app.on('second-instance', (_event, argv) => {
     controller?.showWindow();

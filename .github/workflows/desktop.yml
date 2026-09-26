@@ -65,12 +65,82 @@ jobs:
       - run: pnpm build
       - name: Package
         run: pnpm --filter @corehub/desktop package ${{ matrix.target }}
+      # The name a person sees is "Core Hub" (1.1.1 shipped `corehub.app` in a `corehub
+      # 1.1.1-arm64` DMG window, `corehub.exe`, `/opt/Core Hub/corehub`); the .deb package, the Linux
+      # desktop entry and window class keep `corehub`. A release of an older tag
+      # (publish-release.yml) still builds the old names, so these run from these changes on.
+      - name: Check the app name (macOS)
+        if: runner.os == 'macOS' && hashFiles('apps/desktop/src/shared/user-data.ts') != ''
+        run: |
+          v="${COREHUB_VERSION:-$(node -p "require('./package.json').version")}"; v="${v#v}"
+          app=$(ls -d apps/desktop/release/mac*/*.app | head -1)
+          echo "bundle: $app"
+          test "$(basename "$app")" = "Core Hub.app"
+          test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleName' "$app/Contents/Info.plist")" = "Core Hub"
+          dmg=$(ls apps/desktop/release/*.dmg | head -1)
+          mount=$(hdiutil attach -nobrowse -readonly "$dmg" | awk -F'\t' '/\/Volumes\//{print $NF}')
+          echo "DMG window: $mount"
+          ls "$mount"
+          status=0
+          test "$mount" = "/Volumes/Core Hub $v" || status=1
+          test -d "$mount/Core Hub.app" || status=1
+          hdiutil detach "$mount" >/dev/null
+          exit $status
+      - name: Check the app name (Linux)
+        if: runner.os == 'Linux' && hashFiles('apps/desktop/scripts/installer.nsh') != ''
+        run: |
+          deb=$(ls apps/desktop/release/*.deb | head -1)
+          test "$(dpkg-deb -f "$deb" Package)" = corehub
+          dir="$RUNNER_TEMP/deb"
+          dpkg-deb -x "$deb" "$dir"
+          entry="$dir/usr/share/applications/corehub.desktop"
+          cat "$entry"
+          grep -qx 'Name=Core Hub' "$entry"
+          grep -qx 'Exec="/opt/Core Hub/core-hub" %U' "$entry"
+          grep -qx 'StartupWMClass=corehub' "$entry"
+          test -x "$dir/opt/Core Hub/core-hub"
+          test ! -e "$dir/opt/Core Hub/corehub"
+      # A machine with 1.1.1's .deb installed (the public release) takes this one: the old binary
+      # and its /usr/bin link go, the new ones come, the menu entry is the same file.
+      - name: Upgrade from 1.1.1 (Linux .deb)
+        if: runner.os == 'Linux' && hashFiles('apps/desktop/scripts/installer.nsh') != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          old="$RUNNER_TEMP/old"
+          gh release download v1.1.1 --repo "$GITHUB_REPOSITORY" --pattern 'corehub_1.1.1_amd64.deb' --dir "$old"
+          sudo apt-get update -qq
+          sudo apt-get install -y "$old/corehub_1.1.1_amd64.deb"
+          test -x "/opt/Core Hub/corehub"
+          ls -l /usr/bin/corehub
+          sudo dpkg -i "$(ls "$PWD"/apps/desktop/release/*.deb | head -1)"
+          ls -l /usr/bin/core-hub /usr/bin/corehub "/opt/Core Hub" 2>&1 | head -40 || true
+          test -x "/opt/Core Hub/core-hub"
+          test ! -e "/opt/Core Hub/corehub"
+          test "$(readlink -f /usr/bin/core-hub)" = "/opt/Core Hub/core-hub"
+          test ! -e /usr/bin/corehub && test ! -L /usr/bin/corehub
+          grep -qx 'Exec="/opt/Core Hub/core-hub" %U' /usr/share/applications/corehub.desktop
+          sudo dpkg -r corehub
+          test ! -e "/opt/Core Hub/core-hub" && test ! -L /usr/bin/core-hub
+      - name: Check the app name and upgrade from 1.1.1 (Windows)
+        if: runner.os == 'Windows' && hashFiles('apps/desktop/scripts/installer.nsh') != ''
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          if (-not (Test-Path 'apps/desktop/release/win-unpacked/Core Hub.exe')) { throw 'win-unpacked has no Core Hub.exe' }
+          if (Test-Path 'apps/desktop/release/win-unpacked/corehub.exe') { throw 'win-unpacked still has corehub.exe' }
+          $v = if ($env:COREHUB_VERSION) { $env:COREHUB_VERSION } else { node -p "require('./package.json').version" }
+          $v = $v -replace '^v', ''
+          $exe = Get-ChildItem apps/desktop/release/Core-Hub-Setup-*.exe | Select-Object -First 1
+          ./apps/desktop/scripts/nsis-upgrade-smoke.ps1 -Installer $exe.FullName -Version $v
       # On Linux the three smoke journeys also run against the packaged app, embedded hub and all.
       - name: Smoke test the packaged app
         if: runner.os == 'Linux'
         run: |
           command -v xvfb-run || (sudo apt-get update && sudo apt-get install -y xvfb)
-          COREHUB_DESKTOP_SMOKE_EXECUTABLE="$PWD/apps/desktop/release/linux-unpacked/corehub" \
+          COREHUB_DESKTOP_SMOKE_EXECUTABLE="$PWD/apps/desktop/release/linux-unpacked/core-hub" \
             xvfb-run -a pnpm --filter @corehub/desktop test:smoke
       # The version every Windows check expects: the stamped one, else the root package.json's.
       # The MSIX steps need this change's packaging; a release of an older tag (v1.1.0, through

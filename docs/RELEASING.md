@@ -256,7 +256,7 @@ change (for example 1.1.1: bump the root `package.json`, `pnpm version:check --w
 
 ## The download page (`site/`, GitHub Pages)
 
-**https://twuijri.github.io/core-hub/** — one static page, Arabic first with an English toggle,
+**https://twuijri.github.io/core-hub/** — one static page, English first (owner, 2026-09-26) with an Arabic toggle,
 light and dark with the system. It offers the latest release's files for the visitor's system
 (Windows `.exe`, the Apple silicon `.dmg`, Linux AppImage and `.deb`, the Android `.apk`), the
 store buttons, and a short "Run your own hub" section with the Docker image.

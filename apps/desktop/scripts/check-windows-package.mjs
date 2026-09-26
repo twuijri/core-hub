@@ -47,9 +47,14 @@ function checkMsix(dir, version) {
   has('<Resource Language="en-US" />', 'English');
   has('<Resource Language="ar" />', 'Arabic');
   has('<uap:Protocol Name="corehub">', 'the corehub:// protocol');
-  has('Executable="app\\corehub.exe"', 'app\\corehub.exe as the executable');
+  has('Executable="app\\Core Hub.exe"', 'app\\Core Hub.exe as the executable');
   has('<rescap:Capability Name="runFullTrust"/>', 'runFullTrust');
-  expect(existsSync(path.join(dir, 'app', 'corehub.exe')), 'app\\corehub.exe is missing');
+  // A package stores the space of a file name as %20 (an OPC part name); Windows installs
+  // `Core Hub.exe`. A folder extracted with a plain zip tool keeps the encoded name.
+  expect(
+    ['Core Hub.exe', 'Core%20Hub.exe'].some((name) => existsSync(path.join(dir, 'app', name))),
+    'app\\Core Hub.exe is missing',
+  );
   expect(
     existsSync(path.join(dir, 'app', 'resources', 'hub', 'dist', 'app', 'hub.mjs')),
     'the embedded hub is missing',

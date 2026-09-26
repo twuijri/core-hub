@@ -30,7 +30,7 @@ import { tmpdir, userInfo } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { LIVE_MODELS_PROGRAM } from './live-models.js';
+import { CODEX_CLIENT_VERSION, LIVE_MODELS_PROGRAM } from './live-models.js';
 
 const image = process.env.COREHUB_HERMES_IMAGE;
 const PYTHON = '/opt/hermes/.venv/bin/python';
@@ -157,7 +157,10 @@ describe.skipIf(!image)(
       });
 
     it("lists the account's models with Hermes's own resolver and identity headers", async () => {
-      const run = await docker(['-c', LIVE_MODELS_PROGRAM, 'openai-codex'], {});
+      const run = await docker(
+        ['-c', LIVE_MODELS_PROGRAM, 'openai-codex', CODEX_CLIENT_VERSION],
+        {},
+      );
       const line = run.stdout.trim().split('\n').pop() ?? '';
       expect(JSON.parse(line), run.stderr).toEqual({
         ok: true,
@@ -167,7 +170,7 @@ describe.skipIf(!image)(
         ],
       });
       const asked = seen.find((entry) => entry.url.startsWith('/codex/models'));
-      expect(asked?.url).toBe('/codex/models?client_version=0.0.0');
+      expect(asked?.url).toBe(`/codex/models?client_version=${CODEX_CLIENT_VERSION}`);
       expect(asked?.headers['chatgpt-account-id']).toBe('acct-real-test');
       // Hermes's identity for a non-official Codex address.
       expect(asked?.headers.originator).toBeTruthy();

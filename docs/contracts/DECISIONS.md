@@ -2543,6 +2543,19 @@ Not changed here: the speech providers (ElevenLabs lists voices, not models; its
 is a setting, not a list) and the presets' default model settings. The hub's adapters for key
 providers already ask the provider; none keeps a list.
 
+**Amended 2026-09-26 (the list was still short on the owner's Pro account).** The Codex backend
+reads `client_version` as the asking Codex CLI's version and leaves out every model whose
+`minimal_client_version` is newer; `0.0.0` now answers a frozen older list (`gpt-6-astra`, the
+5.6 trio, `gpt-5.5`) without `gpt-6-sol` / `gpt-6-luna`. The hub asks as the latest Codex CLI
+release, as the Codex CLI itself does with its own version (`CODEX_CLIENT_VERSION` in
+`live-models.ts`, 0.157.0 = openai/codex `rust-v0.157.0`; bump it to the newest `rust-v*` tag, or
+set `COREHUB_CODEX_CLIENT_VERSION` in the hub's environment), and asks `0.0.0` once more only when
+that version is refused or lists nothing. CLI Proxy API's longer list is not the backend's: its
+Codex list is a static catalogue per plan kept in its code, `gpt-oss-120b-medium` is another
+provider's (Antigravity) in the same "GPT" group, and `gpt-image-1.5` / `gpt-image-2` are image
+names its own Images endpoint maps onto the Codex image tool. None of those is added here;
+`gpt-image-1.5` stays out until it is seen drawing through a real subscription (§84).
+
 ## 84. The ChatGPT subscription draws through the Codex backend's image tool
 
 The owner (2026-09-25): his CLI Proxy API instance on the same ChatGPT account offers `gpt-image-2`
@@ -2624,6 +2637,41 @@ owner to confirm:
 Rejected: guessing the mode from the number, which cannot be known; Hermes's own `…/apply`,
 which runs `hermes gateway restart` and in a container starts a second gateway inside the
 dashboard process.
+
+The header over self-chat replies: §86.
+
+## 86. The header over WhatsApp self-chat replies is the agent's name, or a typed title
+
+The owner (2026-09-26, hub 1.1.1, approved: «ممتاز»): in «أنا (مراسلة نفسي)» every reply of the
+agent starts with Hermes's «☤ *Hermes Agent*» over a rule; it should name the agent.
+
+Observed (ADR 0012; Hermes v2026.9.14, MIT): in `self-chat` the owner and the agent write from one
+number, so Hermes's WhatsApp bridge puts a header over every reply (`bot` replies carry none).
+`WHATSAPP_REPLY_PREFIX` in the profile's `.env` replaces Hermes's own, a written `\n` being a line
+break. Hermes's Python side reads an empty value as "no header", but its adapter drops an empty
+variable from the bridge's environment and the bridge then sends its own default header — tried
+on the real Hermes in the image, with its adapter and the bridge's own formatting code. Proposed,
+owner to confirm:
+
+- **`agents.setChannelReplyHeader`** (WhatsApp only; `409 reply_header_not_supported` elsewhere,
+  `409 not_linked` with no phone): `use: agent_name` — the agent's name as the hub shows it
+  (`Agent.name`), read when written — or `use: custom` with a `title` (one line, 1–64 characters).
+  The hub writes `*<title>*`, Hermes's rule, a line break: the shape of Hermes's own header with
+  another title. The gateway serving the profile follows like any channel change (§85).
+  `ChannelLink.reply_title` reads it back; null while nothing usable is written (Hermes's own).
+- **The default is the agent's name**, written when a number is linked in `self-chat` or switched
+  to it and nothing is written yet. Links made before are not rewritten when the hub starts: they
+  keep Hermes's header until someone saves the setting or changes the mode. A value written by hand
+  is kept and reads as its text.
+- **No "no header"**: with Hermes v2026.9.14 an empty value still sends Hermes's header, and a
+  header is what tells the owner's messages from the agent's in one chat. If Hermes's bridge takes
+  an empty value one day, `use: none` can be added.
+- Renaming the agent later does not rewrite the header (it then reads as a typed title).
+
+Rejected: `reply_prefix` in the platform's `config.yaml` — the adapter hands it to the bridge only
+while the environment variable is also set, so it adds nothing; faking "no header" with a
+zero-width prefix (Hermes's own code notes WhatsApp renders those as stray characters) or a
+blank-line prefix.
 
 ## 87. An agent's run may ask its person's own computer for files and programs; a computer says what its helper offers
 

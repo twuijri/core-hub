@@ -34,9 +34,9 @@
  *
  * **Telegram links by a bot token.** "Link Telegram" explains @BotFather in plain words, takes the
  * token, and the hub asks Telegram who the bot is before storing it (in the profile's own `.env`,
- * never shown again). Linked, the row names the bot (@username) and the page says how to start:
- * open the bot, send a message, approve the request below. Hermes's outside bot-creation service
- * is not used.
+ * never shown again). Linked, the row names the bot (@username) and «كيف تبدأ» says how to start:
+ * open the bot, send a message, approve the request under «الموافقات». Hermes's outside
+ * bot-creation service is not used.
  *
  * **More platforms link like Telegram.** Discord, Slack, Matrix, Mattermost and Email each have a
  * «ربط <المنصة>» dialog with plain setup steps; the hub asks the platform who the account is
@@ -49,9 +49,13 @@
  * platform's own form. With nothing linked the page is an empty state with the same button. Each
  * platform's "how to start" lives in its own card and dialog, never over the page.
  *
- * **When a change takes effect** is said by the gateway that serves the profile: at once in a
- * named profile (the hub restarts that profile's messaging gateway), after Hermes's Restart in
- * the default one.
+ * **When a change takes effect** is said by the gateway that serves the profile: at once wherever
+ * the hub runs Hermes (it restarts that profile's messaging gateway, the default one's too), so
+ * the page's "restart it" note and the guides' restart step are only for a Hermes the hub does not
+ * run, or an older hub.
+ *
+ * **«عنوان الردود»** (WhatsApp in «مراسلة نفسي»): the header over every reply of the agent — its
+ * name by default, or a typed title (`ReplyHeaderDialog`).
  */
 import { useQueryClient } from '@tanstack/react-query';
 import { useEffect, useState, type ReactNode } from 'react';
@@ -95,6 +99,7 @@ import {
   usePairing,
   useRevokePairing,
   useSetChannelMode,
+  useSetChannelReplyHeader,
   useUnlinkChannel,
   useUpdateChannel,
   type Channel,
@@ -120,6 +125,7 @@ export function AgentChannelsScreen() {
   const [editing, setEditing] = useState<Channel | null>(null);
   const [approvalsOpen, setApprovalsOpen] = useState(false);
   const [changingMode, setChangingMode] = useState<Channel | null>(null);
+  const [changingHeader, setChangingHeader] = useState<Channel | null>(null);
   const [pairing, setPairing] = useState<string | null>(null);
   const [linkingTelegram, setLinkingTelegram] = useState(false);
   const [linking, setLinking] = useState<ChannelPlatform | null>(null);
@@ -136,7 +142,6 @@ export function AgentChannelsScreen() {
   const items = channels.data?.items ?? [];
   const gateway = channels.data?.gateway ?? null;
   const pending = requests.data?.pending ?? [];
-  const approved = requests.data?.approved ?? [];
   const waiting = new Set(pending.map((request) => request.platform));
   const waitingOn = (platform: string) =>
     pending.filter((request) => request.platform === platform).length;
@@ -154,10 +159,6 @@ export function AgentChannelsScreen() {
   const linkedSet = new Set(
     items.filter((channel) => channel.link?.linked).map((channel) => channel.platform),
   );
-  /** Still waiting for its first person: nobody approved on it yet, or a request is waiting. */
-  const starting = (platform: string) =>
-    waiting.has(platform) || !approved.some((sender) => sender.platform === platform);
-
   const pick = (spec: ChannelPlatform) => {
     setPicking(false);
     if (spec.login === 'token') setLinkingTelegram(true);
@@ -250,10 +251,10 @@ export function AgentChannelsScreen() {
                       channel={channel}
                       spec={spec}
                       gateway={gateway}
-                      starting={starting(channel.platform)}
                       waiting={mayApprove ? waitingOn(channel.platform) : 0}
                       onReview={() => setApprovalsOpen(true)}
                       onChangeMode={() => setChangingMode(channel)}
+                      onReplyHeader={() => setChangingHeader(channel)}
                       restart={restartable ? restarter : null}
                       unlinking={unlink.isPending}
                       onUnlink={() => unlink.mutate(channel.platform)}
@@ -278,6 +279,14 @@ export function AgentChannelsScreen() {
           agentId={agentId}
           channel={changingMode}
           onClose={() => setChangingMode(null)}
+        />
+      )}
+      {changingHeader && (
+        <ReplyHeaderDialog
+          agentId={agentId}
+          agentName={agent?.name ?? ''}
+          channel={changingHeader}
+          onClose={() => setChangingHeader(null)}
         />
       )}
       {picking && platforms.data && (
@@ -314,19 +323,19 @@ export function AgentChannelsScreen() {
 }
 
 /**
- * One linked platform. Its "how to start" lives here, not over the page: open while the platform
- * waits for its first person (nobody approved yet, or a request waiting), behind «كيف تبدأ»
- * otherwise.
+ * One linked platform. Its "how to start" lives here, not over the page, closed behind «كيف تبدأ»
+ * until that is pressed (the owner, 2026-09-26: it opened by itself on Telegram every visit). A
+ * sender waiting for approval shows as its own «N بانتظار الموافقة — راجِع» link.
  */
 function ChannelRow({
   agentId,
   channel,
   spec,
   gateway,
-  starting,
   waiting,
   onReview,
   onChangeMode,
+  onReplyHeader,
   restart,
   unlinking,
   onUnlink,
@@ -337,14 +346,14 @@ function ChannelRow({
   channel: Channel;
   spec: ChannelPlatform | null;
   gateway: ChannelGateway | null;
-  /** Nobody approved on it yet, or somebody is waiting for approval. */
-  starting: boolean;
   /** How many senders wait for approval on this platform. */
   waiting: number;
   /** Opens «الموافقات». */
   onReview: () => void;
   /** Opens «تغيير الوضع» (WhatsApp). */
   onChangeMode: () => void;
+  /** Opens «عنوان الردود» (WhatsApp in self-chat). */
+  onReplyHeader: () => void;
   /** Restarts the agent's runtime; null for a person or a runtime that cannot. */
   restart: { restart: () => Promise<void>; pending: boolean } | null;
   unlinking: boolean;
@@ -354,7 +363,7 @@ function ChannelRow({
 }) {
   const { t } = useI18n();
   const [settingsOpen, setSettingsOpen] = useState(false);
-  const [guideOpen, setGuideOpen] = useState<boolean | null>(null);
+  const [guideOpen, setGuideOpen] = useState(false);
   // The platform's name in the reader's language where it has one («تيليجرام»), else its own.
   const name = platformName(channel.platform, t, spec?.label ?? channel.label);
   const hasSettings =
@@ -365,12 +374,8 @@ function ChannelRow({
   const { ask, dialog } = useConfirm();
   const link = channel.link;
   const account = link ? accountOf(link) : '';
-  const guide = link?.linked ? guideOf(channel, spec, gateway) : null;
-  // Pairing platforms open their guide by themselves while they wait for the first person; the
-  // ones that only answer an allowlist never wait, so theirs stays behind the button.
-  const waitsForPeople =
-    channel.platform === 'whatsapp' || channel.platform === 'telegram' || spec?.pairs === true;
-  const showGuide = guide !== null && (guideOpen ?? (starting && waitsForPeople));
+  const guide = link?.linked ? guideOf(channel, spec) : null;
+  const showGuide = guide !== null && guideOpen;
 
   const failed = channel.status === 'error' && channel.error;
   const restartNeeded = channel.restart_needed === true;
@@ -462,6 +467,16 @@ function ChannelRow({
               onClick={onChangeMode}
             >
               {t('channels.mode.change')}
+            </Button>
+          )}
+          {mode === 'self-chat' && (
+            <Button
+              size="sm"
+              variant="ghost"
+              data-testid={`channel-reply-header-${channel.platform}`}
+              onClick={onReplyHeader}
+            >
+              {t('channels.reply_header.open')}
             </Button>
           )}
           {guide && (
@@ -575,18 +590,18 @@ function ChannelRow({
   );
 }
 
-/** The platform's own "how to start", once it is linked; null when it has none. */
-function guideOf(
-  channel: Channel,
-  spec: ChannelPlatform | null,
-  gateway: ChannelGateway | null,
-): ReactNode {
+/**
+ * The platform's own "how to start", once it is linked; null when it has none. No restart step:
+ * where the hub runs Hermes a change applies at once, and where it does not the page's note says
+ * to restart.
+ */
+function guideOf(channel: Channel, spec: ChannelPlatform | null): ReactNode {
   const link = channel.link;
   if (!link?.linked) return null;
   if (channel.platform === 'whatsapp') return <HowToUse link={link} />;
-  if (channel.platform === 'telegram') return <TelegramHowTo link={link} gateway={gateway} />;
+  if (channel.platform === 'telegram') return <TelegramHowTo link={link} />;
   if (channel.login === 'credentials' && spec?.support === 'full') {
-    return <PlatformHowTo spec={spec} gateway={gateway} />;
+    return <PlatformHowTo spec={spec} />;
   }
   return null;
 }
@@ -703,7 +718,7 @@ function HowToUse({ link }: { link: ChannelLink }) {
  * What to do once Telegram is linked: open the bot, send it anything, approve the request here.
  * The bot's address is a link, so the step is one click.
  */
-function TelegramHowTo({ link, gateway }: { link: ChannelLink; gateway: ChannelGateway | null }) {
+function TelegramHowTo({ link }: { link: ChannelLink }) {
   const { t } = useI18n();
   const username = link.account_username;
   const url = username ? `https://t.me/${username}` : null;
@@ -711,7 +726,6 @@ function TelegramHowTo({ link, gateway }: { link: ChannelLink; gateway: ChannelG
     <Notice tone="info">
       <span className="flex flex-col gap-1" data-testid="telegram-how-to-use">
         <strong>{t('channels.telegram.how_title')}</strong>
-        {gateway?.applies === 'on_restart' && <span>{t('channels.how.step_restart')}</span>}
         <span>
           {url ? (
             <>
@@ -893,20 +907,13 @@ function wordsOf(t: (key: string, values?: Record<string, string>) => string) {
 }
 
 /** What to do once a platform is linked, in plain words. */
-function PlatformHowTo({
-  spec,
-  gateway,
-}: {
-  spec: ChannelPlatform;
-  gateway: ChannelGateway | null;
-}) {
+function PlatformHowTo({ spec }: { spec: ChannelPlatform }) {
   const { t } = useI18n();
   const name = platformName(spec.platform, t, spec.label);
   return (
     <Notice tone="info">
       <span className="flex flex-col gap-1" data-testid={`platform-how-${spec.platform}`}>
         <strong>{t('channels.platform.how_title', { name })}</strong>
-        {gateway?.applies === 'on_restart' && <span>{t('channels.how.step_restart')}</span>}
         <span>{t(`channels.platform.${spec.platform}.how`)}</span>
         {spec.pairs && <span>{t('channels.platform.how_pairs')}</span>}
         {spec.allowlist && <span>{t('channels.platform.how_allowlist')}</span>}
@@ -1384,6 +1391,130 @@ function ModeDialog({
           options={options}
           testId="channel-mode-choice"
         />
+      </div>
+    </Dialog>
+  );
+}
+
+/** Hermes's rule under a reply header's title (`channels.ts` §REPLY_RULE on the hub). */
+const REPLY_RULE = '────────────';
+const REPLY_TITLE_MAX = 64;
+
+/**
+ * «عنوان الردود»: in «مراسلة نفسي» the owner and the agent write from one number, so Hermes puts a
+ * header over every reply of the agent. The agent's name (the default) or a typed title, shown as
+ * the reply will start. While nothing is written Hermes's own header shows, and the agent's name is
+ * picked for the person to save. There is no "no header": Hermes's bridge puts its own back.
+ */
+function ReplyHeaderDialog({
+  agentId,
+  agentName,
+  channel,
+  onClose,
+}: {
+  agentId: string | undefined;
+  agentName: string;
+  channel: Channel;
+  onClose: () => void;
+}) {
+  const { t } = useI18n();
+  const setHeader = useSetChannelReplyHeader(agentId);
+  const current = channel.link?.reply_title ?? null;
+  const [use, setUse] = useState<'agent_name' | 'custom'>(
+    current === null || current === agentName ? 'agent_name' : 'custom',
+  );
+  const [text, setText] = useState(current !== null && current !== agentName ? current : '');
+  const title = (use === 'agent_name' ? agentName : text).replace(/\s+/g, ' ').trim();
+  const usable = title !== '' && [...title].length <= REPLY_TITLE_MAX;
+  const unchanged = current !== null && title === current;
+  return (
+    <Dialog
+      open
+      onOpenChange={(open) => !open && onClose()}
+      title={t('channels.reply_header.title')}
+      description={t('channels.reply_header.note')}
+      closeLabel={t('common.cancel')}
+      testId="channel-reply-header-dialog"
+      footer={
+        <>
+          <Button variant="ghost" onClick={onClose}>
+            {t('common.cancel')}
+          </Button>
+          <Button
+            variant="primary"
+            data-testid="channel-reply-header-save"
+            disabled={!usable || unchanged || setHeader.isPending}
+            onClick={() =>
+              setHeader.mutate(
+                {
+                  platform: channel.platform,
+                  header: use === 'custom' ? { use, title } : { use },
+                },
+                { onSuccess: onClose },
+              )
+            }
+          >
+            {t('channels.reply_header.save')}
+          </Button>
+        </>
+      }
+    >
+      <div className="flex flex-col gap-3">
+        {current === null && (
+          <p className="text-sm text-muted" data-testid="channel-reply-header-hermes">
+            {t('channels.reply_header.hermes_now')}
+          </p>
+        )}
+        <Radio
+          label={t('channels.reply_header.title')}
+          value={use}
+          onChange={(next) => setUse(next as 'agent_name' | 'custom')}
+          options={[
+            {
+              value: 'agent_name',
+              label: agentName
+                ? t('channels.reply_header.agent_name', { name: agentName })
+                : t('channels.reply_header.agent_name_plain'),
+            },
+            { value: 'custom', label: t('channels.reply_header.custom') },
+          ]}
+          testId="channel-reply-header-choice"
+        />
+        {use === 'custom' && (
+          <Field
+            label={t('channels.reply_header.custom_label')}
+            hint={t('channels.reply_header.custom_hint')}
+          >
+            {(props) => (
+              <Input
+                {...props}
+                dir="auto"
+                autoComplete="off"
+                maxLength={REPLY_TITLE_MAX}
+                value={text}
+                data-testid="channel-reply-header-text"
+                onChange={(event) => setText(event.target.value)}
+              />
+            )}
+          </Field>
+        )}
+        {usable && (
+          <div className="flex flex-col gap-1 text-sm">
+            <span className="text-muted">{t('channels.reply_header.preview')}</span>
+            <div
+              className="rounded-md border border-line p-2"
+              data-testid="channel-reply-header-preview"
+            >
+              <strong dir="auto">{title}</strong>
+              <div aria-hidden="true">{REPLY_RULE}</div>
+              <span className="text-muted">{t('channels.reply_header.preview_body')}</span>
+            </div>
+          </div>
+        )}
+        <p className="text-xs text-muted">{t('channels.reply_header.no_none')}</p>
+        {setHeader.isError && (
+          <Notice tone="danger">{describeToolError(setHeader.error, t)}</Notice>
+        )}
       </div>
     </Dialog>
   );

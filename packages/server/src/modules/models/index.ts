@@ -51,6 +51,7 @@ import { DataKeyRing } from './crypto.js';
 import { SecretStore } from './secrets.js';
 import { roleForAdapter } from './defaults.js';
 import { hermesSignInRuntime, type SignInRuntime } from './sign-in.js';
+import { codexClientVersion } from './live-models.js';
 import {
   ModelsService,
   type HermesTarget,
@@ -252,6 +253,8 @@ function contextOf(app: FastifyInstance): ModelsService {
               if (!existsSync(python)) return null;
               return hermesPythonRunner({ python, env: () => runtime.cliEnv(), timeoutMs: 45_000 });
             },
+            // The hub's environment may move the version without a release.
+            clientVersion: () => codexClientVersion(hub.config.hostEnv.inherited ?? {}),
             home: (profile) => {
               const home = runtime.status().home;
               if (!home) return null;
