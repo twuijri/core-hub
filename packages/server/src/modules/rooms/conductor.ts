@@ -206,7 +206,7 @@ export class Conductor implements RoomLive {
   }
 
   /**
-   * The files people posted since the seat's last turn (contract decision §96): they go with
+   * The files people posted since the seat's last turn (contract decision §99): they go with
    * the turn as a chat's files go with its run, so the agent can open them.
    */
   private filesFor(
@@ -661,7 +661,7 @@ export class Conductor implements RoomLive {
   }
 }
 
-/** A stored message's file blocks (contract decision §96). */
+/** A stored message's file blocks (contract decision §99). */
 function filePartsOf(
   row: RoomMessageRow,
 ): Array<{ type: 'image' | 'file'; attachment_id: string; name?: string }> {

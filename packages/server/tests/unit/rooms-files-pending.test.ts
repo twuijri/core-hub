@@ -1,5 +1,5 @@
 /**
- * Rooms from a phone (contract decision §96): a person's message carries pictures and files
+ * Rooms from a phone (contract decision §99): a person's message carries pictures and files
  * the seats receive with their turn, and what a seat asks a person (an approval, a question)
  * names its room — in the pending list (`sessions.listApprovals`) and on the room itself
  * (`RoomDetail.pending_approvals`). The seats run on the scripted runner, with the real
@@ -102,7 +102,7 @@ beforeEach(() => {
   requests.length = 0;
 });
 
-describe('files in a room (§96)', () => {
+describe('files in a room (§99)', () => {
   it('a picture and a file go into the room, and with the seat’s turn', async () => {
     const { id } = await room('غرفة الصور');
     const picture = await upload('shot.png', PNG, 'image/png');
@@ -163,7 +163,7 @@ describe('files in a room (§96)', () => {
   });
 });
 
-describe('what a seat asks names its room (§96)', () => {
+describe('what a seat asks names its room (§99)', () => {
   it('in the pending list and on the room', async () => {
     const { id } = await room('غرفة الأسئلة');
     script = [

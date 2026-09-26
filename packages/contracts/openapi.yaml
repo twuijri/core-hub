@@ -8602,7 +8602,7 @@ paths:
         Each triggered seat gets a run; the runs are returned so the client can show the queue at
         once. An archived room refuses new messages with `409 state_invalid`.
 
-        `content` is text and, since contract decision §96, `image` and `file` blocks naming
+        `content` is text and, since contract decision §99, `image` and `file` blocks naming
         attachments uploaded into the room's profile (`sessions.uploadAttachment`,
         `sessions.startUpload`) — words, files, or both. An id that names no attachment there is
         `404`; any other block (audio, location) is `400 validation_failed` with
@@ -19208,7 +19208,7 @@ components:
                 - $ref: '#/components/schemas/Ulid'
                 - type: 'null'
             room_id:
-              description: The room whose seat asked, when a seat's own conversation asked (contract decision §96).
+              description: The room whose seat asked, when a seat's own conversation asked (contract decision §99).
               oneOf:
                 - $ref: '#/components/schemas/Ulid'
                 - type: 'null'
@@ -21130,7 +21130,7 @@ components:
               type: array
               description: |
                 What waits for a person in the seats' own conversations (their approvals and
-                questions), oldest first, each with this room's `room_id` (contract decision §96).
+                questions), oldest first, each with this room's `room_id` (contract decision §99).
               items:
                 $ref: '#/components/schemas/Approval'
             handoff_chains:
@@ -21241,7 +21241,7 @@ components:
         content:
           type: array
           minItems: 1
-          description: Text, and `image` / `file` blocks of the room's profile (contract decision §96).
+          description: Text, and `image` / `file` blocks of the room's profile (contract decision §99).
           items:
             $ref: '#/components/schemas/ContentBlock'
         mentions:

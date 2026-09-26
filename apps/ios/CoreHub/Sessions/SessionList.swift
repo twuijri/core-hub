@@ -318,6 +318,9 @@ struct SessionListView: View {
                 if model.selecting {
                     Image(systemName: chosen ? "checkmark.circle.fill" : "circle")
                         .foregroundStyle(chosen ? Tone.accent : Tone.textFaint)
+                } else if let agent = app.agentDirectory.agents(session.profile).first(where: { $0.id == session.agentId }) {
+                    // The chat's agent, by its face (its picture, its mark, or its initial).
+                    AgentAvatar(identity: .of(agent), profile: session.profile, size: 22)
                 }
                 VStack(alignment: .leading, spacing: 2) {
                     Text(title)

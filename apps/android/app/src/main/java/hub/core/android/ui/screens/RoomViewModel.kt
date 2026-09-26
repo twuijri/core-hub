@@ -43,7 +43,7 @@ data class RoomUi(
  * One open room (DECISIONS §69): HTTP for the room and its messages, `/rt/rooms` for everything
  * after (joined while the screen shows it), and the reply of each seat streaming into its
  * message. What is sent carries its mentions as structured ids and its files as blocks
- * (contract decision §96).
+ * (contract decision §99).
  */
 class RoomViewModel(
     private val graph: AppGraph,
@@ -122,7 +122,7 @@ class RoomViewModel(
         if (tray.uploading) return
         val picked = tray.message(text)
         if (picked.isEmpty) return
-        // A room takes words, pictures and files (§96): a recording goes as a file.
+        // A room takes words, pictures and files (§99): a recording goes as a file.
         val outgoing = picked.copy(
             asFiles = picked.asFiles + picked.attachments.filter { it.kind == hub.core.client.model.Attachment.Kind.AUDIO }.map { it.id },
         )

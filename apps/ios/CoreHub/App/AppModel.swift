@@ -49,6 +49,8 @@ final class AppModel {
     let realtime: RealtimeClient
     /// This phone's own voice and reading choices («This device»).
     let device = DeviceSettings()
+    /// The agents of each profile, for their names, marks and pictures (AgentIdentity.swift).
+    let agentDirectory = AgentDirectory()
     /// Text shared from another app, waiting to become a new chat.
     var pendingDraft: String?
     private let defaults: UserDefaults
@@ -74,6 +76,7 @@ final class AppModel {
         self.realtime = RealtimeClient(keeper: keeper)
         api.language = language
         realtime.onStateChange = { [weak self] state in self?.connection = state }
+        agentDirectory.app = self
     }
 
     var isAdmin: Bool {
@@ -323,6 +326,7 @@ final class AppModel {
         do {
             let list = try await api.call { try await AgentsAPI.agentsList(xHubProfile: profile, apiConfiguration: $0) }
             if profile == currentProfile { agents = list.items }
+            agentDirectory.put(profile, list.items)
         } catch {
             if profile == currentProfile { agents = [] }
         }
@@ -365,6 +369,7 @@ final class AppModel {
         credentials = nil
         profiles = []
         agents = []
+        agentDirectory.forget()
         phase = .signedOut
     }
 

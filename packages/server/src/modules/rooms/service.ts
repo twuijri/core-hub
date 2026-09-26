@@ -45,7 +45,7 @@ export interface RoomPorts {
   enterable(userId: string): Array<{ id: string; slug: string }>;
   /**
    * `knowledge`: the attachments these ids name in the workspace (a message's files, contract
-   * decision §96). Absent: no file resolves, so a message with files is refused.
+   * decision §99). Absent: no file resolves, so a message with files is refused.
    */
   files?(workspace: string, ids: readonly string[]): Map<string, RoomFile>;
 }
@@ -616,7 +616,7 @@ export class RoomsService {
       .map((block) => String(block.text ?? ''))
       .join('\n')
       .trim();
-    // Words, files, or both (contract decision §96); audio and places are not a room's.
+    // Words, files, or both (contract decision §99); audio and places are not a room's.
     const isFile = (block: Record<string, unknown>) =>
       (block.type === 'image' || block.type === 'file') && typeof block.attachment_id === 'string';
     if (body.content.some((block) => block.type !== 'text' && !isFile(block))) {

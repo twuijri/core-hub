@@ -1,7 +1,7 @@
 // The pending list on the phone (proposed — owner to confirm): a bell in the top bar with how
 // many things wait for the person — the approvals and questions of every profile they may enter
 // (`sessions.listApprovals`, one call per profile), a room's seats' among them (their
-// `room_id`, contract decision §96). Each is answered in the sheet, or opened where it lives.
+// `room_id`, contract decision §99). Each is answered in the sheet, or opened where it lives.
 import CoreHubClient
 import Observation
 import SwiftUI

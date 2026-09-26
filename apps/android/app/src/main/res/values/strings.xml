@@ -343,4 +343,5 @@
     <string name="chat_more">More</string>
     <string name="chat_export">Export</string>
     <string name="chat_export_failed">The chat could not be exported. Try again.</string>
+    <string name="agent_fallback">Agent</string>
 </resources>

@@ -77,7 +77,14 @@ struct RoomScreen: View {
                             startsTurn: RoomTurns.startsTurn(visible, at: index, me: model.me),
                             run: nil,
                             profile: model.profile,
-                            mine: RoomTurns.isMine(message, me: model.me)
+                            mine: RoomTurns.isMine(message, me: model.me),
+                            // A seat keeps its own name in the room, and wears its agent's face.
+                            agent: message.role == .assistant
+                                ? AgentIdentity.of(
+                                    authorID: message.author.id, shownName: message.author.name,
+                                    agents: app.agentDirectory.agents(model.profile), fallback: l10n("chat.agent")
+                                )
+                                : nil
                         )
                         .id(message.id)
                     }
@@ -231,6 +238,7 @@ struct SeatActivity: View {
 /// now), the invite for the manager, and Leave for everyone but the maker.
 struct RoomMembersSheet: View {
     let model: RoomModel
+    @Environment(AppModel.self) private var app
     @Environment(\.l10n) private var l10n
     @Environment(\.dismiss) private var dismiss
 
@@ -239,6 +247,14 @@ struct RoomMembersSheet: View {
             Section(l10n("rooms.seats")) {
                 ForEach(model.state.seats, id: \.id) { seat in
                     HStack {
+                        AgentAvatar(
+                            identity: AgentIdentity.of(
+                                authorID: seat.agentId, shownName: seat.name,
+                                agents: app.agentDirectory.agents(model.profile), fallback: seat.name
+                            ),
+                            profile: model.profile,
+                            size: 28
+                        )
                         VStack(alignment: .leading, spacing: 2) {
                             Text("@\(seat.name)").contentDirection(of: seat.name)
                             if let description = seat.description, !description.isEmpty {

@@ -122,6 +122,8 @@ fun RoomScreen(roomId: String, profile: String, subtitle: String?, onMenu: () ->
     val listState = rememberLazyListState()
     val atBottom by remember { derivedStateOf { !listState.canScrollForward } }
     val youLabel = stringResource(R.string.chat_you)
+    val agents = hub.core.android.ui.components.rememberAgents(profile)
+    val agentFallback = stringResource(R.string.agent_fallback)
     LaunchedEffect(turns.size, turns.lastOrNull()?.turn?.messages?.lastOrNull()?.text?.length) {
         if (turns.isNotEmpty() && (atBottom || listState.firstVisibleItemIndex == 0)) listState.scrollToItem(turns.lastIndex + 1)
     }
@@ -152,7 +154,10 @@ fun RoomScreen(roomId: String, profile: String, subtitle: String?, onMenu: () ->
                         if (ui.loadingOlder) Text(stringResource(R.string.chat_loading_older), color = t.textMuted)
                     }
                     items(turns, key = { it.turn.messages.first().id }) { turn ->
-                        TurnView(turn.turn, youLabel, profile, mine = turn.mine)
+                        // A seat keeps its own name in the room, and wears its agent's face.
+                        val agent = if (turn.turn.role != hub.core.client.model.MessageRole.ASSISTANT) null
+                        else hub.core.android.ui.components.AgentIdentity.of(turn.turn.messages.first().authorId, turn.turn.authorName, agents, agentFallback)
+                        TurnView(turn.turn, youLabel, profile, mine = turn.mine, agent = agent)
                     }
                 }
             }
@@ -265,6 +270,7 @@ private fun SeatActivity(seat: Seat, step: String?, onStop: () -> Unit) {
 @Composable
 private fun MembersSheet(vm: RoomViewModel, ui: RoomUi, onClose: () -> Unit) {
     val t = LocalTokens.current
+    val agents = hub.core.android.ui.components.rememberAgents(vm.profile)
     val context = LocalContext.current
     val state = ui.state
     val room = state.room
@@ -273,6 +279,9 @@ private fun MembersSheet(vm: RoomViewModel, ui: RoomUi, onClose: () -> Unit) {
         item { Text(stringResource(R.string.room_seats), style = MaterialTheme.typography.titleSmall) }
         items(state.seats, key = { "s" + it.id }) { seat ->
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                hub.core.android.ui.components.AgentAvatar(
+                    hub.core.android.ui.components.AgentIdentity.of(seat.agentId, seat.name, agents, seat.name), vm.profile, 28.dp,
+                )
                 Column(Modifier.weight(1f)) {
                     Text("@${seat.name}", style = MaterialTheme.typography.bodyLarge)
                     seat.description?.takeIf { it.isNotBlank() }?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = t.textMuted, maxLines = 2) }

@@ -342,4 +342,5 @@
     <string name="chat_more">المزيد</string>
     <string name="chat_export">تصدير</string>
     <string name="chat_export_failed">تعذّر تصدير المحادثة. حاول مرة أخرى.</string>
+    <string name="agent_fallback">الوكيل</string>
 </resources>

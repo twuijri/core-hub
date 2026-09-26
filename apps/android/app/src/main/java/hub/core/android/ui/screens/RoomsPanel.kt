@@ -212,6 +212,7 @@ private fun NewRoomDialog(ui: RoomsUi, onCancel: () -> Unit, onMake: (String, Li
                             selected = agent.id in chosen,
                             onClick = { chosen = if (agent.id in chosen) chosen - agent.id else chosen + agent.id },
                             label = { Text(agent.name) },
+                            leadingIcon = { hub.core.android.ui.components.AgentAvatar(hub.core.android.ui.components.AgentIdentity.of(agent), agent.profile, 20.dp) },
                         )
                     }
                 }

@@ -105,6 +105,7 @@ struct NewRoomSheet: View {
                         if let index = chosen.firstIndex(of: agent.id) { chosen.remove(at: index) } else { chosen.append(agent.id) }
                     } label: {
                         HStack {
+                            AgentAvatar(identity: .of(agent), profile: agent.profile, size: 24)
                             Text(agent.name).foregroundStyle(Tone.text)
                             Spacer()
                             if chosen.contains(agent.id) { Image(systemName: "checkmark").foregroundStyle(Tone.accent) }

@@ -100,7 +100,7 @@ private val contentStyle = TextStyle(textDirection = TextDirection.Content)
  * the content inside keeps deciding its own.
  */
 @Composable
-fun TurnView(turn: Turn, youLabel: String, profile: String = "", mine: Boolean = turn.fromPerson) {
+fun TurnView(turn: Turn, youLabel: String, profile: String = "", mine: Boolean = turn.fromPerson, agent: AgentIdentity? = null) {
     val t = LocalTokens.current
     val uiDirection = LocalLayoutDirection.current
     CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Ltr) {
@@ -111,12 +111,22 @@ fun TurnView(turn: Turn, youLabel: String, profile: String = "", mine: Boolean =
                 horizontalAlignment = if (mine) Alignment.End else Alignment.Start,
                 verticalArrangement = Arrangement.spacedBy(LayoutTokens.groupGap.dp),
             ) {
-                // In a room another person is on the left under their own name, like the agents.
-                Text(
-                    if (mine) youLabel else turn.authorName,
-                    style = MaterialTheme.typography.labelMedium,
-                    color = t.textMuted,
-                )
+                // An agent's turn wears its face and its registry name (never the placeholder
+                // «agent»); in a room another person is on the left under their own name.
+                if (!mine && agent != null) {
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        AgentAvatar(agent, profile, 22.dp)
+                        CompositionLocalProvider(LocalLayoutDirection provides uiDirection) {
+                            Text(agent.name, style = MaterialTheme.typography.labelMedium, color = t.textMuted)
+                        }
+                    }
+                } else {
+                    Text(
+                        if (mine) youLabel else turn.authorName,
+                        style = MaterialTheme.typography.labelMedium,
+                        color = t.textMuted,
+                    )
+                }
                 turn.messages.forEach { message ->
                     CompositionLocalProvider(LocalLayoutDirection provides uiDirection) {
                         if (mine) PersonBubble(message, Modifier.widthIn(max = maxBubble), profile) else AgentMessage(message, profile)

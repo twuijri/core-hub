@@ -166,7 +166,7 @@ class RoomsTest {
         assertEquals(listOf(me), s.members.map { it.userId })
     }
 
-    @Test fun `only your own messages are on the right; another person is named on the left`() {
+    @Test fun `only your own messages are on the right, another person is named on the left`() {
         val mine = hub.core.android.chat.ChatMessage.from(json.decodeFromString(Message.serializer(), message("01J8QK3ZR2W7M5N4P6T8V9X0A1", 1, "أنا")))
         val theirs = hub.core.android.chat.ChatMessage.from(json.decodeFromString(Message.serializer(), message("01J8QK3ZR2W7M5N4P6T8V9X0A2", 2, "أنا سارة", authorId = friend, name = "سارة")))
         val agent = hub.core.android.chat.ChatMessage.from(json.decodeFromString(Message.serializer(), message("01J8QK3ZR2W7M5N4P6T8V9X0A3", 3, "تم", "agent", "01J8QK3ZR2W7M5N4P6T8V9X0AG", "المخطِّط")))

@@ -33,6 +33,7 @@
     "web:e2e": "pnpm --filter @corehub/web test:e2e",
     "tokens:build": "pnpm --filter @corehub/ui-tokens build",
     "icons:build": "node scripts/icons/build-icons.mjs",
+    "icons:agents": "node scripts/icons/agent-marks-mobile.mjs",
     "graph": "node scripts/graph.mjs",
     "graph:check": "node scripts/graph-check.mjs",
     "image:sealed-check": "node scripts/image-sealed-check.mjs"

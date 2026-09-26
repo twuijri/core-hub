@@ -1,7 +1,7 @@
 // Opens one room (DECISIONS §69): HTTP for the room and its messages (`rooms.get`,
 // `rooms.listMessages`), `/rt/rooms` for everything after — joined while the screen shows it,
 // and read again after a reconnect, because rooms have no replay. What is sent carries its
-// mentions as structured ids and its files as blocks (contract decision §96).
+// mentions as structured ids and its files as blocks (contract decision §99).
 import CoreHubClient
 import Foundation
 import Observation
@@ -129,7 +129,7 @@ final class RoomModel {
     func send(_ message: OutgoingMessage) async -> Bool {
         guard !message.isEmpty, let app else { return false }
         let mentions = RoomMentions.mentions(in: message.text, seats: state.mentionSeats, allowAll: state.canMentionAll)
-        // A room takes words, pictures and files (§96): a recording goes as a file.
+        // A room takes words, pictures and files (§99): a recording goes as a file.
         var outgoing = message
         outgoing.asFiles.formUnion(message.attachments.filter { $0.kind == .audio }.map(\.id))
         let body = RoomMessageCreate(content: outgoing.blocks, mentions: mentions.isEmpty ? nil : mentions)

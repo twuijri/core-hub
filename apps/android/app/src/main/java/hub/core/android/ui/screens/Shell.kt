@@ -378,6 +378,14 @@ private fun ChatRow(session: Session, badge: Boolean, shell: ShellViewModel, nav
     ) {
         if (selecting) {
             androidx.compose.material3.Checkbox(checked = chosen, onCheckedChange = { shell.toggleSelected(session.id) })
+        } else {
+            // The chat's agent, by its face (its picture, its mark, or its initial).
+            val agents = hub.core.android.ui.components.rememberAgents(session.profile)
+            val agent = agents.firstOrNull { it.id == session.agentId }
+            if (agent != null) {
+                hub.core.android.ui.components.AgentAvatar(hub.core.android.ui.components.AgentIdentity.of(agent), session.profile, 22.dp)
+                Spacer(Modifier.size(8.dp))
+            }
         }
         Column(Modifier.weight(1f)) {
             Text(session.title ?: stringResource(R.string.term_new_chat), style = MaterialTheme.typography.bodyMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)

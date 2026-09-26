@@ -304,7 +304,7 @@ export interface SeatSessions {
       sessionId: string;
       seatId: string;
       prompt: string;
-      /** Files people posted in the room since the seat's last turn (contract decision §96). */
+      /** Files people posted in the room since the seat's last turn (contract decision §99). */
       files?: ReadonlyArray<{ type: 'image' | 'file'; attachment_id: string }>;
     },
   ): Promise<TurnHandle>;

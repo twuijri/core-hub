@@ -49,7 +49,7 @@ export interface NewRoomMessage {
   sessionId: string;
   content: string;
   parts: Array<Record<string, unknown>>;
-  /** The attachments the message's file blocks name (contract decision §96). */
+  /** The attachments the message's file blocks name (contract decision §99). */
   attachmentIds?: string[];
   mentions?: StoredMention[];
   replyToId?: string | null;
