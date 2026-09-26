@@ -138,6 +138,9 @@ CI على #165 عند `2b03bb18`: فشل فحصان من هذه المهمة و�
   `./gradlew :app:testDebugUnitTest --tests hub.core.android.contract.ContractExamplesTest`):
   `BUILD SUCCESSFUL`، `tests="1" skipped="0" failures="0"`، `contract examples decoded: 271`.
 
+بعدها CI على #165 عند `3ad1bf6f` (يحوي `91300925` من هذا الفرع): كل الفحوص خضراء — CI (الخوادم الثلاثة، رحلات
+Playwright، lint/typecheck/العقد، Docker، سطح المكتب)، Android، iOS، Swift، المثبّتات، سجل التغيير.
+
 ## المخاطر والرجوع
 - **الباب العام بلا رمز دخول**: الحماية سر المسار الذي يتحقق منه هرمز (HMAC)، مع حد ١ م.ب وحد المعدل عند هرمز. المستقبِل
   نفسه على `127.0.0.1` فلا يصل إليه أحد إلا عبر المركز. مسار بلا سر يتجاهله هرمز.
