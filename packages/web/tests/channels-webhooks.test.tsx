@@ -1,5 +1,5 @@
 /**
- * «ويب هوك» on the agent's Channels page (decision §96): Hermes's incoming webhooks.
+ * «ويب هوك» on the agent's Channels page (decision §97): Hermes's incoming webhooks.
  *
  * - the section lists each route with its full address on this hub and its secret (hidden until
  *   shown), each with a copy button; a route from `config.yaml` cannot be deleted here;

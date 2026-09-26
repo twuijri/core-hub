@@ -5,7 +5,7 @@
  * phone (SplitPane) — and kept current: when the agent changes an open file, the list says
  * so (`modified_at`) and the tab reads it again.
  *
- * A video or a sound plays in the panel (§97) from a one-hour stream address, a byte range at a
+ * A video or a sound plays in the panel (§98) from a one-hour stream address, a byte range at a
  * time, so a long file starts at once and seeks; Download saves it from the same address.
  */
 import { HubApiError } from '@corehub/contracts';
@@ -118,7 +118,7 @@ function openInNewTab(file: SessionFile, bytes: FileBytes): void {
 function FileView({ sessionId, file }: { sessionId: string; file: SessionFile }) {
   const { t, language } = useI18n();
   const canPreview = previewable(file);
-  // A video or a sound is played from a stream address, never read whole into the page (§97).
+  // A video or a sound is played from a stream address, never read whole into the page (§98).
   const media: MediaKind | null =
     file.preview === 'video' || file.preview === 'audio' ? file.preview : null;
   const bytes = useFileBytes(sessionId, file, canPreview && media === null);

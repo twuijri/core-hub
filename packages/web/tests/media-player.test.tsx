@@ -1,5 +1,5 @@
 /**
- * Media in chat (decision §97): a video or a sound plays in the side file panel and in a reply,
+ * Media in chat (decision §98): a video or a sound plays in the side file panel and in a reply,
  * from a one-hour stream address, so the player asks the hub for byte ranges and can seek — the
  * page never reads the whole file into itself first.
  *
@@ -135,7 +135,7 @@ afterEach(() => {
   requests.length = 0;
 });
 
-describe('which files play (§97)', () => {
+describe('which files play (§98)', () => {
   it('knows a video or a sound by its type, or by its name when the type says nothing', () => {
     expect(isPlayable('video/webm')).toBe('video');
     expect(isPlayable('audio/ogg')).toBe('audio');

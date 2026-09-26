@@ -185,7 +185,7 @@ function Attachments({ message }: { message: Message }) {
           );
         }
         const mime = 'mime' in block ? (block.mime ?? file?.mime) : file?.mime;
-        // Any video or sound the browser may play, by its type or its name (§97); one it cannot
+        // Any video or sound the browser may play, by its type or its name (§98); one it cannot
         // play falls back to the name under it.
         const playable =
           'attachment_id' in block && block.attachment_id

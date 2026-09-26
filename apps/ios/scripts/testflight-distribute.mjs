@@ -37,9 +37,11 @@ export function makeToken({ keyId, issuer, privateKey, now = Date.now() }) {
 }
 
 export class AscError extends Error {
-  constructor(message, status) {
+  constructor(message, status, errors = []) {
     super(message);
     this.status = status;
+    /** Apple's error objects ({ code, title, detail, source }), for callers that act on them. */
+    this.errors = errors;
   }
 }
 
@@ -77,6 +79,7 @@ export function createClient({ base = API, keyId, issuer, privateKey, clock = ()
       throw new AscError(
         `App Store Connect ${method} ${pathAndQuery.split('?')[0]} → ${res.status} ${why}`.trim(),
         res.status,
+        json.errors ?? [],
       );
     }
     return json;

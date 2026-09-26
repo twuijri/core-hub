@@ -1449,7 +1449,7 @@ button.context-ring {
   align-self: center;
   border-radius: var(--ch-radius-md);
 }
-/* A video or a sound of the conversation, played from its stream address (§97). */
+/* A video or a sound of the conversation, played from its stream address (§98). */
 .file-media {
   display: flex;
   flex-direction: column;

@@ -1,5 +1,5 @@
 /**
- * Hermes's incoming webhooks, as the hub manages them (contract decision §96).
+ * Hermes's incoming webhooks, as the hub manages them (contract decision §97).
  *
  * What Hermes does, observed in its MIT source at `v2026.9.14` (`gateway/platforms/webhook.py`,
  * `hermes_cli/webhook.py`) and said in our words:

@@ -2070,7 +2070,7 @@ export const agentsModule = defineModule({
       },
     });
 
-    // Incoming webhooks (`webhook-routes.ts`, decision §96): Hermes's `webhook` platform.
+    // Incoming webhooks (`webhook-routes.ts`, decision §97): Hermes's `webhook` platform.
     await registerWebhookRoutes(app, deps, {
       toolHome: (request, agentId) => toolHome(request, agentId),
       listenerStatus: (request, profile, home) => {

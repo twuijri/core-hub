@@ -1,5 +1,5 @@
 /**
- * The five `agents.*Webhook*` operations (contract decision §96): an agent's incoming webhook
+ * The five `agents.*Webhook*` operations (contract decision §97): an agent's incoming webhook
  * routes on its Channels page, and the hub's public door for them. The rules about Hermes's files
  * live in `hermes-webhooks.ts`; this file is the HTTP around them.
  */
@@ -85,7 +85,7 @@ function webhookFault(error: unknown): never {
   throw error;
 }
 
-/** Hermes's refusal, in the hub's envelope with Hermes's own words (§96). */
+/** Hermes's refusal, in the hub's envelope with Hermes's own words (§97). */
 const REFUSAL: Record<number, ErrorCode> = {
   400: 'bad_request',
   401: 'unauthorized',

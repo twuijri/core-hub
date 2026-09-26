@@ -8,6 +8,7 @@ import type { Server as SocketServer } from 'socket.io';
 import { LEGACY, derived, loadOpenApiDocument, type OpenApiDocument } from '@corehub/contracts';
 import { createLogger, logRingOf, type Logger } from '../lib/logger.js';
 import { LogRing } from '../lib/log-ring.js';
+import { DEFAULT_TRUST_PROXY, compileTrust } from '../lib/client-address.js';
 import type { HubModule } from '../lib/module.js';
 import { modules as allModules } from '../modules/index.js';
 import { ownerUser, setupMetaFor } from '../modules/auth/index.js';
@@ -109,15 +110,20 @@ export async function buildServer(options: BuildOptions = {}): Promise<FastifyIn
   const database = createDatabase(config.database, logger);
   if (options.migrate ?? true) await database.migrate();
 
+  // `X-Forwarded-*` is believed only from the proxies `COREHUB_TRUST_PROXY` names (by default
+  // loopback and the private ranges): `request.ip` is then the right-most address that is not
+  // one of them, so a client cannot write its way past the sign-in lockout (DECISIONS §96).
+  // Socket.IO handshakes use the same function (app/sockets.ts).
+  const trust = compileTrust(config.trustProxy ?? DEFAULT_TRUST_PROXY);
   const app: FastifyInstance = Fastify<Server, IncomingMessage, ServerResponse, FastifyBaseLogger>({
     loggerInstance: logger,
-    trustProxy: true,
+    trustProxy: trust,
   });
   const modules = options.modules ?? allModules;
   const contract = options.contract === undefined ? loadOpenApiDocument() : options.contract;
   const version = readVersion(config.version);
 
-  const io = createSockets(app);
+  const io = createSockets(app, trust);
   // Decorated before the modules register so a module can reach the database and the
   // configuration while mounting (first-boot tasks); the report fields are filled below.
   const hub: HubState = {

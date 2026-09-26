@@ -1,5 +1,5 @@
 /**
- * 36. Media in chat (decision §97): a scripted run records a two-minute tone in the session's
+ * 36. Media in chat (decision §98): a scripted run records a two-minute tone in the session's
  *     folder and leaves a short one for its reply. The short one plays in the reply; the long one
  *     opens in the file panel as a player that reads the hub a byte range at a time (`206` from a
  *     one-file stream address, no bearer in it) — so it knows its length at once and seeks to

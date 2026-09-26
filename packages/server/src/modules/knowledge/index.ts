@@ -104,7 +104,7 @@ export interface AttachmentsPort {
     file: { name: string; mime: string; bytes: Buffer },
   ): Promise<{ id: string; name: string; mime: string; sizeBytes: number; kind: string }>;
   /**
-   * A one-hour address a media element plays one file of a folder from (decision §97): the
+   * A one-hour address a media element plays one file of a folder from (decision §98): the
    * file is `relative` inside `root`, checked again on every read.
    */
   streamFile(
@@ -115,7 +115,7 @@ export interface AttachmentsPort {
 
 const services = new WeakMap<SocketServer, KnowledgeService>();
 
-/** The file stream tickets of one hub (decision §97); the attachment ones are §90's. */
+/** The file stream tickets of one hub (decision §98); the attachment ones are §90's. */
 const fileTickets = new WeakMap<SocketServer, StreamTickets<FileTicket>>();
 
 function fileTicketsFor(app: FastifyInstance): StreamTickets<FileTicket> {
@@ -482,7 +482,7 @@ export const knowledgeModule = defineModule({
     });
 
     // A file of a folder, from a ticket `sessions.createFileStream` or
-    // `knowledge.createWorkspaceFileStream` made (§97): opened again, by the working-file rules,
+    // `knowledge.createWorkspaceFileStream` made (§98): opened again, by the working-file rules,
     // on every read.
     defineRoute(app, deps, {
       operationId: 'knowledge.streamFile',

@@ -1,5 +1,5 @@
 /**
- * A video or a sound, played in place (DECISIONS §90, §97). A media element sends no header, so it
+ * A video or a sound, played in place (DECISIONS §90, §98). A media element sends no header, so it
  * cannot carry the bearer; instead the page asks the hub for a short-lived address for this one
  * file — an attachment (`sessions.createAttachmentStream`) or a file of the conversation's working
  * folder (`sessions.createFileStream`) — and the element plays from it, asking for byte ranges as it

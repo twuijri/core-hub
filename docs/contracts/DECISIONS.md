@@ -2946,7 +2946,42 @@ token on `cloudflared`'s command line (other users of the computer can read it);
 (it needs HTTPS certificates turned on for the tailnet, and changes the person's Tailscale
 settings rather than only the app's own listener).
 
-## 96. An agent's incoming webhooks are Hermes's routes, reached through the hub's own address
+## 96. Who is asking: `X-Forwarded-For` only from a proxy the hub trusts
+
+Found on 2026-09-27 while opening a way in from outside (§95): the hub ran Fastify with
+`trustProxy: true`, so it believed `X-Forwarded-For` from anyone, and `request.ip` was the
+left-most address in it — the one the client writes. A client on the internet could send a new
+address with every guess and never meet the per-address lockout of passwords, app tokens and
+pairing codes. Socket.IO handshakes did the opposite: they counted the raw peer, so every
+client behind a proxy shared the proxy's address and one person's mistakes locked everyone out.
+Proposed — owner to confirm:
+
+- **The rule.** Forwarded headers are believed only from a peer the hub trusts, and the client is
+  the right-most address in `X-Forwarded-For` that is not a trusted proxy (proxy-addr's rule, the
+  one Fastify applies). Fastify's `request.ip`, `request.host` and `request.protocol` and the
+  Socket.IO handshake use one trust function (`packages/server/src/lib/client-address.ts`), so a
+  failure over HTTP and over a socket counts against the same address. The web terminal's audit
+  line (`terminal.opened`) records that address too.
+- **The setting.** `COREHUB_TRUST_PROXY`, read in `app/config.ts` only: a comma list of IP
+  addresses / CIDR ranges, `false` (nobody), or a hop count 1–10. Anything else stops the hub at
+  boot with the reason (`ConfigError`), like every other variable.
+- **The default.** Unset, the hub trusts `127.0.0.0/8`, `::1`, `10.0.0.0/8`, `172.16.0.0/12`,
+  `192.168.0.0/16` and `fc00::/7`: a Caddy/Traefik container on the stack's Docker network and a
+  `cloudflared` on the same machine connect from these, so every stack we deploy keeps working
+  by replacing the image; a client on the internet does not, so what it writes is ignored.
+  Tailscale's own addresses (`100.64.0.0/10`) are clients, not proxies.
+
+Known limits: under the default a machine on the same private network as a hub whose port is
+published directly can still write its own address — such a stack sets `false` (docs/DEPLOY.md
+§3d). The desktop app's Tailscale route (§95) is a plain TCP pass-through from loopback, which
+the default trusts, so a machine on the person's own tailnet can do the same against a desktop
+hub; making that pass-through write `X-Forwarded-For` itself is left for later. Rejected: `false`
+as the default (every client behind a proxy would share one address, and one person's failed
+sign-ins would lock everyone out); a hop count as the default (a client reaching the port
+directly could claim any address); reading `CF-Connecting-IP` or `X-Real-IP` (headers a client
+can send as easily, and not what the reference proxies set).
+
+## 97. An agent's incoming webhooks are Hermes's routes, reached through the hub's own address
 
 W14 of the fork gap list: an outside service (GitHub, a form, a script) starts a run of the agent
 with a prompt. Hermes has a receiver for it; the hub had only outbound webhooks. Proposed — owner
@@ -3007,7 +3042,7 @@ keeps toolsets out of `hermes webhook subscribe`, so an agent-made route cannot 
 skills can follow later); a route the hub serves with its own run instead of Hermes's (Hermes's
 routes are what its CLI and agents already manage).
 
-## 97. Media plays from byte ranges: conversation files and working files stream like attachments
+## 98. Media plays from byte ranges: conversation files and working files stream like attachments
 
 W10 of the fork gap list: a video or a sound the agent made played nowhere, and a conversation's
 files and the profile's working files were sent whole, with no ranges — only stored attachments

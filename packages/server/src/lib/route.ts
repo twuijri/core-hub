@@ -75,7 +75,7 @@ export function defineRoute(
       // A handler that answered on the reply itself (a binary body) is already done. The reply is
       // never awaited or returned as it is: it is a thenable that rejects when the response fails
       // mid-stream — a media player dropping the rest of a range it asked for — and Fastify would
-      // then send an error after the headers, which throws out of the process (DECISIONS §97).
+      // then send an error after the headers, which throws out of the process (DECISIONS §98).
       if (produced === reply) return streamed(request, reply);
       let result: unknown;
       try {
@@ -101,7 +101,7 @@ export function defineRoute(
  * Waits for a reply a handler sent on itself (a stream) to end, and never rejects: a reply is a
  * thenable that rejects when the response fails mid-stream — a media player dropping the rest of
  * a range it asked for — and a handler that returned it would make Fastify send an error after
- * the headers, which throws out of the process (DECISIONS §97). A client that went away is not an
+ * the headers, which throws out of the process (DECISIONS §98). A client that went away is not an
  * error of the hub's. Resolves to `undefined`, which Fastify leaves alone once the body is out.
  */
 export function streamed(request: FastifyRequest, reply: FastifyReply): Promise<undefined> {

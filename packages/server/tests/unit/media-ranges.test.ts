@@ -1,5 +1,5 @@
 /**
- * Media in chat (decision §97): a video or a sound of a conversation's working folder, or of the
+ * Media in chat (decision §98): a video or a sound of a conversation's working folder, or of the
  * profile's working files, plays and seeks — the reads a player makes are byte ranges.
  *
  * - `sessions.readFile` and `knowledge.downloadWorkspaceFile` answer one `Range` with `206` and
@@ -68,7 +68,7 @@ async function session(h: Hub): Promise<{ id: string; dir: string }> {
   return { id: body.id, dir: body.working_dir };
 }
 
-describe('one byte range (§97)', () => {
+describe('one byte range (§98)', () => {
   it('reads a range, a suffix and an open end; past the end cannot be satisfied', () => {
     expect(byteRangeOf(undefined, 100)).toEqual({ kind: 'all' });
     expect(byteRangeOf('bytes=0-9', 100)).toEqual({ kind: 'part', start: 0, end: 9 });
@@ -215,7 +215,7 @@ describe('a conversation’s working folder (sessions.readFile, sessions.createF
   });
 });
 
-describe('a player that stops reading half-way (§97)', () => {
+describe('a player that stops reading half-way (§98)', () => {
   it('is not an error: the hub keeps answering after a reader drops a long range', async () => {
     const h = await hub();
     const { id, dir } = await session(h);

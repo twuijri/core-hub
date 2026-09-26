@@ -1,5 +1,5 @@
 /**
- * Hermes's incoming webhooks on the agent's Channels page (decision §96), over the real routes,
+ * Hermes's incoming webhooks on the agent's Channels page (decision §97), over the real routes,
  * with a fake listener standing where the profile's gateway listens:
  *
  * - a route is written where Hermes reads it (`webhook_subscriptions.json`, 0600, Hermes's shape)
@@ -118,7 +118,7 @@ async function create(h: Hub, agent: string, payload: Record<string, unknown>) {
   return authed(h, h.token, { method: 'POST', url: `/api/v1/agents/${agent}/webhooks`, payload });
 }
 
-describe('Hermes incoming webhooks (§96)', () => {
+describe('Hermes incoming webhooks (§97)', () => {
   it('writes a route where Hermes reads it and switches the listener on, on this machine', async () => {
     const { h, agent, home } = await setup();
     const made = await create(h, agent, {

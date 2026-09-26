@@ -1,5 +1,5 @@
 /**
- * Incoming webhooks against **the real Hermes** from the image (contract decision §96).
+ * Incoming webhooks against **the real Hermes** from the image (contract decision §97).
  *
  * The whole path an outside service takes: the hub writes a route with its prompt through
  * `agents.createWebhook` (the route in `webhook_subscriptions.json`, the listener switched on in

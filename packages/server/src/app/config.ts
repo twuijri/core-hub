@@ -2,6 +2,11 @@
 // starts with nothing beyond a data directory and an admin password; the rest is set from the UI.
 import path from 'node:path';
 import { z } from 'zod';
+import {
+  DEFAULT_TRUST_PROXY,
+  parseAddressRange,
+  type TrustProxySetting,
+} from '../lib/client-address.js';
 
 export const ENV_KEYS = [
   'DATA_DIR',
@@ -24,6 +29,7 @@ export const ENV_KEYS = [
   'COREHUB_PUSH_RELAY',
   'COREHUB_WEB_TERMINAL',
   'COREHUB_WEB_TERMINAL_IDLE_MINUTES',
+  'COREHUB_TRUST_PROXY',
 ] as const;
 export type EnvKey = (typeof ENV_KEYS)[number];
 export type EnvSource = Partial<Record<EnvKey, string | undefined>> & {
@@ -155,7 +161,43 @@ const envSchema = z.object({
     .min(1, 'COREHUB_WEB_TERMINAL_IDLE_MINUTES must be at least 1')
     .max(1440, 'COREHUB_WEB_TERMINAL_IDLE_MINUTES must be at most 1440 (one day)')
     .default(15),
+  /**
+   * Which reverse proxies may say who their client was in `X-Forwarded-For` (DECISIONS §96):
+   * a comma list of IP addresses / CIDR ranges, `false` (nobody), or a hop count. Unset, the
+   * hub trusts loopback and the private ranges, where Docker proxies and cloudflared connect from.
+   */
+  COREHUB_TRUST_PROXY: z.string().trim().optional(),
 });
+
+const TRUST_PROXY_HELP =
+  'COREHUB_TRUST_PROXY must be a comma list of IP addresses / CIDR ranges, false, or a hop count (1-10)';
+
+/** `COREHUB_TRUST_PROXY` as the hub uses it; unset or empty is the default (loopback + private). */
+export function parseTrustProxy(value: string | undefined): TrustProxySetting {
+  const text = value?.trim() ?? '';
+  if (text === '') return DEFAULT_TRUST_PROXY;
+  const lower = text.toLowerCase();
+  if (lower === 'false' || lower === '0' || lower === 'off' || lower === 'none') {
+    return { kind: 'none' };
+  }
+  if (/^\d+$/.test(text)) {
+    const hops = Number(text);
+    if (hops < 1 || hops > 10)
+      throw new ConfigError(`Invalid configuration:\n  ${TRUST_PROXY_HELP}`);
+    return { kind: 'hops', hops };
+  }
+  const entries = text
+    .split(',')
+    .map((entry) => entry.trim())
+    .filter((entry) => entry.length > 0);
+  const invalid = entries.filter((entry) => parseAddressRange(entry) === null);
+  if (entries.length === 0 || invalid.length > 0) {
+    throw new ConfigError(
+      `Invalid configuration:\n  ${TRUST_PROXY_HELP}; not understood: ${invalid.join(', ') || text}`,
+    );
+  }
+  return { kind: 'addresses', entries };
+}
 
 /**
  * Push credentials given by the environment. Values are as given: a path or the content
@@ -221,6 +263,11 @@ export interface HubConfig {
   push?: PushEnv;
   /** The owner's web terminal: off unless `COREHUB_WEB_TERMINAL=1` (DECISIONS §70). */
   webTerminal: WebTerminalConfig;
+  /**
+   * Which reverse proxies may say who their client was (`COREHUB_TRUST_PROXY`, DECISIONS §96).
+   * Absent means the default: loopback and the private ranges (`DEFAULT_TRUST_PROXY`).
+   */
+  trustProxy?: TrustProxySetting;
 }
 
 export interface WebTerminalConfig {
@@ -291,6 +338,7 @@ export function loadConfig(
       idleMs: env.COREHUB_WEB_TERMINAL_IDLE_MINUTES * 60_000,
       maxSessions: WEB_TERMINAL_MAX_SESSIONS,
     },
+    trustProxy: parseTrustProxy(env.COREHUB_TRUST_PROXY),
   };
 }
 

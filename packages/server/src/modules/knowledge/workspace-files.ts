@@ -98,7 +98,7 @@ export interface OpenedFile {
   stream: ReadStream;
   name: string;
   size: number;
-  /** `206` when one byte range of it was asked for (decision §97). */
+  /** `206` when one byte range of it was asked for (decision §98). */
   status: 200 | 206;
   /** `Accept-Ranges`, `Content-Length` and, for a range, `Content-Range`. */
   lengthHeaders: Record<string, string>;
@@ -488,7 +488,7 @@ export class WorkspaceFiles {
 
   /**
    * A file to stream out; the caller sends it and the stream closes the descriptor. With a
-   * `Range` header, only that range (decision §97); one past the end throws the `416`.
+   * `Range` header, only that range (decision §98); one past the end throws the `416`.
    */
   open(raw: string, rangeHeader?: unknown): OpenedFile {
     const file = this.existing(raw);

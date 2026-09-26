@@ -1,5 +1,5 @@
 /**
- * «ويب هوك» on the agent's Channels page (decision §96): Hermes's incoming webhooks. A route is a
+ * «ويب هوك» on the agent's Channels page (decision §97): Hermes's incoming webhooks. A route is a
  * name, a prompt and a secret; an outside service — GitHub, a form, a script — POSTs to the route's
  * address signed with the secret, and the agent runs with the prompt, the posted values filled in.
  *

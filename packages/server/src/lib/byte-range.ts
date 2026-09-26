@@ -1,6 +1,6 @@
 /**
  * One `Range: bytes=…` over a file of a known size (RFC 9110 §14), for the reads a media element
- * makes as it plays and seeks (DECISIONS §97).
+ * makes as it plays and seeks (DECISIONS §98).
  *
  * - `bytes=a-b`, `bytes=a-` and `bytes=-n` (the last n bytes) are one range; `b` past the end is
  *   cut to the end.

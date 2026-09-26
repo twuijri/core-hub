@@ -57,7 +57,7 @@
  * **«عنوان الردود»** (WhatsApp in «مراسلة نفسي»): the header over every reply of the agent — its
  * name by default, or a typed title (`ReplyHeaderDialog`).
  *
- * **«ويب هوك»** under the channels (`WebhooksSection`, decision §96): Hermes's incoming webhook
+ * **«ويب هوك»** under the channels (`WebhooksSection`, decision §97): Hermes's incoming webhook
  * routes, each with its address on this hub and its secret, and a plain word that an outside
  * service needs the hub's address to be public.
  */
@@ -157,7 +157,7 @@ export function AgentChannelsScreen() {
   const restartable = canRestart(agent, user?.role);
   // Only what is linked (or somebody is waiting on): the platforms not linked yet live in the
   // picker, not in a long list under these.
-  // Hermes's webhook receiver is a platform too; it has its own section below (§96).
+  // Hermes's webhook receiver is a platform too; it has its own section below (§97).
   const shown = items.filter(
     (channel) =>
       channel.platform !== 'webhook' &&
