@@ -1,6 +1,6 @@
 {
   "name": "@corehub/push-relay",
-  "version": "1.1.1",
+  "version": "1.1.2",
   "private": true,
   "description": "Core Hub push relay: a Cloudflare Worker that delivers a self-hosted hub's notices to the official iOS and Android apps with the owner's APNs and FCM keys, which never leave it (ADR 0024).",
   "type": "module",

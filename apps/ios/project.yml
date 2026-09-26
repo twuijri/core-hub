@@ -13,7 +13,7 @@ settings:
     SWIFT_STRICT_CONCURRENCY: minimal
     # The root package.json's version (XcodeGen cannot read JSON): `pnpm version:check` fails
     # when the two differ, and `pnpm version:check --write` copies it here (docs/RELEASING.md).
-    MARKETING_VERSION: 1.1.1
+    MARKETING_VERSION: 1.1.2
     CURRENT_PROJECT_VERSION: '1'
     ENABLE_USER_SCRIPT_SANDBOXING: YES
     # The owner's Apple team (docs/RELEASING.md). Xcode signs automatically on a developer's Mac;
