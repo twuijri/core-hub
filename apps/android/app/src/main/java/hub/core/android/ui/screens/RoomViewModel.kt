@@ -120,8 +120,12 @@ class RoomViewModel(
     /** Words and files as one message; the seats it names are its mentions (or the lead answers). */
     fun send(text: String, onFailed: (String) -> Unit = {}) {
         if (tray.uploading) return
-        val outgoing = tray.message(text)
-        if (outgoing.isEmpty) return
+        val picked = tray.message(text)
+        if (picked.isEmpty) return
+        // A room takes words, pictures and files (§96): a recording goes as a file.
+        val outgoing = picked.copy(
+            asFiles = picked.asFiles + picked.attachments.filter { it.kind == hub.core.client.model.Attachment.Kind.AUDIO }.map { it.id },
+        )
         val api = apis ?: return
         val state = _ui.value.state
         val mentions = RoomMentions.mentionsIn(text, state.mentionSeats, state.room?.canMentionAll == true)

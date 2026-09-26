@@ -17,6 +17,8 @@ struct ChatScreen: View {
     @State private var atBottom = true
     /// The keyboard started opening while the reader was at the latest message.
     @State private var keepBottom = false
+    /// The transcript the hub exported, waiting in the share sheet.
+    @State private var exported: SharedFile?
 
     var body: some View {
         VStack(spacing: 0) {
@@ -39,6 +41,23 @@ struct ChatScreen: View {
         .background(Tone.bg)
         .navigationTitle(fixedTitle ?? model.state.title ?? l10n("sessions.untitled"))
         .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            ToolbarItem(placement: .topBarTrailing) {
+                Menu {
+                    Button {
+                        Task { if let url = await model.exportMarkdown() { exported = SharedFile(url: url) } }
+                    } label: {
+                        Label(l10n("chat.export"), systemImage: "square.and.arrow.up")
+                    }
+                    .accessibilityIdentifier("chat.export")
+                } label: {
+                    Image(systemName: "ellipsis.circle")
+                }
+                .accessibilityLabel(l10n("chat.more"))
+                .accessibilityIdentifier("chat.more")
+            }
+        }
+        .sheet(item: $exported) { file in ActivitySheet(items: [file.url]) }
         .onAppear {
             if tray == nil { tray = AttachmentTray(app: app) }
             model.start()
@@ -177,10 +196,13 @@ struct MessageRow: View {
     let run: Run?
     /// The chat's profile: the one its files are fetched from.
     var profile: String = ""
+    /// In a room, whether the message is yours: another person is on the left, named, like the
+    /// agents (DECISIONS §69). `nil` in a chat, where every person's message is yours.
+    var mine: Bool? = nil
     @Environment(\.l10n) private var l10n
     @Environment(\.layoutDirection) private var uiDirection
 
-    private var isPerson: Bool { message.role == .user || message.role == .command }
+    private var isPerson: Bool { mine ?? (message.role == .user || message.role == .command) }
 
     var body: some View {
         VStack(alignment: .leading, spacing: Space.s1) {
@@ -362,4 +384,21 @@ struct ThinkingIndicator: View {
         }
         .accessibilityHidden(true)
     }
+}
+
+/// A file handed to the share sheet.
+struct SharedFile: Identifiable {
+    let url: URL
+    var id: String { url.path }
+}
+
+/// The system's share sheet.
+struct ActivitySheet: UIViewControllerRepresentable {
+    let items: [Any]
+
+    func makeUIViewController(context: Context) -> UIActivityViewController {
+        UIActivityViewController(activityItems: items, applicationActivities: nil)
+    }
+
+    func updateUIViewController(_ controller: UIActivityViewController, context: Context) {}
 }
