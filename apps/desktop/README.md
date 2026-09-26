@@ -39,3 +39,9 @@ each hub's storage live), `COREHUB_DESKTOP_NO_TRAY=1`, `COREHUB_DESKTOP_WEB_DIR`
 `COREHUB_DESKTOP_HERMES_GATEWAY` (where to look for a running Hermes gateway),
 `COREHUB_DESKTOP_SMOKE_EXECUTABLE` (run the smoke journeys against a packaged app),
 `COREHUB_CHANNEL=store` (behave as the Microsoft Store build: no update check).
+
+Between the app and its local hub (not for people to set): `COREHUB_DESKTOP_PORT` (the port the
+hub used last, asked for again so a Cloudflare tunnel keeps pointing at it) and the IPC messages
+of `src/shared/hub-ipc.ts` (the way in from outside, DECISIONS §95). The app keeps `cloudflared`,
+fetched on first use at the version and SHA-256 pinned in `src/shared/relay.ts`, in
+`<app data>/tools`.

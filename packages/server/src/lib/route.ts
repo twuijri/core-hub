@@ -71,17 +71,47 @@ export function defineRoute(
       const query = operation.validateQuery(request.query) as Record<string, unknown>;
       operation.validateBody(request.body);
 
-      const result = await definition.handler(
-        request,
-        { body: request.body, query, params },
-        reply,
-      );
-      // A handler that answered on the reply itself (a binary body) is already done.
-      if (reply.sent || result === reply) return reply;
+      const produced = definition.handler(request, { body: request.body, query, params }, reply);
+      // A handler that answered on the reply itself (a binary body) is already done. The reply is
+      // never awaited or returned as it is: it is a thenable that rejects when the response fails
+      // mid-stream — a media player dropping the rest of a range it asked for — and Fastify would
+      // then send an error after the headers, which throws out of the process (DECISIONS §98).
+      if (produced === reply) return streamed(request, reply);
+      let result: unknown;
+      try {
+        result = await produced;
+      } catch (error) {
+        // An async handler that returned its reply, whose response then failed: the same.
+        if (reply.raw.headersSent) {
+          request.log.debug({ err: error }, 'a streamed reply ended early');
+          return undefined;
+        }
+        throw error;
+      }
+      if (reply.sent || result === reply) return streamed(request, reply);
       const status = definition.status ?? 200;
       if (status === 204) return reply.status(204).send();
       return reply.status(status).send(result);
     },
   });
   return url;
+}
+
+/**
+ * Waits for a reply a handler sent on itself (a stream) to end, and never rejects: a reply is a
+ * thenable that rejects when the response fails mid-stream — a media player dropping the rest of
+ * a range it asked for — and a handler that returned it would make Fastify send an error after
+ * the headers, which throws out of the process (DECISIONS §98). A client that went away is not an
+ * error of the hub's. Resolves to `undefined`, which Fastify leaves alone once the body is out.
+ */
+export function streamed(request: FastifyRequest, reply: FastifyReply): Promise<undefined> {
+  return new Promise((resolve) => {
+    void reply.then(
+      () => resolve(undefined),
+      (error: unknown) => {
+        request.log.debug({ err: error }, 'a streamed reply ended early');
+        resolve(undefined);
+      },
+    );
+  });
 }

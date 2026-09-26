@@ -1,5 +1,5 @@
 // Settings (destination `settings`) on a phone: the list is the page itself (NAVIGATION.md §٢),
-// its first row goes back to the chats, and each page opened from it shows the way back.
+// the navigation bar goes back to the chats, and each page opened from it shows the way back.
 import SwiftUI
 import UIKit
 import UserNotifications
@@ -13,12 +13,6 @@ struct SettingsScreen: View {
         NavigationStack {
             List {
                 Section {
-                    Button(action: backToChats) {
-                        Label(l10n("settings.back_to_chats"), systemImage: "chevron.backward")
-                    }
-                    .accessibilityIdentifier("settings.back_to_chats")
-                }
-                Section {
                     rows(NavigationMap.settingsTabs)
                 }
                 Section(l10n("settings.management")) {
@@ -27,8 +21,45 @@ struct SettingsScreen: View {
                 Section(l10n("settings.tools")) {
                     rows(NavigationMap.settingsTools)
                 }
+                // What needs a computer's screen stays on the web, one tap away (not destinations here).
+                let web = WebOnlyPages.rows(role: app.credentials?.role ?? "member")
+                if !web.isEmpty, let hub = app.credentials?.hubURL {
+                    Section {
+                        ForEach(web, id: \.term) { page in
+                            Link(destination: hub.appendingPathComponent(String(page.path.dropFirst()))) {
+                                HStack {
+                                    Label {
+                                        VStack(alignment: .leading, spacing: 2) {
+                                            Text(l10n("nav.\(page.term)")).foregroundStyle(Tone.text)
+                                            Text(l10n("settings.on_the_web_hint")).font(.system(size: FontSize.sizeXs)).foregroundStyle(Tone.textMuted)
+                                        }
+                                    } icon: {
+                                        LucideIcon(page.term == "terminal" ? .terminal : .globe, size: 18).foregroundStyle(Tone.textMuted)
+                                    }
+                                    Spacer()
+                                    LucideIcon(.externalLink, size: 14).foregroundStyle(Tone.textFaint)
+                                }
+                            }
+                            .accessibilityIdentifier("settings.web.\(page.term)")
+                        }
+                    } header: {
+                        Text(l10n("settings.on_the_web"))
+                    }
+                }
             }
             .navigationTitle(l10n("nav.settings"))
+            // The way back to the chats sits where every phone puts "back": the navigation bar,
+            // not a row that pushes the list down (docs/design/family.md, "Phone adaptations").
+            .toolbar {
+                ToolbarItem(placement: .topBarLeading) {
+                    Button(action: backToChats) {
+                        LucideIcon(.chevronLeft, size: 20)
+                            .flipsForRightToLeftLayoutDirection(true)
+                    }
+                    .accessibilityLabel(l10n("settings.back_to_chats"))
+                    .accessibilityIdentifier("settings.back_to_chats")
+                }
+            }
             .navigationDestination(for: DestinationID.self) { destination in
                 SettingsPage(destination: destination)
             }
@@ -42,7 +73,13 @@ struct SettingsScreen: View {
     private func rows(_ list: [DestinationID]) -> some View {
         ForEach(NavigationMap.visible(list, admin: app.isAdmin)) { destination in
             NavigationLink(value: destination) {
-                Label(l10n(destination.titleKey), systemImage: Icons.symbol(for: destination))
+                Label {
+                    Text(l10n(destination.titleKey))
+                        .foregroundStyle(Tone.text)
+                } icon: {
+                    LucideIcon(Icons.lucide(for: destination), size: 18)
+                        .foregroundStyle(Tone.textMuted)
+                }
             }
             .accessibilityIdentifier("settings.\(destination.rawValue)")
         }
@@ -58,18 +95,18 @@ struct SettingsPage: View {
         Group {
             switch destination {
             case .account: AccountPage()
-            case .users: UsersPage()
+            case .users: PeopleNativePage()
             case .webhooks: WebhooksPage()
             case .display: DisplayPage()
             case .notifications: NotificationsPage()
             case .privacy: PrivacyPage()
             case .thisDevice: ThisDevicePage()
             case .about: AboutPage()
-            case .models: ModelsPage()
+            case .models: ModelsNativePage()
             case .deviceConnections: DeviceConnectionsPage()
             case .knowledge: KnowledgePage()
             case .logs: LogsPage()
-            case .usage: AuditPage(kind: .usage)
+            case .usage: UsageNativePage()
             case .performance: PerformancePage()
             case .theme: ThemePage()
             case .workspaces: WorkspacesPage()
@@ -100,11 +137,16 @@ struct ThisDeviceExtras: View {
             }
             .accessibilityIdentifier("device.voice_source")
             Toggle(l10n("device.voice_input"), isOn: $device.voiceInput)
-            Picker(l10n("device.dictation_language"), selection: $device.dictationLanguage) {
-                Text(l10n("device.dictation_app")).tag(DeviceSettings.DictationLanguage.app)
-                Text(l10n("shell.language_ar")).tag(DeviceSettings.DictationLanguage.ar)
-                Text(l10n("shell.language_en")).tag(DeviceSettings.DictationLanguage.en)
+            NavigationLink {
+                DictationLanguageList(choice: $device.dictationLanguage)
+            } label: {
+                LabeledContent(
+                    l10n("device.dictation_language"),
+                    value: device.dictationLanguage == DictationLanguage.auto ? l10n("voice.language_auto")
+                        : DictationLanguage.name(device.dictationLanguage, in: app.language.rawValue)
+                )
             }
+            .accessibilityIdentifier("device.dictation_language")
             Toggle(l10n("device.spoken_replies"), isOn: $device.spokenReplies)
         } header: {
             Text(l10n("device.voice"))
@@ -186,6 +228,27 @@ struct PushStatusSection: View {
         // Back from the iPhone's Settings: read the permission again.
         .onChange(of: scenePhase) { _, phase in
             if phase == .active { Task { await PushCenter.shared.foreground(app: app) } }
+        }
+    }
+}
+
+/// The web pages the phone does not draw (navigation.json `surfaces: [web]` / `[web, desktop]`) that an
+/// owner or admin may still want from here: they open in the browser.
+enum WebOnlyPages {
+    struct Page: Equatable {
+        let term: String
+        /// The page's path on the web (`surfaceRoutes.web`).
+        let path: String
+    }
+
+    static let linkedHubs = Page(term: "linked_hubs", path: "/settings/linked-hubs")
+    static let terminal = Page(term: "terminal", path: "/settings/terminal")
+
+    static func rows(role: String) -> [Page] {
+        switch role {
+        case "owner": return [linkedHubs, terminal]
+        case "admin": return [linkedHubs]
+        default: return []
         }
     }
 }

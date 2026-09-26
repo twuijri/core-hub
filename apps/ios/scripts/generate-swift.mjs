@@ -185,6 +185,7 @@ export function infoPlistStrings(language, product, catalogue) {
     CFBundleName: name,
     NSCameraUsageDescription: catalogue.permissions.camera,
     NSLocalNetworkUsageDescription: catalogue.permissions.local_network,
+    NSLocationWhenInUseUsageDescription: catalogue.permissions.location,
     NSMicrophoneUsageDescription: catalogue.permissions.microphone,
     NSPhotoLibraryUsageDescription: catalogue.permissions.photos,
     NSSpeechRecognitionUsageDescription: catalogue.permissions.speech,

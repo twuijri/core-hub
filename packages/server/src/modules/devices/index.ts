@@ -4,8 +4,8 @@
 // What answers (DECISIONS §66): the registry (list, read, rename, unlink, register a
 // browser), push registration, the push senders (Web Push with the hub's own VAPID keys,
 // FCM, APNs) and a test push; and capability requests (DECISIONS §14, §74; `requests.ts`).
-// The relay and peers stay 501 (they wait for the owner: docs/changes/
-// 2026-09-26-twuijri-close-501-stubs.md).
+// The way in from outside for a hub the desktop app runs (`getRelay` / `setRelay`, DECISIONS
+// §95; `outside.ts`). Linked hubs (ADR 0026, DECISIONS §101; `peers.ts`).
 //
 // `auth` imports this module (pairing creates the device row), so this module does not
 // import `auth`: what it needs from it — the route guards, revoking a token, reaching a
@@ -13,7 +13,7 @@
 import { and, asc, eq, gt, inArray, isNull, ne, or } from 'drizzle-orm';
 import type { FastifyInstance, FastifyRequest } from 'fastify';
 import type { Server as SocketServer } from 'socket.io';
-import { loadOpenApiDocument } from '@corehub/contracts';
+import { loadOpenApiDocument, serverBasePath } from '@corehub/contracts';
 import { createContractIndex } from '../../lib/contract.js';
 import { requireSqlite, type ModuleDb } from '../../lib/db.js';
 import { HubError, conflict, notFound } from '../../lib/errors.js';
@@ -29,8 +29,9 @@ import {
 } from './push.js';
 import { parseSubscription } from './webpush.js';
 import {
-  DEFAULT_TIMEOUT_MS,
+  AGENT_CAPABILITIES,
   DeviceRequestService,
+  defaultTimeoutFor,
   closeRequests,
   deviceRoom,
   requestsFor,
@@ -41,8 +42,11 @@ import {
 import type { Language } from '../../i18n/index.js';
 import type { PushMessage, PushProvider } from './senders.js';
 import type { RelayProof } from './relay.js';
+import { changeRelay, readRelay, type RelayChange } from './outside.js';
+import { registerPeerRoutes, type PeerAgentsPort } from './peers.js';
 import {
   devices,
+  type DeviceHelperReport,
   type DeviceRequestStatus,
   type CapabilityKind,
   type DeviceConnection,
@@ -69,6 +73,14 @@ export {
 export type { DeliveryResult, Sealer } from './push.js';
 export type { PushMessage, PushProvider } from './senders.js';
 export type { RequestJobHandle, RequestJobs } from './requests.js';
+export {
+  RelayHostRefusal,
+  relayPairingUrl,
+  type RelayChange,
+  type RelayHost,
+  type RelayHostState,
+  type RelayView,
+} from './outside.js';
 
 /** What the composition root lends this module (it may not import `auth` or `notify`). */
 export interface DevicesPorts {
@@ -100,6 +112,8 @@ export interface DevicesPorts {
    * not expired, its person active (auth)? A push registration lives only as long as it.
    */
   sessionLive(db: ModuleDb, tokenId: string, now: number): boolean;
+  /** Linked hubs (ADR 0026): the agents a peer may be shown, and asking one without tools. */
+  peerAgents: PeerAgentsPort;
 }
 
 /** Test seams: fakes for the push services, and permission to call 127.0.0.1. */
@@ -112,6 +126,16 @@ export interface DevicesOverrides {
   /** Lets a Web Push endpoint be `http:` and private (tests and the e2e fake push service). */
   allowPrivateEndpoints?: boolean;
   now?: () => number;
+  /** How long `getRelay` / `setRelay` wait for the desktop app (`outside.ts`). */
+  relayHostTimeoutMs?: number;
+  /** The `fetch` linked-hub calls go through: the two-hub test routes them in process. */
+  peerFetch?: typeof fetch;
+  /** The peer guest's answer, in place of the agent's (the two-hub test has no model). */
+  peerAsk?: (input: {
+    workspaceId: string;
+    agentId: string;
+    prompt: string;
+  }) => Promise<string | null>;
 }
 let overrides: DevicesOverrides = {};
 export function overrideDevices(next: DevicesOverrides): void {
@@ -124,6 +148,56 @@ const RELAY_SYNC_TICK_MS = 60_000;
 const services = new WeakMap<SocketServer, PushService>();
 /** Each hub's database, for the socket handlers (a socket has no request). */
 const databases = new WeakMap<SocketServer, ModuleDb>();
+/** The hubs running in this process, so a dropped registration is announced on the right one. */
+const liveHubs = new Set<SocketServer>();
+
+// ------------------------------------------------------------------ dropped registrations
+
+const droppedPush = new Set<string>();
+let dropFlush: ReturnType<typeof setImmediate> | null = null;
+
+/**
+ * The hub forgot a device's push registration on its own — a sign-in ended (auth), or the
+ * push service called the token dead — so the web's device list hears `device.updated`.
+ * Announced on the next turn, after the caller's transaction settled, and from the row as it
+ * then is: a transaction that rolled back announces the registration it kept, which is true.
+ * Device ids are unique to one hub's database, so each hub announces only its own rows.
+ */
+function pushDropped(deviceIds: readonly string[]): void {
+  if (deviceIds.length === 0) return;
+  for (const id of deviceIds) droppedPush.add(id);
+  dropFlush ??= setImmediate(flushDroppedPush);
+}
+
+function flushDroppedPush(): void {
+  dropFlush = null;
+  const ids = [...droppedPush];
+  droppedPush.clear();
+  if (!ports || ids.length === 0) return;
+  for (const io of liveHubs) {
+    const db = databases.get(io);
+    if (!db) continue;
+    let rows: DeviceRow[];
+    try {
+      rows = db.select().from(devices).where(inArray(devices.id, ids)).all();
+    } catch {
+      continue; // The hub is closing.
+    }
+    const online = onlineDevices(io);
+    for (const row of rows) {
+      // A revoked device was announced by whoever revoked it (`device.unlinked` or a logout).
+      if (row.status !== 'paired') continue;
+      ports.emitToUser(
+        io,
+        row.ownerId,
+        REALTIME_NAMESPACES.devices,
+        'device.updated',
+        { device: serializeDevice(row, { online: online.has(row.id), thisDevice: false }) },
+        now(),
+      );
+    }
+  }
+}
 
 /** The push service of one hub. `notify` reaches it through the composition root. */
 export function pushFor(app: FastifyInstance): PushService {
@@ -138,6 +212,7 @@ export function pushFor(app: FastifyInstance): PushService {
     env: (app.hub.config as { push?: PushEnvInput }).push,
     sealer: lent.sealer(app),
     sessionLive: (tokenId, at) => lent.sessionLive(requireSqlite(app.hub.database), tokenId, at),
+    onTokenForgotten: (deviceId) => pushDropped([deviceId]),
     checkEndpoint: async (endpoint) => {
       if (!allowPrivate && !endpoint.startsWith('https://')) return 'the endpoint is not https';
       const verdict = await lent.checkAddress(endpoint, allowPrivate);
@@ -250,13 +325,14 @@ const REVOKED_PUSH = {
 
 /**
  * A sign-in ended (sign-out, a revoked token, a password change, a re-pair): the push
- * registrations it made are forgotten, so nothing reaches a phone that is no longer signed
- * in. A row registered before `push_session_id` existed answers to its pairing token.
- * Returns the devices that lost their registration.
+ * registrations it made are forgotten, so nothing reaches a phone or a browser that is no
+ * longer signed in. A row registered before `push_session_id` existed answers to its pairing
+ * token. Returns the devices that lost their registration; each is announced
+ * (`device.updated`).
  */
 export function endPushForSessions(db: ModuleDb, tokenIds: readonly string[]): DeviceRow[] {
   if (tokenIds.length === 0) return [];
-  return db
+  const rows = db
     .update(devices)
     .set(REVOKED_PUSH)
     .where(
@@ -270,6 +346,8 @@ export function endPushForSessions(db: ModuleDb, tokenIds: readonly string[]): D
     )
     .returning()
     .all();
+  pushDropped(rows.map((row) => row.id));
+  return rows;
 }
 
 /**
@@ -278,12 +356,14 @@ export function endPushForSessions(db: ModuleDb, tokenIds: readonly string[]): D
  */
 export function endPushForOwners(db: ModuleDb, userIds: readonly string[]): DeviceRow[] {
   if (userIds.length === 0) return [];
-  return db
+  const rows = db
     .update(devices)
     .set(REVOKED_PUSH)
     .where(and(ne(devices.pushProvider, 'none'), inArray(devices.ownerId, [...userIds])))
     .returning()
     .all();
+  pushDropped(rows.map((row) => row.id));
+  return rows;
 }
 
 /** Marks the device revoked when its pairing token is revoked; null when no device holds it. */
@@ -346,6 +426,8 @@ export function serializeDevice(row: DeviceRow, options: SerializeDeviceOptions)
           },
     push_blocker: row.pushBlocker ?? null,
     this_device: options.thisDevice,
+    profiles: row.profiles ?? null,
+    helper: row.helper ?? null,
     created_at: row.createdAt.toISOString(),
     updated_at: row.updatedAt.toISOString(),
   };
@@ -420,6 +502,9 @@ const principalOf = (request: FastifyRequest): Principal => {
 const isAdmin = (principal: Principal) =>
   principal.user.role === 'owner' || principal.user.role === 'admin';
 
+/** An agent's run acting for its person (auth `run-tokens.ts`): pinned to the run's profile. */
+const isRunPrincipal = (principal: Principal) => principal.user.pinnedWorkspaceId !== undefined;
+
 /** The device, if the caller may see it: its owner, the device itself, or an admin. */
 function visibleDevice(db: ModuleDb, principal: Principal, id: string): DeviceRow {
   const row = findDevice(db, id);
@@ -461,6 +546,7 @@ export function createDevicesModule(lent: DevicesPorts): HubModule {
       if (!document) throw new Error('packages/contracts/openapi.yaml is required (ADR 0003)');
       const deps = { contract: createContractIndex(document), guards: lent.guards };
       databases.set(app.hub.io, requireSqlite(app.hub.database));
+      liveHubs.add(app.hub.io);
       // Clean-ups that end a sign-in (auth) do not call the relay; a quiet re-statement of the
       // hub's tokens every few minutes lets go of theirs there (ADR 0024 §6).
       const relaySync = setInterval(() => {
@@ -472,6 +558,7 @@ export function createDevicesModule(lent: DevicesPorts): HubModule {
       }, RELAY_SYNC_TICK_MS);
       relaySync.unref();
       app.addHook('onClose', async () => {
+        liveHubs.delete(app.hub.io);
         clearInterval(relaySync);
         services.get(app.hub.io)?.close();
         closeRequests(app);
@@ -634,8 +721,11 @@ export function createDevicesModule(lent: DevicesPorts): HubModule {
         operationId: 'devices.update',
         handler: (request, { params, body }) => {
           const db = dbOf(request);
-          const row = visibleDevice(db, principalOf(request), params.device_id as string);
+          const principal = principalOf(request);
+          const row = visibleDevice(db, principal, params.device_id as string);
           const patch = body as {
+            profiles?: string[] | null;
+            helper?: DeviceHelperReport | null;
             name?: string;
             brand?: string | null;
             model?: string | null;
@@ -653,6 +743,20 @@ export function createDevicesModule(lent: DevicesPorts): HubModule {
               details: { field: 'name', reason: 'empty' },
             });
           }
+          // Which profiles may ask the device is its person's choice, made from a sign-in of
+          // theirs: not the device's own token, not an agent's run, not an admin (§89).
+          if (
+            patch.profiles !== undefined &&
+            (row.ownerId !== principal.user.id ||
+              principal.deviceId === row.id ||
+              isRunPrincipal(principal))
+          ) {
+            throw new HubError('forbidden', { details: { reason: 'not_the_devices_person' } });
+          }
+          // What the helper offers is the computer's own report, from its own token only.
+          if (patch.helper !== undefined && principal.deviceId !== row.id) {
+            throw new HubError('forbidden', { details: { reason: 'not_this_device' } });
+          }
           const next = db
             .update(devices)
             .set({
@@ -665,6 +769,17 @@ export function createDevicesModule(lent: DevicesPorts): HubModule {
               ...(patch.os_version !== undefined ? { osVersion: patch.os_version } : {}),
               ...(patch.app_version !== undefined ? { appVersion: patch.app_version } : {}),
               ...(patch.push_blocker !== undefined ? { pushBlocker: patch.push_blocker } : {}),
+              ...(patch.profiles !== undefined
+                ? { profiles: patch.profiles === null ? null : [...new Set(patch.profiles)] }
+                : {}),
+              ...(patch.helper !== undefined
+                ? {
+                    helper:
+                      patch.helper === null
+                        ? null
+                        : { ...patch.helper, reported_at: new Date(now()).toISOString() },
+                  }
+                : {}),
               ...(patch.capabilities
                 ? {
                     capabilities: patch.capabilities.map((c) => ({
@@ -755,9 +870,9 @@ export function createDevicesModule(lent: DevicesPorts): HubModule {
             .set({
               pushProvider: input.provider,
               pushToken: push.sealToken(token),
-              // A phone's token lives as long as the sign-in that registered it. A browser's
-              // subscription is the browser's own: it stays until turned off or unlinked.
-              pushSessionId: input.provider === 'webpush' ? null : principal.tokenId,
+              // A token lives as long as the sign-in that registered it: a phone's, and a
+              // browser's too — the web registers its subscription again after each sign-in.
+              pushSessionId: principal.tokenId,
               pushLocale: input.locale ?? principal.user.locale ?? 'ar',
               pushRegisteredAt: new Date(at),
               lastSeenAt: new Date(at),
@@ -871,12 +986,6 @@ export function createDevicesModule(lent: DevicesPorts): HubModule {
         status: 202,
         handler: (request, { body }) => {
           const principal = principalOf(request);
-          if (!principal.scopes.includes('device') && !principal.scopes.includes('admin')) {
-            throw new HubError('forbidden', {
-              messageKey: 'auth.scope_insufficient',
-              details: { required_scope: 'device' },
-            });
-          }
           const input = body as {
             device_id: string;
             capability: CapabilityKind;
@@ -885,20 +994,42 @@ export function createDevicesModule(lent: DevicesPorts): HubModule {
             session_id?: string | null;
             timeout_ms?: number;
           };
+          // An agent's run may ask the person's own computer for its helper's files and
+          // programs (§89) and a phone for its location (§105), and nothing else; anyone else
+          // needs the `device` scope.
+          const run = isRunPrincipal(principal);
+          const allowed = run
+            ? AGENT_CAPABILITIES.has(input.capability)
+            : principal.scopes.includes('device') || principal.scopes.includes('admin');
+          if (!allowed) {
+            throw new HubError('forbidden', {
+              messageKey: 'auth.scope_insufficient',
+              details: { required_scope: 'device' },
+            });
+          }
           const device = findDevice(dbOf(request), input.device_id);
           // Only the device's own person may ask it; anyone else's device is not there.
           if (!device || device.status !== 'paired' || device.ownerId !== principal.user.id) {
             throw notFound({ resource: 'device', id: input.device_id });
           }
+          const workspace = workspaceOf(request);
+          if (device.profiles && !device.profiles.includes(workspace.slug)) {
+            throw new HubError('forbidden', {
+              details: { reason: 'device_not_in_profile', profile: workspace.slug },
+            });
+          }
           const { jobId, request: row } = requests(request).create({
-            workspace: workspaceOf(request),
+            workspace,
             ownerId: principal.user.id,
             device,
             capability: input.capability,
             purpose: input.purpose?.trim() || null,
             params: input.params ?? {},
             sessionId: input.session_id ?? null,
-            timeoutMs: input.timeout_ms ?? DEFAULT_TIMEOUT_MS,
+            // A run token's id is its run's (auth `run-tokens.ts`).
+            runId: run ? principal.tokenId : null,
+            timeoutMs: input.timeout_ms ?? defaultTimeoutFor(input.capability),
+            online: onlineDevices(request.server.hub.io).has(device.id),
           });
           return { job_id: jobId, request_id: row.id };
         },
@@ -980,6 +1111,46 @@ export function createDevicesModule(lent: DevicesPorts): HubModule {
         handler: (request, { body }) =>
           pushFor(request.server).updateRelay(
             body as { enabled?: boolean; private_push?: boolean },
+          ),
+      });
+
+      // ---------------------------------------------------------------- linked hubs (ADR 0026)
+
+      registerPeerRoutes(
+        app,
+        deps,
+        {
+          db: (hub) => requireSqlite(hub.hub.database),
+          sealer: (hub) => lent.sealer(hub),
+          agents: {
+            list: (hub, language) => lent.peerAgents.list(hub, language),
+            ask: (hub, input) =>
+              overrides.peerAsk ? overrides.peerAsk(input) : lent.peerAgents.ask(hub, input),
+          },
+          now,
+          fetch: () => overrides.peerFetch ?? fetch,
+          base: serverBasePath(document),
+        },
+        (request) => {
+          const principal = principalOf(request);
+          return { id: principal.user.id, username: principal.user.username };
+        },
+      );
+
+      // ---------------------------------------------------------------- way in from outside
+
+      defineRoute(app, deps, {
+        operationId: 'devices.getRelay',
+        handler: (request) => readRelay(request.server.hub.relayHost, overrides.relayHostTimeoutMs),
+      });
+
+      defineRoute(app, deps, {
+        operationId: 'devices.setRelay',
+        handler: (request, { body }) =>
+          changeRelay(
+            request.server.hub.relayHost,
+            body as RelayChange,
+            overrides.relayHostTimeoutMs,
           ),
       });
 

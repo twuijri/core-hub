@@ -1,9 +1,10 @@
 /**
- * A scripted Hermes for channel conversations (contract decision §61): answers the three
+ * A scripted Hermes for channel conversations (contract decisions §61, §88): answers the
  * calls `channel-conversations.ts` makes to Hermes's server the way Hermes does
  * (`hermes_cli/web_routers/sessions.py`, `v2026.9.14`) — `GET /api/sessions` filtered by
  * `sources`, most recent first, capped by `limit`; one session's row, `404 {"detail":
- * "Session not found"}` for an unknown id; its messages, the latest page when `order=latest`.
+ * "Session not found"}` for an unknown id; its messages, the latest page when `order=latest`;
+ * and `DELETE` of one session, `{"ok": true}` (`already_absent` for one already gone).
  *
  * Test scaffolding in the source tree on purpose, like `fake-runner.ts`: the unit tests, the
  * contract test and the e2e hub drive the real routes and the real reader against it. It is
@@ -20,6 +21,8 @@ import {
 export interface ScriptedProfile {
   sessions: HermesSessionRow[];
   messages?: Record<string, HermesMessage[]>;
+  /** Picture files in the profile's image cache, by name, with where they are (§103). */
+  pictures?: Record<string, string>;
 }
 
 export interface ScriptedChannels extends ChannelSource {
@@ -54,6 +57,7 @@ export function scriptedChannels(
     hermesProfile: (workspace) => options.profileOf?.(workspace) ?? null,
     stamp: (profile) =>
       options.stamps === false ? null : `${profile}:${writes.get(profile) ?? 0}`,
+    picture: (profile, name) => profiles[profile]?.pictures?.[name] ?? null,
     async get<T>(path: string): Promise<T> {
       calls.push(path);
       if (source.down) throw new ChannelSourceUnavailable('connect ECONNREFUSED 127.0.0.1');
@@ -63,14 +67,15 @@ export function scriptedChannels(
       // /api/sessions
       if (parts.length === 2) {
         const sources = (url.searchParams.get('sources') ?? '').split(',').filter(Boolean);
-        const limit = Number(url.searchParams.get('limit') ?? 20);
-        const rows = store.sessions
+        const limit = Math.min(Number(url.searchParams.get('limit') ?? 20), 100);
+        const offset = Number(url.searchParams.get('offset') ?? 0);
+        const all = store.sessions
           .filter((row) => sources.length === 0 || sources.includes(row.source ?? ''))
           .sort(
             (a, b) => (b.last_active ?? b.started_at ?? 0) - (a.last_active ?? a.started_at ?? 0),
-          )
-          .slice(0, limit);
-        return { sessions: rows, total: rows.length, limit, offset: 0 } as T;
+          );
+        const rows = all.slice(offset, offset + limit);
+        return { sessions: rows, total: all.length, limit, offset } as T;
       }
       const row = store.sessions.find((each) => each.id === parts[2]);
       if (!row) throw new ChannelSourceRefusal(404, 'Session not found');
@@ -80,13 +85,31 @@ export function scriptedChannels(
       const all = store.messages?.[row.id] ?? [];
       const asked = url.searchParams.get('limit');
       const limit = asked === null ? 500 : Math.min(Number(asked), 500);
+      const offset = Number(url.searchParams.get('offset') ?? 0);
       const latest = url.searchParams.get('order') === 'latest' || asked === null;
-      const page = latest ? all.slice(Math.max(0, all.length - limit)) : all.slice(0, limit);
+      // `latest` pages back from the newest, and answers each page oldest first.
+      const page = latest
+        ? all.slice(Math.max(0, all.length - offset - limit), Math.max(0, all.length - offset))
+        : all.slice(offset, offset + limit);
       return {
         session_id: row.id,
         messages: page,
-        pagination: { limit, offset: 0, returned: page.length },
+        pagination: { limit, offset, returned: page.length },
       } as T;
+    },
+    /** `DELETE /api/sessions/{id}`: gone, with its messages; one already gone is fine. */
+    async delete<T>(path: string): Promise<T> {
+      calls.push(`DELETE ${path}`);
+      if (source.down) throw new ChannelSourceUnavailable('connect ECONNREFUSED 127.0.0.1');
+      const url = new URL(path, 'http://hermes.test');
+      const store = profiles[url.searchParams.get('profile') ?? 'default'] ?? { sessions: [] };
+      const id = decodeURIComponent(url.pathname.split('/').filter(Boolean)[2] ?? '');
+      const at = store.sessions.findIndex((each) => each.id === id);
+      if (at < 0) return { ok: true, already_absent: true } as T;
+      store.sessions.splice(at, 1);
+      if (store.messages) delete store.messages[id];
+      writes.set(url.searchParams.get('profile') ?? 'default', (writes.get(id) ?? 0) + 1);
+      return { ok: true } as T;
     },
   };
   return source;

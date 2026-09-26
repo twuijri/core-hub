@@ -8,7 +8,7 @@
  * its diff, the diff opens the file, and what cannot be shown says why.
  */
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import { AuthProvider } from '../src/auth/context.js';
 import { SessionStore } from '../src/auth/store.js';
@@ -194,7 +194,12 @@ const requests: string[] = [];
 function mount(
   changes: RunChanges,
   diffs: Record<string, RunFileDiff>,
-  options: { language?: Language; files?: SessionFile[] } = {},
+  options: {
+    language?: Language;
+    files?: SessionFile[];
+    /** The last reply is still streaming, and the hub answers this for the live run (§102). */
+    live?: RunChanges | null;
+  } = {},
 ) {
   const store = new SessionStore(memoryStorage());
   store.save({
@@ -217,7 +222,9 @@ function mount(
     if (url.pathname.endsWith('/files'))
       return json({ working_dir: '/w', truncated: false, items: options.files ?? [] });
     if (url.pathname.endsWith(`/sessions/${SESSION}/changes`))
-      return json({ items: [changes], next_cursor: null });
+      return json({ items: options.live !== undefined ? [] : [changes], next_cursor: null });
+    if (url.pathname.endsWith(`/runs/${RUN}/changes`) && options.live !== undefined)
+      return options.live ? json(options.live) : json({ error: 'no', code: 'not_found' }, 404);
     if (url.pathname.endsWith('/changes/diff')) {
       const found = diffs[url.searchParams.get('path') ?? ''];
       return found ? json(found) : json({ error: 'gone', code: 'not_found' }, 404);
@@ -229,7 +236,9 @@ function mount(
   const messages = [
     message('u1', 'user', 'عدّل الملفات'),
     message('a1', 'assistant', 'بدأت'),
-    message('a2', 'assistant', 'انتهيت'),
+    options.live !== undefined
+      ? ({ ...message('a2', 'assistant', 'أعمل'), status: 'streaming' } as Message)
+      : message('a2', 'assistant', 'انتهيت'),
   ];
   render(
     <ThemeProvider>
@@ -304,6 +313,40 @@ describe('the card under a run', () => {
     expect(within(card).getAllByTestId('run-change-file')).toHaveLength(7);
     expect(card.textContent).toContain('And more files not listed here (243).');
     expect(card.textContent).toContain('may be missing');
+  });
+});
+
+describe('the card while the run is still going (decision §102)', () => {
+  it('shows what the run has changed so far under the live reply, with no diff to open yet', async () => {
+    mount(
+      runChanges([]),
+      {},
+      {
+        language: 'ar',
+        live: runChanges(
+          [change('src/app.ts', { additions: 2, deletions: 0 }), change('notes.md')],
+          { live: true },
+        ),
+      },
+    );
+    const card = await screen.findByTestId('run-changes-live');
+    expect(card.closest('[data-message-id]')?.getAttribute('data-message-id')).toBe('a2');
+    expect(within(card).getByTestId('run-changes-live-badge').textContent).toBe('حتى الآن');
+    expect(within(card).getByTestId('run-changes-title').textContent).toBe('غيّر ملفين');
+    // Recorded diffs come with the run's end: the rows open nothing yet.
+    const rows = within(card).getAllByTestId('run-change-file');
+    expect(rows.map((row) => row.tagName)).toEqual(['DIV', 'DIV']);
+    expect(requests.some((r) => r.includes(`/runs/${RUN}/changes`))).toBe(true);
+    expect(screen.queryByTestId('run-changes')).toBeNull();
+  });
+
+  it('draws nothing while the run has changed nothing, or has no folder', async () => {
+    mount(runChanges([]), {}, { live: null });
+    await waitFor(() =>
+      expect(requests.some((r) => r.includes(`/runs/${RUN}/changes`))).toBe(true),
+    );
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(screen.queryByTestId('run-changes-live')).toBeNull();
   });
 });
 

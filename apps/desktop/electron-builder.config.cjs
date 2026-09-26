@@ -17,11 +17,11 @@ const signed = Boolean(process.env.CSC_LINK || process.env.CSC_NAME);
 /** @type {import('electron-builder').Configuration} */
 module.exports = {
   appId: 'com.twuijri.corehub',
-  // The name a person sees: `Core Hub.app`, the DMG window, the menu bar and the Dock, the Start
-  // menu shortcut and the uninstall entry, the Linux desktop entry's Name. No top-level
-  // `executableName`: electron-builder names the macOS bundle and the DMG volume after it, which
-  // made 1.1.1 a lowercase `corehub.app` in a `corehub 1.1.1-arm64` window. The data folder does
-  // not follow any of these names (src/shared/user-data.ts).
+  // The name a person sees: `Core Hub.app`, the DMG window, the menu bar and the Dock; `Core
+  // Hub.exe` in a `Core Hub` folder, the Start menu shortcut and the uninstall entry; the Linux
+  // menu entry and `/opt/Core Hub`. No top-level `executableName`: electron-builder names the
+  // bundle, the .exe and the install folder after it (1.1.1 shipped `corehub.app` and
+  // `corehub.exe`). The data folder follows none of these names (src/shared/user-data.ts).
   productName: 'Core Hub',
   copyright: 'Copyright © twuijri. Apache-2.0.',
   directories: { output: 'release', buildResources: 'assets' },
@@ -53,9 +53,12 @@ module.exports = {
     maintainer: 'twuijri <twuijri@users.noreply.github.com>',
     mimeTypes: ['x-scheme-handler/corehub'],
     syncDesktopName: true,
-    // The binary stays `corehub` (`/opt/Core Hub/corehub`, the packaged smoke test's path); the
-    // desktop entry's Name is the productName.
-    executableName: 'corehub',
+    // The binary is `/opt/Core Hub/core-hub` (and `/usr/bin/core-hub`): no space in a command
+    // name, the desktop entry's Exec is quoted for the folder. What a person sees is the entry's
+    // Name, "Core Hub". The entry itself stays `corehub.desktop` (package.json `desktopName`), so
+    // the window class stays `corehub` = StartupWMClass and existing dock pins and the
+    // `corehub://` handler keep pointing at it. 1.1.1's binary was `corehub`.
+    executableName: 'core-hub',
   },
   deb: { packageName: 'corehub', artifactName: 'corehub_${version}_${arch}.${ext}' },
   mac: {
@@ -68,14 +71,20 @@ module.exports = {
     // falling back to unsigned.
     identity: signed ? undefined : null,
     hardenedRuntime: true,
+    // Dictation through the hub (B11): the hardened runtime gives a signed app no microphone
+    // without `com.apple.security.device.audio-input`, and macOS asks the person with these words
+    // (Arabic in assets/mac/ar.lproj/InfoPlist.strings). Both are used only when a page records.
+    entitlements: 'assets/entitlements.mac.plist',
+    entitlementsInherit: 'assets/entitlements.mac.plist',
+    extendInfo: {
+      NSMicrophoneUsageDescription:
+        'Core Hub uses the microphone when you dictate a message; the sound goes to your hub to be written out.',
+    },
+    extraResources: [{ from: 'assets/mac/ar.lproj', to: 'ar.lproj', filter: ['**/*'] }],
   },
   win: {
     target: [{ target: 'nsis', arch: ['x64'] }],
     icon: 'assets/icon.ico',
-    // `corehub.exe` in a `corehub` install folder, as before, so an update replaces the same files
-    // and the MSIX manifest keeps its executable; shortcuts and the uninstall entry use the
-    // productName.
-    executableName: 'corehub',
     // Unsigned: SmartScreen asks "More info → Run anyway" (docs/RELEASING.md). SignPath
     // Foundation's free signing for open source is the option noted for later.
   },
@@ -102,6 +111,9 @@ module.exports = {
     oneClick: false,
     perMachine: false,
     allowToChangeInstallationDirectory: true,
+    // Upgrading 1.1.1 (`corehub\corehub.exe`) moves the app to a `Core Hub` folder and points
+    // `corehub://` at the new .exe at once (scripts/installer.nsh).
+    include: 'scripts/installer.nsh',
     artifactName: 'Core-Hub-Setup-${version}-${arch}.${ext}',
   },
   // The window the DMG opens in, e.g. "Core Hub 1.1.1" (the default adds the arch).

@@ -15,7 +15,7 @@ import {
 } from 'react';
 import { DEFAULT_GLASS, type GlassLevel } from '@corehub/ui-tokens';
 import { browserLanguage, directionOf, isLanguage, type Language } from '../i18n/index.js';
-import { IconDisplay, IconMoon, IconSun } from '../ui/icons.js';
+import { IconMoon, IconSun, IconThemeSystem } from '../ui/icons.js';
 
 export type ThemeChoice = 'system' | 'light' | 'dark';
 // Light, dark, then "follow the system" — the order every desktop shows them in, and the
@@ -35,7 +35,7 @@ export function nextTheme(choice: ThemeChoice): ThemeChoice {
 
 /** The symbol for a theme choice. One drawing, so the footer and the Display page agree. */
 export function themeIcon(choice: ThemeChoice, size = 14) {
-  const Icon = choice === 'light' ? IconSun : choice === 'dark' ? IconMoon : IconDisplay;
+  const Icon = choice === 'light' ? IconSun : choice === 'dark' ? IconMoon : IconThemeSystem;
   return <Icon size={size} />;
 }
 export const GLASS_CHOICES: readonly GlassLevel[] = ['0', '1', '2', '3'];

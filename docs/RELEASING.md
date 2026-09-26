@@ -182,8 +182,12 @@ installers stay unsigned (`desktop.yml`).
 
 Owner's decision (2026-09-25): the iPhone app goes to the App Store (no Mac App Store; Google Play
 later). The listing, screenshots, privacy policy and review notes are prepared in the repository
-([docs/store/apple/README.md](store/apple/README.md)); **submitting is always the owner's own step
-in App Store Connect**. No workflow submits for review.
+([docs/store/apple/README.md](store/apple/README.md)). On the owner's request (2026-09-26),
+Actions → *iOS App Store submission* (`ios-submit.yml`) readies a version through the App Store
+Connect API (build, age rating, price and availability, content rights, manual release) and lists
+what only the owner can enter; with **submit** ticked it submits for review, and only when nothing
+is missing. App Privacy and the demo account are always the owner's own entries in App Store
+Connect.
 
 Once, and again when the listing or the screenshots change:
 
@@ -216,7 +220,9 @@ For each version:
    false` (`apps/ios/project.yml`), so App Store Connect does not ask.
 5. **Version details.** Check the version's text and screenshots, and the release choice
    (manual or automatic after approval).
-6. **Add for Review**, then **Submit to App Review** on the page that follows.
+6. **Add for Review**, then **Submit to App Review** on the page that follows — or run
+   *iOS App Store submission* with **submit** ticked, which does steps 2 and 5 itself and submits
+   only when step 3 and the rest are complete.
 
 ## The GitHub release (`publish-release.yml`)
 

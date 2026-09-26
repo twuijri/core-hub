@@ -403,62 +403,7 @@ hub reports the fact; the client warns and suggests `host.docker.internal`.
 Rewriting the URL silently was rejected — a hub that edits what you typed is a
 hub you cannot debug.
 
-## 26. Changing a conversation's agent is a fork; changing its model is a patch
-
-Owner direction, 2026-09-22. Mid-conversation, "talk to a different agent" and
-"run on a different model" look like the same gesture and are not the same act.
-
-A model is a setting of the running conversation: the same agent, the same
-tools, the same memory, a different engine behind the next turn. It stays
-`PATCH /sessions/{id}` (`SessionPatch.model`, `provider`) and the transcript is
-untouched.
-
-An agent is *who* the conversation is with. Its tools, its permissions, its
-notion of a session and its side of the transcript all change. Rewriting
-`Session.agent_id` in place would leave a transcript half of which was produced
-by an agent the row no longer names, and would abandon the first agent's live
-session with no way back. So it forks: `POST /sessions/{id}/fork` gained
-optional `agent_id`, `model` and `provider`. The fork copies the messages, sets
-the agent, starts **no** run, and points `parent_session_id` at the original,
-which is left exactly as it was — the person can go back to it.
-
-The refusals are explicit rather than silent: an unknown `agent_id` is `404
-not_found`, and an agent the hub has not installed is `422 agent_unavailable`
-with the agent id and its status in `details`. A fork with no `agent_id` is the
-fork that existed before this entry, unchanged.
-
-Rejected: a dedicated `POST /sessions/{id}/handoff`. It would be `fork` with one
-more field and a second copy of the copy-the-transcript rule, and §7's shape
-rules do not want a second verb under `/sessions/{id}` for an act the existing
-one already performs.
-
-### The hub names a session, unless a person did
-
-`Session.title` stays `null` until something names it, and "New chat" in a
-sidebar of twenty rows is a list with no information in it. After the first
-assistant reply of a session completes, the hub asks the session's *own* agent
-for a short title in the conversation's language, through a separate one-shot
-call that is not a run: no `Run` row, no job, no `/rt/sessions` run events, and
-a failure costs the caller nothing. The fallback, whenever that call is refused
-or unsupported by the adapter, is the first user message trimmed on a word
-boundary.
-
-The one-shot offers the model **no tools** and leaves nothing in the agent's
-history (2026-09-26): a title is not worth a model writing a file or sending a
-message on its way to six words. Hermes answers it with its own tool-free
-`llm.oneshot` on the conversation's model (the open conversation lends it, or a
-throwaway session in the same profile does, and no prompt is ever submitted);
-an agent without such a call is not handed a turn — the conversation's model is
-asked directly through the provider the hub knows, and without one the fallback
-names it.
-
-No field was added for it. A person's own title is one they sent in
-`SessionPatch.title`, so the hub marks the row when the patch carries a
-non-empty string and never overwrites it afterwards; `title: null` hands the
-naming back and the hub names it again, emitting `session.updated` on
-`/rt/sessions`. Rejected: a `title_source` enum on `Session`. Every client would
-have to render a state nobody displays, and the one question a client actually
-asks — "may I ask for a new title?" — is answered by sending `title: null`.
+> The second entry numbered 26 here — *Changing a conversation's agent is a fork; changing its model is a patch*, with *The hub names a session, unless a person did* — is now **§92** (renumbered 2026-09-27; code and records that say “§26” for forking or naming mean §92).
 
 ## 28. A list may span every profile the caller may enter (`profiles=all`)
 
@@ -1738,7 +1683,7 @@ because the hub had no multipart reader where the models module could use it. It
   words in `details.detail`. A silent take: `400 validation_failed`, `details.reason: no_speech`.
 - **One protocol for now: the OpenAI-shaped `audio/transcriptions`** (OpenAI, Groq, and any
   self-hosted OpenAI-compatible speech server). A custom endpoint added as a speech provider
-  needs no key — it is asked without one, like a custom chat endpoint (§26) — for both
+  needs no key — it is asked without one, like a custom chat endpoint (§27) — for both
   transcription and `models.synthesize`.
 - **No streaming.** Neither side streams: the web's voice mode is turn by turn (record → one
   transcription → the run streams its reply → the reply is spoken sentence by sentence as the
@@ -2446,13 +2391,13 @@ The owner, 2026-09-25, on the rest of the 501 inventory:
   to work both ways — connected to a server, or local — and a desktop-local person without a
   server may later want their phone to reach it from outside. That is what the relay is for.
   Options when it is built: the person's own Cloudflare Tunnel, or Tailscale. Not a service run
-  for them. Not built now; the operations stay 501.
+  for them. Not built now; the operations stay 501. *Built on 2026-09-27: §95.*
 - **Presets** (`agents.listPresets`, `getPreset`, `deletePreset`, `activatePreset`) and **hub
   peers** (`devices.listPeers`, `requestPeer`, `updatePeer`, `deletePeer`, `createPeerInvite`):
   «خلها بعدين اخاف تفتحلنا ثغرات» — later; the owner is wary of the security surface they open
   (a preset swaps an agent's whole configuration; a peer is another hub reaching into this one).
   Not built and not deleted; they stay 501 until a decision says what they may do and what they
-  may not.
+  may not. *Built on 2026-09-27: presets §100, hub peers §101 (ADR 0026).*
 
 ## 81. A device says what it is and what stops its push; a name a person gives it stays
 
@@ -2672,3 +2617,782 @@ Rejected: `reply_prefix` in the platform's `config.yaml` — the adapter hands i
 while the environment variable is also set, so it adds nothing; faking "no header" with a
 zero-width prefix (Hermes's own code notes WhatsApp renders those as stray characters) or a
 blank-line prefix.
+
+## 87. A model that only draws is never offered as a chat model
+
+The owner, testing hub 1.1.1 (2026-09-26): the ChatGPT subscription's `gpt-image-2`, OpenAI's
+`gpt-image-1` and the like appeared in the chat model pickers, and choosing one as a chat model
+failed the turn. Proposed, owner to confirm:
+
+- **`Model.image_only`** (optional boolean; absent from an older hub means `false`). The hub says
+  it for the families that answer only with pictures — the Images-API ones it already speaks to
+  through `/images/generations` (`gpt-image-*`, DALL·E, Imagen, FLUX, Stable Diffusion, Seedream,
+  Recraft, Ideogram …), the subscription's image model among them. A model that draws **and**
+  chats (`gemini-*-image`, `gpt-5-image`) keeps `image_output` and is not image-only.
+- **Clients leave image-only models out of every chat-model picker**: the composer, the chat and
+  auxiliary defaults, the fallback chain, a provider card's default and a workflow step. They stay
+  on the Images tab (§72), which lists `image_output` models as before.
+- The hub does not refuse an image-only model that a profile already chose as a chat model: a
+  refusal would break a saved setting without a way to see why. Hiding it is enough to stop new
+  mistakes.
+
+- **The add-provider dialog's Fetch says it too** (amended 2026-09-27): each model of
+  `models.probeProvider`'s answer carries `image_only` by the same rule, since nothing is stored
+  yet that could carry capabilities, and the dialog's default-model picker leaves those out.
+
+Rejected: a new `ModelKind` value (`image`), which widens an enum the native clients decode and
+changes what every existing row of the catalogue is; a capability "text output", whose absence
+would have made every older row image-only.
+
+## 88. A channel conversation is hidden per person, and deleted from Hermes by an admin
+
+The owner could neither hide nor delete a Telegram conversation in the chats list: they are
+Hermes's and read-only (§61), and he had to run `hermes sessions delete` inside the container.
+Proposed, owner to confirm:
+
+- **Hide** (`sessions.hideChannelConversation`, `PUT /channel-conversations/{id}/hidden`, and
+  `sessions.unhideChannelConversation`, its `DELETE`): the caller's own list stops showing it.
+  The hub keeps the mark — per person and per profile, keyed by Hermes's session id — and
+  touches nothing else: other people's lists, Hermes and the channel stay as they were.
+  `sessions.listChannelConversations` leaves hidden ones out unless `hidden=include`, which lists
+  them marked `hidden: true`, so a client can offer "Show hidden chats" and "Show again".
+- **Delete from Hermes** (`sessions.deleteChannelConversation`,
+  `DELETE /channel-conversations/{id}`, owners and admins): what `hermes sessions delete` does,
+  asked through Hermes's internal server (ADR 0015). What Hermes does, observed in its MIT source
+  at `v2026.9.14` (`hermes_cli/web_routers/sessions.py`, `hermes_state_sessions.py`) and said in
+  our words: `DELETE /api/sessions/{id}?profile=<p>` removes the session row and its messages,
+  deletes the delegate children with it and keeps branch children by clearing their parent, and
+  answers `{"ok": true}` — or `{"ok": true, "already_absent": true}` when there is nothing to
+  delete. It resolves an id it does not know as the one session that id is a prefix of. So the
+  hub first reads the row by the exact id (`GET /api/sessions/{id}`) and deletes only a
+  conversation from a messaging channel whose id is exactly the one asked for; anything else —
+  the hub's own chats, which Hermes keeps too, or a prefix — is `404`. The hub drops what it had
+  read of that profile, forgets every person's hidden mark on it, and writes an audit line
+  (`sessions.channel_conversation_deleted`). It is permanent; clients ask first and say so.
+
+Rejected: deleting through the `hermes` CLI from the hub process (the dashboard is already how
+the hub reads these, and it answers per profile); hiding for everyone (that is a different
+person's list); a soft delete in Hermes (Hermes has archive, but an archived conversation is
+still in its store, which is not what the owner asked for).
+
+## 89. An agent's run may ask its person's own computer for files and programs; a computer says what its helper offers
+
+A hub on a server could not reach the person's computer: a run token had no way to make a device
+request, and nothing described what the computer's helper offered (ADR 0025, the owner's scope of
+2026-09-26). Proposed — owner to confirm where the owner did not name it:
+
+- **`Device.helper`** — the folders the person shared (the app's own `~/Core Hub` marked
+  `default`), whether opening is allowed, and the programs switched on with the profiles each one
+  serves and its tools (`DeviceHelper`, `DeviceProgram`, `DeviceProgramTool`). Only the device
+  itself reports it (`devices.update` with its own token; anyone else `403 not_this_device`); the
+  hub stamps `reported_at`. `null` while the helper is off.
+- **`Device.profiles`** — the profiles whose agents may ask the device; `null`, the default, is
+  every profile of its person. Only that person, from a sign-in of theirs, changes it (the device's
+  own token, a run token or an admin: `403 not_the_devices_person`). A request made in a profile
+  it leaves out is `403` with `details.reason = device_not_in_profile`.
+- **A run token may create `files` and `apps` requests** to its own person's device, and nothing
+  else (`location` and the rest still need the `device` scope); the request carries the run's id.
+  This is how the hub's `devices` tools ask (§67's group, built here).
+- **`files`** params `{tool, arguments}` (the helper's tools and `send_file`, which uploads into
+  the request's profile with the resumable upload); result `{content, is_error}` or
+  `{attachment_id, name, mime, size_bytes, kind}`. **`apps`** params `{op: call, program, tool,
+  arguments}` or `{op: status, call_id}`; result `{state: done, content, is_error}` or
+  `{state: running, call_id, progress}` — anything else is `400 not_a_program_result`.
+- **Waits per capability** when the asker gives none: `files` 60 s, `apps` 120 s, everything
+  else 30 s. **Offline at once**: a `files`, `apps` or `screen` request to a device with no live
+  `/rt/devices` socket is `failed` with `unavailable` and says the device is offline, instead of a
+  wait nobody would answer (a phone's capabilities keep §74's catch-up).
+- **The `devices` group of the hub's tools is off until an admin switches it on**, even in a
+  profile whose tools were on; its reads are `list`, `list_folder`, `read_file`, `fetch_file`,
+  `run_status`; its writes `write_file`, `open`, `run`.
+- **What a device sends for the chat goes on the reply** of the run that asked
+  (`devices.fetch_file`); the file is an attachment of the profile like any other.
+
+Migration `0029` adds `devices.profiles` and `devices.helper`.
+
+Rejected: per-program tools in the hub's tool list (Hermes lists a profile's tools before a run
+names a person); a raw pipe per program through the hub (no per-call consent, logging or timeout,
+and it would not fit §74's one-answer request).
+
+## 90. A video plays from a one-attachment stream ticket
+
+A reply can now carry a video (a render from the person's computer). The web fetched every file
+with the bearer header into a blob, so a 40 MB video played only once all of it had arrived; a
+media element cannot send the header, and the contract keeps the bearer out of URLs. Proposed —
+owner to confirm:
+
+- `sessions.createAttachmentStream` (`POST /attachments/{id}/stream`) gives a path with a random
+  64-hex ticket (`/api/v1/attachment-streams/<ticket>`), valid for one hour, for that attachment
+  only; `sessions.streamAttachment` serves it with `Range` like the download, without a bearer,
+  `Cache-Control: private, no-store`.
+- The ticket is not the bearer and grants nothing else. It is checked on every read: the person
+  who asked must still be active and able to enter the profile. Tickets live in memory; a restart
+  forgets them and the page asks again.
+- The web plays a `video/*` or `audio/*` file of a message in place from it; the name stays under
+  it and opens the preview as before.
+
+Rejected: the bearer in the URL (it would reach logs and history); a service worker that adds the
+header (one more moving part, absent on first load, and the push worker is optional).
+
+## 91. A client asks for speech in a format it can play
+
+The owner (2026-09-27): the iPhone cannot play the hub's Ogg speech and falls back to the phone's
+own voice. `models.synthesize` had no way to say what the client plays, so each provider sent its
+own format. Proposed, owner to confirm:
+
+- **`SpeechRequest.format`** (`SpeechFormat`: `mp3`, `aac`, `wav`, `ogg` — Ogg Opus), optional.
+  The hub asks the provider for it where the provider lets it choose (the OpenAI-shaped protocol's
+  `response_format`, where Ogg Opus is `opus`); a provider that cannot choose sends its own format.
+  The response `Content-Type` always says what came, and `audio/aac` joins the declared types.
+- **Omitted or null is the provider's default**, as before: nothing changes for a client that does
+  not ask.
+- The iPhone and Android apps ask for `mp3`, which both play natively and every speech provider the
+  hub drives can produce; the web keeps not asking.
+
+Rejected: converting the audio on the hub (a transcoder in the image for one client's gap), and a
+per-provider setting (the format is the listener's constraint, not the provider's).
+
+## 92. Changing a conversation's agent is a fork; changing its model is a patch
+
+Owner direction, 2026-09-22. Mid-conversation, "talk to a different agent" and
+"run on a different model" look like the same gesture and are not the same act.
+
+A model is a setting of the running conversation: the same agent, the same
+tools, the same memory, a different engine behind the next turn. It stays
+`PATCH /sessions/{id}` (`SessionPatch.model`, `provider`) and the transcript is
+untouched.
+
+An agent is *who* the conversation is with. Its tools, its permissions, its
+notion of a session and its side of the transcript all change. Rewriting
+`Session.agent_id` in place would leave a transcript half of which was produced
+by an agent the row no longer names, and would abandon the first agent's live
+session with no way back. So it forks: `POST /sessions/{id}/fork` gained
+optional `agent_id`, `model` and `provider`. The fork copies the messages, sets
+the agent, starts **no** run, and points `parent_session_id` at the original,
+which is left exactly as it was — the person can go back to it.
+
+The refusals are explicit rather than silent: an unknown `agent_id` is `404
+not_found`, and an agent the hub has not installed is `422 agent_unavailable`
+with the agent id and its status in `details`. A fork with no `agent_id` is the
+fork that existed before this entry, unchanged.
+
+Rejected: a dedicated `POST /sessions/{id}/handoff`. It would be `fork` with one
+more field and a second copy of the copy-the-transcript rule, and §7's shape
+rules do not want a second verb under `/sessions/{id}` for an act the existing
+one already performs.
+
+### The hub names a session, unless a person did
+
+`Session.title` stays `null` until something names it, and "New chat" in a
+sidebar of twenty rows is a list with no information in it. After the first
+assistant reply of a session completes, the hub asks the session's *own* agent
+for a short title in the conversation's language, through a separate one-shot
+call that is not a run: no `Run` row, no job, no `/rt/sessions` run events, and
+a failure costs the caller nothing. The fallback, whenever that call is refused
+or unsupported by the adapter, is the first user message trimmed on a word
+boundary.
+
+The one-shot offers the model **no tools** and leaves nothing in the agent's
+history (2026-09-26): a title is not worth a model writing a file or sending a
+message on its way to six words. Hermes answers it with its own tool-free
+`llm.oneshot` on the conversation's model (the open conversation lends it, or a
+throwaway session in the same profile does, and no prompt is ever submitted);
+an agent without such a call is not handed a turn — the conversation's model is
+asked directly through the provider the hub knows, and without one the fallback
+names it.
+
+No field was added for it. A person's own title is one they sent in
+`SessionPatch.title`, so the hub marks the row when the patch carries a
+non-empty string and never overwrites it afterwards; `title: null` hands the
+naming back and the hub names it again, emitting `session.updated` on
+`/rt/sessions`. Rejected: a `title_source` enum on `Session`. Every client would
+have to render a state nobody displays, and the one question a client actually
+asks — "may I ask for a new title?" — is answered by sending `title: null`.
+
+## 93. Tasks run in order: `auto_start` waits for dependencies, a quiet run is marked stuck, the archive is counted
+
+Proposed — owner to confirm (2026-09-27, the night's "tasks run in order" batch). Four things the
+Tasks section promised or needed, each with the smallest contract change that says it.
+
+**Auto-start waits for what a task depends on.** A task with `auto_start` that is `ready` and given
+to an agent does not start on its own while any task of its `depends_on` is not done, and starts
+itself when the last of them reaches `done` (the move to `done` looks again, as a move to `ready`
+already did). "Done" is `done`, or `archived` after `done` — the weekly archive keeps
+`completed_at`; a task archived by hand has none and is not done. A person's "assign and start" is
+**not** held back: the person decides, and the clients warn first, naming what is not done. So
+that a card and its details can say what it waits for, `Task` gained `waiting_on`: the
+dependencies not done yet, each `{ id, title, status }` (`TaskDependencyState`) — the ids alone
+would leave a client to find titles among tasks it may not have loaded (the archive, another
+profile's board). Rejected: blocking a manual start with `409` — the owner's rule is that a
+person can always start a task by hand.
+
+**A stuck-task watchdog, on the scheduler's clock.** A `running` task of the hub's own whose run
+has shown no activity — no event on `/rt/sessions` that names the run: text, reasoning, a tool
+call, a step — for `COREHUB_TASK_STUCK_MINUTES` (default **30, proposed**; `0` is off) gets
+`Task.stuck_since` (the moment it last showed any) and its owner **one** notice ("A task seems
+stuck", kind `task_moved`, opening the task; the person's "task moved" switch silences it). The
+marker goes when the run speaks again or the task leaves `running`, and it is announced as
+`task.updated`. Nothing is moved and nothing is stopped: a slow run is not a failed one, and the
+person decides. A run waiting for a person's answer (`waiting_approval`, `waiting_input`) is not
+stuck — it has already asked. The check runs on the hub scheduler's tick (`schedules` owns the
+clock, `tasks` the rule, `notify` the words; they meet in the composition root), not on a timer of
+its own. What a run last did is kept in memory: a restart ends every run and settles its task
+(§47), so nothing about it has to outlive the process. Rejected: moving a stuck task to `blocked`
+(it would undo work that was only slow) and an env var the UI cannot see being the only switch
+forever — a setting can replace it later without a contract change.
+
+**`task.moved` carries `from`, `to` and `actor`.** The event's schema always required them; the
+move route sent the task alone, so webhooks forwarded an event without them. It now sends all
+three, and a card put elsewhere in its own column is `task.updated`, not `task.moved`.
+
+**The archive is counted, not sent.** Without `include_archived`, `tasks.getColumns` answers the
+`archived` column with its real `count` (and `counts.by_status.archived`) and empty `tasks`;
+`counts.total` counts only the columns whose tasks came along. The board is read again every few
+seconds while a task runs, and the archive only grows, so clients read it with
+`include_archived=true` only when a person opens it.
+
+## 94. Speech providers: voices from the provider or its documentation, every language, long text in parts
+
+The owner asked for Groq's voices (its Saudi Arabic voice among them, chosen by the person) and
+the well-known speech services, each added in a click, with a voice picker and a preview; and,
+as for everything in Core Hub, every language — "Arabic" means "Arabic too". Proposed — owner to
+confirm:
+
+- **Presets.** Groq speaks and transcribes with its chat key (`groq-stt`: Whisper over OpenAI's
+  shape; `groq-tts`: Orpheus, English and Arabic-Saudi, WAV only, 200 characters a request, no
+  default model or voice — the person picks). ElevenLabs gains Scribe (`elevenlabs-stt`).
+  Deepgram (`deepgram-stt`, `deepgram-tts`: Nova and Aura) and Azure Speech (`azure-tts`,
+  `azure-stt`, with a resource key; the address is the region's endpoint, asked for with
+  `ProviderPreset.base_url_example`) are new families. Adding one row of a family adds its
+  siblings, and a family that already holds a key in the chosen scope lends it
+  (`ProviderPreset.key_on_file`): no key is pasted twice.
+- **Voices** (`models.listVoices`): the provider's own list when it has an endpoint
+  (`source: provider` — ElevenLabs `/v2/voices` page by page, Deepgram's `/v1/models`, Azure's
+  region voice list); its public documentation when it has none (`source: documented` — Groq,
+  OpenAI), kept in one editable file of the hub (`modules/models/speech/documented.ts`) with the
+  page and the day it was checked; `source: none` otherwise. `model` narrows the list to that
+  model's voices (`Voice.models`); `Voice.description` carries the provider's words (accent).
+- **Models** of a speech row are its provider's own list filtered to the row's kind; a provider
+  with no model endpoint (Scribe) answers its documented list with `catalogue.source: fallback`.
+- **Preview**: `SpeechRequest.model` joins `voice` and `provider_id`, so the page speaks the model
+  and voice on screen before they are saved.
+- **Long text**: a provider whose request limit is below the text (Groq 200, Deepgram 2 000,
+  OpenAI 4 096, ElevenLabs 5 000) is sent it in parts cut at sentence, then clause, then word
+  boundaries, and the parts' audio comes back as one file (WAV samples joined under one header;
+  MP3 frames concatenated).
+- **Every language**: the web offers "Detect automatically", the popular languages, then every
+  language (names from the browser in the interface language), and any id — model, voice,
+  language code — can be typed by hand.
+- **Hermes** hears the choice where it has a backend: `stt.provider` `groq` / `openai` /
+  `elevenlabs` and `tts.provider` `openai` / `elevenlabs`, with the row's model, voice and
+  language in that provider's block, written key by key. For Groq TTS (Hermes's OpenAI-shaped TTS
+  asks for MP3 or Opus, which Groq refuses), Deepgram and Azure, Hermes's own voice is left as it
+  is; the web and the phones speak through the hub's endpoints.
+
+Rejected: Google Cloud Text-to-Speech and Speech-to-Text (their authentication pages name
+Application Default Credentials and service accounts, not an API key, which the hub's one-key
+provider model needs); Microsoft Edge's read-aloud voices (an undocumented endpoint reached by
+presenting as the Edge browser, with no terms that grant a third-party server its use — Azure
+Speech offers the same neural voices with a key); a static voice list for a provider that has a
+list endpoint.
+
+## 95. The way in from outside: the person's own Cloudflare Tunnel or Tailscale, run by the desktop app
+
+The owner, 2026-09-26, on the relay parked in §80: «كل اللي قلت لك خلها بعدين… سوها». A person
+who runs the desktop app in local mode, with no server, wants their phone to reach that hub from
+outside the house. Proposed — owner to confirm:
+
+- **Where it runs.** Only a hub the desktop app started (local mode) can open a way in. The hub
+  runs nothing and keeps no secret: `devices.getRelay` / `devices.setRelay` ask the app over the
+  child's IPC channel (`apps/desktop/src/shared/hub-ipc.ts`), and the app does the work. Any other
+  hub answers `getRelay` with `available: false` and `setRelay` with `409 relay_unavailable`,
+  rather than `501`.
+- **Cloudflare Tunnel** (`route: cloudflare`). The person makes a tunnel in their own Cloudflare
+  dashboard (Zero Trust › Networks › Tunnels), gives it a public hostname whose service is
+  `http://localhost:<hub_port>`, and pastes its token. The app keeps the token sealed by the OS
+  keychain (`safeStorage`, as the device token of §89), never returns it (`token_set` and the
+  token's tunnel id only) and never logs it; the hub checks its shape (base64 of `{a, t, s}`)
+  and passes it through once. The app downloads `cloudflared` from Cloudflare's GitHub releases
+  on first use, at a pinned version (2026.9.3) whose SHA-256 is Cloudflare's published one for
+  that file — any other file is refused — keeps it in `<app data>/tools`, and runs
+  `cloudflared tunnel --no-autoupdate --metrics 127.0.0.1:<free port> run` with the token in
+  `TUNNEL_TOKEN` (never on the command line). `connected` comes from cloudflared's own `/ready`;
+  the routes the dashboard gives the tunnel come from its log (`hostnames`, with `matches: false`
+  for one that points anywhere but the hub's port). It restarts after a crash with a growing
+  pause, but not for a token Cloudflare refuses (`token_invalid`).
+- **Tailscale** (`route: tailscale`). When the computer is on a tailnet (an address in
+  100.64.0.0/10; the MagicDNS name from `tailscale status --json` when the program is where its
+  installers put it), the app listens on that address only, at the hub's port, and passes each
+  connection to the hub on the loopback. Never on 0.0.0.0 or the LAN.
+- **A stable port.** The hub of local mode asks for the port it used last
+  (`COREHUB_DESKTOP_PORT`), so a tunnel's service keeps pointing at it; another one when it is
+  taken, and the page then shows the route pointing elsewhere.
+- **Pairing.** While the way in is open, a pairing made on that hub is `connection: relay` and
+  its QR's `hub_url` is `relay_url` (`https://<hostname>`, or `http://<tailnet address>:<port>`),
+  whatever was asked: that hub listens on its own computer only, so no other address would reach
+  it. Asking for `relay` while it is closed answers `409 relay_not_connected`.
+- **Security.** The hub keeps its normal sign-in; the way in carries the hub's port and nothing
+  else. The page says, before anything is turned on, that the hub becomes reachable from the
+  internet through the person's own tunnel. Nothing starts until the person turns it on, and it
+  stops with the hub.
+
+The contract changes: `Relay` loses `hub_id` and the `official` route (no service is run for
+anyone, §80), and gains `available`, `hub_port`, `token_set`, `tunnel_id`, `hostname`,
+`hostnames`, `tailnet`, `error` (a closed list) and `error_detail`; `RelayUpdate` is the body of
+`setRelay` (`enabled`, `route`, write-only `token`, `forget_token`, `hostname`), which queues no
+job. Rejected: a relay service run for people (§80); `cloudflared` bundled in every installer (tens
+of MB for a feature few turn on, and a second program to keep current in every release); the
+token on `cloudflared`'s command line (other users of the computer can read it); `tailscale serve`
+(it needs HTTPS certificates turned on for the tailnet, and changes the person's Tailscale
+settings rather than only the app's own listener).
+
+## 96. Who is asking: `X-Forwarded-For` only from a proxy the hub trusts
+
+Found on 2026-09-27 while opening a way in from outside (§95): the hub ran Fastify with
+`trustProxy: true`, so it believed `X-Forwarded-For` from anyone, and `request.ip` was the
+left-most address in it — the one the client writes. A client on the internet could send a new
+address with every guess and never meet the per-address lockout of passwords, app tokens and
+pairing codes. Socket.IO handshakes did the opposite: they counted the raw peer, so every
+client behind a proxy shared the proxy's address and one person's mistakes locked everyone out.
+Proposed — owner to confirm:
+
+- **The rule.** Forwarded headers are believed only from a peer the hub trusts, and the client is
+  the right-most address in `X-Forwarded-For` that is not a trusted proxy (proxy-addr's rule, the
+  one Fastify applies). Fastify's `request.ip`, `request.host` and `request.protocol` and the
+  Socket.IO handshake use one trust function (`packages/server/src/lib/client-address.ts`), so a
+  failure over HTTP and over a socket counts against the same address. The web terminal's audit
+  line (`terminal.opened`) records that address too.
+- **The setting.** `COREHUB_TRUST_PROXY`, read in `app/config.ts` only: a comma list of IP
+  addresses / CIDR ranges, `false` (nobody), or a hop count 1–10. Anything else stops the hub at
+  boot with the reason (`ConfigError`), like every other variable.
+- **The default.** Unset, the hub trusts `127.0.0.0/8`, `::1`, `10.0.0.0/8`, `172.16.0.0/12`,
+  `192.168.0.0/16` and `fc00::/7`: a Caddy/Traefik container on the stack's Docker network and a
+  `cloudflared` on the same machine connect from these, so every stack we deploy keeps working
+  by replacing the image; a client on the internet does not, so what it writes is ignored.
+  Tailscale's own addresses (`100.64.0.0/10`) are clients, not proxies.
+- **The desktop app's Tailscale route** (§95) connects to the hub from loopback, which the
+  default trusts, so it no longer passes bytes through: it forwards HTTP — requests, server-sent
+  events and WebSocket upgrades — drops the peer's own `Forwarded`, `X-Forwarded-*` and
+  `X-Real-IP`, and writes `X-Forwarded-For` with the tailnet peer's address
+  (`apps/desktop/src/main/tailnet.ts`). A machine on the person's tailnet is counted as itself.
+
+Known limits: under the default a machine on the same private network as a hub whose port is
+published directly can still write its own address — such a stack sets `false` (docs/DEPLOY.md
+§3d). Rejected: `false`
+as the default (every client behind a proxy would share one address, and one person's failed
+sign-ins would lock everyone out); a hop count as the default (a client reaching the port
+directly could claim any address); reading `CF-Connecting-IP` or `X-Real-IP` (headers a client
+can send as easily, and not what the reference proxies set).
+
+## 97. An agent's incoming webhooks are Hermes's routes, reached through the hub's own address
+
+W14 of the fork gap list: an outside service (GitHub, a form, a script) starts a run of the agent
+with a prompt. Hermes has a receiver for it; the hub had only outbound webhooks. Proposed — owner
+to confirm.
+
+**What Hermes does**, observed in its MIT source at `v2026.9.14` (`gateway/platforms/webhook.py`,
+`hermes_cli/webhook.py`) and said in our words. The receiver is a platform of the messaging
+gateway, `platforms.webhook` in a profile's `config.yaml`: switched on, the gateway serving the
+profile listens on `extra.port` (8644 when none is given) and `extra.host` (every interface when
+none is given), answering `POST /webhooks/<route>` and `GET /health`. Routes come from
+`extra.routes` in `config.yaml` (static; they win a name clash) and from
+`webhook_subscriptions.json` in the profile's home (what `hermes webhook subscribe` writes, mode
+0600), which is read again by its modification time on every POST — a new or deleted route needs
+no restart, switching the platform on does. A route has a secret (required; one without is
+skipped), a prompt template, the events it takes (empty: all), skills, and `deliver` (`log` keeps
+the answer in Hermes's record of the run; a platform's name sends it to that platform's home chat).
+A POST is capped at 1 MiB, checked against the secret (GitHub's `X-Hub-Signature-256`, GitLab's
+`X-Gitlab-Token`, Svix and Standard Webhooks, Linear, or the generic `X-Webhook-Signature` and its
+timestamped `-V2`), rate-limited per route (30 a minute), filtered by event (`X-GitHub-Event`,
+`X-GitLab-Event`, or the body's `event_type`/`type`) and de-duplicated by its delivery id for an
+hour. The prompt is rendered with `{a.b}` taken from the JSON body (a form body is read too),
+`{event_type}` and `{__raw__}`; an empty prompt asks with the whole body. The POST is answered
+`202 {status: accepted, route, event, delivery_id}` at once and the run starts; `200` says
+`ignored` or `duplicate`; refusals are `401` (signature), `404` (no such route), `403` (a route
+switched off), `413`, `429`. A route's `profile` must be `default` for a gateway that serves one
+profile, which is how the hub runs them.
+
+**What the hub does:**
+
+- **Routes on the agent's Channels page** (`agents.listWebhooks`, `createWebhook`,
+  `deleteWebhook`, `testWebhook`; owners and admins). A route the hub makes is written to
+  `webhook_subscriptions.json` in Hermes's own shape with a new 32-byte random secret, and the
+  profile's listener is switched on in `config.yaml`, **bound to `127.0.0.1`** on a port of its
+  own (from 18650 up, one no other profile's listener has and nothing on the machine holds; one
+  written by hand is kept). The profile's gateway starts or restarts to listen, as after any
+  channel change (§85); deleting the last route switches the listener off again. Static routes are
+  listed with `static: true` and are not deleted here. The page shows each route's full address
+  and its secret (hidden until shown), each with a copy button; `deliver` is `log` or a channel
+  switched on in the profile.
+- **The hub is the public door** (`agents.receiveWebhook`,
+  `POST /api/v1/hermes-webhooks/<profile slug>/<route>`, no bearer: the route's secret is the
+  permission, checked by Hermes). The hub passes the body byte for byte, with the headers Hermes
+  reads a signature, an event or a delivery id from, to the profile's listener on its own machine,
+  and answers what the listener answered: a `2xx` as it came, a refusal in the hub's envelope with
+  Hermes's words in `details.hermes_error`, `503` when nothing listens. So an outside service needs
+  only the hub's address — **which must be reachable from the internet**, and the page says so,
+  louder when the page itself was opened on a private address — and no port is opened on the host:
+  a Docker upgrade keeps working by replacing the image alone.
+- **Test** sends what `hermes webhook test` sends — a `test` event signed with the route's secret —
+  from the hub to the listener, so the agent runs once with the route's prompt. It proves the route
+  and the listener, not the public address.
+- In the channels list the `webhook` platform is shown in this section, not as a card of its own.
+
+Rejected: publishing Hermes's port on the host (a Compose change for every existing stack, and a
+second address to secure); the hub checking signatures itself (Hermes has the full set, and two
+checkers would drift); letting the page set a route's toolsets or skills (Hermes deliberately
+keeps toolsets out of `hermes webhook subscribe`, so an agent-made route cannot grant itself tools;
+skills can follow later); a route the hub serves with its own run instead of Hermes's (Hermes's
+routes are what its CLI and agents already manage).
+
+## 98. Media plays from byte ranges: conversation files and working files stream like attachments
+
+W10 of the fork gap list: a video or a sound the agent made played nowhere, and a conversation's
+files and the profile's working files were sent whole, with no ranges — only stored attachments
+had them (§90 added their stream tickets). Proposed — owner to confirm:
+
+- **One byte range** on `sessions.readFile`, `knowledge.downloadWorkspaceFile` and the stream
+  addresses: `Range: bytes=a-b`, `a-` or `-n` answers `206` with `Content-Range`; a range that
+  starts at or past the end (or `-0`) is `416` with `Content-Range: bytes */<size>`
+  (`bad_request`, `details.reason = range_not_satisfiable`); anything else — another unit, several
+  ranges, `b < a` — is ignored and the whole file sent, as RFC 9110 allows. `Accept-Ranges: bytes`
+  on every answer. Stored attachments keep §90's behaviour.
+- **`SessionFilePreview` gains `video` and `audio`**, decided from the name (`mp4`, `m4v`, `webm`,
+  `ogv`, `mov`, `mkv`; `mp3`, `m4a`, `aac`, `wav`, `oga`, `ogg`, `opus`, `flac`, `weba`) or, for an
+  attachment whose name says nothing, from its stored type. Their preview cap is 64 GiB: a player
+  reads a range at a time, so size is not what stops it; a download of one is capped the same way.
+- **Stream tickets for files** (§90's mechanism, one more kind of ticket):
+  `sessions.createFileStream` (a file of the session's working folder, checked as `readFile`
+  checks it) and `knowledge.createWorkspaceFileStream` (owners and admins) answer the same
+  `AttachmentStream`; `knowledge.streamFile` (`GET /api/v1/file-streams/<ticket>`, no bearer) serves
+  it with ranges, opening the file again by the working-file rules on every read. A ticket names
+  one file, lasts an hour, lives in memory and stops when its person may no longer enter the
+  profile (or, for working files, is no longer an owner or admin). Served in place only for video,
+  audio, pictures (not SVG) and PDF; anything else as a download. `private, no-store`, `nosniff`,
+  sandboxed.
+- **The web plays them**: in the side file panel (a `<video>` or `<audio>` with its controls, from
+  the ticket — the page never reads the file into itself; Download saves from the same address) and
+  in a reply (an attachment whose type or name says video or audio). Whether the browser can decode
+  the format is its call: when the element says it cannot, the reply shows the name and the panel a
+  note with Download.
+- **A reader that stops half-way is not an error.** A player drops the rest of a range it asked
+  for as soon as it has what it needs; the hub answered that with an error after the headers, which
+  threw out of the process (found by the journey that seeks; §90's attachment stream had the same
+  path). A route that sends on its reply now waits for it to end and never turns a closed
+  connection into an error (`lib/route.ts` §streamed).
+
+Rejected: the bearer in the media URL (§90); several ranges in one answer (`multipart/byteranges`,
+which no player asks for); a separate range route per module (one ticket route serves both kinds).
+
+## 99. A room message carries pictures and files; a seat's question names its room
+
+Proposed — owner to confirm (the phones' rooms, 2026-09-27: «reuse the chat composer … attachments
+with the quality choice», and «the room's pending items appear in the phone's pending list»).
+
+- **Files in a room.** `RoomMessageCreate.content` takes `image` and `file` blocks as well as text —
+  words, files, or both — naming attachments uploaded into the room's profile the way a chat's are
+  (`sessions.uploadAttachment`, `sessions.startUpload`). An id that names no attachment there is
+  `404`; `audio` and `location` blocks are `400 validation_failed` with
+  `details.reason: unsupported_block` (a phone sends a recording as a file). The stored message keeps
+  each block with its attachment's name, type, size and address, so every member sees it. The files
+  go with each seat's next turn as a chat's files go with its run (the seat's own run carries them
+  as blocks; the hub copies them into the run's input folder), and the room's transcript as the seat
+  reads it names them (`(attached: …)`). Rejected: a room's own upload — the profile's attachments
+  already serve chats, and any member of the room may enter its profile.
+- **A seat's question names its room.** An approval or question raised in a seat's own conversation
+  carries `Approval.room_id` (it was always `null`), everywhere an approval is read: the pending
+  list (`sessions.listApprovals`), the events, and `RoomDetail.pending_approvals`, which now lists
+  what waits in the room's seats (it was always empty). The pending list opens such an item in its
+  room. `sessions` learns a seat's room from `rooms` through the composition root
+  (`registerRoomOfSeat`), so neither module imports the other.
+
+## 100. A preset is a saved bundle of one agent's settings in a profile, applied through the existing saves
+
+Proposed — owner to confirm. The owner parked presets on 2026-09-25 (§80) and lifted it on
+2026-09-26 («كل اللي قلت لك خلها بعدين لا سوها ما عندي مشكلة»). The contract had put them under
+agents for one agent (`dsh`) that is not in the catalog; they now mean something for every agent.
+
+- **What a preset is.** A named bundle (`AgentPreset`) of one agent's settings in one profile:
+  `content.model` — the profile's chat model with its fallback chain (`null` when the profile
+  inherits the `default` profile's) and the agent's own model; `content.skills` — skill key →
+  on/off (Hermes's built-in skills, which the hub does not switch, are left out);
+  `content.mcp_servers` — server name → on/off (never a server's configuration); and
+  `content.settings` — section → field → value, as `agents.updateSettings` takes them. A part the
+  agent did not have when saved is `null` and is left alone on activation.
+- **Never a secret.** Providers are named by id and MCP servers by name; a settings field of
+  kind `secret`, and any text value carrying a user and password (`http://user:pass@proxy`), is
+  not saved — and not written on activation, even from a preset stored before the rule.
+- **Operations.** `agents.listPresets` and `agents.getPreset` (whoever may read the agent's
+  settings), `agents.createPreset` (new: save the current settings under `name`; a name used by
+  another preset of the agent in the profile is `409 conflict`, more than 50 is `409
+  state_invalid`), `agents.deletePreset` and `agents.activatePreset` (owners and admins).
+- **Activating goes through the existing operations, as the caller.** `models.setDefaults`,
+  `agents.update`, `agents.updateSkill`, `agents.updateMcpServer` and `agents.updateSettings`,
+  with the caller's own credentials, so every check, event and restart those make happens as from
+  the pages. Only what differs from the agent's current state is written. What is gone since the
+  preset was saved (a provider, a skill, a server, a section) comes back in
+  `AgentPresetActivation.skipped` with the refusal's code, and the rest still applies;
+  `restart_job_ids` are the restarts the settings asked for. Saving reads through the matching
+  read operations the same way.
+- The old `AgentPreset` shape (`trust`, `is_default`, `broken`, `content` as text) and
+  `authorable` are gone: the operations were 501 and no client used them. `AgentSection.presets`
+  stays declared and unused; the web shows presets as a card on the agent's Settings page.
+- Rejected: storing a copy of Hermes's `config.yaml` (it holds keys and would bypass every
+  check); a preset shared across profiles (the providers and skills differ per profile).
+
+## 101. Linked hubs: invite, approve, signed calls, shared agents and one tool-free question
+
+Proposed — owner to confirm; the threat model and the reasons are ADR 0026.
+
+- **`Peer`** now says `hub_name`, `direction` (`inbound`: it used this hub's invite;
+  `outbound`: this hub used its invite), `status` (`pending` for this owner, `waiting` for
+  theirs, `linked`), `enabled`, `fingerprint` (SHA-256 of its Ed25519 key, 16 bytes in hex
+  groups), `asks_per_hour` and `approved_at`. `inbound_status`, `outbound_status` and `online`
+  are gone (the operations were 501; nothing used them).
+- **Pairing.** `devices.createPeerInvite` answers `PeerInvite` (a single-use link valid 10
+  minutes carrying this hub's fingerprint, and the fingerprint). `devices.requestPeer` redeems a
+  link and answers `201 Peer` (`waiting`) — synchronous, no job: the refusals are
+  `invite_refused`, `fingerprint_mismatch`, `peer_unreachable` (`409 state_invalid`) and
+  `https_required`, `own_url_not_https`, `invite_url_invalid` (`400`). `devices.updatePeer`
+  takes `PeerPatch`: `approve: true` (a `pending` peer only), `name`, `enabled`,
+  `asks_per_hour`. `devices.deletePeer` revokes at once and is also how a request is refused.
+- **Controls and log.** `devices.listPeerShares` / `devices.setPeerShare`: every agent of every
+  profile with its share switch (off until switched on) and an optional description peers see.
+  `devices.listPeerEvents`: the last 200 audit lines of a peer (`PeerEvent`), kept after it is
+  deleted, never a question's words.
+- **Using a link.** `devices.listPeerAgents` (the peer's shared agents: `PeerAgent`, whose id
+  is the share's, not the agent's) and `devices.askPeerAgent` (`PeerAsk` → `PeerAnswer`).
+- **Hub to hub** (not client APIs, `security: []`, signed per ADR 0026): `devices.peerJoin`
+  (the invite redeemed; signed with the key it registers), `devices.peerNotice` (`approved` /
+  `unlinked`), `devices.peerAgents`, `devices.peerAsk` (answered without tools within 120 s;
+  `403` for an unshared or unknown agent alike, `429` past `asks_per_hour`, `422
+  agent_unavailable` when the agent gave no answer).
+- Every operation on this hub's side is for owners and admins, including asking.
+
+## 102. Web follow-ups: memory entries and their budget, a live run's changes, the window by category
+
+Proposed — owner to confirm (the fork gap list, batches B10 and B19, 2026-09-27: items the earlier
+records left as "later").
+
+- **A memory list comes with its entries and its budget.** `MemoryItem` gains `entries` (a list
+  document's entries as Hermes reads them: split on a `§` line, trimmed, empty ones dropped),
+  `char_limit` (Hermes's `memory.memory_char_limit` / `memory.user_char_limit`, else its defaults
+  2200 / 1375) and `char_count` (code points of the entries joined, what the hub's
+  `memory_too_long` measures). All three are `null` for `soul`, which is one text, and optional, so
+  a client still splits `content` on an older hub. The web draws each entry on its own with edit and
+  remove, adds one at the end, and shows the list against its budget (a bar that warns from 80 %
+  and says "full" past it); a write that would grow a list past its budget is held back with the
+  reason before the hub has to refuse it. Editing one entry sends the whole list, as before: no
+  per-entry operation (Hermes's file has no ids, and a second writer would race it).
+- **A run's changes while it is still going.** `sessions.getRunChanges` on a run in flight answers
+  the working folder compared with the run's start **now**, `RunChanges.live: true`, instead of
+  `404`: the same comparison the run's end records (§49), kept nowhere. One look is shared for two
+  seconds, so several viewers cost one comparison. Its files carry no diff to fetch yet
+  (`getRunChangeDiff` stays `404` until the run ends). The web draws it under the live reply as the
+  same card with a "so far" mark, read again every four seconds and whenever a tool call ends, with
+  rows that open nothing; the recorded card takes over at the end. Rejected: a realtime event per
+  change (a run that rewrites a file in a loop would flood every viewer), and diffs while live (they
+  would have to be computed per look).
+- **The window by category.** `sessions.getContextBreakdown` (`GET /sessions/{id}/context`) answers
+  `SessionContextBreakdown`: the categories Hermes counts with `session.context_breakdown`
+  (observed in Hermes v0.21.3, the pinned image: `system_prompt`, `tool_definitions`, `rules`,
+  `skills`, `mcp`, `subagent_definitions`, `memory`, `conversation`, each with its English label and
+  a token count; Hermes's own CSS colour is dropped), `used_tokens`, `window_tokens`, `estimated`.
+  It asks only a conversation the agent already has open and never opens one for it; with none
+  open, or an agent that cannot tell, it answers `available: false` with no categories rather than
+  an error. The web reads it only while the context meter's details are open, draws one bar of the
+  window in the chart palette and a line per category (names it knows in the person's language,
+  Hermes's label for any other), and says the per-category counts are the agent's rough estimate.
+- **A category's colour** is picked from eight swatches or none (`SessionCategory.color`, already in
+  the contract, now set from the chats list's category menu and drawn as a dot before its name). A
+  fixed set rather than a free picker, so a colour reads as itself on light and dark alike.
+- **The pending-actions sheet** counts, for an admin, the memory and skill writes Hermes's agent
+  staged for review in the profile they are in (§58's `agents.listPendingWrites`) and answers them
+  right there; and a room's question opens its room (`/rooms/<id>`, with `?profile=` when it waits in
+  another profile, which the room page now honours).
+- **A member whose remembered profile was taken** (or archived) but who still has others is moved
+  to the first profile they were given, instead of pages that each answer "not found".
+- **Workflow limits** live in the editor's side panel while no step is selected (the workflow's own,
+  §53), and the Run button has a companion "run with limits" that opens on the workflow's limits
+  and sends `WorkflowRunRequest.limits` for that run only.
+
+## 103. Hermes-facing follow-ups: a card's history and bulk edits, Hermes's skill switch and platforms, names from Hermes, channel paging and pictures
+
+B17 of the fork gap list. What Hermes does was read in its MIT source at the pinned `v2026.9.14`
+and is said here in our words; each point was run against the real Hermes of the image
+(`*.real.test.ts`). Proposed — owner to confirm:
+
+- **A Hermes card's history.** Hermes's kanban answers a card with its event log (what happened:
+  `created`, `claimed`, `edited`, `reprioritized`, `commented`, `review_requested`… with details
+  and the attempt it belongs to) and its runs (each attempt of its dispatcher: the profile that
+  worked it, its status and outcome, the worker's summary or error, when it started and ended)
+  (`plugins/kanban/dashboard/plugin_api.py` §get_task, `hermes_cli/kanban_db.py` §Event, §Run).
+  `TaskDetail.hermes` carries them, newest first, at most 100 events and 20 runs, texts cut at
+  4 000 characters; `null` for a hub card and for a Hermes card Hermes did not answer just now.
+  Hermes's own words: a client names the kinds it knows and shows any other as Hermes wrote it.
+- **Bulk edits of Hermes cards.** `TaskBulkUpdate.patch.comment` says the same words on every
+  task in the caller's name — on a Hermes card on Hermes first, then read back, as one comment is;
+  `priority` was already set on Hermes first. A refusal is that task's `ok: false`, the others
+  stand. The web board gets "Select": ticks on the cards, one priority or one comment for all,
+  one request per profile the ticked cards are in. Rejected: Hermes's own `POST /tasks/bulk`
+  (it takes no comment, and the hub keeps its per-card reflection in step one card at a time).
+- **Skills: Hermes's own switch.** Hermes keeps "off" in the profile's `config.yaml`,
+  `skills.disabled` (a list of names; a lone string is one name), written sorted by its dashboard
+  and `hermes skills`; `hermes-agent`, its manual, is never off (`agent/skill_utils.py`
+  §get_disabled_skill_names, `hermes_cli/skills_config.py`). The hub now reads and writes that
+  list: a skill in it reads `enabled: false`, and `agents.updateSkill` puts a name in or takes it
+  out, leaving the rest of the file as it was. That works for built-in skills too — the files are
+  not touched — and `hermes-agent` is `409 skill_essential`. Switching on also renames back a
+  `SKILL.md.off` an older hub left. Rejected: keeping the rename (Hermes and the hub would
+  disagree about what is off).
+- **Skills for another system are not listed.** A `platforms:` front matter (`[macos]`,
+  `windows`, a block list) that leaves out the system the hub runs on means Hermes never loads the
+  skill there (`skill_matches_platform`), so the hub leaves it out as Hermes's list does. A skill
+  Hermes offers only inside one of its contexts (`environments:`, e.g. a kanban worker) is still
+  listed: it is the profile's skill and may be switched off, though Hermes's dashboard hides it.
+- **Names from Hermes.** A display name is `display_name` in a profile's `profile.yaml` (for
+  `default`, in Hermes's home itself), shown beside the id and never used to find it
+  (`hermes_cli/profiles.py` §read_profile_meta). Listing profiles now reads it: a Hermes profile
+  the hub adopts takes it (its id when it has none), and a workspace whose Hermes display name
+  was changed outside the hub takes the new one. A Hermes profile without a display name leaves
+  the hub's name alone (a name Hermes refused is not undone). The name given at first-run setup
+  is written as `default`'s display name.
+- **Channel conversations: paging.** Hermes lists sessions 100 at a time with `offset` and a
+  `total`, and pages a transcript back from the newest with `order=latest&limit&offset`
+  (`hermes_cli/web_routers/sessions.py`). `sessions.listChannelConversations` takes `limit`
+  (1–1000 per profile, 100 by default; the hub reads as many pages as that needs) and answers
+  `has_more`; `sessions.listChannelMessages` takes `offset` and answers `next_offset`. The web
+  offers "Older channel conversations" and "Load older messages".
+- **Channel conversations: pictures.** Hermes's gateway saves a picture in the profile's image
+  cache (`cache/images/`, or `image_cache/` on older installs), deletes it after 24 hours, and
+  stores only a note naming the file — `[Image attached at: <path>]`, a `vision_analyze …
+  image_url: <path>` note after describing it, or `[User sent an image: <path>]`
+  (`gateway/run_inbound.py`, `agent/image_routing.py`, `agent/session_persistence.py`). The hub
+  takes the picture's name out of those notes on a person's message (PNG, JPEG, GIF or WebP), drops
+  the notes from the words shown, and lists it in `ChannelMessage.attachments` with `available`;
+  the new `sessions.getChannelPicture` serves it by name from that profile's cache only
+  (`private, no-store`, `nosniff`), `404` once Hermes has deleted it. The web draws it in the
+  bubble, or says Hermes no longer keeps it.
+
+## 104. A task's definition of done and constraints
+
+B18 of the fork gap list (AB 1.1, 1.2). Proposed — owner to confirm:
+
+- **Two lists on a task**, `Task.definition_of_done` and `Task.constraints` (`TaskCheckItem`:
+  `text` 1–500, `checked`), at most 30 lines each, always sent. Written with `TaskCreate` and
+  replaced whole by `TaskPatch` (`TaskCheckItemWrite`, `checked` optional); empty lines are
+  dropped, texts trimmed.
+- **Sent with the run.** The task's prompt gains "Definition of done — the task is done only when
+  every one of these holds" and "Constraints — keep to these while you work", in the run's
+  language, after the checklist.
+- **Ticked at review.** `checked` is the reviewer's tick: the web enables the boxes only while the
+  task is in review and saves them with the dialog's Save. **A new run clears every tick**: they
+  were about the last attempt's work.
+- **The board card** counts the ticked lines of the definition of done (`✓ 1/3`), with the full
+  sentence on hover.
+- **Hermes's cards take none** (`409 conflict`, `hermes_owns_card`, `action: definition_of_done`):
+  Hermes's worker is briefed by the card itself, so lists it never sees would only look kept. A hub
+  task handed to Hermes and started carries its lists into the Hermes card's brief.
+
+## 105. An agent may ask its person's phone where it is; the phone asks the person first
+
+Proposed — owner to confirm (2026-09-27, phone parity). §74 built the request and §89 let a run ask a
+computer for files and programs; an agent still could not ask a phone for its location, and neither
+app answered a request (the owner's B8).
+
+- **A run token may create `location` requests** to its own person's devices, like `files` and
+  `apps` (§89); every other capability still needs the `device` scope. Everything else of §74
+  stands: only that person's device, the profile the device allows, answered once, by the device.
+- **The hub's `devices` tools gain `devices.locate`** (read): the phone to ask is the one named, or
+  else the one that declares `location` switched on and may be asked in the profile, connected
+  first, then seen last; its answer is `{device, latitude, longitude, accuracy_m, captured_at}`. The
+  agent says why in `why`, which becomes the request's `purpose` and is what the person reads. A
+  refusal, no answer in 90 s (the default wait for `location` now, long enough to read and answer)
+  or no phone that can tell is a tool refusal the agent reads (`device_denied`, `device_timeout`,
+  `device_capability_off`).
+- **The phones declare `location`** in their registration and answer pending requests (a
+  `request.created` on `/rt/devices`, and `listRequests?status=pending` on connecting): a consent
+  prompt the first time — «Allow every time», «Only this time», «Don't allow» — then the operating
+  system's own location permission; «every time» and «never» are kept on the phone and changed under
+  This device. A phone that is not connected answers when it next connects, within the wait.
+
+Rejected: a standing permission kept by the hub (the person decides on the device that has the
+location, where they can see it happen); a background location the phone keeps sending (the
+request is one answer, as §74 says).
+
+
+## 106. Catalog agents from a pinned release download; an agent signs in to its own account
+
+Proposed — owner to confirm (2026-09-27, catalog recipes, B21). Every catalog agent so far was an
+npm package. Goose and Grok Build ship as native binaries, and Kimi Code and Grok Build keep their
+own vendor account rather than reading a provider key.
+
+- **A catalog entry may install from a release download** (`install.kind = download`): one file per
+  platform (`linux-x64`, `linux-arm64`, `darwin-x64`, `darwin-arm64`, `win32-x64`), each an `https`
+  URL that names the pinned version, its SHA-256, and how the executable is packed (`raw`, `gz`, or
+  `tar.gz` with the executable's path inside). The hub fetches the file for its own platform into a
+  staging folder beside the agent's, **refuses it unless the SHA-256 matches** (before unpacking or
+  running anything), unpacks only the named executable into `bin/`, and only then replaces
+  `<DATA_DIR>/agents/<id>` — so a refused or failed download leaves the previous install as it was.
+  Still ADR 0006: the data volume, one folder per agent, no image or Compose change.
+- **Such an agent is updated only by the catalog** (a pull request that moves the version and every
+  hash together): there is no registry to ask, `install.package` is `null` and
+  `auto_update_supported` is false; `pinned_version` is the release.
+- **The catalog gains Goose 1.52.0** (Block / Agentic AI Foundation, Apache-2.0, `goose acp`) and
+  **Grok Build 1.0.41** (xAI, Apache-2.0, `grok agent --no-leader stdio`), each hash checked against
+  a fresh download of the vendor's own file (GitHub's published digests for Goose; the storage MD5
+  for Grok Build, which publishes no checksum). Windows is not offered for either (Goose publishes a
+  `.zip`, Grok Build a bare `.exe`). Goose needs `GOOSE_PROVIDER` and `GOOSE_MODEL`, set in its
+  `~/.config/goose/config.yaml`, which the Config files page now edits (§78).
+- **An agent may sign in to its own vendor account** (`agents.startSignIn`, `agents.getSignIn`,
+  `install.sign_in`): the catalog names the agent's own device-code command (Kimi Code
+  `kimi login --region global`, Grok Build `grok login --device-auth`); the hub runs it, answers
+  with the link and code it printed as a `ProviderSignIn`, and follows the process — running is
+  `pending`, exit 0 `approved`, a reported refusal `denied`, any other exit `failed` with its last
+  line, a code past its lifetime `expired` (the process is stopped). The agent keeps the credential
+  under the hub user's home, for every profile; no token passes through the hub. Admins only; one
+  at a time per agent; kept in memory like a provider sign-in.
+- **Kimi Code's region is `global` (kimi.ai)**; the mainland-China kimi.com account is not offered.
+  Kimi Code's API-key route stays its `config.toml` on the Config files page.
+
+Rejected: running a vendor's install script (`curl … | bash`: it takes "latest" and checks
+nothing); following a "latest" link (the hash would stop meaning anything); unpacking the whole
+archive into the agent's folder (only the executable the entry names is taken).
+
+## 107. Push follow-ups: a browser's Web Push ends with its sign-in, dropped registrations are announced, the apps prove the device to the relay
+
+Proposed — owner to confirm (2026-09-27, B16; docs/changes/2026-09-27-twuijri-push-followups.md).
+No path or schema changes; `device.updated` names one more cause.
+
+- **A browser's Web Push lives as long as the sign-in that registered it**, like a phone's
+  (docs/changes/2026-09-26-twuijri-push-cleanup-mobile-logs.md): `devices.registerPush` records the
+  sign-in for every provider, and every way a sign-in ends forgets the registration. A browser
+  subscribed before this keeps its registration until it is turned off or unlinked.
+- **The web hands the subscription back after a sign-in**, silently, only while the browser's
+  permission is granted, it still holds a subscription, and the person signing in is the one who
+  turned push on in that browser (remembered in the browser's storage). Another person signing in
+  to the same browser is not subscribed; they turn it on themselves. Never on a page load that was
+  already signed in (its registration stands) and never with a permission prompt.
+- **`device.updated` when the hub drops a registration on its own** — the sign-in that made it
+  ended, or the push service called the token dead — to the device's person, from the row as it is
+  after the change (announced on the next turn, so a transaction that rolled back announces what it
+  kept). A device revoked at the same time is announced by whoever revoked it (`device.unlinked`, or
+  `device.updated` on a logout).
+- **The apps send `PushRegistration.relay_proof`** (ADR 0024 §6) with every registration: a P-256
+  key made once per install — a software key kept in the iOS Keychain (this device only, after first
+  unlock), a Keystore key on Android whose private half never leaves it — signs
+  `corehub-push-bind-v1`, the platform, the token and the unix time. No key, no proof: the
+  registration goes on without one. The hub forwards it unread (unchanged since §82). A registration
+  the relay could not bind at that moment is bound later without it: a proof is good for ten minutes.
+- **The FCM installation id is not used**: neither ADR 0024 nor the push records depend on it; the
+  hub and the relay address FCM registration tokens (HTTP v1 `message.token`), and the device proof
+  already identifies the install to the relay.
+- **iOS, signed out by the hub** (a 401 at launch or on a call): the app forgets the token it held
+  and unregisters from APNs, so APNs refuses the old token to any hub or relay still holding it; the
+  next sign-in registers again. The proof key stays (it is the install's). Signing out on purpose
+  still tells the hub first and leaves APNs registered.
+
+Rejected: subscribing a browser on sign-in without a subscription it already holds (that is the
+person's choice on the Notifications page); the Secure Enclave for the iOS key (not in the simulator
+the CI tests on, and the relay's risk model — ADR 0024 §6 — does not need a key that cannot leave
+the phone).

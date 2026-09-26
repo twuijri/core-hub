@@ -54,13 +54,27 @@ final class PhoneTests: XCTestCase {
         XCTAssertTrue(settings.voiceInput)
         XCTAssertFalse(settings.spokenReplies)
         XCTAssertTrue(settings.backgroundChecks)
-        XCTAssertEqual(settings.dictationLocale(app: .ar).identifier, "ar-SA")
-        settings.dictationLanguage = .en
+        // Auto by default: the keyboard picks, not the app's language (2026-09-27).
+        XCTAssertEqual(settings.dictationLanguage, DictationLanguage.auto)
+        XCTAssertNil(settings.hubDictationLanguage, "the hub's model detects the language itself")
+        settings.dictationLanguage = "fr-FR"
         settings.spokenReplies = true
         let again = DeviceSettings(defaults: defaults)
-        XCTAssertEqual(again.dictationLanguage, .en)
+        XCTAssertEqual(again.dictationLanguage, "fr-FR")
         XCTAssertTrue(again.spokenReplies)
-        XCTAssertEqual(again.dictationLocale(app: .ar).identifier, "en-US")
+        XCTAssertEqual(again.hubDictationLanguage, "fr")
+    }
+
+    @MainActor
+    func testTheOldSameAsTheAppChoiceBecomesAuto() {
+        // «Same as the app» made an English app hear Arabic as English: it reads as Auto now.
+        let defaults = suite("device-old")
+        defaults.set("app", forKey: DeviceSettings.Keys.dictation)
+        XCTAssertEqual(DeviceSettings(defaults: defaults).dictationLanguage, DictationLanguage.auto)
+        defaults.set("ar", forKey: DeviceSettings.Keys.dictation)
+        XCTAssertEqual(DeviceSettings(defaults: defaults).dictationLanguage, "ar")
+        defaults.set("en", forKey: DeviceSettings.Keys.dictation)
+        XCTAssertEqual(DeviceSettings(defaults: defaults).dictationLanguage, "en")
     }
 
     func testARepliesSpokenWordsLeaveMarkdownAndCodeOut() {

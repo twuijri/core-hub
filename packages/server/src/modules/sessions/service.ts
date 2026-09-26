@@ -5,6 +5,7 @@
  * already in the contract's wire shape (`mappers.ts`), so a route is a
  * one-liner and there is exactly one place where a rule lives.
  */
+import { closeSync } from 'node:fs';
 import { PRODUCT } from '@corehub/contracts';
 import { HubError, notFound } from '../../lib/errors.js';
 import { t, type Language } from '../../i18n/index.js';
@@ -18,6 +19,7 @@ import {
   toMessage,
   toRun,
   toRunChanges,
+  toLiveRunChanges,
   toRunFileDiff,
   toSession,
   type ApprovalRow,
@@ -43,6 +45,7 @@ import {
 } from './files.js';
 import { SubagentBook, type SubagentRecord, type SubagentSupport } from './subagents.js';
 import { SessionCategories } from './categories.js';
+import { ChannelHides } from './channel-hides.js';
 import {
   continuationTitle,
   summaryOf,
@@ -149,6 +152,8 @@ export class SessionsService {
   readonly subagents: SubagentBook;
   /** The profile's categories (contract decision §60, `categories.ts`). */
   readonly categories: SessionCategories;
+  /** Channel conversations each person hid from their own list (§88, `channel-hides.ts`). */
+  readonly channelHides: ChannelHides;
 
   constructor(
     store: SessionsStore,
@@ -180,6 +185,7 @@ export class SessionsService {
     });
     ports.runner.onSubagent?.((sessionId, signal) => this.subagents.onSignal(sessionId, signal));
     this.categories = new SessionCategories(store.db);
+    this.channelHides = new ChannelHides(store.db);
   }
 
   // ------------------------------------------------------------ subagents (§56)
@@ -773,7 +779,33 @@ export class SessionsService {
     const row = this.requireSession(scope, sessionId);
     if (!row.workingDir) throw notFound({ resource: 'file', id: requested });
     return openInside(row.workingDir, requested, (type) =>
-      download ? DOWNLOAD_MAX_BYTES : PREVIEW_MAX_BYTES[type.kind],
+      // A video or a sound is read a range at a time, whichever way it is asked for (§98).
+      download
+        ? Math.max(DOWNLOAD_MAX_BYTES, PREVIEW_MAX_BYTES[type.kind])
+        : PREVIEW_MAX_BYTES[type.kind],
+    );
+  }
+
+  /**
+   * A stream ticket for one file of the working folder (`sessions.createFileStream`, decision
+   * §98), after the same checks `openFile` makes; the ticket opens the file again on every read.
+   */
+  createFileStream(
+    scope: EngineScope,
+    sessionId: string,
+    requested: string,
+  ): { url: string; expires_at: string } {
+    const stream = this.ports.attachments.streamFile;
+    if (!stream) {
+      throw new HubError('service_unavailable', { details: { reason: 'attachments_not_wired' } });
+    }
+    const opened = this.openFile(scope, sessionId, requested, false);
+    closeSync(opened.fd);
+    const row = this.requireSession(scope, sessionId);
+    return stream.call(
+      this.ports.attachments,
+      { workspace: scope.workspace, profile: scope.profile, userId: scope.userId },
+      { root: row.workingDir as string, relative: opened.relative, mime: opened.type.mime },
     );
   }
 
@@ -802,10 +834,21 @@ export class SessionsService {
     };
   }
 
-  /** One run's changed files (contract `sessions.getRunChanges`); 404 when none were recorded. */
-  runChanges(scope: EngineScope, sessionId: string, runId: string): Record<string, unknown> {
+  /**
+   * One run's changed files (contract `sessions.getRunChanges`). A run still going answers
+   * what it has changed so far, `live: true` (decision §102); 404 when none were recorded.
+   */
+  async runChanges(
+    scope: EngineScope,
+    sessionId: string,
+    runId: string,
+  ): Promise<Record<string, unknown>> {
     const run = this.requireRun(scope, sessionId, runId);
-    if (!run.changes) throw notFound({ resource: 'run_changes', id: runId });
+    if (!run.changes) {
+      const live = await this.engine.liveChanges(run.id);
+      if (live) return toLiveRunChanges(run.id, live.record, live.at);
+      throw notFound({ resource: 'run_changes', id: runId });
+    }
     const files = this.store.runFileChangesOf(scope.workspace, [run.id]).get(run.id) ?? [];
     return toRunChanges(run, files);
   }
@@ -1087,12 +1130,25 @@ export class SessionsService {
    */
   async startSeatTurn(
     scope: EngineScope,
-    input: { sessionId: string; seatId: string; prompt: string },
+    input: {
+      sessionId: string;
+      seatId: string;
+      prompt: string;
+      files?: ReadonlyArray<{ type: 'image' | 'file'; attachment_id: string }>;
+    },
   ): Promise<TurnHandle> {
     const accepted = await this.createRun(
       scope,
       input.sessionId,
-      { content: [{ type: 'text', text: input.prompt }] },
+      {
+        content: [
+          { type: 'text', text: input.prompt },
+          ...(input.files ?? []).map((file) => ({
+            type: file.type,
+            attachment_id: file.attachment_id,
+          })),
+        ],
+      },
       { kind: 'room', id: input.seatId },
     );
     const runId = String(accepted.payload.run_id);
@@ -1306,6 +1362,33 @@ export class SessionsService {
   }
 
   /**
+   * `sessions.getContextBreakdown` (decision §102): what fills the window, by category, as the
+   * agent counts it — asked of the conversation it already has open, never opening one.
+   * `available: false` when there is nothing to ask or it could not tell.
+   */
+  async contextBreakdown(scope: EngineScope, sessionId: string): Promise<Record<string, unknown>> {
+    const session = this.requireSession(scope, sessionId);
+    const runner = this.ports.runner;
+    const breakdown = runner.contextBreakdown ? await runner.contextBreakdown(session.id) : null;
+    if (!breakdown) {
+      return {
+        available: false,
+        used_tokens: 0,
+        window_tokens: null,
+        estimated: false,
+        categories: [],
+      };
+    }
+    return {
+      available: breakdown.categories.length > 0,
+      used_tokens: breakdown.usedTokens,
+      window_tokens: breakdown.windowTokens,
+      estimated: breakdown.estimated,
+      categories: breakdown.categories,
+    };
+  }
+
+  /**
    * `sessions.steerRun`: guidance into the run in flight, read by the agent after its next
    * tool call. Nothing is written to the transcript and the run is not interrupted.
    */
@@ -1346,6 +1429,14 @@ export class SessionsService {
       items: page.items.map((row) => this.approvalOf(scope, row)),
       next_cursor: page.nextCursor,
     };
+  }
+
+  /** What waits for a person in these sessions — a room's seats (`RoomDetail.pending_approvals`). */
+  pendingApprovalsOf(scope: EngineScope, sessionIds: readonly string[]): Record<string, unknown>[] {
+    return sessionIds
+      .flatMap((id) => this.store.pendingApprovals(scope.workspace, id))
+      .sort((a, b) => a.requestedAt.getTime() - b.requestedAt.getTime())
+      .map((row) => this.approvalOf(scope, row));
   }
 
   getApproval(scope: EngineScope, approvalId: string): Record<string, unknown> {
@@ -1640,9 +1731,17 @@ export class SessionsService {
         sessionId: run?.sessionId ?? '',
         messageId: run?.finalMessageId ?? null,
         agent: { id: run?.agentId ?? '', name: 'agent' },
+        roomId: run ? this.roomOfSession(scope.workspace, run.sessionId) : null,
       },
       scope.profile,
     );
+  }
+
+  /** The room a seat's own session belongs to; `null` for any other session. */
+  private roomOfSession(workspace: string, sessionId: string): string | null {
+    const session = this.store.getSession(workspace, sessionId);
+    if (session?.originKind !== 'room' || !session.originId) return null;
+    return this.ports.roomOfSeat?.()?.(workspace, session.originId) ?? null;
   }
 }
 

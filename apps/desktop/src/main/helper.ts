@@ -23,6 +23,8 @@ import type { AddressInfo } from 'node:net';
 import path from 'node:path';
 import type { Duplex } from 'node:stream';
 import { resolveInside, type HelperConfig, type Resolved } from '../shared/helper.js';
+import { helperToolName } from '../shared/programs.js';
+import { ProgramRefusal, type CallOutcome, type ProgramHost } from './programs.js';
 
 export const MCP_PATH = '/mcp';
 export const PROTOCOL_VERSIONS = ['2025-06-18', '2025-03-26', '2024-11-05'] as const;
@@ -41,6 +43,10 @@ export interface HelperActivity {
   ok: boolean;
   /** Why it was refused or failed. */
   detail: string | null;
+  /** The program the call went to, for a program's tool. */
+  program?: string | null;
+  /** Who asked: the hub on this computer, or a hub elsewhere through the device connection. */
+  via?: 'local' | 'hub';
 }
 
 export interface HelperEnv {
@@ -259,12 +265,76 @@ export interface HelperServerOptions {
   version: string;
   preferredPort: number | null;
   onActivity?: (entry: HelperActivity) => void;
+  /** Programs on this computer, offered to the profile the request names (ADR 0025). */
+  programs?: ProgramHost;
+}
+
+/** The header the hub on this computer puts on its MCP config: which profile is asking. */
+export const PROFILE_HEADER = 'x-corehub-profile';
+export const PROGRAM_STATUS_TOOL = 'program_call_status';
+
+/** A program's tools as this computer's helper offers them to one profile. */
+export function programToolsFor(host: ProgramHost | undefined, profile: string | null): ToolSpec[] {
+  if (!host || profile === null) return [];
+  const tools: ToolSpec[] = [];
+  for (const { program, tools: listed } of host.available(profile)) {
+    for (const tool of listed) {
+      tools.push({
+        name: helperToolName(program.id, tool.name),
+        description: `[${program.name}] ${tool.description}`.slice(0, 2000),
+        inputSchema: tool.input_schema,
+      });
+    }
+  }
+  if (tools.length > 0)
+    tools.push({
+      name: PROGRAM_STATUS_TOOL,
+      description:
+        'How a long program call stands (a tool answered state: running with a call_id), and its result once it is done.',
+      inputSchema: obj({ call_id: { type: 'string' } }, ['call_id']),
+    });
+  return tools;
+}
+
+/** Which program and tool a helper tool name stands for, for this profile. */
+function programToolOf(
+  host: ProgramHost,
+  profile: string,
+  name: string,
+): { programId: string; tool: string } | null {
+  for (const { program, tools } of host.available(profile)) {
+    const tool = tools.find((t) => helperToolName(program.id, t.name) === name);
+    if (tool) return { programId: program.id, tool: tool.name };
+  }
+  return null;
+}
+
+/** A program's answer as an MCP tool result. */
+export function outcomeResult(outcome: CallOutcome): { content: unknown[]; isError: boolean } {
+  if (outcome.state === 'running')
+    return {
+      content: [
+        {
+          type: 'text',
+          text: JSON.stringify({
+            state: 'running',
+            call_id: outcome.callId,
+            progress: outcome.progress,
+            next: `call ${PROGRAM_STATUS_TOOL} with this call_id in a little while`,
+          }),
+        },
+      ],
+      isError: false,
+    };
+  return { content: outcome.content, isError: outcome.isError };
 }
 
 export interface HelperServer {
   readonly port: number;
   readonly url: string;
   activity(): HelperActivity[];
+  /** Adds an entry made elsewhere (a program's call, a hub's request) to the same list. */
+  record(entry: HelperActivity): void;
   close(): Promise<void>;
 }
 
@@ -284,7 +354,7 @@ export async function startHelper(options: HelperServerOptions): Promise<HelperS
     options.onActivity?.(entry);
   };
 
-  async function handle(message: RpcRequest): Promise<unknown> {
+  async function handle(message: RpcRequest, profile: string | null): Promise<unknown> {
     const { id, method } = message;
     const notification = id === undefined;
     if (method === 'initialize') {
@@ -311,14 +381,48 @@ export async function startHelper(options: HelperServerOptions): Promise<HelperS
     if (notification) return null;
     if (method === 'ping') return { jsonrpc: '2.0', id, result: {} };
     if (method === 'tools/list')
-      return { jsonrpc: '2.0', id, result: { tools: toolsFor(options.config()) } };
+      return {
+        jsonrpc: '2.0',
+        id,
+        result: {
+          tools: [...toolsFor(options.config()), ...programToolsFor(options.programs, profile)],
+        },
+      };
     if (method === 'tools/call') {
       const name = String(message.params?.name ?? '');
       const args = (message.params?.arguments ?? {}) as Record<string, unknown>;
       const at = new Date().toISOString();
+      const host = options.programs;
+      const program = host && profile !== null ? programToolOf(host, profile, name) : null;
+      if (host && (program || (name === PROGRAM_STATUS_TOOL && profile !== null))) {
+        // The host asks the person and writes the activity itself.
+        try {
+          const outcome = program
+            ? await host.call({
+                programId: program.programId,
+                tool: program.tool,
+                args,
+                profile,
+                via: 'local',
+                hub: null,
+              })
+            : host.status(String(args.call_id ?? ''));
+          return { jsonrpc: '2.0', id, result: outcomeResult(outcome) };
+        } catch (error) {
+          const detail =
+            error instanceof ProgramRefusal || error instanceof Error
+              ? error.message
+              : String(error);
+          return {
+            jsonrpc: '2.0',
+            id,
+            result: { content: [{ type: 'text', text: detail }], isError: true },
+          };
+        }
+      }
       try {
         const { text, target } = await callTool(options.config(), options.env, name, args);
-        record({ at, tool: name, target, ok: true, detail: null });
+        record({ at, tool: name, target, ok: true, detail: null, via: 'local' });
         return {
           jsonrpc: '2.0',
           id,
@@ -337,7 +441,7 @@ export async function startHelper(options: HelperServerOptions): Promise<HelperS
             : typeof args.url === 'string'
               ? args.url
               : null;
-        record({ at, tool: name, target, ok: false, detail });
+        record({ at, tool: name, target, ok: false, detail, via: 'local' });
         return {
           jsonrpc: '2.0',
           id,
@@ -385,10 +489,13 @@ export async function startHelper(options: HelperServerOptions): Promise<HelperS
       }
       const batch = Array.isArray(parsed);
       const messages = (batch ? parsed : [parsed]) as RpcRequest[];
+      const named = req.headers[PROFILE_HEADER];
+      const profile =
+        typeof named === 'string' && /^[a-z0-9][a-z0-9-]{0,62}$/.test(named) ? named : null;
       void Promise.all(
         messages.map((m) =>
           m && typeof m === 'object' && typeof m.method === 'string'
-            ? handle(m)
+            ? handle(m, profile)
             : Promise.resolve(rpcError(null, -32600, 'Invalid request')),
         ),
       ).then((answers) => {
@@ -426,6 +533,7 @@ export async function startHelper(options: HelperServerOptions): Promise<HelperS
     port,
     url: `http://127.0.0.1:${port}${MCP_PATH}`,
     activity: () => [...log],
+    record,
     close: () =>
       new Promise<void>((resolve) => {
         server.close(() => resolve());

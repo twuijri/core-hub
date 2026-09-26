@@ -228,7 +228,7 @@ message.
 | Event | Emitted by | Payload | Notes |
 |---|---|---|---|
 | `device.linked` | auth module (pairing claim) | `device`: `Device` | A device of the user was linked. User-level (`profile: null`). |
-| `device.updated` | devices module (rename, capabilities, push registration, token renewal) | `device`: `Device` | User-level. |
+| `device.updated` | devices module (rename, capabilities, push registration, token renewal, a push registration the hub dropped: its sign-in ended or the token is dead) | `device`: `Device` | User-level. |
 | `device.unlinked` | devices/auth modules (unlink, token revoked, user deleted) | `device_id`: `Ulid` | User-level. |
 | `device.online` | socket layer when the device connects to /rt/devices | `device`: `Device` | User-level. |
 | `device.offline` | socket layer when the last socket of the device drops | `device`: `Device` | User-level. |

@@ -1,7 +1,7 @@
 // The web client inside the desktop app (apps/desktop, ADR 0009): the same bundle, told by
 // the app's bridge that it is the `desktop` surface of navigation.json.
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { cleanup, render, screen, waitFor } from '@testing-library/react';
+import { cleanup, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -9,7 +9,9 @@ import { AuthProvider } from '../src/auth/context.js';
 import { SessionStore, type StoredSession } from '../src/auth/store.js';
 import type {
   DesktopBridge,
+  DesktopDeviceState,
   DesktopHelperState,
+  DesktopProgramsState,
   DesktopState,
 } from '../src/desktop/bridge-types.js';
 import { ThemeProvider } from '../src/design/theme.js';
@@ -61,8 +63,18 @@ function fakeHelper(over: Partial<DesktopHelperState> = {}) {
   const set = (patch: Partial<DesktopHelperState>) => (helper = { ...helper, ...patch });
   return {
     get: vi.fn(async () => helper),
+    // As the app does: on with nothing shared, its own folder is shared writable (§89).
     setEnabled: vi.fn(async (value: boolean) =>
-      set({ enabled: value, url: value ? 'http://127.0.0.1:47001/mcp' : null }),
+      set({
+        enabled: value,
+        url: value ? 'http://127.0.0.1:47001/mcp' : null,
+        ...(value && helper.folders.length === 0
+          ? {
+              folders: [{ path: '/home/t/Core Hub', write: true }],
+              defaultFolder: '/home/t/Core Hub',
+            }
+          : {}),
+      }),
     ),
     addFolder: vi.fn(async () =>
       set({ folders: [...helper.folders, { path: '/home/t/Docs', write: false }] }),
@@ -75,6 +87,133 @@ function fakeHelper(over: Partial<DesktopHelperState> = {}) {
     newToken: vi.fn(async () => helper),
   };
 }
+
+const RESOLVE_PROGRAM = {
+  id: 'davinci-resolve',
+  name: 'DaVinci Resolve',
+  source: 'claude_desktop_extension' as const,
+  origin: '/home/t/.config/Claude/Claude Extensions/ant.resolve/manifest.json',
+  description: 'Drive DaVinci Resolve.',
+  status: 'needs_setup' as const,
+  fields: [
+    {
+      key: 'api_key',
+      title: 'API key',
+      description: null,
+      sensitive: true,
+      required: true,
+      set: false,
+      value: null,
+    },
+  ],
+  profiles: [] as string[],
+  tools: [] as Array<{ name: string; description: string }>,
+  running: false,
+  error: null,
+  resolve: true,
+};
+
+function fakePrograms() {
+  let state: DesktopProgramsState = {
+    programs: [
+      RESOLVE_PROGRAM,
+      {
+        ...RESOLVE_PROGRAM,
+        id: 'figma',
+        name: 'Figma',
+        source: 'cursor',
+        origin: '/home/t/.cursor/mcp.json',
+        description: null,
+        status: 'remote',
+        fields: [],
+        resolve: false,
+      },
+    ],
+    scannedAt: '2026-09-27T10:00:00Z',
+    resolve: null,
+  };
+  const program = (id: string) => state.programs.find((p) => p.id === id)!;
+  const put = (id: string, patch: Partial<DesktopProgramsState['programs'][number]>) =>
+    (state = {
+      ...state,
+      programs: state.programs.map((p) => (p.id === id ? { ...p, ...patch } : p)),
+    });
+  return {
+    get: vi.fn(async () => state),
+    rescan: vi.fn(async () => state),
+    setProfiles: vi.fn(async (id: string, profiles: string[]) =>
+      put(id, {
+        profiles,
+        tools: profiles.length > 0 ? [{ name: 'render', description: 'Render the timeline' }] : [],
+      }),
+    ),
+    setField: vi.fn(async (id: string, key: string, value: string | null) =>
+      put(id, {
+        status: value ? 'ready' : 'needs_setup',
+        fields: program(id).fields.map((f) => (f.key === key ? { ...f, set: !!value } : f)),
+      }),
+    ),
+    checkResolve: vi.fn(async () => ({
+      ...state,
+      resolve: {
+        checkedAt: '2026-09-27T10:01:00Z',
+        programId: 'davinci-resolve',
+        integration: 'shared' as const,
+        running: true,
+        scripting: 'unreachable' as const,
+        product: null,
+        version: null,
+        studio: null,
+        steps: ['enable_scripting' as const, 'needs_studio' as const],
+      },
+    })),
+  };
+}
+
+function fakeDevice() {
+  let state: DesktopDeviceState = {
+    hub: 'https://hub.example',
+    linked: false,
+    deviceId: null,
+    status: 'unlinked',
+    detail: null,
+  };
+  return {
+    get: vi.fn(async () => state),
+    link: vi.fn(async () => {
+      state = { ...state, linked: true, deviceId: DEVICE_ID, status: 'connected' };
+      return state;
+    }),
+    forget: vi.fn(async () => {
+      state = { ...state, linked: false, deviceId: null, status: 'unlinked' };
+      return state;
+    }),
+  };
+}
+
+const DEVICE_ID = '01J8QK3ZR2W7M5N4P6T8V9X0DV';
+
+/** What the OS answered about the microphone, for the fake bridge. */
+let micStatus: 'granted' | 'denied' | 'not-determined' | 'restricted' | 'unknown' = 'unknown';
+
+/** The hub's `devices.getRelay`, as the desktop app would answer it through the hub. */
+const RELAY_OFF = {
+  available: true,
+  enabled: false,
+  connected: false,
+  route: null,
+  relay_url: null,
+  hub_port: 47113,
+  token_set: false,
+  tunnel_id: null,
+  hostname: null,
+  hostnames: [],
+  tailnet: null,
+  error: null,
+  error_detail: null,
+  connected_at: null,
+};
+let relayState: Record<string, unknown> = { ...RELAY_OFF };
 
 function fakeBridge(
   over: Partial<DesktopState> = {},
@@ -104,6 +243,13 @@ function fakeBridge(
     setUnreadCount: vi.fn(),
     onOpenPath: vi.fn(() => () => {}),
     helper: fakeHelper(helperOver),
+    programs: fakePrograms(),
+    voice: {
+      mic: vi.fn(async () => ({ status: micStatus, canOpenSettings: true })),
+      askMic: vi.fn(async () => ({ status: 'granted' as const, canOpenSettings: true })),
+      openMicSettings: vi.fn(async () => {}),
+    },
+    device: fakeDevice(),
     updates: {
       get: vi.fn(async () => ({ auto: true, last: null, releasesPage: RELEASES })),
       check: vi.fn(async () => ({
@@ -148,9 +294,39 @@ const fetchImpl = (async (url: string, init: RequestInit = {}) => {
   const method = (init.method ?? 'GET').toUpperCase();
   sent.push({ method, path: pathname, body: init.body ? JSON.parse(String(init.body)) : null });
   if (pathname.endsWith('/meta')) return json(meta);
+  if (pathname.endsWith('/models/speech'))
+    return json({ stt: { ready: true }, tts: { ready: false } });
+  if (pathname.endsWith('/relay') && method === 'PUT') {
+    const body = JSON.parse(String(init.body)) as Record<string, unknown>;
+    relayState = {
+      ...relayState,
+      enabled: body.enabled ?? relayState.enabled,
+      route: body.route ?? relayState.route,
+      hostname: body.hostname ?? relayState.hostname,
+      token_set: body.token ? true : relayState.token_set,
+      tunnel_id: body.token ? '6ff42ae2' : relayState.tunnel_id,
+      connected: body.enabled === true,
+      relay_url: body.enabled === true ? 'https://hub.example.com' : null,
+    };
+    return json(relayState);
+  }
+  if (pathname.endsWith('/relay')) return json(relayState);
   if (pathname.endsWith('/agents')) return json({ items: [{ id: 'AG1', slug: 'hermes' }] });
   if (pathname.endsWith('/agents/AG1/mcp-servers'))
     return method === 'POST' ? json({ name: 'this-computer' }, 201) : json({ items: [] });
+  if (pathname.endsWith('/profiles'))
+    return json({
+      items: [
+        { id: 'P1', slug: 'default', name: 'Default' },
+        { id: 'P2', slug: 'work', name: 'Work' },
+      ],
+    });
+  if (pathname.endsWith('/auth/pairings') && method === 'POST')
+    return json({ id: '01J8QK3ZR2W7M5N4P6T8V9X0PR', code: '7KQ2-M9XW', status: 'pending' }, 201);
+  if (pathname.endsWith(`/devices/${DEVICE_ID}`) && method === 'PATCH')
+    return json({ id: DEVICE_ID, profiles: ['work'] });
+  if (pathname.endsWith('/devices'))
+    return json({ items: [{ id: DEVICE_ID, profiles: null }], next_cursor: null });
   return json({ error: 'x', code: 'not_found' }, 404);
 }) as unknown as typeof fetch;
 
@@ -353,20 +529,28 @@ describe('This device in local mode', () => {
 });
 
 describe('local helper permission screen', () => {
-  it('is off by default and shows exactly the tools and folders the app reports', async () => {
+  it('is off by default; on, it shares the app’s own folder and shows exactly what it exposes', async () => {
     const bridge = fakeBridge({ mode: 'local', hubUrl: 'http://127.0.0.1:40123' });
     withBridge(bridge);
     mountThisDevice();
     const helper = await screen.findByTestId('helper');
     expect(screen.getByTestId('helper-enabled').getAttribute('aria-checked')).toBe('false');
+    // Off: nothing below the switch but what it says.
+    expect(screen.queryByTestId('helper-folders-fold')).toBeNull();
+    await userEvent.click(screen.getByTestId('helper-enabled'));
+    await waitFor(() =>
+      expect(screen.getByTestId('helper-folders').textContent).toContain('/home/t/Core Hub'),
+    );
+    expect(screen.getByTestId('helper-default-folder').textContent).toBe('Core Hub folder');
     expect(
       [...helper.querySelectorAll('[data-tool]')].map((li) => li.getAttribute('data-tool')),
     ).toEqual(['list_allowed_folders', 'list_directory', 'read_text_file']);
-    expect(screen.getByTestId('helper-no-folders')).toBeTruthy();
     await userEvent.click(screen.getByTestId('helper-add-folder'));
     await waitFor(() =>
       expect(screen.getByTestId('helper-folders').textContent).toContain('/home/t/Docs'),
     );
+    // The page stays one page: programs are a part of it, not a page of their own.
+    expect(within(helper).getByTestId('programs')).toBeTruthy();
   });
 
   it('turned on in local mode, adds itself to Hermes through the hub’s MCP contract', async () => {
@@ -395,19 +579,83 @@ describe('local helper permission screen', () => {
           enabled: true,
           config: {
             url: 'http://127.0.0.1:47001/mcp',
-            headers: { Authorization: `Bearer ${'a'.repeat(64)}` },
+            // Which profile asks, so the helper offers that profile's programs only.
+            headers: {
+              Authorization: `Bearer ${'a'.repeat(64)}`,
+              'X-Corehub-Profile': 'default',
+            },
           },
         },
       }),
     );
   });
 
-  it('says a hub on a server cannot reach it, and offers no Hermes button', async () => {
-    withBridge(fakeBridge({}, { enabled: true, url: 'http://127.0.0.1:47001/mcp' }));
+  it('links this computer to a hub on a server with a pairing of the person’s own', async () => {
+    sent.length = 0;
+    const bridge = fakeBridge({}, { enabled: true, url: 'http://127.0.0.1:47001/mcp' });
+    withBridge(bridge);
     mountThisDevice();
-    await screen.findByTestId('helper-url');
-    expect(screen.getByText(/cannot reach it/)).toBeTruthy();
+    const panel = await screen.findByTestId('device-link');
+    expect(screen.getByTestId('device-link-status').textContent).toBe('Not linked');
+    // The loopback address and the Hermes button belong to the hub on this computer only.
+    expect(screen.queryByTestId('helper-url')).toBeNull();
     expect(screen.queryByTestId('helper-add-to-hermes')).toBeNull();
+    await userEvent.click(within(panel).getByTestId('device-link-button'));
+    await waitFor(() =>
+      expect(bridge.device.link).toHaveBeenCalledWith('01J8QK3ZR2W7M5N4P6T8V9X0PR', '7KQ2-M9XW'),
+    );
+    expect(sent.find((r) => r.path.endsWith('/auth/pairings'))).toMatchObject({ method: 'POST' });
+    await waitFor(() =>
+      expect(screen.getByTestId('device-link-status').textContent).toBe('Connected'),
+    );
+    // Every profile until the person narrows it; leaving one out sends the rest.
+    const work = await screen.findByTestId('device-link-profile-default');
+    expect(work.getAttribute('aria-checked')).toBe('true');
+    await userEvent.click(work);
+    await waitFor(() =>
+      expect(sent.find((r) => r.method === 'PATCH')).toMatchObject({
+        path: `/api/v1/devices/${DEVICE_ID}`,
+        body: { profiles: ['work'] },
+      }),
+    );
+  });
+});
+
+describe('programs on this computer', () => {
+  it('lists what other assistants registered, takes a missing setting, and switches one on per profile', async () => {
+    const bridge = fakeBridge({}, { enabled: true });
+    withBridge(bridge);
+    mountThisDevice();
+    const programs = await screen.findByTestId('programs');
+    const resolve = within(programs).getByTestId('program-davinci-resolve');
+    expect(within(resolve).getByText('Claude Desktop extension')).toBeTruthy();
+    expect(screen.getByTestId('program-status-davinci-resolve').textContent).toBe('Needs setup');
+    expect(screen.getByTestId('program-status-figma').textContent).toBe('Online server');
+    // Needs setup: no profile can switch it on until the key is given.
+    expect(screen.queryByTestId('program-profiles-davinci-resolve')).toBeNull();
+    await userEvent.type(within(resolve).getByLabelText(/API key/), 'k-123');
+    await userEvent.click(within(resolve).getByRole('button', { name: 'Save' }));
+    expect(bridge.programs.setField).toHaveBeenCalledWith('davinci-resolve', 'api_key', 'k-123');
+    await waitFor(() =>
+      expect(screen.getByTestId('program-status-davinci-resolve').textContent).toBe('Ready'),
+    );
+    await userEvent.click(await screen.findByTestId('program-davinci-resolve-profile-work'));
+    expect(bridge.programs.setProfiles).toHaveBeenCalledWith('davinci-resolve', ['work']);
+    await waitFor(() =>
+      expect(screen.getByTestId('program-tools-davinci-resolve').textContent).toContain('render'),
+    );
+  });
+
+  it('checks DaVinci Resolve and says what to fix, step by step', async () => {
+    const bridge = fakeBridge({}, { enabled: true });
+    withBridge(bridge);
+    mountThisDevice();
+    await userEvent.click(await screen.findByTestId('resolve-check'));
+    const steps = await screen.findByTestId('resolve-steps');
+    expect(
+      [...steps.querySelectorAll('[data-step]')].map((li) => li.getAttribute('data-step')),
+    ).toEqual(['enable_scripting', 'needs_studio']);
+    expect(steps.textContent).toContain('External scripting using → Local');
   });
 });
 
@@ -473,5 +721,128 @@ describe('pairing link for a computer', () => {
     );
     expect(pairingLinkOf('not json')).toBeNull();
     expect(pairingLinkOf('{"hub_url":1}')).toBeNull();
+  });
+});
+
+describe('Voice in This device', () => {
+  afterEach(() => {
+    micStatus = 'unknown';
+  });
+
+  it('says what the system answered about the microphone, and opens its settings when blocked', async () => {
+    micStatus = 'denied';
+    const bridge = fakeBridge();
+    withBridge(bridge);
+    mountThisDevice();
+    const part = await screen.findByTestId('desktop-voice');
+    await waitFor(() => expect(within(part).getByText('Blocked')).toBeTruthy());
+    // The page no longer says the desktop app has no voice.
+    expect(screen.queryByText(/not in the desktop app yet/)).toBeNull();
+    await userEvent.click(within(part).getByTestId('desktop-voice-settings'));
+    expect(bridge.voice.openMicSettings).toHaveBeenCalledOnce();
+  });
+
+  it('asks the system on macOS while it has not been asked', async () => {
+    micStatus = 'not-determined';
+    const bridge = fakeBridge({ platform: 'darwin' });
+    withBridge(bridge);
+    mountThisDevice();
+    await userEvent.click(await screen.findByTestId('desktop-voice-ask'));
+    expect(bridge.voice.askMic).toHaveBeenCalledOnce();
+    await waitFor(() => expect(screen.getByText('Allowed')).toBeTruthy());
+  });
+
+  it('says so when this browser cannot record, instead of hanging', async () => {
+    withBridge(fakeBridge());
+    mountThisDevice();
+    await userEvent.click(await screen.findByTestId('desktop-voice-test'));
+    expect((await screen.findByTestId('desktop-voice-result')).textContent).toBe(
+      'No microphone could be opened.',
+    );
+  });
+});
+
+describe('Reach from outside in This device', () => {
+  const LOCAL = {
+    mode: 'local' as const,
+    hubUrl: 'http://127.0.0.1:47113',
+    local: {
+      dataDir: '/home/t/.config/Core Hub/local-hub',
+      hermes: 'program' as const,
+      hermesProgram: null,
+    },
+  };
+  beforeEach(() => {
+    relayState = { ...RELAY_OFF };
+    sent.length = 0;
+  });
+
+  it('is not offered when the app talks to a hub on a server', async () => {
+    withBridge(fakeBridge());
+    mountThisDevice();
+    await screen.findByTestId('desktop-voice');
+    expect(screen.queryByTestId('outside-access')).toBeNull();
+  });
+
+  it('warns first, then hands the pasted token to the hub once and never shows it', async () => {
+    withBridge(fakeBridge(LOCAL));
+    mountThisDevice();
+    const part = await screen.findByTestId('outside-access');
+    expect(within(part).getByTestId('outside-warning').textContent).toContain(
+      'reachable from the internet',
+    );
+    expect(within(part).getByTestId('outside-service').textContent).toBe('http://localhost:47113');
+    const on = within(part).getByTestId('outside-on');
+    expect(on.hasAttribute('disabled')).toBe(true);
+    await userEvent.type(
+      within(part).getByTestId('outside-token'),
+      'eyJhIjoiYSIsInQiOiJ0IiwicyI6InMifQ==',
+    );
+    await userEvent.type(within(part).getByTestId('outside-hostname'), 'hub.example.com');
+    await userEvent.click(on);
+    await waitFor(() =>
+      expect(sent.find((r) => r.method === 'PUT' && r.path.endsWith('/relay'))?.body).toEqual({
+        enabled: true,
+        route: 'cloudflare',
+        hostname: 'hub.example.com',
+        token: 'eyJhIjoiYSIsInQiOiJ0IiwicyI6InMifQ==',
+      }),
+    );
+    expect((await within(part).findByTestId('outside-connected')).textContent).toContain(
+      'https://hub.example.com',
+    );
+    expect(within(part).getByTestId('outside-token-kept').textContent).toContain('6ff42ae2');
+    expect((within(part).getByTestId('outside-token') as HTMLInputElement).value).toBe('');
+  });
+
+  it('offers Tailscale only when this computer is on a tailnet', async () => {
+    relayState = { ...RELAY_OFF, tailnet: { address: '100.101.102.103', dns_name: null } };
+    withBridge(fakeBridge(LOCAL));
+    mountThisDevice();
+    const part = await screen.findByTestId('outside-access');
+    await userEvent.click(within(part).getByRole('radio', { name: /Tailscale/ }));
+    expect(within(part).getByTestId('outside-tailnet').textContent).toBe('100.101.102.103');
+    await userEvent.click(within(part).getByTestId('outside-on'));
+    await waitFor(() =>
+      expect(sent.find((r) => r.method === 'PUT')?.body).toEqual({
+        enabled: true,
+        route: 'tailscale',
+      }),
+    );
+  });
+});
+
+describe('dictation in the desktop app', () => {
+  it('never falls back to the browser recognizer, which has no service behind it in Electron', async () => {
+    const { browserRecognizer } = await import('../src/voice/useDictation.js');
+    const scope = window as unknown as { webkitSpeechRecognition?: unknown };
+    scope.webkitSpeechRecognition = class {};
+    try {
+      expect(browserRecognizer()).not.toBeNull();
+      withBridge(fakeBridge());
+      expect(browserRecognizer()).toBeNull();
+    } finally {
+      delete scope.webkitSpeechRecognition;
+    }
   });
 });

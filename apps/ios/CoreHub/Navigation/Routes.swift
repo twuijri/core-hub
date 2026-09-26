@@ -12,7 +12,7 @@ enum AppRoutes {
         .models: "/settings/models",
         .knowledge: "/settings/knowledge",
         .chat: "/chat/:sessionId?",
-        .rooms: "/rooms",
+        .rooms: "/rooms/:roomId?",
         .tasks: "/tasks",
         .schedules: "/schedules",
         .settings: "/settings",
@@ -39,6 +39,7 @@ enum AppRoutes {
         .agentJobs: "/agents/:agentId/jobs",
         .agentChannels: "/agents/:agentId/channels",
         .agentPlugins: "/agents/:agentId/plugins",
+        .agentConfigFiles: "/agents/:agentId/config-files",
         .agentSettings: "/agents/:agentId/settings",
         .globalAgent: "/global-agent",
     ]

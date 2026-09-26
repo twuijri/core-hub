@@ -153,7 +153,7 @@ function WorkspaceCard({ workspace }: { workspace: Workspace }) {
             {!isDefault && (
               <Button
                 size="sm"
-                variant="danger"
+                variant="danger-quiet"
                 data-testid="archive-workspace"
                 onClick={() => {
                   void ask({

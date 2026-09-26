@@ -12,7 +12,7 @@ import { hubPort } from './playwright.config.js';
 const here = path.dirname(fileURLToPath(import.meta.url));
 const appDir = path.resolve(here, '../..');
 // COREHUB_DESKTOP_SMOKE_EXECUTABLE runs the same journeys against a packaged app
-// (release/linux-unpacked/corehub) instead of the development runtime.
+// (release/linux-unpacked/core-hub) instead of the development runtime.
 const packaged = process.env.COREHUB_DESKTOP_SMOKE_EXECUTABLE;
 const executablePath =
   packaged ?? (createRequire(import.meta.url)('electron') as unknown as string);
@@ -42,6 +42,8 @@ async function launch(
       ...process.env,
       WAYLAND_DISPLAY: '',
       COREHUB_DESKTOP_USER_DATA: userData,
+      // `~/Core Hub` and the other assistants' files: the test's, never the machine's.
+      COREHUB_DESKTOP_HOME: path.join(userData, 'home'),
       COREHUB_DESKTOP_NO_TRAY: '1',
       COREHUB_DESKTOP_NO_AUTO_UPDATE: '1',
       ...env,
@@ -189,8 +191,19 @@ test('local mode: no Hermes found → the hub starts on this computer anyway →
     expect(url).toMatch(/^http:\/\/127\.0\.0\.1:\d+\/mcp$/);
     const settings = JSON.parse(
       readFileSync(path.join(userDataOf(app), 'desktop.json'), 'utf8'),
-    ) as { helper: { token: string; enabled: boolean } };
+    ) as {
+      helper: {
+        token: string;
+        enabled: boolean;
+        folders: Array<{ path: string; write: boolean }>;
+        defaultFolder: string | null;
+      };
+    };
     expect(settings.helper.enabled).toBe(true);
+    // Turned on with nothing shared: the app made `~/Core Hub` and shared it writable.
+    const coreHub = path.join(userDataOf(app), 'home', 'Core Hub');
+    expect(settings.helper.folders).toEqual([{ path: coreHub, write: true }]);
+    expect(settings.helper.defaultFolder).toBe(coreHub);
     const call = (body: unknown, token = settings.helper.token) =>
       fetch(url, {
         method: 'POST',
@@ -201,13 +214,15 @@ test('local mode: no Hermes found → the hub starts on this computer anyway →
     const tools = (await (await call({ jsonrpc: '2.0', id: 1, method: 'tools/list' })).json()) as {
       result: { tools: Array<{ name: string }> };
     };
-    // No folder shared and nothing allowed: agents may only ask what is shared.
+    // The app's own folder, writable; opening is still not allowed.
     expect(tools.result.tools.map((t) => t.name)).toEqual([
       'list_allowed_folders',
       'list_directory',
       'read_text_file',
+      'write_text_file',
     ]);
-    await expect(page.getByTestId('helper-no-folders')).toBeVisible();
+    // Programs on this computer are a part of This device, not a page of their own.
+    await expect(page.getByTestId('programs')).toBeVisible();
     await page.getByTestId('helper').screenshot({ path: path.join(shots, 'helper-ar.png') });
   } finally {
     await app.close();

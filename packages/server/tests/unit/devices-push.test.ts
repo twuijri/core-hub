@@ -5,7 +5,10 @@
  */
 import { generateKeyPairSync } from 'node:crypto';
 import { eq } from 'drizzle-orm';
+import { io as connect } from 'socket.io-client';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { SOCKET_PATH } from '../../src/app/sockets.js';
+import { REALTIME_NAMESPACES } from '../../src/lib/module.js';
 import { requireSqlite } from '../../src/lib/db.js';
 import { overrideDevices } from '../../src/modules/devices/index.js';
 import { devices } from '../../src/modules/devices/schema.js';
@@ -701,7 +704,7 @@ describe('devices: a push registration ends with the sign-in that made it', () =
     await vi.waitFor(() => expect(pushOf(hub, id).pushProvider).toBe('none'));
   });
 
-  it('leaves a browser’s subscription with the browser when a sign-in ends', async () => {
+  it('forgets a browser’s subscription when its sign-in ends, and takes it again after the next', async () => {
     const service = await fakePush();
     const hub = await hubWith();
     const other = await signIn(hub);
@@ -711,10 +714,76 @@ describe('devices: a push registration ends with the sign-in that made it', () =
       payload: browser(),
     });
     const id = (device.json() as { id: string }).id;
-    const put = await subscribe(hub, id, service.subscribe('laptop').subscription, other);
+    const laptop = service.subscribe('laptop');
+    const put = await subscribe(hub, id, laptop.subscription, other);
     expect(put.statusCode, put.body).toBe(200);
+    expect(pushOf(hub, id).pushSessionId).toBeTruthy();
     await authed(hub, other, { method: 'POST', url: '/api/v1/auth/logout' });
-    expect(pushOf(hub, id).pushProvider).toBe('webpush');
+    expect(pushOf(hub, id)).toMatchObject({ pushProvider: 'none', pushSessionId: null });
+    await testNotice(hub);
+    expect(service.received).toHaveLength(0);
+
+    // Signed in again, the web hands the same subscription back (browserPush.ts).
+    const again = await signIn(hub);
+    const back = await subscribe(hub, id, laptop.subscription, again);
+    expect(back.statusCode, back.body).toBe(200);
+    await testNotice(hub);
+    await vi.waitFor(() => expect(service.received).toHaveLength(1));
+  });
+});
+
+/** A socket on `/rt/devices` of one sign-in, and every envelope it hears. */
+async function deviceSocket(hub: Hub, token: string) {
+  if (!hub.app.server.listening) await hub.app.listen({ port: 0, host: '127.0.0.1' });
+  const address = hub.app.server.address();
+  const port = typeof address === 'object' && address ? address.port : 0;
+  const socket = connect(`http://127.0.0.1:${port}${REALTIME_NAMESPACES.devices}`, {
+    path: SOCKET_PATH,
+    transports: ['websocket'],
+    auth: { token, profile: 'default' },
+  });
+  const events: Json[] = [];
+  socket.onAny((_event: string, envelope: Json) => events.push(envelope));
+  await new Promise<void>((resolve, reject) => {
+    socket.once('connect', () => resolve());
+    socket.once('connect_error', reject);
+  });
+  cleanups.push(() => void socket.disconnect());
+  const updates = (deviceId: string) =>
+    events.filter(
+      (e) =>
+        e.event === 'device.updated' &&
+        (e.payload as { device: { id: string } }).device.id === deviceId,
+    );
+  return { events, updates };
+}
+
+describe('devices: a dropped registration is announced', () => {
+  it('says device.updated when a sign-in ends and takes its phone’s token', async () => {
+    const { hub } = await fcmHub();
+    const web = await deviceSocket(hub, hub.token);
+    const phone = await signIn(hub);
+    const id = await passwordPhone(hub, phone, 'iphone-a');
+    await vi.waitFor(() => expect(web.updates(id).length).toBeGreaterThan(0));
+    const before = web.updates(id).length;
+
+    await authed(hub, phone, { method: 'POST', url: '/api/v1/auth/logout' });
+    await vi.waitFor(() => expect(web.updates(id).length).toBe(before + 1));
+    const last = web.updates(id).at(-1)!;
+    expect(last).toMatchObject({
+      namespace: '/rt/devices',
+      payload: { device: { id, push: null, user_id: hub.userId } },
+    });
+  });
+
+  it('says device.updated when the push service calls the token dead', async () => {
+    const { fcm, hub } = await fcmHub();
+    const id = await passwordPhone(hub, hub.token, 'iphone-a');
+    const web = await deviceSocket(hub, hub.token);
+    fcm.invalid.add('fcm-token-iphone-a-0123456789');
+    await testNotice(hub);
+    await vi.waitFor(() => expect(web.updates(id)).toHaveLength(1));
+    expect(web.updates(id)[0]).toMatchObject({ payload: { device: { id, push: null } } });
   });
 });
 

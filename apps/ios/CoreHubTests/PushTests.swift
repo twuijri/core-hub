@@ -12,6 +12,7 @@ private final class FakePushBackend: PushBackend {
     var paired: String? = "dev-paired"
     private(set) var calls: [String] = []
     private(set) var registered: [(deviceID: String, token: String, locale: HubLocale)] = []
+    private(set) var proofs: [PushRelayProof?] = []
 
     private func refuse(_ status: Int) -> HubFailure {
         HubFailure(kind: .http, status: status, code: status == 409 ? "conflict" : "not_found", message: nil,
@@ -35,8 +36,9 @@ private final class FakePushBackend: PushBackend {
         return paired
     }
 
-    func registerPush(deviceID: String, token: String, locale: HubLocale) async throws {
+    func registerPush(deviceID: String, token: String, locale: HubLocale, proof: PushRelayProof?) async throws {
         calls.append("push \(deviceID)")
+        proofs.append(proof)
         if !registerPushStatuses.isEmpty {
             let status = registerPushStatuses.removeFirst()
             if status != 200 { throw refuse(status) }
@@ -206,5 +208,35 @@ final class PushTests: XCTestCase {
         XCTAssertTrue(PushState.notAllowed.retriesOnForeground)
         XCTAssertTrue(PushState.waiting.retriesOnForeground)
         XCTAssertFalse(PushState.active.retriesOnForeground)
+    }
+
+    func testTheRegistrationCarriesTheRelayProofEachTime() async {
+        let hub = FakePushBackend()
+        hub.registerPushStatuses = [404, 200]
+        let registrar = PushRegistrar(backend: hub)
+        let proof = PushRelayProof(key: "k", signedAt: 1_790_000_000, signature: "s")
+        let outcome = await registrar.register(token: "ab12", locale: .ar, kind: .password, knownDeviceID: "gone",
+                                               device: phone, proof: proof)
+        XCTAssertEqual(outcome, .registered(deviceID: "dev-0"))
+        // The retry after a row removed on the web sends it again; without one, none is sent.
+        XCTAssertEqual(hub.proofs, [proof, proof])
+        _ = await registrar.register(token: "ab12", locale: .ar, kind: .password, knownDeviceID: "dev-0", device: phone)
+        XCTAssertEqual(hub.proofs.last, .some(nil))
+    }
+
+    @MainActor
+    func testASignOutByTheHubForgetsTheTokenAndDropsTheAPNsRegistration() {
+        let center = PushCenter()
+        var dropped = 0
+        center.unregisterRemote = { dropped += 1 }
+        center.received(deviceToken: Data([0xab, 0x12]))
+        XCTAssertEqual(center.heldToken, "ab12")
+        center.endedByHub()
+        XCTAssertNil(center.heldToken)
+        XCTAssertEqual(center.state, .idle)
+        XCTAssertEqual(dropped, 1)
+        // Signing out on purpose tells the hub first and leaves APNs alone.
+        center.reset()
+        XCTAssertEqual(dropped, 1)
     }
 }

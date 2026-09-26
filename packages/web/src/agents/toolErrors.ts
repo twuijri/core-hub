@@ -116,6 +116,8 @@ export function describeToolError(
         });
       case 'skill_bundled':
         return t('skills.bundled_refused');
+      case 'skill_essential':
+        return t('skills.essential_refused');
       case 'skill_not_library':
         return t('skills.library.not_library');
       case 'skill_library_off':

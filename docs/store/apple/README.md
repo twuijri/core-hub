@@ -74,7 +74,7 @@ in the iOS unit tests. To change what the screenshots show, edit the script and 
 
 Both upload paths use fastlane `deliver` with the App Store Connect API key (`ASC_API_KEY_ID`,
 `ASC_API_KEY_P8`, `ASC_API_ISSUER_ID`, the same secrets as `ios-signed.yml`), with
-`--skip_binary_upload --skip_submission --submit_for_review false`. They are off unless the owner
+`--skip_binary_upload --submit_for_review false`. They are off unless the owner
 ticks `upload` on a manual run:
 
 - `ios-screenshots.yml` with **upload**: the listing and the light screenshots of that run
@@ -82,9 +82,32 @@ ticks `upload` on a manual run:
 - `ios-store-metadata.yml` with **upload**: the listing text only.
 
 `deliver` works on the version named by the `version` input, else the root `package.json`'s
-(`1.1.0`); if App Store Connect has no such version yet, deliver creates it in "Prepare for
+version; if App Store Connect has no such version yet, deliver creates it in "Prepare for
 Submission". Neither workflow sends the age rating, the App Privacy answers, the App Review
-contact or the demo account: the owner enters those in App Store Connect.
+contact or the demo account.
+
+## Readying and submitting a version (`ios-submit.yml`)
+
+Owner's request (2026-09-26): submit the app to the App Store. Actions → *iOS App Store
+submission* → Run workflow (by hand only; inputs `version`, `build`, `submit`) runs
+`apps/ios/scripts/asc-prepare-submission.mjs` with the same API key. It:
+
+- attaches the build (`build`, else the newest VALID build of the version);
+- answers the age rating questionnaire with the answers below (`AGE_RATING` in the script);
+- when no price is set, makes the app free (0.00, base territory USA); when no availability is
+  set, makes it available in every territory **except China mainland** and in new territories as
+  Apple adds them (proposed — owner to confirm: China mainland needs an ICP filing number and a
+  permit for generative AI features, and without them App Review holds the version up);
+- declares "does not use third-party content" when nothing is declared, and sets the release to
+  **manual** after approval;
+- prints what is still missing: App Review contact, "Sign-in required" with the demo account, the
+  notes, copyright, primary category and privacy policy URLs when empty. App Privacy is always
+  listed: the public App Store Connect API has no endpoint for it (checked 2026-09-26), so it is
+  the owner's own check, and Apple refuses a submission without it.
+
+With `submit` ticked it does the same and, only when nothing is missing, adds the version to a
+review submission and submits it; otherwise it fails and lists what is missing. It never writes
+the demo account's user name or password, and never prints them.
 
 ## Age rating (answers to App Store Connect's questionnaire)
 

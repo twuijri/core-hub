@@ -85,6 +85,17 @@ export function conductorFor(app: FastifyInstance): Conductor {
   return created;
 }
 
+/**
+ * Which room a seat sits in, for `sessions` (`Approval.room_id`): the composition root
+ * registers it (`registerRoomOfSeat`), so `sessions` never imports this module.
+ */
+export function roomOfSeatFor(
+  app: FastifyInstance,
+): (workspace: string, seatId: string) => string | null {
+  return (workspace, seatId) =>
+    new RoomsStore(requireSqlite(app.hub.database)).roomOfSeat(workspace, seatId);
+}
+
 /** The service for this app: one store, the app's ports, the app's realtime layer. */
 export function roomsServiceFor(app: FastifyInstance): RoomsService {
   return new RoomsService(
@@ -218,7 +229,12 @@ export const roomsModule = defineModule({
         const scope = scopeOf(request);
         const id = room(params);
         const live = conductorFor(request.server).liveRuns(id);
-        return service(request).detail(scope, id, roomRuns(request.server, scope, id, live));
+        return service(request).detail(
+          scope,
+          id,
+          roomRuns(request.server, scope, id, live),
+          (sessionIds) => portsOf(request.server).seats?.pending(scope, sessionIds) ?? [],
+        );
       },
     });
     defineRoute(app, deps, {

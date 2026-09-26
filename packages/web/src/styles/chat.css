@@ -726,6 +726,87 @@ button.context-ring {
   }
 }
 
+/* The window by category (decision §102): one bar, a line per category. The colours are the
+   chart palette, which reads in both themes; a category the client does not know is faint. */
+.context-breakdown {
+  display: flex;
+  flex-direction: column;
+  gap: var(--ch-space-1);
+  margin-block-start: var(--ch-space-2);
+  padding-block-start: var(--ch-space-2);
+  border-block-start: 1px solid var(--ch-color-border);
+}
+.context-breakdown-bar {
+  display: flex;
+  block-size: 0.5rem;
+  border-radius: var(--ch-radius-full);
+  background: var(--ch-color-surface-2);
+  overflow: hidden;
+}
+.context-breakdown-bar > span {
+  block-size: 100%;
+  min-inline-size: 2px;
+}
+.context-breakdown-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: var(--ch-font-size-xs);
+}
+.context-breakdown-list > li {
+  display: flex;
+  align-items: center;
+  gap: var(--ch-space-2);
+}
+.context-breakdown-swatch {
+  flex-shrink: 0;
+  inline-size: 0.5rem;
+  block-size: 0.5rem;
+  border-radius: 2px;
+}
+.context-breakdown-name {
+  flex: 1;
+  min-inline-size: 0;
+}
+.context-breakdown-tokens {
+  color: var(--ch-color-text-muted);
+  font-variant-numeric: tabular-nums;
+}
+.context-breakdown [data-category] {
+  background: var(--ch-color-text-faint);
+}
+.context-breakdown [data-category='system_prompt'] {
+  background: var(--ch-color-chart-1);
+}
+.context-breakdown [data-category='tool_definitions'] {
+  background: var(--ch-color-chart-2);
+}
+.context-breakdown [data-category='rules'] {
+  background: var(--ch-color-status-review);
+}
+.context-breakdown [data-category='skills'] {
+  background: var(--ch-color-chart-3);
+}
+.context-breakdown [data-category='mcp'] {
+  background: var(--ch-color-chart-4);
+}
+.context-breakdown [data-category='subagent_definitions'] {
+  background: var(--ch-color-chart-5);
+}
+.context-breakdown [data-category='memory'] {
+  background: var(--ch-color-chart-6);
+}
+.context-breakdown [data-category='conversation'] {
+  background: var(--ch-color-accent);
+}
+/* The list rows carry the category too; only their swatch is coloured. */
+.context-breakdown-list > li[data-category] {
+  background: none;
+}
+
 /* «يُضغط السياق…» above the composer, where the live indicator sits. */
 .compression-status {
   display: flex;
@@ -951,8 +1032,91 @@ button.context-ring {
    Time flows in the reading direction: bars are placed with `inset-inline-start`,
    so the first step is at the right edge in Arabic and at the left in English.
    ============================================================================= */
-.chat-header-tabs {
-  margin-inline-start: auto;
+/* ------------------------------------------ the conversation's bar, in the top bar
+   The agent, the folder, Files and the Chat | Trajectory switch sit after the title in the one
+   pinned bar (ConversationBar.tsx). Compact icons; the switch is a small segmented pill. */
+.topbar-slot {
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+  min-inline-size: 0;
+}
+.topbar-slot:empty {
+  display: none;
+}
+/* Room for the conversation's controls: the hub's own name steps aside on all but wide bars. */
+@media (max-width: 80rem) {
+  .topbar-slot:not(:empty) ~ .topbar-hub {
+    display: none;
+  }
+}
+.convo-bar {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  min-inline-size: 0;
+}
+.convo-bar .ch-pending-count {
+  background: var(--ch-color-surface-3);
+  color: var(--ch-color-text);
+}
+.convo-tabs .ch-tabs {
+  flex-wrap: nowrap;
+  gap: 2px;
+  padding: 2px;
+  border-radius: var(--ch-radius-full);
+  background: var(--ch-color-surface-2);
+}
+.convo-bar .convo-tabs {
+  margin-inline-start: var(--ch-space-1);
+}
+.convo-tabs .ch-tab {
+  block-size: var(--ch-control-height-sm);
+  padding-inline: var(--ch-space-3);
+  border-radius: var(--ch-radius-full);
+  font-size: var(--ch-font-size-xs);
+  white-space: nowrap;
+}
+.convo-tabs .ch-tab::after {
+  display: none;
+}
+.convo-tabs .ch-tab[data-state='active'] {
+  background: var(--ch-color-bg-raised);
+  box-shadow: var(--ch-shadow-sm);
+}
+.convo-more {
+  display: flex;
+  flex-direction: column;
+  gap: var(--ch-space-2);
+  inline-size: min(20rem, calc(100vw - 2rem));
+}
+.convo-more .convo-tabs .ch-tabs {
+  inline-size: fit-content;
+}
+.convo-more-row {
+  display: flex;
+  align-items: center;
+  gap: var(--ch-space-2);
+  inline-size: 100%;
+  padding: var(--ch-space-2);
+  border-radius: var(--ch-radius-sm);
+  font-size: var(--ch-font-size-sm);
+  text-align: start;
+}
+.convo-more-row:hover {
+  background: var(--ch-color-surface-2);
+}
+.working-dir-current {
+  display: flex;
+  flex-direction: column;
+  gap: var(--ch-space-1);
+  max-inline-size: 22rem;
+}
+.working-dir-path {
+  font-family: var(--ch-font-mono);
+  font-size: var(--ch-font-size-xs);
+  color: var(--ch-color-text-muted);
+  overflow-wrap: anywhere;
 }
 .chat-flow[data-view='trajectory'] .composer-dock,
 .chat-flow[data-view='trajectory'] .chat-pad {
@@ -1253,6 +1417,25 @@ button.context-ring {
   background: var(--ch-color-surface-2);
   object-fit: contain;
 }
+/* A video or a sound on a message, played in place from a stream ticket (§90). */
+.msg-attachment-media {
+  display: flex;
+  flex-basis: 100%;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--ch-space-1);
+}
+.msg-video {
+  display: block;
+  max-inline-size: min(100%, 32rem);
+  max-block-size: 24rem;
+  border: 1px solid var(--ch-color-border);
+  border-radius: var(--ch-radius-md);
+  background: var(--ch-color-surface-2);
+}
+.msg-audio {
+  max-inline-size: min(100%, 24rem);
+}
 
 .file-list {
   display: flex;
@@ -1346,6 +1529,24 @@ button.context-ring {
   block-size: auto;
   align-self: center;
   border-radius: var(--ch-radius-md);
+}
+/* A video or a sound of the conversation, played from its stream address (§98). */
+.file-media {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--ch-space-2);
+}
+.file-video {
+  display: block;
+  max-inline-size: 100%;
+  max-block-size: 70vh;
+  border: 1px solid var(--ch-color-border);
+  border-radius: var(--ch-radius-md);
+  background: var(--ch-color-surface-2);
+}
+.file-audio {
+  inline-size: min(100%, 32rem);
 }
 .file-code-wrap pre,
 .file-code {
@@ -1444,6 +1645,30 @@ button.context-ring {
   gap: var(--ch-space-2);
   padding-inline: var(--ch-space-1);
   font-weight: 500;
+}
+/* While the run is still going (decision §102): a small pulsing "so far" before the count. */
+.run-changes-live {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--ch-space-1);
+  padding: 0 var(--ch-space-2);
+  border-radius: var(--ch-radius-full);
+  background: var(--ch-color-accent-soft);
+  color: var(--ch-color-accent-soft-text);
+  font-size: var(--ch-font-size-xs);
+  font-weight: 500;
+}
+.run-changes-live-dot {
+  inline-size: 0.4rem;
+  block-size: 0.4rem;
+  border-radius: var(--ch-radius-full);
+  background: currentColor;
+  animation: ch-pulse 1.4s var(--ch-motion-ease) infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .run-changes-live-dot {
+    animation: none;
+  }
 }
 .run-changes-list {
   display: flex;

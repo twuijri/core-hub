@@ -50,10 +50,40 @@ const bridge: DesktopBridge = {
     setAllowOpen: (value) => ipcRenderer.invoke(CHANNELS.helperAllowOpen, value === true),
     newToken: () => ipcRenderer.invoke(CHANNELS.helperNewToken),
   },
+  programs: {
+    get: () => ipcRenderer.invoke(CHANNELS.programsGet),
+    rescan: () => ipcRenderer.invoke(CHANNELS.programsRescan),
+    // Plain arrays of strings only: a reactive list cannot cross into the main process.
+    setProfiles: (id, profiles) =>
+      ipcRenderer.invoke(
+        CHANNELS.programsSetProfiles,
+        String(id),
+        Array.from(profiles ?? [], (p) => String(p)),
+      ),
+    setField: (id, key, value) =>
+      ipcRenderer.invoke(
+        CHANNELS.programsSetField,
+        String(id),
+        String(key),
+        value === null ? null : String(value),
+      ),
+    checkResolve: () => ipcRenderer.invoke(CHANNELS.programsCheckResolve),
+  },
+  device: {
+    get: () => ipcRenderer.invoke(CHANNELS.deviceGet),
+    link: (pairingId, code) =>
+      ipcRenderer.invoke(CHANNELS.deviceLink, String(pairingId), String(code)),
+    forget: () => ipcRenderer.invoke(CHANNELS.deviceForget),
+  },
   updates: {
     get: () => ipcRenderer.invoke(CHANNELS.updatesGet),
     check: () => ipcRenderer.invoke(CHANNELS.updatesCheck),
     setAuto: (value) => ipcRenderer.invoke(CHANNELS.updatesAuto, value === true),
+  },
+  voice: {
+    mic: () => ipcRenderer.invoke(CHANNELS.voiceMic),
+    askMic: () => ipcRenderer.invoke(CHANNELS.voiceMicAsk),
+    openMicSettings: () => ipcRenderer.invoke(CHANNELS.voiceMicSettings) as Promise<void>,
   },
 };
 

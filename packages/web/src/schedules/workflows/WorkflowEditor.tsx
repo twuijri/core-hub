@@ -32,7 +32,8 @@ import {
   Tabs,
   type BadgeTone,
 } from '../../ui/index.js';
-import { IconArrowStart, IconPlus } from '../../ui/icons.js';
+import { IconArrowStart, IconGauge, IconPlus } from '../../ui/icons.js';
+import { RunLimitsDialog, WorkflowLimitsForm, type Limits } from '../WorkflowLimits.js';
 import { ApprovalGate } from '../ScheduleRuns.js';
 import { WorkflowCanvas, type CanvasIssues } from './WorkflowCanvas.js';
 import { IssueList, StepPanel, StepRunPanel } from './StepPanel.js';
@@ -109,6 +110,7 @@ export default function WorkflowEditor({
   const [checkError, setCheckError] = useState<string | null>(null);
   const [input, setInput] = useState('');
   const [message, setMessage] = useState<string | null>(null);
+  const [runLimitsOpen, setRunLimitsOpen] = useState(false);
   const loadedFor = useRef<string | null>(null);
 
   // The saved drawing, once, when it arrives — never over what someone is drawing.
@@ -177,7 +179,7 @@ export default function WorkflowEditor({
     return created.id;
   };
 
-  const runFrom = async (startNodeIds: string[] | null) => {
+  const runFrom = async (startNodeIds: string[] | null, limits?: Limits) => {
     setMessage(null);
     const id = workflowId && !state.dirty ? workflowId : await save().catch(() => null);
     if (!id) return;
@@ -186,7 +188,9 @@ export default function WorkflowEditor({
       id,
       input: input.trim() || null,
       startNodeIds,
+      ...(limits ? { limits } : {}),
     });
+    setRunLimitsOpen(false);
     setMessage(t('workflows.started', { name: draft.name }));
     onShowRun(started.workflow_run_id, id);
   };
@@ -306,7 +310,26 @@ export default function WorkflowEditor({
             >
               {t('workflows.run')}
             </Button>
+            <Button
+              variant="secondary"
+              iconOnly
+              icon={<IconGauge size={16} />}
+              aria-label={t('schedules.limits.run_with')}
+              tooltip={t('schedules.limits.run_with')}
+              disabled={nameMissing || blocked || draft.nodes.length === 0}
+              onClick={() => setRunLimitsOpen(true)}
+              data-testid="workflow-run-with-limits"
+            />
           </div>
+          {runLimitsOpen && (
+            <RunLimitsDialog
+              open
+              limits={(workflow.data as { limits?: Limits } | undefined)?.limits}
+              busy={writes.run.isPending}
+              onClose={() => setRunLimitsOpen(false)}
+              onRun={(limits) => void runFrom(null, limits).catch(() => undefined)}
+            />
+          )}
           {nameMissing && state.dirty && (
             <p className="text-xs text-muted">{t('workflows.editor.name_required')}</p>
           )}
@@ -379,6 +402,19 @@ export default function WorkflowEditor({
                     problems={problems}
                     onRunFrom={(id) => void runFrom([id]).catch(() => undefined)}
                     runFromBusy={writes.run.isPending}
+                    settings={
+                      <section
+                        className="flex flex-col gap-2 border-t border-line pt-3"
+                        data-testid="workflow-settings"
+                      >
+                        <h3 className="text-sm font-medium">{t('schedules.limits.title')}</h3>
+                        {workflowId ? (
+                          <WorkflowLimitsForm workflowId={workflowId} profile={profile} />
+                        ) : (
+                          <p className="text-xs text-muted">{t('schedules.limits.save_first')}</p>
+                        )}
+                      </section>
+                    }
                   />
                 </Card>
               </div>

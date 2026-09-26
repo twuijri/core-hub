@@ -49,7 +49,8 @@
     "back_to_agents": "Back to agents",
     "terminal": "Terminal",
     "files": "Files",
-    "config_files": "Config files"
+    "config_files": "Config files",
+    "linked_hubs": "Linked hubs"
   },
   "common": {
     "loading": "Loading…",
@@ -205,7 +206,20 @@
       "none": "No category",
       "current": "Current",
       "new_and_move": "New category…",
-      "empty_group": "Drag a chat here, or use its menu."
+      "empty_group": "Drag a chat here, or use its menu.",
+      "colour": "Colour",
+      "colour_title": "Colour of {name}",
+      "colour_none": "No colour",
+      "colours": {
+        "blue": "Blue",
+        "green": "Green",
+        "amber": "Amber",
+        "red": "Red",
+        "purple": "Purple",
+        "pink": "Pink",
+        "teal": "Teal",
+        "slate": "Slate"
+      }
     },
     "channels": {
       "telegram": "Telegram",
@@ -223,7 +237,23 @@
         "note": "What should the agent do with it? (optional)",
         "go": "Continue",
         "no_agent": "No agent in this profile can take it. Install one from Agents first."
-      }
+      },
+      "hide": "Hide from my list",
+      "unhide": "Show again",
+      "delete": "Delete from Hermes…",
+      "delete_title": "Delete “{title}” from Hermes?",
+      "delete_body": "The conversation and its messages are removed from Hermes for everyone, permanently. This cannot be undone. The chat in {channel} itself is not affected.",
+      "delete_confirm": "Delete permanently",
+      "hidden_toast": "“{title}” is hidden from your list",
+      "hidden_toast_body": "Only you stop seeing it. “Show hidden chats” at the end of the list brings it back.",
+      "show_hidden": "Show hidden chats ({count})",
+      "hide_hidden": "Stop showing hidden chats",
+      "actions": "Conversation actions",
+      "action_failed": "Couldn't change the conversation",
+      "show_older": "Older channel conversations",
+      "load_older": "Load older messages",
+      "picture": "Picture sent on the channel",
+      "picture_gone": "A picture was sent here. Hermes keeps channel pictures for a day, and this one is gone."
     }
   },
   "search": {
@@ -282,11 +312,12 @@
     "older_failed": "Couldn’t load older messages.",
     "answered_by": "Answered by {model}",
     "fallback_note": "{failed} failed, so {model} answered",
-    "fallback_reason": "Why: {reason}"
+    "fallback_reason": "Why: {reason}",
+    "bar_more": "More"
   },
   "composer": {
     "label": "Message composer",
-    "placeholder": "Message the agent… (Enter to send, Shift+Enter for a new line)",
+    "placeholder": "Message the agent…",
     "disabled": "The session is not ready.",
     "send": "Send",
     "stop": "Stop the run",
@@ -336,7 +367,8 @@
       "high": "High",
       "max": "Max"
     },
-    "context_ring": "Context: {percent}% — {used} of {window} tokens"
+    "context_ring": "Context: {percent}% — {used} of {window} tokens",
+    "placeholder_agent": "Message {agent}…"
   },
   "slash": {
     "title": "Commands",
@@ -377,7 +409,19 @@
     "last_compressed": "Last compression: about {before} → {after} tokens.",
     "last_done": "Last compression finished.",
     "last_failed": "The last compression failed.",
-    "wait_for_run": "Wait for the running turn to finish, then compress."
+    "wait_for_run": "Wait for the running turn to finish, then compress.",
+    "breakdown_title": "What fills it",
+    "breakdown_note": "By category, as the agent counts it roughly.",
+    "category": {
+      "system_prompt": "System prompt",
+      "tool_definitions": "Tool definitions",
+      "rules": "Rules",
+      "skills": "Skills",
+      "mcp": "MCP",
+      "subagent_definitions": "Subagent definitions",
+      "memory": "Memory",
+      "conversation": "Conversation"
+    }
   },
   "compression_settings": {
     "title": "Context compression",
@@ -405,7 +449,7 @@
     "send": "Answer",
     "skip": "Skip (deny)",
     "waiting": "Waiting on you",
-    "answer_hint": "Type your answer… (Enter to send, Shift+Enter for a new line)"
+    "answer_hint": "Type your answer…"
   },
   "pending": {
     "open": "Waiting for you",
@@ -418,7 +462,9 @@
     "workflow_step": "Workflow step",
     "pairing": "{name} wants to message the agent on {platform}",
     "pairing_hint": "Approve or deny them here, or under Approvals on the agent’s channels page.",
-    "global_agent": "Ask the global agent"
+    "global_agent": "Ask the global agent",
+    "write_hint": "The agent wants to keep this; it waits for review.",
+    "room_item": "Room"
   },
   "global_agent": {
     "intro": "One standing conversation with your agent in this profile, outside the chats list. Reach it from search and from the bar of things waiting for you.",
@@ -439,7 +485,8 @@
     "earlier": "{count} earlier",
     "hide_earlier": "Hide {count} earlier",
     "arguments": "Arguments",
-    "result": "Result"
+    "result": "Result",
+    "count_one": "1 tool"
   },
   "agents": {
     "empty": "The registry is empty.",
@@ -462,19 +509,30 @@
       "disabled": "Disabled"
     },
     "capability": {
-      "approvals": "approvals",
-      "channels": "channels",
-      "jobs": "jobs",
+      "approvals": "Approvals",
+      "channels": "Channels",
+      "jobs": "Jobs",
       "kanban": "Tasks",
       "mcp": "MCP",
-      "memory": "memory",
-      "plugins": "plugins",
-      "resume": "resume",
-      "skills": "skills",
-      "streaming": "streaming",
+      "memory": "Memory",
+      "plugins": "Plugins",
+      "resume": "Resume",
+      "skills": "Skills",
+      "streaming": "Streaming",
       "tasks": "Tasks",
-      "tools": "tools",
-      "worktrees": "worktrees"
+      "tools": "Tools",
+      "worktrees": "Worktrees",
+      "vision": "Vision",
+      "audio": "Audio",
+      "presets": "Presets",
+      "journey": "Journey",
+      "compress": "Compress",
+      "steer": "Steer",
+      "goals": "Goals",
+      "plans": "Plans",
+      "learn": "Learn",
+      "skill_commands": "Skill commands",
+      "config_files": "Config files"
     },
     "settings_of": "{name} settings",
     "settings_none": "This agent declares no settings.",
@@ -491,6 +549,10 @@
     "update_now": "Update now",
     "auto_update": "Update automatically",
     "auto_update_hint": "The hub looks for a newer version every six hours and installs it only while the agent is idle; a run started during the update waits for it. Off by default.",
+    "signin_title": "Sign in to the {name} account",
+    "signin_hint": "{name} uses its own account rather than a provider key. Signing in here stores it for every profile on this hub.",
+    "signin_action": "Sign in",
+    "signin_approved": "Signed in. New conversations with {name} use this account.",
     "version_tested": "Tested version: {version}",
     "newer_than_tested": "Newer than the tested version",
     "newer_than_tested_hint": "This version is past the one Core Hub was tested with ({version}). It should work; if something breaks, say so.",
@@ -739,7 +801,8 @@
       "no_sender": "Push off: this hub has no {provider} sender yet",
       "off": "Push off"
     },
-    "push_set_up": "Set up push"
+    "push_set_up": "Set up push",
+    "pair_through_relay": "The phone will reach this hub at {url} (Reach from outside, in This device)."
   },
   "placeholder": {
     "later": "{name} arrives with its module in phase {phase}. Nothing is hidden here.",
@@ -795,8 +858,12 @@
       "fallbacks_empty": "No fallback models: if the chat model's provider fails, the turn fails.",
       "fallbacks_need_default": "Choose a chat model first; the fallbacks are tried after it.",
       "fallback_add": "Add a fallback model",
-      "fallback_up": "Move {model} up",
-      "fallback_down": "Move {model} down",
+      "fallback_reorder": "Drag to reorder {model} (Space to pick up, arrows to move)",
+      "fallback_instructions": "To reorder a fallback model, press Space or Enter on its handle, move it with the arrow keys, and press Space or Enter again to drop it. Escape puts it back.",
+      "fallback_picked": "Picked up {model}, place {position} of {total}.",
+      "fallback_moved": "{model} is now at place {position} of {total}.",
+      "fallback_dropped": "{model} dropped at place {position} of {total}.",
+      "fallback_cancelled": "Reordering cancelled; {model} is back at place {position} of {total}.",
       "fallback_remove": "Remove {model}"
     },
     "ensembles": {
@@ -869,7 +936,8 @@
       "kind_llm": "Chat",
       "kind_stt": "Speech to text",
       "kind_tts": "Text to speech",
-      "sign_in_hint": "This provider is used by signing in to your account, not with a key. Add it, then sign in from its card."
+      "sign_in_hint": "This provider is used by signing in to your account, not with a key. Add it, then sign in from its card.",
+      "key_on_file": "This provider’s account already has a key saved here; it is used unless you type another."
     },
     "runtime": {
       "title": "Runtime",
@@ -914,14 +982,39 @@
       "saved": "Saved.",
       "ready": "Ready",
       "not_ready": "Not ready",
-      "try": "Try the voice",
-      "try_text": "Hello. This is how replies will sound.",
+      "try": "Preview",
       "try_failed": "The voice could not be played: {detail}",
-      "add_hint": "Add OpenAI (it brings its speech rows with the same key), ElevenLabs, or your own OpenAI-compatible speech server with Add provider → Custom.",
+      "add_hint": "Add Groq or OpenAI (they bring their speech rows with the same key), ElevenLabs, Deepgram, Azure Speech, or your own OpenAI-compatible speech server with Add provider → Custom.",
       "add_stt": "Add a speech-to-text provider",
       "add_tts": "Add a text-to-speech provider",
       "none_stt": "No speech-to-text provider yet. Speech usually has providers of its own; add one here.",
-      "none_tts": "No text-to-speech provider yet. Speech usually has providers of its own; add one here."
+      "none_tts": "No text-to-speech provider yet. Speech usually has providers of its own; add one here.",
+      "custom_value": "Typed by hand",
+      "custom_group": "Typed by hand",
+      "model_pick": "Pick a model",
+      "model_id": "Model id",
+      "model_custom": "…or type a model id",
+      "language_auto": "Detect automatically",
+      "lang_popular": "Popular languages",
+      "lang_all": "All languages",
+      "lang_all_count": "All languages ({count} voices)",
+      "language_stt": "Spoken language (detected when empty)",
+      "language_tts": "Language (optional)",
+      "language_code": "Language code",
+      "language_custom": "…or type a code, e.g. ar-EG",
+      "gender_female": "Female",
+      "gender_male": "Male",
+      "gender_neutral": "Neutral",
+      "any_language": "Any language",
+      "voice_language": "Voice language",
+      "voice_pick": "Pick a voice",
+      "voice_id": "Voice id",
+      "voices_loading": "Asking the provider for its voices…",
+      "voices_documented": "From the provider’s documentation: it has no voice list to ask.",
+      "voices_none": "This provider lists no voices: type the voice id.",
+      "sample": "Preview language",
+      "sample_ar": "مرحبًا، هكذا ستُقرأ الردود بهذا الصوت.",
+      "sample_en": "Hello, this is how replies will sound in this voice."
     },
     "signin": {
       "signed_in": "Signed in",
@@ -964,7 +1057,8 @@
     "new": "New folder",
     "new_placeholder": "New folder name",
     "create": "Create",
-    "locked": "The folder is fixed once the chat has run."
+    "locked": "The folder is fixed once the chat has run.",
+    "button": "Folder: {name}"
   },
   "combobox": {
     "search": "Search…",
@@ -974,7 +1068,8 @@
     "none": "No models in this list.",
     "no_match": "Nothing matches “{query}”.",
     "error": "The list could not be fetched.",
-    "count": "{count} models"
+    "count": "{count} models",
+    "all": "All"
   },
   "ui": {
     "close": "Close",
@@ -1055,7 +1150,56 @@
       "owns_card": "This card is on Hermes's board, and this hub does not run Hermes here, so Hermes decides what happens to it.",
       "writes_through": "This card is on Hermes's board: changes are made on Hermes first.",
       "api_unavailable": "Hermes's API is not available right now, so nothing was changed: {message}",
-      "confirm_delete_body": "It is deleted from Hermes's board too. This cannot be undone."
+      "confirm_delete_body": "It is deleted from Hermes's board too. This cannot be undone.",
+      "history": {
+        "title": "On Hermes",
+        "runs": "Attempts",
+        "events": "What happened",
+        "no_runs": "Hermes has not worked on it yet.",
+        "no_events": "Nothing recorded yet.",
+        "attempt": "attempt {id}",
+        "event": {
+          "created": "Created",
+          "assigned": "Assigned",
+          "claimed": "Picked up by a worker",
+          "spawned": "Worker started",
+          "heartbeat": "Worker still working",
+          "completed": "Completed",
+          "blocked": "Blocked",
+          "unblocked": "Unblocked",
+          "commented": "Comment",
+          "edited": "Edited",
+          "reprioritized": "Priority changed",
+          "status": "Moved",
+          "archived": "Archived",
+          "reclaimed": "Taken back from its worker",
+          "timed_out": "Timed out",
+          "review_requested": "Sent for review",
+          "review_reopened": "Reopened after review",
+          "changes_requested": "Changes requested",
+          "scheduled": "Scheduled",
+          "promoted": "Promoted",
+          "promoted_manual": "Promoted by hand",
+          "gave_up": "Given up",
+          "attached": "File attached",
+          "linked": "Linked",
+          "unlinked": "Unlinked",
+          "specified": "Specified"
+        },
+        "run": {
+          "running": "Running",
+          "done": "Done",
+          "completed": "Completed",
+          "blocked": "Blocked",
+          "review": "In review",
+          "review_requested": "Sent for review",
+          "reclaimed": "Taken back",
+          "crashed": "Crashed",
+          "timed_out": "Timed out",
+          "scheduled": "Scheduled",
+          "changes_requested": "Changes requested"
+        }
+      }
     },
     "assign": {
       "open": "Assign to an agent…",
@@ -1067,18 +1211,25 @@
       "start": "Assign and start",
       "only": "Assign only",
       "no_agents": "No agent on this hub can take a task yet. Install or enable one in Agents.",
-      "not_started": "Handed to this agent's own board: it starts the task from there, not the hub."
+      "not_started": "Handed to this agent's own board: it starts the task from there, not the hub.",
+      "waiting": "This task depends on tasks that are not done yet: {titles}. “Assign and start” starts it now anyway."
     },
     "stop": "Stop",
     "unassign": "Unassign",
     "open_session": "Open the conversation",
     "show_archived": "Show archived ({count})",
     "hide_archived": "Hide archived ({count})",
+    "waiting_on": "Waiting on {count}",
+    "waiting_on_list": "Waiting on: {titles}",
+    "stuck": "Stuck",
+    "stuck_since": "No activity from its run since {time}",
     "details": {
       "open": "Details…",
       "title": "Task details",
       "description": "Description",
       "priority": "Priority",
+      "waiting_on": "Waiting on",
+      "waiting_hint": "It starts on its own only when all of these are done.",
       "comments": "Comments",
       "no_comments": "No comments yet.",
       "add_comment": "Add a comment",
@@ -1114,7 +1265,7 @@
     },
     "auto_start": {
       "label": "Start automatically",
-      "hint": "Starts on its own once it is in Ready and given to an agent. Stopping it turns this off."
+      "hint": "Starts on its own once it is in Ready, given to an agent, and everything it depends on is done. Stopping it turns this off."
     },
     "worktree": {
       "title": "Worktree",
@@ -1136,6 +1287,36 @@
         "removed": "Removed",
         "error": "Git refused"
       }
+    },
+    "count_one": "1 task",
+    "dod": {
+      "title": "Definition of done",
+      "hint": "What must be true for the task to count as done. The agent is given these with every run.",
+      "review_hint": "In review: tick each line that holds, then Save.",
+      "ticked": "{done} of {total} ticked",
+      "tick": "Holds: {text}",
+      "remove": "Remove “{text}”",
+      "line": "Line {number}",
+      "placeholder": "e.g. The tests pass",
+      "add": "Add a line",
+      "card": "Definition of done: {done} of {total} ticked",
+      "hermes_card": "This card is on Hermes's board, and Hermes briefs its own worker from the card, so it takes no definition of done or constraints here."
+    },
+    "constraints": {
+      "title": "Constraints",
+      "hint": "What the agent must keep to while it works — a file not to touch, a library not to add. Given with every run.",
+      "line": "Constraint {number}",
+      "placeholder": "e.g. Do not add new libraries",
+      "add": "Add a constraint"
+    },
+    "bulk": {
+      "select": "Select",
+      "count": "{count} selected",
+      "priority": "Set priority",
+      "comment": "Comment on all",
+      "comment_title": "One comment on {count} tasks",
+      "refused": "Not changed: {count} (Hermes refused, or they are gone). Changed: {done}.",
+      "tick": "Select “{title}”"
     }
   },
   "schedules": {
@@ -1301,7 +1482,11 @@
         "max_duration": "Stopped: the run went over its time limit.",
         "max_cost": "Stopped: the run went over its cost limit.",
         "step_timeout": "Stopped: a step went over its timeout and nothing handled it."
-      }
+      },
+      "run_with": "Run with limits for this run",
+      "run_title": "Limits for this run",
+      "run_hint": "Starts from the workflow's limits. What you change applies to this run only; an empty field means no limit.",
+      "save_first": "Save the workflow to set its limits."
     }
   },
   "workflows": {
@@ -1562,7 +1747,6 @@
       "update_available": "An update is available",
       "system": "System messages"
     },
-    "push_switch": "Push to devices",
     "test": "Send a test notification",
     "test_sent": "Sent. Check this browser and your devices.",
     "browser": {
@@ -1574,7 +1758,10 @@
       "denied": "The browser blocks notifications for this site. Allow them in the browser's site settings, then try again.",
       "unsupported": "This browser cannot receive push notifications.",
       "no_key": "Web Push is switched off on this hub. An admin can switch it on."
-    }
+    },
+    "col_event": "Event",
+    "col_in_hub": "In the hub",
+    "col_on_devices": "On devices"
   },
   "webhooks": {
     "intro": "Addresses this hub calls on its own, signed so the receiver can check the sender. Webhooks belong to the profile you are in.",
@@ -1885,7 +2072,7 @@
       }
     },
     "builtin": "Built into Hermes",
-    "builtin_hint": "One of Hermes's own skills. Hermes keeps it in step with its bundle, so it can be read and pinned here but not edited, switched off or deleted.",
+    "builtin_hint": "One of Hermes's own skills. Hermes keeps it in step with its bundle, so it can be read, pinned and switched on or off here (Hermes's own switch) but not edited or deleted.",
     "bundled_refused": "This is one of Hermes's own skills; it is read-only here.",
     "close": "Close",
     "library": {
@@ -1909,7 +2096,8 @@
       "editor_note": "One of Core Hub's own skills. Once you save a change it is yours: Core Hub stops updating it, and Restore brings its version back.",
       "not_library": "This skill is not one of Core Hub's own.",
       "off_refused": "The Core Hub library is off in this profile; switch it on first."
-    }
+    },
+    "essential_refused": "Hermes's own manual (hermes-agent) is always on: Hermes does not let it be switched off."
   },
   "mcp": {
     "title_of": "{name} MCP servers",
@@ -1950,7 +2138,8 @@
       "conversations": "Conversations",
       "notifications": "Notifications",
       "workflows": "Workflows",
-      "files": "Files"
+      "files": "Files",
+      "devices": "Your computers"
     },
     "group_about": {
       "tasks": "List the board's tasks; with changes allowed, create, move, assign and comment on them.",
@@ -1958,7 +2147,8 @@
       "conversations": "List and search this profile's conversations and read a summary of one.",
       "notifications": "Tell the person something: a notice in their inbox.",
       "workflows": "List workflows; with changes allowed, run one.",
-      "files": "Read the files in this profile's folder; with changes allowed, write them."
+      "files": "Read the files in this profile's folder; with changes allowed, write them.",
+      "devices": "Use the shared folders and the programs on the person's own computers that run the Core Hub app (each computer asks its person first). With changes allowed, write files and run programs there."
     },
     "unavailable": {
       "runtime_absent": "There is no Hermes beside this hub to give the tools to.",
@@ -1993,7 +2183,17 @@
     "empty_memory": "It has kept nothing yet.",
     "empty_user": "It has written nothing about you yet.",
     "entries_hint": "A list of short entries, each separated by a line holding only §. It has a character limit: past it, the agent cannot add anything new.",
-    "too_long": "Too long for this memory: {length} characters, and the limit is {limit}. Shorten or merge entries."
+    "too_long": "Too long for this memory: {length} characters, and the limit is {limit}. Shorten or merge entries.",
+    "add_entry": "Add entry",
+    "edit_all": "Edit all",
+    "edit_entry": "Edit this entry",
+    "remove": "Remove",
+    "remove_title": "Remove this entry?",
+    "entry": "Entry",
+    "add_entry_title": "New entry in {name}",
+    "edit_entry_title": "An entry in {name}",
+    "budget": "{count} of {limit} characters",
+    "budget_over": "{count} of {limit} characters — full: the agent cannot keep anything new"
   },
   "channels": {
     "title_of": "{name} channels",
@@ -2614,7 +2814,56 @@
       "waiting_review": "{count} waiting — Review"
     },
     "restart_needed": "Hermes needs a restart to connect {name}.",
-    "restart_now": "Restart now"
+    "restart_now": "Restart now",
+    "webhooks": {
+      "title": "Webhooks",
+      "new": "New webhook",
+      "intro": "Let an outside service — GitHub, a form, a script — start this agent by sending a request to an address. Each webhook has its own prompt and secret.",
+      "public_note": "Outside services send to this hub's address ({origin}). They can reach it only if that address is open to the internet.",
+      "public_private": "This page is open on {origin}, an address only your own network or computer can reach. Outside services need a public address for this hub (a domain or a tunnel) before these webhooks can work for them.",
+      "none": "No webhooks yet.",
+      "listener_online": "Listening",
+      "listener_unknown": "Starting",
+      "listener_offline": "Not listening",
+      "listener_error": "Error",
+      "listener_off": "Off",
+      "static": "From config.yaml",
+      "prompt_label": "Prompt:",
+      "prompt_empty": "(the whole request)",
+      "url": "Address",
+      "secret": "Secret",
+      "secret_global": "Signed with the listener's shared secret from config.yaml.",
+      "show_secret": "Show secret",
+      "hide_secret": "Hide secret",
+      "copy": "Copy",
+      "copied": "Copied",
+      "copy_url": "Copy the address of {name}",
+      "copy_secret": "Copy the secret of {name}",
+      "test": "Test",
+      "testing": "Testing…",
+      "test_accepted": "Accepted: the agent is running with this webhook's prompt. This test came from the hub itself, so it does not prove the public address.",
+      "test_refused": "The listener answered {status}. {reason}",
+      "delete": "Delete",
+      "delete_title": "Delete the webhook {name}?",
+      "delete_body": "Services that still send to its address will be refused.",
+      "new_title": "New webhook",
+      "new_intro": "A name for the address, and what the agent is asked when a request arrives.",
+      "name": "Name",
+      "name_hint": "Lowercase letters, digits, - and _. It is part of the address.",
+      "name_invalid": "Use lowercase letters, digits, - and _, starting with a letter or a digit.",
+      "name_taken": "A webhook with this name already exists.",
+      "prompt": "Prompt",
+      "prompt_hint": "{a.b} is replaced with that value of the request's JSON, {event_type} with the event, {__raw__} with the whole request. Leave it empty to send the whole request.",
+      "prompt_placeholder": "A new issue was opened: {issue.title}. Read it and suggest a label.",
+      "description": "Description (optional)",
+      "events": "Events (optional)",
+      "events_hint": "Only these events start the agent (GitHub's X-GitHub-Event, or event_type in the request). Empty takes every event.",
+      "deliver": "Send the answer to",
+      "deliver_log": "Nowhere — keep it in the agent's record",
+      "deliver_to": "{name} (its home chat)",
+      "create": "Create",
+      "creating": "Creating…"
+    }
   },
   "question": {
     "title": "Question",
@@ -2773,7 +3022,6 @@
     "close_to_tray_hint": "The app stays in the tray and keeps showing notifications. Quit it from the tray.",
     "no_tray": "This desktop has no tray, so closing the window quits the app.",
     "voice": "Voice",
-    "voice_later": "Voice input, the dictation language and spoken replies are not in the desktop app yet.",
     "data_dir": "Data folder",
     "hermes": "Hermes Agent",
     "hermes_program": "Installed on this computer",
@@ -2782,9 +3030,9 @@
     "hermes_path": "Hermes program"
   },
   "helper": {
-    "title": "Local helper (MCP)",
-    "intro": "Lets an agent use this computer through MCP tools — only the folders you share, only as you allow. Off until you turn it on.",
-    "enable": "Turn on the local helper",
+    "title": "Agents on this computer",
+    "intro": "Lets an agent use this computer — only the folders and programs you share, only as you allow — from the hub on this computer or from a hub on a server. Off until you turn it on.",
+    "enable": "Let agents use this computer",
     "enable_hint": "It listens on this computer only and wants its key on every request.",
     "exposed": "What agents can do",
     "tool_list_allowed_folders": "See which folders are shared",
@@ -2812,11 +3060,16 @@
     "add_to_hermes": "Add to Hermes on this hub",
     "added_to_hermes": "Added to Hermes as “{name}”. It takes effect on Hermes’s next start.",
     "no_hermes_agent": "This hub has no Hermes agent to add it to.",
-    "remote_note": "The helper answers on this computer only, so a hub on a server cannot reach it. It serves the hub running on this computer (local mode).",
+    "remote_note": "A hub on a server reaches this computer through its device connection, which this app keeps open while it runs, also from the tray.",
     "activity": "Recent use",
     "no_activity": "Nothing has used the helper yet.",
     "refused": "refused",
-    "not_running": "The helper is on but not running: {message}"
+    "not_running": "The helper is on but not running: {message}",
+    "local_note": "The hub on this computer reaches the helper at this address. Add it to Hermes once; each profile gets the programs you switched on for it.",
+    "default_folder": "Core Hub folder",
+    "default_folder_hint": "The app made this folder for Core Hub's files when you turned the helper on. Programs put what they make here (a render, say) unless you say otherwise. Stop sharing it any time.",
+    "via_hub": "from the hub",
+    "via_local": "from this computer"
   },
   "desktop_updates": {
     "title": "Updates",
@@ -3124,7 +3377,8 @@
     "modified": "Changed {time}",
     "updated": "Updated just now",
     "gone": "This file is no longer in the conversation's folder.",
-    "close": "Close the files"
+    "close": "Close the files",
+    "cannot_play": "This browser cannot play this file. Download it to open it in a player."
   },
   "workspace_files": {
     "intro": "The working folder of the profile «{profile}»: the folders its conversations and tasks work in. A file manager only — nothing here runs a command.",
@@ -3218,7 +3472,8 @@
     "show_all": "Show all {count}",
     "show_less": "Show fewer",
     "unlisted": "And more files not listed here ({count}).",
-    "incomplete": "The folder is larger than the hub reads when a run starts, so a change may be missing here."
+    "incomplete": "The folder is larger than the hub reads when a run starts, so a change may be missing here.",
+    "live": "So far"
   },
   "diff": {
     "layout": "How to show the changes",
@@ -3342,5 +3597,275 @@
     "all_none": "Nobody has linked a messaging account.",
     "remove": "Remove",
     "remove_title": "Remove {name}'s link?"
+  },
+  "device_link": {
+    "title": "Connection to this hub",
+    "intro": "A hub on a server can use this computer's shared folders and programs only once this computer is linked to it as a device. The app then keeps its own connection, even when the window is closed; nothing listens on this computer.",
+    "link": "Link this computer to the hub",
+    "refused": "The hub no longer accepts this computer (it was unlinked there). Link it again.",
+    "profiles": "Profiles that may use this computer",
+    "profiles_hint": "All your profiles until you narrow it. A profile left out cannot reach this computer's folders or programs.",
+    "unlink": "Unlink this computer",
+    "status_connected": "Connected",
+    "status_connecting": "Connecting…",
+    "status_offline": "Offline — trying again",
+    "status_refused": "Refused",
+    "status_stopped": "Stopped",
+    "status_unlinked": "Not linked"
+  },
+  "programs": {
+    "title": "Programs on this computer",
+    "count": "{on} of {all} on",
+    "intro": "Programs that registered an AI integration (an MCP server) with another assistant on this computer: Claude Desktop and its extensions, Claude Code, Codex, Cursor or Windsurf. Each is off until you pick the profiles it serves; it runs with your account's rights, and the computer asks you once per session before an agent uses it.",
+    "rescan": "Look again",
+    "empty": "No program found. Programs register with those assistants: install the program's AI integration there, then look again.",
+    "source": {
+      "claude_desktop": "Claude Desktop",
+      "claude_desktop_extension": "Claude Desktop extension",
+      "claude_code": "Claude Code",
+      "codex": "Codex",
+      "cursor": "Cursor",
+      "windsurf": "Windsurf"
+    },
+    "status": {
+      "ready": "Ready",
+      "needs_setup": "Needs setup",
+      "remote": "Online server",
+      "invalid": "Cannot start"
+    },
+    "on_for": "On for {count}",
+    "found_in": "Found in",
+    "remote_note": "This one is a server on the network, not a program on this computer; it is not passed through in this version.",
+    "invalid_note": "Its registration names no program to start.",
+    "settings": "Settings",
+    "needs_setup_hint": "It needs a value only you have, which the other assistant kept to itself. Give it here; the app keeps secrets sealed by your system’s keychain.",
+    "save": "Save",
+    "clear": "Remove",
+    "saved_secret": "Saved — type to replace",
+    "profiles": "Profiles that may use it",
+    "profiles_hint": "None: off (the default).",
+    "failed": "It did not start: {message}",
+    "tools": "What it offers",
+    "consent_note": "Before an agent uses a program, this computer asks you: allow once, allow for this session, or deny. Every call appears under Recent use.",
+    "resolve": {
+      "title": "DaVinci Resolve",
+      "ready": "Ready",
+      "not_ready": "Not ready yet",
+      "check": "Check",
+      "intro": "Checks that Resolve’s integration is here, Resolve is running, scripting from outside is allowed and it is the Studio edition.",
+      "integration": "Integration",
+      "integration_missing": "not found",
+      "integration_found": "found, not switched on",
+      "integration_shared": "found and switched on",
+      "running": "Running",
+      "unknown": "could not tell",
+      "yes": "yes",
+      "no": "no",
+      "scripting": "External scripting",
+      "scripting_reachable": "answers",
+      "scripting_unreachable": "does not answer",
+      "scripting_unknown": "not checked",
+      "edition": "Edition",
+      "step_install_integration": "Install DaVinci Resolve’s AI integration in Claude Desktop (or another assistant listed above), then press Look again.",
+      "step_share_program": "Switch DaVinci Resolve on above for the profiles that should use it.",
+      "step_start_resolve": "Open DaVinci Resolve and keep it running: its scripting talks to the running app.",
+      "step_enable_scripting": "In Resolve: Preferences → System → General → External scripting using → Local. Then restart Resolve.",
+      "step_needs_studio": "Scripting from outside Resolve needs DaVinci Resolve Studio; the free edition allows it only from inside the app.",
+      "support": "DaVinci Resolve support and downloads"
+    }
+  },
+  "desktop_voice": {
+    "intro": "Dictation and reading aloud work here as in a browser: the microphone records on this computer, and your hub writes the words out and speaks the replies with the profile's speech providers.",
+    "mic_label": "Microphone:",
+    "mic_granted": "Allowed",
+    "mic_granted_hint": "the system lets Core Hub use it.",
+    "mic_denied": "Blocked",
+    "mic_denied_hint": "the system blocks it for Core Hub. Allow Core Hub in the system's microphone settings, then try again.",
+    "mic_not_determined": "Not asked yet",
+    "mic_not_determined_hint": "the system asks you the first time you dictate, or now.",
+    "mic_restricted": "Restricted",
+    "mic_restricted_hint": "a policy on this computer does not let apps use it.",
+    "mic_unknown": "No system switch",
+    "mic_unknown_hint": "this system has no per-app switch; Core Hub asks for it when you dictate.",
+    "ask": "Allow the microphone",
+    "open_settings": "Open the system's microphone settings",
+    "no_providers": "This profile has no speech-to-text or text-to-speech provider ready, so there is nothing to dictate to or read aloud with.",
+    "no_stt": "This profile has no speech-to-text provider ready: the test only says whether sound was heard.",
+    "no_tts": "This profile has no text-to-speech provider ready, so replies cannot be read aloud.",
+    "test": "Test the microphone",
+    "testing": "Speak now… ({seconds} seconds)",
+    "level": "Sound level",
+    "heard_text": "The hub heard: “{text}”",
+    "heard_sound": "Sound came through the microphone.",
+    "heard_nothing": "Nothing was heard. Check that the right microphone is chosen in the system and speak a little closer.",
+    "speak_test": "Test reading aloud",
+    "sample": "This is how Core Hub reads your replies aloud.",
+    "speak_failed": "The hub could not read the sentence aloud. Check the profile's text-to-speech provider in Models."
+  },
+  "outside": {
+    "title": "Reach from outside",
+    "intro": "The hub on this computer answers this computer only. To use it from your phone away from home, open a way in on an account of your own: a Cloudflare Tunnel, or your Tailscale network. Core Hub runs no service for you.",
+    "warning": "Turning this on makes your hub reachable from the internet through your own tunnel. Anyone who reaches it still has to sign in, so use a strong password; turn it off when you do not need it.",
+    "route": "How phones reach it",
+    "cloudflare": "Cloudflare Tunnel",
+    "cloudflare_hint": "A public address on a domain in your Cloudflare account. Works on any network.",
+    "tailscale": "Tailscale",
+    "tailscale_hint": "Only devices on your own tailnet can reach it. Needs Tailscale on this computer and on the phone.",
+    "cf_step_create": "In your Cloudflare dashboard open Zero Trust → Networks → Tunnels, and create a tunnel of the Cloudflared kind.",
+    "cf_step_route": "Give it a public hostname whose service is",
+    "cf_step_token": "Copy the tunnel's token (the long text after --token in the install command) and paste it below. Core Hub downloads Cloudflare's own cloudflared once and runs it.",
+    "copy": "Copy",
+    "copied": "Copied",
+    "token_kept": "A token is kept in this computer's keychain (tunnel {tunnel}).",
+    "forget_token": "Forget the token",
+    "token": "Tunnel token",
+    "token_replace": "New tunnel token (optional)",
+    "token_hint": "Kept in this computer's keychain; it is never shown again or sent anywhere but to cloudflared.",
+    "hostname": "Public hostname",
+    "hostname_hint": "The hostname you gave the tunnel, such as hub.example.com. Phones pair with it.",
+    "route_elsewhere": "Points elsewhere — set the service to {service}",
+    "tailnet_found": "This computer is on a tailnet at",
+    "tailnet_missing": "This computer is not on a Tailscale network. Install Tailscale, sign in, then come back.",
+    "tailscale_phone": "Core Hub listens on this tailnet address only. Install Tailscale on the phone with the same account, then pair it.",
+    "turn_on": "Turn on",
+    "turn_off": "Turn off",
+    "save": "Save",
+    "connected": "Open. Phones pair at {url}.",
+    "pair_phone": "Pair a phone",
+    "no_hostname": "The tunnel is connected, but it has no public hostname yet. Add one in Cloudflare and write it above.",
+    "state_off": "Off",
+    "state_connected": "Connected",
+    "state_connecting": "Connecting…",
+    "state_error": "Not working",
+    "error": {
+      "token_invalid": "Cloudflare did not accept the token. Copy it again from the tunnel's page.",
+      "download_failed": "cloudflared could not be downloaded from Cloudflare's releases. Check the internet connection and try again.",
+      "checksum_mismatch": "The downloaded cloudflared is not the file Cloudflare published, so it was not run.",
+      "unsupported_platform": "Cloudflare publishes no cloudflared for this computer.",
+      "start_failed": "cloudflared did not start.",
+      "tunnel_exited": "cloudflared stopped; Core Hub is starting it again.",
+      "not_on_tailnet": "This computer is not on a Tailscale network.",
+      "listen_failed": "Core Hub could not listen on the tailnet address."
+    },
+    "refused": {
+      "token_invalid": "That is not a Cloudflare tunnel token. Paste only the long text after --token.",
+      "token_required": "Paste the tunnel token first.",
+      "route_required": "Choose Cloudflare Tunnel or Tailscale first.",
+      "hostname_invalid": "That is not a hostname. Write it like hub.example.com.",
+      "relay_unavailable": "Only the hub the desktop app runs on this computer can open a way in.",
+      "relay_host_not_answering": "The desktop app did not answer. Try again in a moment."
+    }
+  },
+  "presets": {
+    "title": "Presets",
+    "subtitle": "This agent's settings in this profile, saved under a name: the chat model and its fallbacks, the agent's own model, which skills and MCP servers are on, and the settings below. Never a key or a password.",
+    "name": "Name for the current settings",
+    "save": "Save current settings",
+    "none": "No presets yet.",
+    "activate": "Activate",
+    "activate_title": "Activate “{name}”?",
+    "activate_body": "Its settings replace this agent's current ones in this profile. What must restart for them restarts.",
+    "delete_title": "Delete “{name}”? The agent's settings do not change.",
+    "applied": "Applied.",
+    "applied_partly": "Applied, except what is gone since it was saved: {skipped}.",
+    "restarting": "Restarting what the settings need.",
+    "separator": ", ",
+    "part": {
+      "model": "Model",
+      "skills": "{count} skills",
+      "mcp_servers": "{count} MCP servers",
+      "settings": "{count} settings sections"
+    },
+    "part_name": {
+      "model": "the model",
+      "skills": "the skills",
+      "mcp_servers": "the MCP servers",
+      "settings": "the settings"
+    }
+  },
+  "linked_hubs": {
+    "intro": "Link this hub with another Core Hub. A link lets each side see the names of the agents the other shares, and lets a person here ask one of them a single question — answered by that agent's model, without tools, files or memory. Nothing else is shared: no files, memory, tasks, providers or keys. Both owners must agree.",
+    "invite_title": "Invite another hub",
+    "invite_hint": "Make a link and send it to the other hub's owner. It works once, for 10 minutes.",
+    "invite_create": "Make an invite link",
+    "invite_again": "Make another",
+    "invite_expires": "Works once, until {time}.",
+    "own_fingerprint": "This hub's key",
+    "their_fingerprint": "Their key",
+    "copy": "Copy",
+    "redeem_title": "Use an invite",
+    "redeem_hint": "Paste the link another hub's owner sent you. Their owner then approves.",
+    "redeem_url": "Invite link",
+    "redeem_name": "Name for it here (optional)",
+    "redeem_submit": "Ask to link",
+    "redeem_sent": "Asked. The link is ready once their owner approves.",
+    "peers_heading": "Hubs",
+    "none": "No linked hubs.",
+    "enabled": "On",
+    "off": "Off",
+    "approve": "Approve",
+    "refuse": "Refuse",
+    "unlink": "Unlink",
+    "unlink_title": "Unlink “{name}”?",
+    "unlink_body": "Its key is forgotten at once and it can no longer ask anything here. The log stays.",
+    "rename": "Rename",
+    "rename_title": "Rename the hub",
+    "rename_label": "Name",
+    "asks_per_hour": "Questions it may ask per hour",
+    "their_agents": "Their shared agents",
+    "their_agents_none": "They share no agents.",
+    "ask_hint": "One question, one answer. Their agent answers without tools, files or memory.",
+    "ask_agent": "Agent",
+    "ask_question": "Your question",
+    "ask_send": "Ask",
+    "log": "Log",
+    "shares_title": "Agents linked hubs may ask",
+    "shares_hint": "Off until you switch an agent on. A linked hub only sees its name and asks it single questions, answered without tools.",
+    "share_label": "Share {name} ({profile})",
+    "pending_hint": "It asked to link; compare its key with what its owner sees, then approve or refuse.",
+    "status": {
+      "pending": "Waiting for you",
+      "waiting": "Waiting for them",
+      "linked": "Linked"
+    },
+    "direction": {
+      "inbound": "It used this hub's invite.",
+      "outbound": "This hub used its invite."
+    },
+    "event": {
+      "joined": "It used an invite",
+      "requested": "Asked to link",
+      "approved": "Approved",
+      "approved_by_peer": "They approved",
+      "updated": "Changed",
+      "unlinked": "Unlinked",
+      "unlinked_by_peer": "They unlinked",
+      "list_in": "They listed the shared agents",
+      "list_out": "Listed their agents",
+      "ask_in": "They asked a question",
+      "ask_out": "Asked them a question",
+      "refused": "Refused a call"
+    },
+    "reason": {
+      "own_url_not_https": "This hub must be reached over HTTPS to link.",
+      "https_required": "The link must start with https://.",
+      "invite_url_invalid": "That is not an invite link.",
+      "invite_refused": "The invite is used, expired or unknown. Ask for a new one.",
+      "fingerprint_mismatch": "The other hub answered with a different key than the link names. Not linked.",
+      "peer_unreachable": "The other hub did not answer.",
+      "peer_exists": "This hub is already linked with it.",
+      "peer_is_self": "That is this hub's own invite.",
+      "peer_limit": "Too many linked hubs.",
+      "invite_limit": "Too many unused invites. Wait for them to expire.",
+      "peer_pending": "Their owner has not approved yet.",
+      "peer_not_linked": "Not linked yet.",
+      "peer_disabled": "The link is switched off.",
+      "agent_not_shared": "That agent is not shared.",
+      "no_answer": "Their agent gave no answer.",
+      "rate_limited": "Too many questions. Try again later.",
+      "peer_calls": "Too many calls. Try again in a minute.",
+      "peer_asks": "They reached their questions for this hour.",
+      "peer_not_pending": "Only a hub waiting for approval can be approved."
+    }
   }
 }

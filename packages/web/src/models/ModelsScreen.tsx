@@ -64,6 +64,7 @@ import { SpeechCard } from './SpeechCard.js';
 import { RuntimeCard } from './RuntimeChecks.js';
 import { needsLoopbackWarning, suggestedHostUrl } from './loopback.js';
 import {
+  chatModels,
   parseRef,
   refValue,
   useCatalogue,
@@ -453,7 +454,7 @@ function ProviderCard({
             placeholder={t('models.defaults.none')}
             testId="card-default-model"
             recent={recent}
-            options={provider.models.map((model) => modelOption(model, model.model))}
+            options={chatModels(provider.models).map((model) => modelOption(model, model.model))}
           />
         </div>
       )}
@@ -522,7 +523,7 @@ function ProviderCard({
           </Button>
         )}
         <Button
-          variant="danger"
+          variant="danger-quiet"
           disabled={remove.isPending}
           onClick={() => setConfirmRemove(true)}
           data-testid="provider-remove"
@@ -1031,7 +1032,7 @@ function ModelSelect({
   const { t } = useI18n();
   const { recent, remember } = useRecentModels();
   // Grouped by provider, in the catalogue's order, so the headers do not interleave.
-  const chat = models.filter((model) => model.kind === 'chat');
+  const chat = chatModels(models);
   const byProvider = new Map<string, Model[]>();
   for (const model of chat)
     byProvider.set(model.provider, [...(byProvider.get(model.provider) ?? []), model]);

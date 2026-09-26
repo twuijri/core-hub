@@ -85,6 +85,10 @@ export const SUMMARY_MAX = 600;
 const WORDS = {
   ar: {
     checklist: 'قائمة التحقق',
+    done: 'تعريف الإنجاز',
+    doneLead: 'لا تُعدّ المهمة منجزة إلا إذا تحقّق كل ما يلي:',
+    constraints: 'القيود',
+    constraintsLead: 'التزم بما يلي أثناء العمل:',
     instructions: 'تعليمات',
     finish:
       'نفّذ المهمة. وحين تنتهي اختم بملخص قصير لما فعلته وما بقي، فهذا ما يظهر على بطاقة المهمة.',
@@ -94,6 +98,10 @@ const WORDS = {
   },
   en: {
     checklist: 'Checklist',
+    done: 'Definition of done',
+    doneLead: 'The task is done only when every one of these holds:',
+    constraints: 'Constraints',
+    constraintsLead: 'Keep to these while you work:',
     instructions: 'Instructions',
     finish:
       'Do the task. When you finish, end with a short summary of what you did and what is left — it is what the task card shows.',
@@ -105,12 +113,13 @@ const WORDS = {
 
 /**
  * The prompt a task's run starts with: the task itself, as the agent needs it — title,
- * brief, the checklist with what is already ticked, and whatever the person added when
- * they assigned it.
+ * brief, the checklist with what is already ticked, its definition of done and its
+ * constraints (decision §104), and whatever the person added when they assigned it.
  */
 export function taskPrompt(input: {
   key: string;
-  task: Pick<TaskRow, 'number' | 'title' | 'description'>;
+  task: Pick<TaskRow, 'number' | 'title' | 'description'> &
+    Partial<Pick<TaskRow, 'definitionOfDone' | 'constraints'>>;
   subtasks: readonly Pick<SubtaskRow, 'title' | 'status'>[];
   instructions: string | null;
   language: 'ar' | 'en';
@@ -126,11 +135,40 @@ export function taskPrompt(input: {
           .join('\n'),
     );
   }
+  const lists = checkListsBrief(input.task, input.language);
+  if (lists) parts.push(lists);
   if (input.instructions?.trim()) {
     parts.push(`## ${words.instructions}\n${input.instructions.trim()}`);
   }
   parts.push(words.finish);
   return parts.join('\n\n');
+}
+
+/**
+ * A task's definition of done and constraints as the agent reads them (decision §104), or
+ * `null` when it has neither. Also the part of a Hermes card's brief they become when a hub
+ * task is handed to Hermes, whose worker reads only the card.
+ */
+export function checkListsBrief(
+  task: Partial<Pick<TaskRow, 'definitionOfDone' | 'constraints'>>,
+  language: 'ar' | 'en',
+): string | null {
+  const words = WORDS[language];
+  const parts: string[] = [];
+  const done = task.definitionOfDone ?? [];
+  if (done.length > 0) {
+    parts.push(
+      `## ${words.done}\n${words.doneLead}\n` + done.map((item) => `- ${item.text}`).join('\n'),
+    );
+  }
+  const constraints = task.constraints ?? [];
+  if (constraints.length > 0) {
+    parts.push(
+      `## ${words.constraints}\n${words.constraintsLead}\n` +
+        constraints.map((item) => `- ${item.text}`).join('\n'),
+    );
+  }
+  return parts.length > 0 ? parts.join('\n\n') : null;
 }
 
 /** The last words of a run, cut to a card's length on a word boundary. */
@@ -160,6 +198,13 @@ export class TaskRuns {
   private readonly passes = new Map<string, Promise<void>>();
   /** Called after a run's ending has moved its task (the worktree's numbers, the next start). */
   afterSettle: ((scope: TaskRunScope, taskId: string) => void) | null = null;
+  /**
+   * When each followed run last showed activity (ms since the epoch): set when it starts and
+   * on every event of its session that names it (`noteActivity`). What the stuck-task
+   * watchdog reads (DECISIONS §93). In memory on purpose: a restart ends every run and
+   * settles its task, so nothing here has to outlive the process.
+   */
+  private readonly activity = new Map<string, number>();
 
   constructor(
     private readonly port: TaskRunPort | null,
@@ -257,8 +302,28 @@ export class TaskRuns {
     return next;
   }
 
+  /** A run this worker follows said something (a delta, a tool call, a step): it is alive. */
+  noteActivity(runId: string, at: number = Date.now()): void {
+    if (this.activity.has(runId)) this.activity.set(runId, at);
+  }
+
+  /** When a followed run last showed activity; `null` for a run this worker does not follow. */
+  lastActivity(runId: string): number | null {
+    return this.activity.get(runId) ?? null;
+  }
+
+  /** How a run stands, as `sessions` says (`waiting` for a person, say); `null` without one. */
+  runStatus(workspace: string, runId: string): string | null {
+    try {
+      return this.port?.outcome(workspace, runId)?.status ?? null;
+    } catch {
+      return null;
+    }
+  }
+
   /** Watch a run to its end, then move the task the way the ending says. */
   follow(scope: TaskRunScope, taskId: string, runId: string, done: Promise<TaskRunOutcome>): void {
+    this.activity.set(runId, Date.now());
     const followed = done
       .then((outcome) => {
         this.settle(scope, taskId, runId, outcome, scope.language);
@@ -267,7 +332,10 @@ export class TaskRuns {
       .catch((error: unknown) => {
         this.log.error({ err: error, taskId, runId }, 'tasks: settling a finished run failed');
       })
-      .finally(() => this.following.delete(followed));
+      .finally(() => {
+        this.activity.delete(runId);
+        this.following.delete(followed);
+      });
     this.following.add(followed);
   }
 

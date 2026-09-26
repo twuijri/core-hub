@@ -17,7 +17,7 @@ import { newUlid } from '../../db/ids.js';
 import type { ModuleDb } from '../../lib/db.js';
 import { conflict, notFound } from '../../lib/errors.js';
 import { append, between } from './position.js';
-import type { TASK_STATUSES } from './schema.js';
+import type { TASK_STATUSES, TaskCheckItem } from './schema.js';
 import {
   projects,
   subtasks,
@@ -275,6 +275,30 @@ export class TasksService {
       )
       .orderBy(asc(tasks.position), asc(tasks.id))
       .all();
+  }
+
+  /**
+   * How many tasks are in the archive of these workspaces, narrowed like `columnAcross` —
+   * what the board says behind Done without sending the archive itself (DECISIONS §93).
+   */
+  archivedCount(
+    workspaces: readonly string[],
+    filter: { projectId?: string | undefined; agentId?: string | undefined },
+  ): number {
+    if (workspaces.length === 0) return 0;
+    const row = this.db
+      .select({ count: sql<number>`count(*)` })
+      .from(tasks)
+      .where(
+        and(
+          inArray(tasks.workspace, [...workspaces]),
+          filter.projectId ? eq(tasks.projectId, filter.projectId) : undefined,
+          filter.agentId ? eq(tasks.assigneeAgentId, filter.agentId) : undefined,
+          eq(tasks.status, 'archived'),
+        ),
+      )
+      .get();
+    return Number(row?.count ?? 0);
   }
 
   private lastPosition(scope: Scope, projectId: string, status: TaskStatus): string | null {
@@ -543,6 +567,8 @@ export class TasksService {
         position: append(this.lastPosition(scope, project.id, status)),
         dueAt: input.due_at ? new Date(String(input.due_at)) : null,
         attachmentIds: (input.attachment_ids as string[] | undefined) ?? [],
+        definitionOfDone: checkItems(input.definition_of_done),
+        constraints: checkItems(input.constraints),
       })
       .run();
     this.record(scope, actor, id, 'status', null, status, null);
@@ -565,6 +591,9 @@ export class TasksService {
     if (patch.due_at !== undefined)
       values.dueAt = patch.due_at ? new Date(String(patch.due_at)) : null;
     if (patch.attachment_ids !== undefined) values.attachmentIds = patch.attachment_ids as string[];
+    if (patch.definition_of_done !== undefined)
+      values.definitionOfDone = checkItems(patch.definition_of_done);
+    if (patch.constraints !== undefined) values.constraints = checkItems(patch.constraints);
     if (patch.project_id !== undefined && patch.project_id !== current.projectId) {
       const target = this.project(scope, String(patch.project_id));
       values.projectId = target.id;
@@ -633,6 +662,8 @@ export class TasksService {
         startedAt: move.status === 'running' ? (current.startedAt ?? now) : current.startedAt,
         completedAt: move.status === 'done' ? now : null,
         archivedAt: move.status === 'archived' ? now : null,
+        // A move is news about the task: whatever the watchdog said about the last run is over.
+        stuckAt: null,
         updatedAt: now,
       })
       .where(eq(tasks.id, id))
@@ -793,6 +824,9 @@ export class TasksService {
         sessionId: run.sessionId,
         currentRunId: run.runId,
         attemptCount: current.attemptCount + 1,
+        // The reviewer's ticks were about the last attempt's work; this one is reviewed afresh.
+        definitionOfDone: untick(current.definitionOfDone),
+        constraints: untick(current.constraints),
       })
       .where(eq(tasks.id, id))
       .run();
@@ -956,6 +990,29 @@ export class TasksService {
       .where(eq(taskDependencies.taskId, taskId))
       .all()
       .map((row) => row.id);
+  }
+
+  /**
+   * The dependencies of a task that are not done yet, oldest first — what a
+   * card says it waits for, and what keeps `auto_start` from starting it (DECISIONS §93).
+   * `done` is done; `archived` is done only when it was done first (the weekly archive
+   * keeps `completed_at`, a task archived by hand has none).
+   */
+  waitingOn(taskId: string): Array<{ id: string; title: string; status: TaskStatus }> {
+    return this.db
+      .select({
+        id: tasks.id,
+        title: tasks.title,
+        status: tasks.status,
+        completedAt: tasks.completedAt,
+      })
+      .from(taskDependencies)
+      .innerJoin(tasks, eq(tasks.id, taskDependencies.dependsOnTaskId))
+      .where(eq(taskDependencies.taskId, taskId))
+      .orderBy(asc(tasks.createdAt), asc(tasks.number), asc(tasks.id))
+      .all()
+      .filter((row) => !isDone(row))
+      .map(({ id, title, status }) => ({ id, title, status }));
   }
 
   /**
@@ -1301,22 +1358,38 @@ export class TasksService {
    * `auto_start`, `ready`, given to an agent, on no run, and the hub's own card.
    */
   autoStartable(workspace: string): TaskRow[] {
-    return this.db
-      .select()
-      .from(tasks)
-      .where(
-        and(
-          eq(tasks.workspace, workspace),
-          eq(tasks.autoStart, true),
-          eq(tasks.status, 'ready'),
-          eq(tasks.assigneeKind, 'agent'),
-          isNull(tasks.currentRunId),
-          isNull(tasks.externalSource),
-          isNull(tasks.archivedAt),
-        ),
-      )
-      .orderBy(asc(tasks.position), asc(tasks.id))
-      .all();
+    return (
+      this.db
+        .select()
+        .from(tasks)
+        .where(
+          and(
+            eq(tasks.workspace, workspace),
+            eq(tasks.autoStart, true),
+            eq(tasks.status, 'ready'),
+            eq(tasks.assigneeKind, 'agent'),
+            isNull(tasks.currentRunId),
+            isNull(tasks.externalSource),
+            isNull(tasks.archivedAt),
+          ),
+        )
+        .orderBy(asc(tasks.position), asc(tasks.id))
+        .all()
+        // A task that depends on others waits for all of them to be done (DECISIONS §93);
+        // the move of the last one to `done` looks again.
+        .filter((row) => this.waitingOn(row.id).length === 0)
+    );
+  }
+
+  // ------------------------------------------------------------- watchdog
+
+  /**
+   * Set or clear the stuck marker (DECISIONS §93). Not an edit: `updated_at` stays, and no
+   * transition is written — the task has not moved, its run has gone quiet.
+   */
+  markStuck(id: string, since: Date | null): TaskRow | undefined {
+    this.db.update(tasks).set({ stuckAt: since }).where(eq(tasks.id, id)).run();
+    return this.db.select().from(tasks).where(eq(tasks.id, id)).get();
   }
 
   /** The workspaces that have a task waiting to start on its own — what a restart looks at. */
@@ -1346,4 +1419,32 @@ export class TasksService {
       .where(and(eq(tasks.workspace, scope.workspace), inArray(tasks.id, ids)))
       .all();
   }
+}
+
+/** Whether a task counts as done for the tasks that depend on it. */
+function isDone(row: { status: TaskStatus; completedAt: Date | null }): boolean {
+  return row.status === 'done' || (row.status === 'archived' && row.completedAt !== null);
+}
+
+/**
+ * A client's list (`TaskCheckItemWrite[]`) as the row keeps it: trimmed, empty lines dropped,
+ * unticked unless it says so. The contract has already checked the lengths.
+ */
+export function checkItems(value: unknown): TaskCheckItem[] {
+  if (!Array.isArray(value)) return [];
+  const out: TaskCheckItem[] = [];
+  for (const entry of value) {
+    if (!entry || typeof entry !== 'object') continue;
+    const text = String((entry as { text?: unknown }).text ?? '').trim();
+    if (text === '') continue;
+    out.push({
+      text: text.slice(0, 500),
+      checked: (entry as { checked?: unknown }).checked === true,
+    });
+  }
+  return out.slice(0, 30);
+}
+
+function untick(items: readonly TaskCheckItem[]): TaskCheckItem[] {
+  return items.map((item) => ({ text: item.text, checked: false }));
 }

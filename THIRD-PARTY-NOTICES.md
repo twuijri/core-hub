@@ -12,7 +12,10 @@ Code (`kimi.svg`) and Pi (`pi.svg`, lobe-icons' "Pi Agent", https://pi.dev) — 
 2026-09-22 and again 2026-09-25). Eight files out of nine hundred are copied in rather than
 depended on, so the client carries the marks it shows and not a 2.4 MB package. They are redrawn into our own
 `Mark` wrapper (one `viewBox`, `currentColor`, a `size` prop) and stripped of their
-`<title>` elements, because the control around them already names the agent.
+`<title>` elements, because the control around them already names the agent. Since 2026-09-27
+the iOS and Android apps carry the same marks, written from that file by
+`scripts/icons/agent-marks-mobile.mjs` (`apps/ios/CoreHub/Resources/Assets.xcassets/AgentMarks`,
+`apps/android/app/src/main/res/drawable/agent_mark_*.xml`).
 
 MIT License · Copyright (c) 2023 LobeHub
 
@@ -38,15 +41,17 @@ SST, Nous Research, Alibaba Cloud's Qwen team, Moonshot AI and Earendil. Core Hu
 what a trademark is for. Core Hub is not affiliated with, endorsed by, or a product of any
 of them. The ninth mark, for our own `direct` agent, is drawn by us.
 
-## Lucide — the apps' icons
+## Lucide — the icons of every client
 
-The iOS and Android apps draw their new icons from [Lucide](https://lucide.dev)
+The web client, the desktop app (which shows the web client), and the iOS and Android apps draw
+their icons from [Lucide](https://lucide.dev)
 ([`lucide-static`](https://www.npmjs.com/package/lucide-static) `1.48.0`, a root dev dependency, pinned).
 `scripts/icons/lucide-mobile.mjs` reads the outlines of the icons listed in
 `scripts/icons/lucide-mobile.json` from the package's `icon-nodes.json` and writes them as template
 images in `apps/ios/CoreHub/Resources/Assets.xcassets/Lucide/` and as vector drawables
-`apps/android/app/src/main/res/drawable/lucide_*.xml`; each generated file names the package and its
-licence. Some Lucide icons derive from Feather (MIT, Copyright (c) 2013-present Cole Bemis), as the
+`apps/android/app/src/main/res/drawable/lucide_*.xml`; `scripts/icons/lucide-web.mjs` writes the
+outlines the web asks for into `packages/web/src/ui/lucide.generated.ts`, which ships inside the web
+bundle. Each generated file names the package and its licence. Some Lucide icons derive from Feather (MIT, Copyright (c) 2013-present Cole Bemis), as the
 package's own licence file lists.
 
 ISC License · Copyright (c) 2026 Lucide Icons and Contributors

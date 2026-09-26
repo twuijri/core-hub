@@ -29,9 +29,20 @@ export const CHANNELS = {
   helperFolderWrite: 'helper:folder-write',
   helperAllowOpen: 'helper:allow-open',
   helperNewToken: 'helper:new-token',
+  programsGet: 'programs:get',
+  programsRescan: 'programs:rescan',
+  programsSetProfiles: 'programs:set-profiles',
+  programsSetField: 'programs:set-field',
+  programsCheckResolve: 'programs:check-resolve',
+  deviceGet: 'device:get',
+  deviceLink: 'device:link',
+  deviceForget: 'device:forget',
   updatesGet: 'updates:get',
   updatesCheck: 'updates:check',
   updatesAuto: 'updates:auto',
+  voiceMic: 'voice:mic',
+  voiceMicAsk: 'voice:mic-ask',
+  voiceMicSettings: 'voice:mic-settings',
 } as const;
 
 export interface WelcomeInit {

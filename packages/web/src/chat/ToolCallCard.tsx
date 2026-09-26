@@ -230,7 +230,9 @@ export function ToolCalls({ calls, live }: { calls: readonly ToolCall[]; live: b
       <summary className="tool-group-summary" data-testid="tool-group-summary">
         <IconChevron size={12} className="tool-group-caret" />
         <IconTool size={14} />
-        <span className="tool-group-count">{t('tool.count', { count: calls.length })}</span>
+        <span className="tool-group-count">
+          {calls.length === 1 ? t('tool.count_one') : t('tool.count', { count: calls.length })}
+        </span>
         <span className="tool-group-names" dir="ltr">
           {names.join(' · ')}
         </span>

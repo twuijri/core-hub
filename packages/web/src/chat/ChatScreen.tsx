@@ -11,6 +11,7 @@ import {
 } from 'react';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router';
 import { useAgents, useForkSession, usePatchSession, usePreferences } from '../hub/queries.js';
+import { agentIdentity } from '../agents/identity.js';
 import { ProfileScope, useAuth } from '../auth/context.js';
 import { describeError } from '../auth/client.js';
 import { useI18n } from '../i18n/context.js';
@@ -24,7 +25,6 @@ import {
   EmptyState,
   Notice,
   SkeletonText,
-  TabList,
   TabPanel,
   TabsFrame,
 } from '../ui/index.js';
@@ -52,7 +52,6 @@ import { holdsBack, queued, type QueuedMessage } from './outbox.js';
 import { QuestionCard } from './QuestionCard.js';
 import { RunStatus } from './RunStatus.js';
 import { RunFailureNotice, failuresByMessage } from './RunFailureNotice.js';
-import { SessionAgent } from './SessionAgent.js';
 import { SubagentsPanel } from './SubagentsPanel.js';
 import { useCatalogue, useRuntimeReport } from '../models/queries.js';
 import { activeRun, isBusy, textOf } from './transcript.js';
@@ -65,15 +64,14 @@ import { useSessionStream } from './useSessionStream.js';
 import { useRunHistory } from './useRunHistory.js';
 import { revisionOf } from './trajectory.js';
 import { TrajectoryView } from './TrajectoryView.js';
-import { WorkingDirPicker } from './WorkingDirPicker.js';
+import { ConversationBar } from './ConversationBar.js';
 import { SessionFilesProvider } from '../files/context.js';
-import { FilesButton } from '../files/FilesList.js';
 import { filesRevisionOf } from '../files/kinds.js';
 import { changesRevisionOf } from '../files/changes.js';
-import { ProfileBadge } from '../shell/ProfileBadge.js';
+import { useContextBreakdown } from './contextBreakdown.js';
 import { VoiceProvider, useAutoRead, useVoicePreferences } from '../voice/context.js';
 import { VoiceStage } from '../voice/VoiceStage.js';
-import { useManyProfiles, useProfileInLink } from '../shell/profiles.js';
+import { useProfileInLink } from '../shell/profiles.js';
 
 export function ChatScreen() {
   const { t } = useI18n();
@@ -145,7 +143,6 @@ interface OpenSessionProps {
 function OpenSessionBody({ sessionId, title: pageTitle, intro }: OpenSessionProps) {
   const { t, language } = useI18n();
   const { client, profile } = useAuth();
-  const manyProfiles = useManyProfiles();
   const inLink = useProfileInLink();
   const navigate = useNavigate();
 
@@ -433,6 +430,9 @@ function OpenSessionBody({ sessionId, title: pageTitle, intro }: OpenSessionProp
       null,
     state.context,
   );
+  // What fills the window, read only while the meter's details are open (decision §102).
+  const [meterOpen, setMeterOpen] = useState(false);
+  const breakdown = useContextBreakdown(sessionId, meterOpen, contextRing?.used ?? 0);
 
   // Voice (contract decision §63): the full-screen stage, and reading replies aloud as
   // they finish when the person asked for it — not while the stage speaks them itself.
@@ -524,40 +524,21 @@ function OpenSessionBody({ sessionId, title: pageTitle, intro }: OpenSessionProp
             data-testid="chat-screen"
             data-session-id={sessionId}
           >
-            <div className="mb-3 flex flex-wrap items-center gap-2" data-testid="chat-header">
-              {/* Who this conversation is with, stated quietly now that the chip row is gone
-              (owner decision, 2026-09-22). Changing it here forks the session. */}
-              <SessionAgent sessionId={sessionId} agentId={agentId} />
-              {/* Which profile this conversation is in, once there is more than one: its
-              models and settings are that profile's (ADR 0016). */}
-              {manyProfiles && <ProfileBadge profile={profile} testId="chat-profile" />}
-              <WorkingDirPicker
-                value={state.session?.working_dir ?? null}
-                onChange={(next) => patch.mutate({ working_dir: next })}
-                lockedReason={hasRun ? t('working_dir.locked') : null}
-              />
-              {patch.isError && (
-                <span className="text-xs text-danger-soft-text">
-                  {describeError(patch.error, t)}
-                </span>
-              )}
-              {/* The conversation's files, once it has begun (decision §48). */}
-              {messageCount > 0 && <FilesButton />}
-              {/* Only once there is something to trace: an empty chat is an invitation. */}
-              {messageCount > 0 && (
-                <div className="chat-header-tabs">
-                  <TabList
-                    compact
-                    label={t('trajectory.tabs_label')}
-                    testId="chat-tabs"
-                    items={[
-                      { value: 'chat', label: t('trajectory.chat_tab') },
-                      { value: 'trajectory', label: t('trajectory.tab') },
-                    ]}
-                  />
-                </div>
-              )}
-            </div>
+            {/* The conversation's controls live in the top bar, pinned while the messages
+                scroll (ConversationBar.tsx, owner 2026-09-26). */}
+            <ConversationBar
+              sessionId={sessionId}
+              agentId={agentId}
+              workingDir={state.session?.working_dir ?? null}
+              onWorkingDir={(next) => patch.mutate({ working_dir: next })}
+              lockedReason={hasRun ? t('working_dir.locked') : null}
+              begun={messageCount > 0}
+            />
+            {patch.isError && (
+              <Notice tone="danger" className="mb-2" testId="chat-patch-error">
+                {describeError(patch.error, t)}
+              </Notice>
+            )}
             {intro && messageCount === 0 && (
               <p className="mb-3 text-sm text-muted" data-testid="chat-intro">
                 {intro}
@@ -640,6 +621,14 @@ function OpenSessionBody({ sessionId, title: pageTitle, intro }: OpenSessionProp
                   showCost={preferences.data?.show_cost ?? false}
                   runs={runHistory}
                   slugOf={(id) => (agents.data ?? []).find((agent) => agent.id === id)?.slug}
+                  identityOf={(message) =>
+                    agentIdentity(
+                      message.author.id,
+                      message.author.name,
+                      agents.data ?? [],
+                      t('chat.assistant'),
+                    )
+                  }
                   anchor={anchor && anchor.phase !== 'missing' ? anchor : null}
                   noticeFor={(message) => {
                     const entry = failures.get(message.id);
@@ -664,6 +653,7 @@ function OpenSessionBody({ sessionId, title: pageTitle, intro }: OpenSessionProp
               {/* What the agent delegated, above the composer (§56); nothing until it has. */}
               <SubagentsPanel sessionId={sessionId} onOpenTrajectory={openStep} />
               <Composer
+                agentName={(agents.data ?? []).find((agent) => agent.id === agentId)?.name ?? null}
                 busy={busy}
                 disabled={disabledReason !== null}
                 disabledReason={disabledReason}
@@ -703,6 +693,8 @@ function OpenSessionBody({ sessionId, title: pageTitle, intro }: OpenSessionProp
                           compression={state.compression}
                           onCompress={slash.compress}
                           compressBlocked={slash.compressBlocked}
+                          breakdown={breakdown.isError ? null : breakdown.data}
+                          onOpenChange={setMeterOpen}
                         />
                       ),
                     }

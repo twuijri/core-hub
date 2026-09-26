@@ -16,6 +16,7 @@ import {
   PUSH_BLOCKERS,
   revokeDeviceByToken,
   serializeDevice,
+  relayPairingUrl,
 } from '../devices/index.js';
 import { AuditService, auditFor, jobRunnerFor } from '../audit/index.js';
 import { decodeAvatarDataUrl, deleteAvatar, readAvatar } from './avatars.js';
@@ -46,7 +47,9 @@ import { verifyPassword } from './passwords.js';
 import {
   ProfileMirrorError,
   adoptProfiles,
+  mirrorDisplayName,
   profileMirrorFor,
+  syncDisplayNames,
   runtimeDisplayName,
   runtimeProfileName,
   type ProfileOrigin,
@@ -483,6 +486,12 @@ export function registerAuthRoutes(app: FastifyInstance, ctx: AuthContext): void
     );
     // The account exists now, so nothing on disk may still create one.
     clearSetupToken(ctx.dataDir);
+    // The name the owner gave the default profile is Hermes's display name for it too
+    // (decision §103). Without one, Hermes's own name (if any) is read on the first listing.
+    if (body.workspace_name?.trim()) {
+      const home = defaultWorkspace(db);
+      if (home) await mirrorDisplayName(app, home);
+    }
     ctx.log.info(
       open
         ? 'auth: owner account created by first-run setup (open window, no token)'
@@ -898,13 +907,19 @@ export function registerAuthRoutes(app: FastifyInstance, ctx: AuthContext): void
   route('POST', '/auth/pairings', signedIn, async (request, reply) => {
     const body = parse(PairingCreate, request.body ?? {});
     const user = me(request);
+    // A hub the desktop app runs listens on its own computer only: while its way in from
+    // outside is open, that is the address every phone is given (DECISIONS §95).
+    const relayUrl = relayPairingUrl(request.server.hub.relayHost);
+    if (body.connection === 'relay' && !relayUrl) {
+      throw new HubError('conflict', { details: { reason: 'relay_not_connected' } });
+    }
     const row = createPairing(
       db,
       {
         userId: user.id,
-        connection: body.connection,
+        connection: relayUrl ? 'relay' : body.connection,
         ttlSeconds: body.ttl_seconds,
-        hubUrl: hubUrlOf(request),
+        hubUrl: relayUrl ?? hubUrlOf(request),
         initialWorkspaceId: user.defaultWorkspaceId ?? defaultWorkspace(db)?.id ?? null,
       },
       now(),
@@ -1024,8 +1039,17 @@ export function registerAuthRoutes(app: FastifyInstance, ctx: AuthContext): void
     const owner = mirror ? ownerUser(db) : null;
     if (!mirror || !owner) return;
     try {
-      const { adopted, unnamed } = adoptProfiles(db, owner.id, await mirror.list());
+      // Hermes's display names (decision §103): a new profile is added under it, and a name
+      // changed on Hermes's side is taken.
+      const displayNameOf = (name: string) => mirror.displayName?.(name) ?? '';
+      const { adopted, unnamed } = adoptProfiles(db, owner.id, await mirror.list(), displayNameOf);
       if (adopted.length > 0) log.info({ adopted }, 'auth: runtime profiles added as workspaces');
+      if (mirror.displayName) {
+        const renamed = syncDisplayNames(db, displayNameOf);
+        if (renamed.length > 0) {
+          log.info({ renamed }, "auth: workspaces took the runtime's display names");
+        }
+      }
       const fresh = unnamed.filter((name) => !unnamedReported.has(name));
       for (const name of fresh) unnamedReported.add(name);
       if (fresh.length > 0) {

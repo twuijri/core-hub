@@ -43,6 +43,19 @@ export interface RoomPorts {
   person(userId: string): { name: string; seed: string } | null;
   /** `auth`: the profiles a person may enter, as `{ id, slug }`. */
   enterable(userId: string): Array<{ id: string; slug: string }>;
+  /**
+   * `knowledge`: the attachments these ids name in the workspace (a message's files, contract
+   * decision §99). Absent: no file resolves, so a message with files is refused.
+   */
+  files?(workspace: string, ids: readonly string[]): Map<string, RoomFile>;
+}
+
+/** An attachment as a room message's block carries it. */
+export interface RoomFile {
+  name: string;
+  mime: string;
+  sizeBytes: number;
+  url: string;
 }
 
 /** What the room knows is happening right now; the conductor (agents in the room) fills it. */
@@ -192,13 +205,22 @@ export class RoomsService {
     return { room: payload, seat_results: seatResults };
   }
 
-  detail(scope: RoomScope, roomId: string, runs: Json[] = []): Json {
+  /**
+   * The room as its page opens it. `pending` reads what waits for a person in the seats' own
+   * sessions (their approvals and questions, `sessions`), each naming this room.
+   */
+  detail(
+    scope: RoomScope,
+    roomId: string,
+    runs: Json[] = [],
+    pending: (sessionIds: string[]) => Json[] = () => [],
+  ): Json {
     const { room, member } = this.requireRoom(scope, roomId);
     return {
       ...this.roomOf(scope, room, member),
       members: this.memberList(room),
       runs,
-      pending_approvals: [],
+      pending_approvals: pending(this.store.seats(room.id).map((seat) => seat.sessionId)),
       handoff_chains: this.store.chains(room.id, true).map(toChain),
       memory: toMemory(room),
       typing: [],
@@ -594,14 +616,37 @@ export class RoomsService {
       .map((block) => String(block.text ?? ''))
       .join('\n')
       .trim();
-    if (!text) {
-      throw new HubError('validation_failed', { details: { field: 'content', reason: 'empty' } });
-    }
-    if (body.content.some((block) => block.type !== 'text')) {
+    // Words, files, or both (contract decision §99); audio and places are not a room's.
+    const isFile = (block: Record<string, unknown>) =>
+      (block.type === 'image' || block.type === 'file') && typeof block.attachment_id === 'string';
+    if (body.content.some((block) => block.type !== 'text' && !isFile(block))) {
       throw new HubError('validation_failed', {
-        details: { field: 'content', reason: 'text_only' },
+        details: { field: 'content', reason: 'unsupported_block' },
       });
     }
+    const fileBlocks = body.content.filter(isFile);
+    if (!text && fileBlocks.length === 0) {
+      throw new HubError('validation_failed', { details: { field: 'content', reason: 'empty' } });
+    }
+    const fileIds = [...new Set(fileBlocks.map((block) => String(block.attachment_id)))];
+    const known =
+      fileIds.length > 0
+        ? (this.ports.files?.(scope.workspace, fileIds) ?? new Map<string, RoomFile>())
+        : new Map<string, RoomFile>();
+    const missing = fileIds.filter((id) => !known.has(id));
+    if (missing.length > 0) throw notFound({ resource: 'attachment', id: missing[0], missing });
+    const files = fileBlocks.map((block) => {
+      const id = String(block.attachment_id);
+      const file = known.get(id) as RoomFile;
+      return {
+        type: block.type as 'image' | 'file',
+        attachment_id: id,
+        name: file.name,
+        mime: file.mime,
+        size_bytes: file.sizeBytes,
+        url: file.url,
+      };
+    });
     const mentions = body.mentions ?? [];
     const seats = this.store.seats(room.id);
     const targets = new Map<string, SeatRow>();
@@ -633,7 +678,8 @@ export class RoomsService {
       authorName: this.ports.person(scope.userId)?.name ?? scope.userName,
       sessionId: room.id,
       content: text,
-      parts: [{ type: 'text', text }],
+      parts: [...(text ? [{ type: 'text', text }] : []), ...files],
+      attachmentIds: fileIds,
       mentions: mentions.map((m) => ({
         kind: m.kind,
         seat_id: m.kind === 'all' ? null : m.seat_id,

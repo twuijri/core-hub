@@ -37,7 +37,7 @@ import {
   SkeletonGroup,
   type BadgeTone,
 } from '../ui/index.js';
-import { IconAgents, IconArrowEnd } from '../ui/icons.js';
+import { destinationIcons, IconAgents } from '../ui/icons.js';
 import { agentSections, configurable } from './sections.js';
 import { useJobs } from './useJobs.js';
 import { versionNotes } from './versionNotes.js';
@@ -230,7 +230,7 @@ function AgentCard({ agent, jobs }: { agent: Agent; jobs: Record<string, Job> })
             {t('agents.restart')}
           </Button>
         ) : installed && managed ? (
-          <Button variant="danger" disabled={running} onClick={() => void act('uninstall')}>
+          <Button variant="danger-quiet" disabled={running} onClick={() => void act('uninstall')}>
             {t('agents.remove')}
           </Button>
         ) : !installed ? (
@@ -268,23 +268,27 @@ function AgentCard({ agent, jobs }: { agent: Agent; jobs: Record<string, Job> })
             className="flex flex-wrap gap-1"
             data-testid="agent-menu"
           >
-            {/* Chips that go somewhere look it: an outline, the accent on hover, an arrow
-                toward the page, and a name that says whose page it is. */}
-            {menu.map((d) => (
-              <Link
-                key={d.id}
-                to={agentRoute(d.id, agent.id)}
-                className="agent-menu-link"
-                data-nav-id={d.id}
-                aria-label={t('agents.open_section', {
-                  section: t(termKey(d.id)),
-                  name: agent.name,
-                })}
-              >
-                <span>{t(termKey(d.id))}</span>
-                <IconArrowEnd size={12} />
-              </Link>
-            ))}
+            {/* Chips that go somewhere look it: an outline, the accent on hover, the page's
+                own icon (the one the sidebar and the phones show for it), and a name that
+                says whose page it is. */}
+            {menu.map((d) => {
+              const Icon = destinationIcons[d.id];
+              return (
+                <Link
+                  key={d.id}
+                  to={agentRoute(d.id, agent.id)}
+                  className="agent-menu-link"
+                  data-nav-id={d.id}
+                  aria-label={t('agents.open_section', {
+                    section: t(termKey(d.id)),
+                    name: agent.name,
+                  })}
+                >
+                  {Icon && <Icon size={13} />}
+                  <span>{t(termKey(d.id))}</span>
+                </Link>
+              );
+            })}
           </nav>
         </>
       )}

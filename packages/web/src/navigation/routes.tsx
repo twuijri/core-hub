@@ -18,6 +18,7 @@ import { ChatScreen } from '../chat/ChatScreen.js';
 import { ModelsScreen } from '../models/ModelsScreen.js';
 import { DeviceConnectionsScreen } from '../screens/DeviceConnectionsScreen.js';
 import { GlobalAgentScreen } from '../screens/GlobalAgentScreen.js';
+import { LinkedHubsScreen } from '../screens/LinkedHubsScreen.js';
 import { NewChatScreen } from '../screens/NewChatScreen.js';
 import { PlaceholderScreen } from '../screens/PlaceholderScreen.js';
 import { SearchScreen } from '../screens/SearchScreen.js';
@@ -35,6 +36,7 @@ const SPECIAL: Record<string, () => ReactElement> = {
   new_chat: () => <NewChatScreen />,
   search: () => <SearchScreen />,
   device_connections: () => <DeviceConnectionsScreen />,
+  linked_hubs: () => <LinkedHubsScreen />,
   agent_manager: () => <AgentManagerScreen />,
   agent_settings: () => <AgentSettingsScreen />,
   agent_skills: () => <AgentSkillsScreen />,

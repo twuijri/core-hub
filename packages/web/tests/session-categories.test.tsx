@@ -229,6 +229,12 @@ function renderList(language: 'en' | 'ar' = 'en') {
       categories = [...categories, made];
       return json(made, 201);
     }
+    const cat = categories.find((c) => path === `/session-categories/${c.id}`);
+    if (cat && method === 'PATCH') {
+      const updated = { ...cat, ...(body as Partial<SessionCategory>) };
+      categories = categories.map((c) => (c.id === cat.id ? updated : c));
+      return json(updated);
+    }
     if (path === '/sessions' && method === 'GET')
       return json({ items: sessions, next_cursor: null });
     const one = sessions.find((s) => path === `/sessions/${s.id}`);
@@ -354,6 +360,32 @@ describe('the chats list in groups', () => {
     await user.click(within(dialog).getByRole('button', { name: 'No category' }));
     await waitFor(() =>
       expect(calls.find((c) => c.method === 'PATCH')?.body).toEqual({ category_id: null }),
+    );
+  });
+
+  it('colours a category from its menu, and draws the dot (decision §102)', async () => {
+    const user = userEvent.setup();
+    const { calls } = renderList();
+    const launch = await groupNamed('الإطلاق');
+    expect(within(launch).queryByTestId('session-group-dot')).toBeNull();
+    await openControl(user, within(launch).getByTestId('session-group-more'));
+    await user.click(await screen.findByRole('menuitem', { name: 'Colour' }));
+    const dialog = await screen.findByTestId('category-colour');
+    await user.click(within(dialog).getByRole('button', { name: 'Red' }));
+    await waitFor(() =>
+      expect(calls.filter((c) => c.method === 'PATCH')).toEqual([
+        { method: 'PATCH', path: `/session-categories/${LAUNCH}`, body: { color: '#dc2626' } },
+      ]),
+    );
+    const dot = await within(await groupNamed('الإطلاق')).findByTestId('session-group-dot');
+    expect(dot.getAttribute('data-color')).toBe('#dc2626');
+
+    // "No colour" takes it off again.
+    await openControl(user, within(await groupNamed('الإطلاق')).getByTestId('session-group-more'));
+    await user.click(await screen.findByRole('menuitem', { name: 'Colour' }));
+    await user.click(await screen.findByTestId('category-colour-none'));
+    await waitFor(() =>
+      expect(calls.filter((c) => c.method === 'PATCH').at(-1)?.body).toEqual({ color: null }),
     );
   });
 

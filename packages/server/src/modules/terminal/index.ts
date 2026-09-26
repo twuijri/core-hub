@@ -28,6 +28,7 @@ import path from 'node:path';
 import type { FastifyInstance } from 'fastify';
 import type { Server as SocketServer, Socket } from 'socket.io';
 import { loadOpenApiDocument } from '@corehub/contracts';
+import { socketAddressOf } from '../../lib/client-address.js';
 import { createContractIndex } from '../../lib/contract.js';
 import { requireSqlite, type ModuleDb } from '../../lib/db.js';
 import { HubError } from '../../lib/errors.js';
@@ -301,7 +302,7 @@ function handleConnection(context: TerminalContext, socket: Socket): void {
             profile: workspace.slug,
             pty: context.manager.pty,
             shell: context.manager.shell,
-            ip: socket.handshake.address,
+            ip: socketAddressOf(socket),
           },
         });
       } catch (error) {

@@ -12,8 +12,14 @@ export function describeTaskError(
 ): string {
   if (error instanceof HubApiError) {
     const details = (
-      error.body as { details?: { reason?: string; message?: string; field?: string } } | undefined
+      error.body as
+        | { details?: { reason?: string; message?: string; field?: string; action?: string } }
+        | undefined
     )?.details;
+    // Hermes briefs its own worker, so its cards take no definition of done (§104).
+    if (details?.reason === 'hermes_owns_card' && details.action === 'definition_of_done') {
+      return t('tasks.dod.hermes_card');
+    }
     // A repository path the hub refused, and why — with git's words when git said something.
     if (details?.field === 'working_dir' && details.reason) {
       return t(`tasks.repo.invalid.${details.reason}`, { message: details.message ?? '' });

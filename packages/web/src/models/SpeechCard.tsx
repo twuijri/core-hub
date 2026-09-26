@@ -4,22 +4,31 @@
  *
  * Before this card the tabs listed providers and said «لم يُختَر مزوّد» with nowhere to
  * choose one, so dictation and read-aloud could never be ready from the web. Choosing and
- * saving here is `models.updateSpeech`; the badge is the hub's own `ready`, and "Try the
- * voice" asks the hub to speak — what it plays is what a reply will sound like.
+ * saving here is `models.updateSpeech`; the badge is the hub's own `ready`.
+ *
+ * The model, language and voice are picked from what the provider offers — its own lists, or
+ * its documented ones where it has no endpoint — and can always be typed (DECISIONS §87).
+ * "Preview" speaks a short sample through the provider, model and voice **on screen**, before
+ * they are saved, in Arabic or English: what it plays is what a reply will sound like.
  */
 import { useEffect, useState } from 'react';
 import { describeError } from '../auth/client.js';
 import { useAuth } from '../auth/context.js';
 import { useI18n } from '../i18n/context.js';
 import type { SpeechSettings } from '../types.js';
-import { Badge, Button, Card, CardHeader, Field, Input, Select } from '../ui/index.js';
+import { Badge, Button, Card, CardHeader, Segmented, Select } from '../ui/index.js';
 import { Notice } from '../ui/Notice.js';
+import { baseLanguage } from '../voice/languages.js';
 import { playThroughAudioElement } from '../voice/player.js';
 import { synthesize } from '../voice/speech-api.js';
-import { useUpdateSpeech, useVoices } from './queries.js';
+import { useUpdateSpeech } from './queries.js';
+import { SpeechLanguageField, SpeechModelField, SpeechVoiceField } from './SpeechPickers.js';
+
+/** The preview's sample: Arabic or English, the voice's own language when it is one of them. */
+type Sample = 'ar' | 'en';
 
 export function SpeechCard({ kind, side }: { kind: 'stt' | 'tts'; side: SpeechSettings['stt'] }) {
-  const { t, language } = useI18n();
+  const { t, language: ui } = useI18n();
   const { client } = useAuth();
   const update = useUpdateSpeech();
   const [providerId, setProviderId] = useState<string | null>(side.active_provider_id);
@@ -28,8 +37,8 @@ export function SpeechCard({ kind, side }: { kind: 'stt' | 'tts'; side: SpeechSe
   const [speechLanguage, setSpeechLanguage] = useState('');
   const [voice, setVoice] = useState('');
   const [saved, setSaved] = useState(false);
+  const [sample, setSample] = useState<Sample>(ui === 'ar' ? 'ar' : 'en');
   const [trying, setTrying] = useState<'idle' | 'playing' | { error: string }>('idle');
-  const voices = useVoices(kind === 'tts' ? providerId : null);
 
   // What the hub holds for the provider in view, whenever the choice or the hub changes.
   useEffect(() => {
@@ -38,6 +47,13 @@ export function SpeechCard({ kind, side }: { kind: 'stt' | 'tts'; side: SpeechSe
     setVoice(chosen?.settings.voice ?? '');
   }, [chosen?.id, chosen?.settings.model, chosen?.settings.language, chosen?.settings.voice]);
   useEffect(() => setProviderId(side.active_provider_id), [side.active_provider_id]);
+
+  const pickVoice = (next: string, language?: string | null) => {
+    setVoice(next);
+    // A voice that speaks Arabic or English previews in its own language.
+    const base = baseLanguage(language ?? null);
+    if (base === 'ar' || base === 'en') setSample(base);
+  };
 
   const save = () => {
     setSaved(false);
@@ -55,10 +71,17 @@ export function SpeechCard({ kind, side }: { kind: 'stt' | 'tts'; side: SpeechSe
     );
   };
 
-  const tryVoice = async () => {
+  const preview = async () => {
+    if (!chosen) return;
     setTrying('playing');
     try {
-      const audio = await synthesize(client, { text: t('models.speech.try_text'), language });
+      const audio = await synthesize(client, {
+        text: t(sample === 'ar' ? 'models.speech.sample_ar' : 'models.speech.sample_en'),
+        language: sample,
+        providerId: chosen.id,
+        model: model.trim() || null,
+        voice: voice.trim() || null,
+      });
       await playThroughAudioElement(audio, new AbortController().signal);
       setTrying('idle');
     } catch (error) {
@@ -66,7 +89,6 @@ export function SpeechCard({ kind, side }: { kind: 'stt' | 'tts'; side: SpeechSe
     }
   };
 
-  const listed = voices.data ?? [];
   return (
     <Card tone="raised" className="mb-3" data-testid={`speech-card-${kind}`}>
       <CardHeader
@@ -105,54 +127,23 @@ export function SpeechCard({ kind, side }: { kind: 'stt' | 'tts'; side: SpeechSe
             />
           </div>
           {chosen && (
-            <Field label={t('models.speech.model')}>
-              {(props) => (
-                <Input
-                  {...props}
-                  dir="ltr"
-                  value={model}
-                  onChange={(event) => setModel(event.target.value)}
-                  data-testid={`speech-model-${kind}`}
-                />
-              )}
-            </Field>
+            <SpeechModelField
+              kind={kind}
+              providerId={chosen.id}
+              value={model}
+              onChange={setModel}
+            />
           )}
           {chosen && kind === 'tts' && (
-            <div className="ch-field-row">
-              <span className="ch-label">{t('models.speech.voice')}</span>
-              {listed.length > 0 ? (
-                <Select
-                  value={voice || null}
-                  onValueChange={(next) => setVoice(next ?? '')}
-                  label={t('models.speech.voice')}
-                  testId="speech-voice-tts"
-                  options={listed.map((item) => ({ value: item.id, label: item.name }))}
-                />
-              ) : (
-                <Input
-                  dir="ltr"
-                  aria-label={t('models.speech.voice')}
-                  placeholder={t('models.speech.voice_hint')}
-                  value={voice}
-                  onChange={(event) => setVoice(event.target.value)}
-                  data-testid="speech-voice-tts"
-                />
-              )}
-            </div>
+            <SpeechVoiceField
+              providerId={chosen.id}
+              model={model}
+              value={voice}
+              onChange={pickVoice}
+            />
           )}
           {chosen && (
-            <Field label={t('models.speech.language')}>
-              {(props) => (
-                <Input
-                  {...props}
-                  dir="ltr"
-                  placeholder="ar"
-                  value={speechLanguage}
-                  onChange={(event) => setSpeechLanguage(event.target.value)}
-                  data-testid={`speech-language-${kind}`}
-                />
-              )}
-            </Field>
+            <SpeechLanguageField kind={kind} value={speechLanguage} onChange={setSpeechLanguage} />
           )}
           <div className="flex flex-wrap items-center gap-2 sm:col-span-2">
             <Button
@@ -163,14 +154,35 @@ export function SpeechCard({ kind, side }: { kind: 'stt' | 'tts'; side: SpeechSe
             >
               {t('models.speech.save')}
             </Button>
-            {kind === 'tts' && side.ready && (
-              <Button
-                onClick={() => void tryVoice()}
-                loading={trying === 'playing'}
-                data-testid="speech-try"
-              >
-                {t('models.speech.try')}
-              </Button>
+            {kind === 'tts' && chosen && (
+              <>
+                <Button
+                  onClick={() => void preview()}
+                  loading={trying === 'playing'}
+                  data-testid="speech-try"
+                >
+                  {t('models.speech.try')}
+                </Button>
+                <Segmented
+                  label={t('models.speech.sample')}
+                  size="sm"
+                  value={sample}
+                  onChange={(next) => setSample(next === 'ar' ? 'ar' : 'en')}
+                  testId="speech-sample"
+                  options={[
+                    {
+                      value: 'ar',
+                      label: 'العربية',
+                      itemProps: { 'data-testid': 'speech-sample-ar', lang: 'ar' },
+                    },
+                    {
+                      value: 'en',
+                      label: 'English',
+                      itemProps: { 'data-testid': 'speech-sample-en', lang: 'en' },
+                    },
+                  ]}
+                />
+              </>
             )}
             {saved && !update.isPending && (
               <span className="text-sm text-muted" role="status">

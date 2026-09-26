@@ -31,6 +31,11 @@ export type NoticeEvent =
   | { kind: 'run_completed'; agent: string; session: string }
   | { kind: 'run_failed'; agent: string; session: string; reason: string | null }
   | { kind: 'approval_requested'; agent: string; session: string; what: string }
+  /**
+   * A running task whose run has said nothing for `minutes` (the tasks watchdog, DECISIONS
+   * §93). `task` is how the board names it: "HUB-12 · the title".
+   */
+  | { kind: 'task_stuck'; task: string; minutes: number }
   /** Words someone else already chose — a workflow's `notify` step writes its own. */
   | { kind: 'system'; title: string; body: string | null };
 
@@ -62,6 +67,13 @@ export function sentenceFor(event: NoticeEvent, locale: Locale): Sentence {
         title: ar ? `${event.agent} ينتظر إذنك` : `${event.agent} is waiting for you`,
         body: event.what,
       };
+    case 'task_stuck':
+      return {
+        title: ar ? 'مهمة متوقفة عن التقدّم' : 'A task seems stuck',
+        body: ar
+          ? `${event.task} — لا نشاط في تشغيلها منذ ${event.minutes} دقيقة`
+          : `${event.task} — its run has shown no activity for ${event.minutes} minutes`,
+      };
     case 'system':
       return { title: event.title, body: event.body };
   }
@@ -72,6 +84,7 @@ const SEVERITY: Record<NoticeEvent['kind'], 'info' | 'warning' | 'action_require
   run_completed: 'info',
   run_failed: 'warning',
   approval_requested: 'action_required',
+  task_stuck: 'warning',
   system: 'info',
 };
 
@@ -85,6 +98,21 @@ const CONTRACT_KIND: Record<NoticeEvent['kind'], string> = {
   run_completed: 'run_completed',
   run_failed: 'run_completed',
   approval_requested: 'approval_requested',
+  // News about a task: the person's "task moved" switch is the one that silences it.
+  task_stuck: 'task_moved',
+  system: 'system',
+};
+
+/**
+ * The table's own kind for each event. The same as the event's, except where the table has
+ * no kind of that name and a check constraint keeps it to its list: a stuck task is a
+ * `task_moved` row (its title says what it is).
+ */
+const STORED_KIND: Record<NoticeEvent['kind'], string> = {
+  run_completed: 'run_completed',
+  run_failed: 'run_failed',
+  approval_requested: 'approval_requested',
+  task_stuck: 'task_moved',
   system: 'system',
 };
 
@@ -295,7 +323,7 @@ export function deliver(
   const id = deps.record(deps.db, {
     workspace: recipient.workspace,
     userId: recipient.userId,
-    kind: event.kind,
+    kind: STORED_KIND[event.kind],
     title: sentence.title,
     body: sentence.body,
     severity: SEVERITY[event.kind],

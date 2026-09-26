@@ -24,7 +24,7 @@ import {
 } from '../../../tests/unit/helpers.js';
 import { parseEnv } from './dotenv.js';
 import { imagePluginDir, imagePluginFiles, writeHermesImagePlugin } from './hermes-image-plugin.js';
-import { HERMES_IMAGE_PLUGIN, imageProtocolOf, isImageModel } from './images.js';
+import { HERMES_IMAGE_PLUGIN, imageProtocolOf, isImageModel, isImageOnlyModel } from './images.js';
 import { writeHermesProviders } from './propagation.js';
 
 type Hub = TestHub & { token: string };
@@ -39,6 +39,7 @@ interface Model {
   provider_id: string;
   model: string;
   capabilities: string[];
+  image_only?: boolean;
 }
 
 /** cli-proxy-api (a chat model and a Gemini image model) and OpenAI (a chat and a gpt-image). */
@@ -159,10 +160,33 @@ describe('models: which models draw', () => {
     expect(imageProtocolOf('anthropic', 'claude-sonnet-4-5')).toBeNull();
   });
 
+  it('tells a model that only draws from one that draws and chats (§87)', () => {
+    // Image-only: the Images-API families, the subscription's gpt-image-2 among them. Chosen as
+    // a chat model they fail the turn, so the clients leave them out of chat pickers.
+    for (const id of [
+      'gpt-image-1',
+      'gpt-image-2',
+      'dall-e-3',
+      'imagen-4.0-generate-001',
+      'black-forest-labs/flux-1.1-pro',
+    ]) {
+      expect(isImageOnlyModel(id), id).toBe(true);
+    }
+    // They draw and they chat: still offered as chat models.
+    for (const id of ['gemini-3.1-flash-image', 'google/gemini-3-pro-image', 'gpt-5-image']) {
+      expect(isImageModel(id), id).toBe(true);
+      expect(isImageOnlyModel(id), id).toBe(false);
+    }
+    for (const id of ['gpt-5', 'gemini-2.5-pro', 'claude-sonnet-4-5']) {
+      expect(isImageOnlyModel(id), id).toBe(false);
+    }
+  });
+
   it('marks the image models of a chat provider in the catalogue', async () => {
     const hub = await signedInHub({}, { models: { fetchImpl: scripted() } });
     try {
       await addProxy(hub);
+      await addOpenAi(hub);
       await drainJobs(hub.app);
       const listed = await authed(hub, hub.token, { method: 'GET', url: '/api/v1/models' });
       const items = (listed.json() as { items: Model[] }).items;
@@ -170,6 +194,14 @@ describe('models: which models draw', () => {
       const chat = items.find((model) => model.model === 'gemini-2.5-pro');
       expect(image?.capabilities).toContain('image_output');
       expect(chat?.capabilities).not.toContain('image_output');
+      // Gemini's image model chats too; neither is image-only (§87).
+      expect(image?.image_only).toBe(false);
+      expect(chat?.image_only).toBe(false);
+      // OpenAI's gpt-image only draws: offered as the image model, never as a chat model.
+      const drawOnly = items.find((model) => model.model === 'gpt-image-1');
+      expect(drawOnly?.capabilities).toContain('image_output');
+      expect(drawOnly?.image_only).toBe(true);
+      expect(items.find((model) => model.model === 'gpt-5')?.image_only).toBe(false);
     } finally {
       await hub.close();
     }

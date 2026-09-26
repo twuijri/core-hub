@@ -174,6 +174,10 @@
     "config_files": {
       "en": "Config files",
       "ar": "ملفات الإعداد"
+    },
+    "linked_hubs": {
+      "en": "Linked hubs",
+      "ar": "المراكز المرتبطة"
     }
   },
   "destinations": [
@@ -243,6 +247,18 @@
       },
       "roles": ["member"],
       "note": "Journal, notes/memory browser, files, search (Phase 4). A Settings page since 2026-09-22."
+    },
+    {
+      "id": "linked_hubs",
+      "title": "linked_hubs",
+      "module": "devices",
+      "level": "settings",
+      "entry": {
+        "kind": "settings-management"
+      },
+      "roles": ["admin"],
+      "surfaces": ["web", "desktop"],
+      "note": "Other Core Hubs linked to this one (ADR 0026): invite, redeem an invite, approve, rename, switch off, limit, unlink; which agents linked hubs may ask; each peer's shared agents and one question to one of them; each peer's audit log. Owners and admins; not on the phones yet."
     },
     {
       "id": "chat",
@@ -571,8 +587,7 @@
         "kind": "agent"
       },
       "roles": ["admin"],
-      "surfaces": ["web", "desktop"],
-      "note": "A coding agent's own instructions and settings files (CLAUDE.md, settings.json, AGENTS.md, config.toml …), one set for every profile in the home of the user the hub runs as (DECISIONS §78). Owners and admins; not on the phones."
+      "note": "A coding agent's own instructions and settings files (CLAUDE.md, settings.json, AGENTS.md, config.toml …), one set for every profile in the home of the user the hub runs as (DECISIONS §78). Owners and admins; on the phones as a plain editor since 2026-09-27 (docs/changes/2026-09-27-twuijri-phone-parity.md)."
     },
     {
       "id": "agent_settings",
@@ -612,7 +627,7 @@
     "this_device",
     "about"
   ],
-  "settingsManagement": ["models", "device_connections", "knowledge"],
+  "settingsManagement": ["models", "device_connections", "knowledge", "linked_hubs"],
   "settingsTools": [
     "logs",
     "usage",
@@ -680,6 +695,7 @@
       "new_chat": "/new",
       "search": "/search",
       "device_connections": "/settings/devices",
+      "linked_hubs": "/settings/linked-hubs",
       "agent_manager": "/agents",
       "models": "/settings/models",
       "knowledge": "/settings/knowledge",
@@ -723,7 +739,7 @@
       "models": "/settings/models",
       "knowledge": "/settings/knowledge",
       "chat": "/chat/:sessionId?",
-      "rooms": "/rooms",
+      "rooms": "/rooms/:roomId?",
       "tasks": "/tasks",
       "schedules": "/schedules",
       "settings": "/settings",
@@ -750,6 +766,7 @@
       "agent_jobs": "/agents/:agentId/jobs",
       "agent_channels": "/agents/:agentId/channels",
       "agent_plugins": "/agents/:agentId/plugins",
+      "agent_config_files": "/agents/:agentId/config-files",
       "agent_settings": "/agents/:agentId/settings",
       "global_agent": "/global-agent"
     },
@@ -761,7 +778,7 @@
       "models": "/settings/models",
       "knowledge": "/settings/knowledge",
       "chat": "/chat/:sessionId?",
-      "rooms": "/rooms",
+      "rooms": "/rooms/:roomId?",
       "tasks": "/tasks",
       "schedules": "/schedules",
       "settings": "/settings",
@@ -788,6 +805,7 @@
       "agent_jobs": "/agents/:agentId/jobs",
       "agent_channels": "/agents/:agentId/channels",
       "agent_plugins": "/agents/:agentId/plugins",
+      "agent_config_files": "/agents/:agentId/config-files",
       "agent_settings": "/agents/:agentId/settings",
       "global_agent": "/global-agent"
     },

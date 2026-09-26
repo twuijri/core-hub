@@ -89,6 +89,12 @@ export interface MemoryDocument {
   updatedAt: Date | null;
   /** True once the agent or a person has actually written it. */
   exists: boolean;
+  /** A list document's entries as Hermes reads them; `null` for `SOUL.md`, which is one text. */
+  entries: string[] | null;
+  /** The list's budget in characters (`memoryLimit`); `null` for `SOUL.md`, which has none. */
+  limit: number | null;
+  /** What the list counts against `limit`: code points of its entries joined. */
+  length: number | null;
 }
 
 export class MemoryError extends Error {
@@ -234,17 +240,41 @@ export function migrateLegacyMemory(home: string): LegacyMigration[] {
   return done;
 }
 
+/**
+ * A list's entries, its budget and what it counts against it, so every client draws the
+ * entries one by one and shows the same counter (decision §102) instead of re-deriving
+ * Hermes's separator and its way of counting.
+ */
+function budgetOf(
+  home: string,
+  id: DocumentKey,
+  content: string,
+): Pick<MemoryDocument, 'entries' | 'limit' | 'length'> {
+  if (!isListKey(id)) return { entries: null, limit: null, length: null };
+  const entries = entriesOf(content);
+  return { entries, limit: memoryLimit(home, id), length: lengthOf(joinEntries(entries)) };
+}
+
 function read(home: string, id: DocumentKey): MemoryDocument {
   const file = path.join(home, DOCUMENTS[id]);
   if (!existsSync(file)) {
-    return { id, title: DOCUMENTS[id], content: '', updatedAt: null, exists: false };
+    return {
+      id,
+      title: DOCUMENTS[id],
+      content: '',
+      updatedAt: null,
+      exists: false,
+      ...budgetOf(home, id, ''),
+    };
   }
+  const content = readFileSync(file, 'utf8');
   return {
     id,
     title: DOCUMENTS[id],
-    content: readFileSync(file, 'utf8'),
+    content,
     updatedAt: statSync(file).mtime,
     exists: true,
+    ...budgetOf(home, id, content),
   };
 }
 

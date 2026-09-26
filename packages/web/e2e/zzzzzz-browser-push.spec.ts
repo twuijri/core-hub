@@ -82,6 +82,27 @@ test('a browser turns notifications on, and a test notice is pushed to it', asyn
     });
     await section.screenshot({ path: path.join(shots, 'browser-push-ar-light.png') });
 
+    // Signing out ends the registration with its sign-in (the hub forgets it); signing in again
+    // hands the same subscription back without asking anything (browserPush.ts). Both on this
+    // page: a reload would lose the played subscription.
+    await page.getByRole('button', { name: 'تسجيل الخروج' }).click();
+    await expect(page).toHaveURL(/\/login$/);
+    const resumed = page.waitForResponse(
+      (response) =>
+        /\/api\/v1\/devices\/[^/]+\/push$/.test(new URL(response.url()).pathname) &&
+        response.request().method() === 'PUT',
+    );
+    await page.getByLabel('اسم المستخدم').fill('admin');
+    await page.getByLabel('كلمة المرور').fill(PASSWORD);
+    await page.getByRole('button', { name: 'دخول' }).click();
+    // Back where it signed out from.
+    await expect(page).toHaveURL(/\/settings\/notifications$/);
+    expect((await resumed).status()).toBe(200);
+    await expect(section).toHaveAttribute('data-state', 'on');
+    await section.getByTestId('send-test-notice').click();
+    await expect(section).toContainText('أُرسل');
+    await expect.poll(() => service.received.length).toBe(2);
+
     // The browser is now one of the person's devices, with push.
     // One page: pairing at the top, the devices as cards below it (no tabs since 2026-09-26).
     await page.goto('/settings/devices');

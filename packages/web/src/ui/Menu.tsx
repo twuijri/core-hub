@@ -18,6 +18,7 @@ export function Menu({
   tooltip,
   children,
   align = 'start',
+  side = 'top',
   testId,
 }: {
   /** The button, already styled by the caller; Radix only adds behaviour to it. */
@@ -26,6 +27,8 @@ export function Menu({
   tooltip?: string | undefined;
   children: ReactNode;
   align?: 'start' | 'center' | 'end';
+  /** Above the trigger by default (the composer's menus); `bottom` for one in the top bar. */
+  side?: 'top' | 'bottom';
   testId?: string | undefined;
 }) {
   return (
@@ -37,7 +40,7 @@ export function Menu({
         <DropdownMenu.Content
           className="ch-menu glass"
           align={align}
-          side="top"
+          side={side}
           sideOffset={8}
           collisionPadding={8}
           data-testid={testId}

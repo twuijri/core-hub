@@ -188,6 +188,14 @@ abstract class GenerateSharedSources : DefaultTask() {
             sb.appendLine("}")
             sb.appendLine()
         }
+        val control = json["control"] as Map<String, String>
+        sb.appendLine("/** The controls' sizes from tokens.json (`control`): three heights, concentric radii, in dp. */")
+        sb.appendLine("object ControlTokens {")
+        control.filterKeys { !it.startsWith("$") }.filterValues { it.endsWith("rem") }.forEach { (k, v) ->
+            sb.appendLine("    const val ${ident(k)} = ${dp(v)}")
+        }
+        sb.appendLine("}")
+        sb.appendLine()
         val layout = json["layout"] as Map<String, String>
         sb.appendLine("/** Layout sizes from tokens.json that make sense on a phone, in dp. */")
         sb.appendLine("object LayoutTokens {")
@@ -334,7 +342,6 @@ dependencies {
     implementation(libs.compose.ui)
     implementation(libs.compose.foundation)
     implementation(libs.compose.material3)
-    implementation(libs.compose.material.icons.core)
     implementation(libs.compose.ui.tooling.preview)
     debugImplementation(libs.compose.ui.tooling)
     implementation(libs.kotlinx.coroutines.android)

@@ -1364,6 +1364,12 @@ paths:
       description: |
         Returns a one-time code and the exact JSON to encode in a QR. The phone scans it, then calls
         `claim` with the code. The pairing expires after `ttl_seconds` (default 300, max 900).
+
+        `hub_url` in the QR is the address the phone will use. On a hub the desktop app runs
+        (local mode) with its way in from outside open (`devices.getRelay`), it is the way in's
+        `relay_url` and the pairing is `relay`, whatever was asked: that hub listens on its own
+        computer only, so no other address would reach it. Asking for `relay` when no way in is
+        open answers `409` `relay_not_connected` (DECISIONS §95).
       x-scope: global
       x-rt-events: []
       requestBody:
@@ -1395,6 +1401,8 @@ paths:
           $ref: '#/components/responses/BadRequest'
         '401':
           $ref: '#/components/responses/Unauthorized'
+        '409':
+          $ref: '#/components/responses/Conflict'
         '429':
           $ref: '#/components/responses/RateLimited'
   /auth/pairings/{pairing_id}:
@@ -1581,6 +1589,12 @@ paths:
       operationId: auth.listProfiles
       tags: [auth]
       summary: List the workspaces the user can enter
+      description: >-
+        Where the hub mirrors Hermes's profiles (ADR 0014), listing also reads them: a Hermes
+        profile the hub does not know yet is added under Hermes's display name (its id when it
+        has none), and a profile whose Hermes display name was changed outside the hub — `hermes
+        profile rename`, Hermes's dashboard — takes that name (contract decision §103). A Hermes
+        profile with no display name leaves the hub's name as it is.
       x-scope: global
       x-rt-events: []
       responses:
@@ -3025,8 +3039,10 @@ paths:
       description: |
         The files this run changed in the session's working folder, with their line counts
         (contract decision §49). A run that ended with nothing changed answers an empty `files`.
-        `404` when the run is not this conversation's, is still going, or recorded no changes
-        (no working folder, or it ran before the hub recorded them).
+        While the run is still going the answer is the folder compared with the run's start
+        **now**, with `live: true` (decision §102): it can grow or shrink until the run ends,
+        and is recorded only then. `404` when the run is not this conversation's, or recorded
+        no changes and is not going (no working folder, or it ran before the hub recorded them).
       x-rt-events: []
       responses:
         '200':
@@ -3229,6 +3245,53 @@ paths:
           $ref: '#/components/responses/Conflict'
         '422':
           $ref: '#/components/responses/AgentUnavailable'
+  /sessions/{session_id}/context:
+    parameters:
+      - $ref: '#/components/parameters/Profile'
+      - $ref: '#/components/parameters/SessionId'
+    get:
+      operationId: sessions.getContextBreakdown
+      tags: [sessions]
+      summary: The conversation's context window, split by what fills it
+      description: |
+        What takes the model's window in this conversation, by category — the system prompt,
+        tool definitions, rules, skills, MCP, subagent definitions, memory and the
+        conversation itself — as the agent counts it (Hermes `session.context_breakdown`,
+        decision §102). The hub asks the conversation the agent already has open and never
+        opens one for this: `available: false` with no categories when none is open (after the
+        hub restarted, before the first turn) or the agent cannot tell. The category counts
+        are the agent's rough estimate and need not add up to `used_tokens`, which is its
+        best figure for the whole window.
+      x-rt-events: []
+      responses:
+        '200':
+          description: 'The breakdown, or `available: false`.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SessionContextBreakdown'
+              example:
+                available: true
+                used_tokens: 48210
+                window_tokens: 200000
+                estimated: false
+                categories:
+                  - id: system_prompt
+                    label: System prompt
+                    tokens: 3120
+                  - id: tool_definitions
+                    label: Tool definitions
+                    tokens: 14800
+                  - id: memory
+                    label: Memory
+                    tokens: 410
+                  - id: conversation
+                    label: Conversation
+                    tokens: 29500
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
   /sessions/{session_id}/runs/{run_id}/steer:
     parameters:
       - $ref: '#/components/parameters/Profile'
@@ -3686,6 +3749,11 @@ paths:
         and every answer carries `Content-Security-Policy: sandbox; default-src 'none'` and
         `Cache-Control: no-store`, so an HTML file opened directly runs nothing in the hub's
         origin. A client renders HTML in a sandboxed frame of its own.
+
+        One `Range: bytes=…` is honoured (`Accept-Ranges: bytes`): `206` with `Content-Range`
+        and only those bytes. A range that starts past the end is `416` with
+        `Content-Range: bytes */<size>`; a header that is not one byte range is ignored and the
+        whole file sent (DECISIONS §98).
       parameters:
         - name: path
           in: query
@@ -3702,10 +3770,22 @@ paths:
           schema:
             type: boolean
             default: false
+        - $ref: '#/components/parameters/ByteRange'
       x-rt-events: []
       responses:
         '200':
           description: The file.
+          content:
+            '*/*':
+              schema:
+                type: string
+                format: binary
+        '206':
+          description: The requested byte range.
+          headers:
+            Content-Range:
+              schema:
+                type: string
           content:
             '*/*':
               schema:
@@ -3719,6 +3799,55 @@ paths:
           $ref: '#/components/responses/NotFound'
         '413':
           $ref: '#/components/responses/PayloadTooLarge'
+        '416':
+          $ref: '#/components/responses/RangeNotSatisfiable'
+  /sessions/{session_id}/files/stream:
+    parameters:
+      - $ref: '#/components/parameters/Profile'
+      - $ref: '#/components/parameters/SessionId'
+    post:
+      operationId: sessions.createFileStream
+      tags: [sessions]
+      summary: A short-lived address a media element can play one file of the working folder from
+      description: >-
+        What `sessions.createAttachmentStream` is for an attachment (DECISIONS §90), for a file of
+        the session's working folder (DECISIONS §98): a random one-hour ticket in the path of
+        `knowledge.streamFile`, for this one file only, read-only, answered with byte ranges.
+        The path is checked now as `sessions.readFile` checks it (outside the folder, a link, not
+        a file: `400`; not there: `404`) and again on every read. It stops when the person who
+        asked may no longer enter the profile. It is not the bearer and grants nothing else.
+      x-rt-events: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [path]
+              additionalProperties: false
+              properties:
+                path:
+                  type: string
+                  minLength: 1
+                  maxLength: 4096
+            example:
+              path: renders/final.mp4
+      responses:
+        '201':
+          description: The address.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AttachmentStream'
+              example:
+                url: /api/v1/file-streams/9d2c4e6f8a0b1c3d5e7f9a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d
+                expires_at: '2026-09-27T02:14:50Z'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
   # ---------------------------------------------------------------- approvals
   /approvals:
     get:
@@ -4093,8 +4222,9 @@ paths:
         reads them, **read-only**, through Hermes's internal server (ADR 0015), in the Hermes
         profile each hub profile is (ADR 0014). A reply is made on the channel itself.
 
-        Up to the 100 most recent live conversations per profile, most recent first; Hermes's
-        archived ones are left out. With `profiles=all` every profile the caller may enter is
+        The `limit` most recent live conversations per profile (100 unless asked), most recent
+        first; Hermes's archived ones are left out. `has_more` says some profile has older ones:
+        a client asks again with a larger `limit` to show them (contract decision §103). With `profiles=all` every profile the caller may enter is
         read (ADR 0016), each item naming its `profile`, and the whole list is ordered by
         `last_message_at`. The hub keeps what it read for a short while and asks Hermes again
         only when Hermes's store has been written since (contract decision §61); clients poll
@@ -4103,6 +4233,9 @@ paths:
         Where the hub cannot read them — it does not supervise Hermes, a profile has no Hermes
         profile, or Hermes did not answer — the answer is still `200`: `items` holds what could
         be read and `unavailable` says, per profile, why the rest is missing.
+
+        A conversation the caller hid (`sessions.hideChannelConversation`) is left out unless
+        `hidden=include` is asked (contract decision §88).
       parameters:
         - $ref: '#/components/parameters/Profile'
         - name: profiles
@@ -4118,6 +4251,25 @@ paths:
           schema:
             type: string
             pattern: '^[a-z][a-z0-9_]{0,31}$'
+        - name: hidden
+          in: query
+          description: >-
+            `include` lists the conversations the caller hid too, each with `hidden: true`
+            (contract decision §88). Without it they are left out.
+          schema:
+            type: string
+            enum: [include]
+        - name: limit
+          in: query
+          description: >-
+            How many of each profile's most recent conversations to read (contract decision
+            §103). Hermes answers 100 at a time; the hub reads as many of its pages as this
+            needs.
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 1000
+            default: 100
       x-rt-events: []
       responses:
         '200':
@@ -4128,6 +4280,11 @@ paths:
                 type: object
                 required: [items, unavailable]
                 properties:
+                  has_more:
+                    type: boolean
+                    description: >-
+                      Some profile has older conversations than `limit` let through (Hermes's
+                      own count). Always sent by the hub (contract decision §103).
                   items:
                     type: array
                     items:
@@ -4160,6 +4317,130 @@ paths:
           $ref: '#/components/responses/Unauthorized'
         '404':
           $ref: '#/components/responses/NotFound'
+  /channel-conversations/{conversation_id}:
+    delete:
+      operationId: sessions.deleteChannelConversation
+      tags: [sessions]
+      summary: Delete a channel conversation from Hermes (admin, permanent)
+      description: |
+        Removes the conversation from Hermes's own session store, in the Hermes profile the
+        profile in `X-Hub-Profile` is (contract decision §88): its messages go with it and it
+        cannot be brought back. It is what `hermes sessions delete` does, asked through Hermes's
+        internal server (ADR 0015). Clients ask for a confirmation that says it is permanent.
+
+        Only a conversation from a messaging channel is deleted here, and only by its exact id:
+        the hub reads it first and answers `404` (`resource: channel_conversation`) for anything
+        else, including the hub's own chats, which Hermes keeps too. `503 service_unavailable`
+        when Hermes cannot be asked (`details.reason: hermes_api_unavailable`, or
+        `hermes_not_managed` where the hub does not supervise Hermes). Every person's "hidden"
+        mark on it goes too.
+      x-roles: [owner, admin]
+      parameters:
+        - $ref: '#/components/parameters/Profile'
+        - name: conversation_id
+          in: path
+          required: true
+          description: Hermes's own session id.
+          schema:
+            type: string
+            pattern: '^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$'
+      x-rt-events: []
+      responses:
+        '204':
+          description: Deleted from Hermes.
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
+  /channel-conversations/{conversation_id}/pictures/{picture_id}:
+    get:
+      operationId: sessions.getChannelPicture
+      tags: [sessions]
+      summary: Read a picture sent on a channel conversation
+      description: |
+        The bytes of a picture named in a `ChannelMessage.attachments` (contract decision §103),
+        from Hermes's image cache of the Hermes profile `X-Hub-Profile` is. Only a picture file
+        in that cache is served (a name, never a path); `404` (`resource: channel_picture`)
+        once Hermes has deleted it — it keeps them a day — or for any other name. `private,
+        no-store`, `nosniff`, and only the picture types a browser draws (PNG, JPEG, GIF, WebP;
+        never SVG).
+      parameters:
+        - $ref: '#/components/parameters/Profile'
+        - name: conversation_id
+          in: path
+          required: true
+          description: Hermes's own session id.
+          schema:
+            type: string
+            pattern: '^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$'
+        - name: picture_id
+          in: path
+          required: true
+          description: '`ChannelAttachment.id`.'
+          schema:
+            type: string
+            pattern: '^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$'
+      x-rt-events: []
+      responses:
+        '200':
+          description: The picture.
+          content:
+            'image/*':
+              schema:
+                type: string
+                format: binary
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
+  /channel-conversations/{conversation_id}/hidden:
+    parameters:
+      - $ref: '#/components/parameters/Profile'
+      - name: conversation_id
+        in: path
+        required: true
+        description: Hermes's own session id.
+        schema:
+          type: string
+          pattern: '^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$'
+    put:
+      operationId: sessions.hideChannelConversation
+      tags: [sessions]
+      summary: Hide a channel conversation from the caller's list
+      description: |
+        The caller's own list stops showing the conversation (contract decision §88). Only the
+        hub remembers it — per person, per profile — and Hermes, the channel and everyone
+        else's list are untouched. Hiding one that is already hidden, or one the hub cannot read
+        right now, is allowed; the conversation itself is not looked up.
+      x-rt-events: []
+      responses:
+        '204':
+          description: Hidden.
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+    delete:
+      operationId: sessions.unhideChannelConversation
+      tags: [sessions]
+      summary: Show a hidden channel conversation again
+      description: The reverse of `sessions.hideChannelConversation`; one not hidden is fine.
+      x-rt-events: []
+      responses:
+        '204':
+          description: Shown again.
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
   /channel-conversations/{conversation_id}/messages:
     get:
       operationId: sessions.listChannelMessages
@@ -4167,8 +4448,10 @@ paths:
       summary: Read one channel conversation (read-only)
       description: |
         The conversation, as Hermes keeps it, in the profile named by `X-Hub-Profile`: what the
-        person on the channel wrote and what the agent answered, oldest first — the latest 500
-        messages at most. Tool calls, tool results and system text are left out. Only a
+        person on the channel wrote and what the agent answered, oldest first — a page of Hermes's
+        latest 500 messages at most. `offset` pages back: the page before is asked with the
+        answer's `next_offset` (contract decision §103). A picture the person sent is named in
+        the message's `attachments` and read with `sessions.getChannelPicture`. Tool calls, tool results and system text are left out. Only a
         conversation that came from a messaging channel is found here; any other id is
         `404` (`resource: channel_conversation`). `503 service_unavailable` when Hermes cannot
         be asked (`details.reason: hermes_api_unavailable`, or `hermes_not_managed` where the
@@ -4182,6 +4465,16 @@ paths:
           schema:
             type: string
             pattern: '^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$'
+        - name: offset
+          in: query
+          description: >-
+            How many of Hermes's newest messages to skip — `0`, the latest page, unless paging
+            back with an answer's `next_offset`.
+          schema:
+            type: integer
+            minimum: 0
+            maximum: 10000000
+            default: 0
       x-rt-events: []
       responses:
         '200':
@@ -4201,6 +4494,11 @@ paths:
                   has_more:
                     type: boolean
                     description: Older messages exist that this answer does not carry.
+                  next_offset:
+                    type: [integer, 'null']
+                    description: >-
+                      The `offset` that reads the page before this one, or `null` when there is
+                      none. Always sent by the hub (contract decision §103).
               example:
                 conversation:
                   id: 20260925_091500_3f9a1c2b
@@ -4477,6 +4775,74 @@ paths:
                 format: binary
         '401':
           $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /attachments/{attachment_id}/stream:
+    parameters:
+      - $ref: '#/components/parameters/Profile'
+      - $ref: '#/components/parameters/AttachmentId'
+    post:
+      operationId: sessions.createAttachmentStream
+      tags: [sessions]
+      summary: A short-lived address a media element can play the bytes from
+      description: >-
+        A `<video>` or `<audio>` element sends no header, so it cannot carry the bearer that
+        `sessions.downloadAttachment` wants. This gives a one-attachment, read-only ticket in the
+        path instead (DECISIONS §90): valid for one hour, for this attachment only, and it stops
+        when the person who asked may no longer read it. It is not the bearer token and grants
+        nothing else. Supports `Range` like the download.
+      x-rt-events: []
+      responses:
+        '201':
+          description: The address.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AttachmentStream'
+              example:
+                url: /api/v1/attachment-streams/7c1b0e5f2a9d4c3b8e6f1a2b3c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9a0b1c2d
+                expires_at: '2026-09-26T11:14:50Z'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /attachment-streams/{ticket}:
+    parameters:
+      - name: ticket
+        in: path
+        required: true
+        schema:
+          type: string
+          pattern: '^[0-9a-f]{64}$'
+        example: 7c1b0e5f2a9d4c3b8e6f1a2b3c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9a0b1c2d
+    get:
+      operationId: sessions.streamAttachment
+      tags: [sessions]
+      summary: Stream the bytes a ticket names (supports `Range`)
+      description: No bearer; the ticket from `sessions.createAttachmentStream` is the permission. An unknown, expired or withdrawn ticket is `404`.
+      security: []
+      parameters:
+        - name: Range
+          in: header
+          required: false
+          schema:
+            type: string
+      x-rt-events: []
+      responses:
+        '200':
+          description: The whole file.
+          content:
+            '*/*':
+              schema:
+                type: string
+                format: binary
+        '206':
+          description: The requested byte range.
+          content:
+            '*/*':
+              schema:
+                type: string
+                format: binary
         '404':
           $ref: '#/components/responses/NotFound'
   /attachment-uploads:
@@ -5041,6 +5407,91 @@ paths:
           $ref: '#/components/responses/Forbidden'
         '404':
           $ref: '#/components/responses/NotFound'
+  /agents/{agent_id}/sign-in:
+    parameters:
+      - $ref: '#/components/parameters/Profile'
+      - $ref: '#/components/parameters/AgentId'
+    post:
+      operationId: agents.startSignIn
+      tags: [agents]
+      summary: Sign an installed agent in to its own vendor account by device code (admin)
+      description: >-
+        Only for an agent whose `install.sign_in` is true (Kimi Code, Grok Build): the hub runs
+        the agent's own device-code sign-in (`kimi login`, `grok login --device-auth`), answers
+        with the link and code it printed, and the client polls `agents.getSignIn` until
+        `status` is no longer `pending`. The agent keeps the credential in its own folder under
+        the hub user's home, for every profile; no token passes through the hub. Starting again
+        stops the one before. Any other agent is `409 state_invalid` with
+        `details.reason = sign_in_unsupported`; one not installed, `details.reason =
+        not_installed`. A CLI that prints no link in time is `503`.
+      x-roles: [owner, admin]
+      x-rt-events: []
+      responses:
+        '201':
+          description: The pending sign-in; show `user_code` and `verification_url`, then poll.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProviderSignIn'
+              example:
+                id: 01J8QK3ZR2W7M5N4P6T8V9X0SN
+                status: pending
+                user_code: RL0S-YSZ9
+                verification_url: https://www.kimi.ai/code/authorize_device?user_code=RL0S-YSZ9
+                accepts_code: false
+                expires_at: '2026-09-26T13:25:00Z'
+                error: null
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
+  /agents/{agent_id}/sign-in/{sign_in_id}:
+    parameters:
+      - $ref: '#/components/parameters/Profile'
+      - $ref: '#/components/parameters/AgentId'
+      - name: sign_in_id
+        in: path
+        required: true
+        schema:
+          $ref: '#/components/schemas/Ulid'
+    get:
+      operationId: agents.getSignIn
+      tags: [agents]
+      summary: Poll an agent's sign-in (admin)
+      description: >-
+        How the agent's sign-in stands: `pending` while its command waits, `approved` once it
+        stored the credential, `denied` when the person declined, `expired` when the code ran
+        out, `failed` with the command's last line otherwise. A sign-in the hub no longer holds
+        (the hub restarted, or another was started) is `404`.
+      x-roles: [owner, admin]
+      x-rt-events: []
+      responses:
+        '200':
+          description: The sign-in.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProviderSignIn'
+              example:
+                id: 01J8QK3ZR2W7M5N4P6T8V9X0SN
+                status: approved
+                user_code: RL0S-YSZ9
+                verification_url: https://www.kimi.ai/code/authorize_device?user_code=RL0S-YSZ9
+                accepts_code: false
+                expires_at: '2026-09-26T13:25:00Z'
+                error: null
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
   /agents/{agent_id}/restart:
     parameters:
       - $ref: '#/components/parameters/Profile'
@@ -5519,11 +5970,17 @@ paths:
         (`skills/<category>/<name>/SKILL.md`, where Hermes keeps its built-in skills) lists
         under that category, whose `description` is the category's `DESCRIPTION.md`. A skill
         Hermes seeded from its own bundle (named in `skills/.bundled_manifest`) is `source:
-        builtin` and read-only here: it can be read and pinned, not written, switched or
-        deleted (`409 conflict`, `details.reason = skill_bundled`). A skill's `key` is its
-        folder's name wherever the folder is. Core Hub's own skills (decision §71) live in the
-        `core-hub` category, are `source: library` with `library` saying whether the person
-        edited them, and `library` in the answer describes the library in this profile.
+        builtin` and read-only here: it can be read, pinned and switched on or off (Hermes's own
+        switch, below), not written or deleted (`409 conflict`, `details.reason =
+        skill_bundled`). A skill's `key` is its folder's name wherever the folder is. Core Hub's
+        own skills (decision §71) live in the `core-hub` category, are `source: library` with
+        `library` saying whether the person edited them, and `library` in the answer describes
+        the library in this profile.
+
+        As Hermes lists them (contract decision §103): a skill whose front matter names
+        `platforms` that do not include the hub's own system (`linux`, `macos`, `windows`) is
+        left out — Hermes never loads it here — and `enabled` is off for a skill in the
+        profile's `skills.disabled` list.
       x-rt-events: []
       responses:
         '200':
@@ -5721,10 +6178,13 @@ paths:
       tags: [agents]
       summary: Enable, disable or pin a skill
       description: >-
-        `enabled` switches a skill on or off by renaming its `SKILL.md`; a built-in skill
-        (`source: builtin`) is Hermes's own and is not switched here (`409 conflict`,
-        `details.reason = skill_bundled`). `pinned` is the hub's own order and works for every
-        skill.
+        `enabled` switches a skill on or off where Hermes itself keeps that switch: the
+        profile's `skills.disabled` list in `config.yaml` (contract decision §103), so Hermes's
+        own `hermes skills` and dashboard agree with the hub. That works for a built-in skill
+        (`source: builtin`) too — its files are not touched. Switching on also restores a skill
+        an older hub switched off by renaming its `SKILL.md`. Hermes's own manual,
+        `hermes-agent`, is never off (`409 conflict`, `details.reason = skill_essential`).
+        `pinned` is the hub's own order and works for every skill.
       requestBody:
         required: true
         content:
@@ -6302,10 +6762,13 @@ paths:
                   - id: memory
                     kind: document
                     title: MEMORY.md
-                    content: "- يفضّل المستخدم الردود المختصرة\n"
+                    content: "يفضّل المستخدم الردود المختصرة\n§\nيكتب الالتزامات بالإنجليزية"
                     tags: []
                     revision: 7
                     updated_at: '2026-09-20T09:00:00Z'
+                    entries: ['يفضّل المستخدم الردود المختصرة', 'يكتب الالتزامات بالإنجليزية']
+                    char_limit: 2200
+                    char_count: 60
                   - id: 01J8QK3ZR2W7M5N4P6T8V9X0ME
                     kind: entry
                     title: 'تفضيلات الكتابة'
@@ -6689,7 +7152,7 @@ paths:
           $ref: '#/components/responses/NotFound'
         '409':
           $ref: '#/components/responses/Conflict'
-  # ---------------------------------------------------------------- presets (dsh)
+  # ---------------------------------------------------------------- presets (DECISIONS §100)
   /agents/{agent_id}/presets:
     parameters:
       - $ref: '#/components/parameters/Profile'
@@ -6697,38 +7160,111 @@ paths:
     get:
       operationId: agents.listPresets
       tags: [agents]
-      summary: List an agent's presets (agents whose `sections` include `presets`)
+      summary: The agent's saved presets in the selected profile, newest first
+      description: >-
+        A preset is a named, saved bundle of this agent's settings in this profile (decision
+        §100): the chat model with its fallback chain, the agent's own model, which skills and
+        MCP servers are on, and the agent's settings sections. It never holds a secret: models
+        name their provider by id, MCP servers by name, and a settings field of kind `secret`
+        (or a value carrying a password, such as a proxy URL with a user and password) is never
+        saved. Readable by whoever may read the agent's settings; written by admins.
       x-rt-events: []
       responses:
         '200':
-          description: Presets.
+          description: Presets (not paged; at most 50 per agent and profile).
           content:
             application/json:
               schema:
                 type: object
-                required: [items, authorable]
+                required: [items]
                 properties:
                   items:
                     type: array
                     items:
                       $ref: '#/components/schemas/AgentPreset'
-                  authorable:
-                    type: boolean
-                    description: Whether user presets can be created on this hub.
               example:
                 items:
-                  - id: default
-                    name: 'الافتراضي'
-                    description: null
-                    trust: system
-                    is_default: true
-                    broken: false
-                    content: null
-                authorable: false
+                  - id: 01J8QK3ZR2W7M5N4P6T8V9X0PR
+                    profile: default
+                    owner_id: 01J8QK3ZR2W7M5N4P6T8V9X0HM
+                    agent_id: 01J8QK3ZR2W7M5N4P6T8V9X0AC
+                    name: 'بحث سريع'
+                    description: 'نموذج أرخص وأدوات أقل'
+                    content:
+                      model:
+                        default:
+                          provider_id: 01J8QK3ZR2W7M5N4P6T8V9X0PV
+                          model: claude-haiku-4-5
+                        fallbacks: []
+                        agent: null
+                      skills:
+                        web-research: true
+                      mcp_servers:
+                        github: false
+                      settings:
+                        agent:
+                          max_turns: 20
+                    last_activated_at: null
+                    created_at: '2026-09-27T01:00:00Z'
+                    updated_at: '2026-09-27T01:00:00Z'
         '401':
           $ref: '#/components/responses/Unauthorized'
         '404':
           $ref: '#/components/responses/NotFound'
+    post:
+      operationId: agents.createPreset
+      tags: [agents]
+      summary: Save the agent's current settings as a preset (admin)
+      description: >-
+        Reads the agent's settings as they are now, through the same operations its pages read
+        (`models.getDefaults`, `agents.get`, `agents.listSkills`, `agents.listMcpServers`,
+        `agents.getSettings`), drops anything secret, and stores the rest under `name`. A part
+        the agent does not have (skills on an agent that is not Hermes) is saved as `null` and
+        left alone when the preset is activated. A name already used by another preset of the
+        agent in the profile is `409 conflict`; more than 50 presets is `409 state_invalid`.
+      x-roles: [owner, admin]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AgentPresetWrite'
+            example:
+              name: 'بحث سريع'
+              description: 'نموذج أرخص وأدوات أقل'
+      x-rt-events: []
+      responses:
+        '201':
+          description: The saved preset.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AgentPreset'
+              example:
+                id: 01J8QK3ZR2W7M5N4P6T8V9X0PR
+                profile: default
+                owner_id: 01J8QK3ZR2W7M5N4P6T8V9X0HM
+                agent_id: 01J8QK3ZR2W7M5N4P6T8V9X0AC
+                name: 'بحث سريع'
+                description: 'نموذج أرخص وأدوات أقل'
+                content:
+                  model: null
+                  skills: null
+                  mcp_servers: null
+                  settings: {}
+                last_activated_at: null
+                created_at: '2026-09-27T01:00:00Z'
+                updated_at: '2026-09-27T01:00:00Z'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
   /agents/{agent_id}/presets/{preset_id}:
     parameters:
       - $ref: '#/components/parameters/Profile'
@@ -6737,7 +7273,7 @@ paths:
     get:
       operationId: agents.getPreset
       tags: [agents]
-      summary: Read a preset with its content
+      summary: Read one preset with its content
       x-rt-events: []
       responses:
         '200':
@@ -6747,13 +7283,20 @@ paths:
               schema:
                 $ref: '#/components/schemas/AgentPreset'
               example:
-                id: default
-                name: 'الافتراضي'
+                id: 01J8QK3ZR2W7M5N4P6T8V9X0PR
+                profile: default
+                owner_id: 01J8QK3ZR2W7M5N4P6T8V9X0HM
+                agent_id: 01J8QK3ZR2W7M5N4P6T8V9X0AC
+                name: 'بحث سريع'
                 description: null
-                trust: system
-                is_default: true
-                broken: false
-                content: "name: default\nplugins: []\n"
+                content:
+                  model: null
+                  skills: null
+                  mcp_servers: null
+                  settings: {}
+                last_activated_at: null
+                created_at: '2026-09-27T01:00:00Z'
+                updated_at: '2026-09-27T01:00:00Z'
         '401':
           $ref: '#/components/responses/Unauthorized'
         '404':
@@ -6761,9 +7304,9 @@ paths:
     delete:
       operationId: agents.deletePreset
       tags: [agents]
-      summary: Delete a user preset (admin)
+      summary: Delete a preset (admin); the agent's settings are not touched
       x-roles: [owner, admin]
-      x-rt-events: [agent.updated]
+      x-rt-events: []
       responses:
         '204':
           description: Deleted.
@@ -6773,8 +7316,6 @@ paths:
           $ref: '#/components/responses/Forbidden'
         '404':
           $ref: '#/components/responses/NotFound'
-        '409':
-          $ref: '#/components/responses/Conflict'
   /agents/{agent_id}/presets/{preset_id}/activate:
     parameters:
       - $ref: '#/components/parameters/Profile'
@@ -6783,34 +7324,45 @@ paths:
     post:
       operationId: agents.activatePreset
       tags: [agents]
-      summary: Make a preset the default (admin)
+      summary: Apply a preset to the agent (admin)
+      description: >-
+        Applies each saved part through the operation a person would use for it —
+        `models.setDefaults` (chat model and fallbacks), `agents.update` (the agent's own
+        model), `agents.updateSkill`, `agents.updateMcpServer` and `agents.updateSettings` —
+        with the caller's own permissions, so every check, event and restart those make
+        happens as it would from their pages. A part is applied as far as it can be: a
+        provider, model, skill, MCP server or settings section that is gone since the preset
+        was saved is reported in `skipped` with the refusal's code, and the rest still
+        applies. `restart_job_ids` are the restarts the settings asked for.
       x-roles: [owner, admin]
-      x-rt-events: [agent.updated]
+      x-rt-events: [agent.updated, job.queued]
       responses:
         '200':
-          description: The full roster after the change.
+          description: What was applied and what was not.
           content:
             application/json:
               schema:
-                type: object
-                required: [items, authorable]
-                properties:
-                  items:
-                    type: array
-                    items:
-                      $ref: '#/components/schemas/AgentPreset'
-                  authorable:
-                    type: boolean
+                $ref: '#/components/schemas/AgentPresetActivation'
               example:
-                items:
-                  - id: default
-                    name: 'الافتراضي'
-                    description: null
-                    trust: system
-                    is_default: true
-                    broken: false
-                    content: null
-                authorable: false
+                preset:
+                  id: 01J8QK3ZR2W7M5N4P6T8V9X0PR
+                  profile: default
+                  owner_id: 01J8QK3ZR2W7M5N4P6T8V9X0HM
+                  agent_id: 01J8QK3ZR2W7M5N4P6T8V9X0AC
+                  name: 'بحث سريع'
+                  description: null
+                  content:
+                    model: null
+                    skills:
+                      web-research: true
+                    mcp_servers: null
+                    settings: {}
+                  last_activated_at: '2026-09-27T01:10:00Z'
+                  created_at: '2026-09-27T01:00:00Z'
+                  updated_at: '2026-09-27T01:00:00Z'
+                applied: [skills]
+                skipped: []
+                restart_job_ids: []
         '401':
           $ref: '#/components/responses/Unauthorized'
         '403':
@@ -7464,6 +8016,248 @@ paths:
           $ref: '#/components/responses/NotFound'
         '409':
           $ref: '#/components/responses/Conflict'
+  # ---------------------------------------------------------------- Hermes incoming webhooks
+  /agents/{agent_id}/webhooks:
+    parameters:
+      - $ref: '#/components/parameters/Profile'
+      - $ref: '#/components/parameters/AgentId'
+    get:
+      operationId: agents.listWebhooks
+      tags: [agents]
+      summary: The agent's incoming webhook routes in the selected profile, with their secrets (admin)
+      description: >-
+        Hermes's webhook receiver (its `webhook` platform, observed in its MIT source and described
+        in our words in DECISIONS §97): a named route lets an outside service — GitHub, a form, a
+        script — start a run of the agent by POSTing to the route's address, signed with the
+        route's secret; the route's prompt says what the agent is asked, with `{dot.path}` values
+        taken from the posted JSON. Routes the hub or `hermes webhook subscribe` made live in the
+        profile's `webhook_subscriptions.json` and can be deleted here; routes written in
+        `config.yaml` by hand are listed with `static: true` and are not. `listener` says whether
+        the profile's gateway is listening; `path` of each route is on this hub — the hub passes
+        what it receives there to the profile's listener on its own machine, so an outside service
+        needs the hub's address to be public.
+      x-roles: [owner, admin]
+      x-rt-events: []
+      responses:
+        '200':
+          description: The routes, by name.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HermesWebhookList'
+              example:
+                listener:
+                  enabled: true
+                  port: 18650
+                  status: online
+                  error: null
+                items:
+                  - name: github-issues
+                    description: New issues on the repository
+                    prompt: 'A new issue was opened: {issue.title}'
+                    events: [issues]
+                    deliver: log
+                    secret: 'Zq3xV9b4mN0pR7sT2wY5aC8dF1gH6jK9LmN3pQ5rS7'
+                    path: /api/v1/hermes-webhooks/default/github-issues
+                    static: false
+                    created_at: '2026-09-27T01:20:00Z'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+    post:
+      operationId: agents.createWebhook
+      tags: [agents]
+      summary: Create an incoming webhook route with its prompt (admin)
+      description: >-
+        Writes the route into the profile's `webhook_subscriptions.json` (mode 0600, as Hermes
+        writes it) with a new random secret, and switches the profile's webhook listener on in its
+        `config.yaml` when it is not yet: bound to this machine only (`127.0.0.1`) on a port of
+        its own, so two profiles never share one. The profile's gateway starts or restarts to
+        listen, as after any channel change (`agents.listChannels` `gateway.applies`); Hermes reads
+        new routes on the next POST without a restart. A name already taken is `409`
+        (`details.reason = webhook_exists`). The answer carries the secret.
+      x-roles: [owner, admin]
+      x-rt-events: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/HermesWebhookCreate'
+            example:
+              name: github-issues
+              prompt: 'A new issue was opened: {issue.title}'
+              description: New issues on the repository
+              events: [issues]
+      responses:
+        '201':
+          description: Created.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HermesWebhook'
+              example:
+                name: github-issues
+                description: New issues on the repository
+                prompt: 'A new issue was opened: {issue.title}'
+                events: [issues]
+                deliver: log
+                secret: 'Zq3xV9b4mN0pR7sT2wY5aC8dF1gH6jK9LmN3pQ5rS7'
+                path: /api/v1/hermes-webhooks/default/github-issues
+                static: false
+                created_at: '2026-09-27T01:20:00Z'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+  /agents/{agent_id}/webhooks/{route_name}:
+    parameters:
+      - $ref: '#/components/parameters/Profile'
+      - $ref: '#/components/parameters/AgentId'
+      - $ref: '#/components/parameters/WebhookRouteName'
+    delete:
+      operationId: agents.deleteWebhook
+      tags: [agents]
+      summary: Delete an incoming webhook route (admin)
+      description: >-
+        Removes the route from `webhook_subscriptions.json`; Hermes stops accepting it on the next
+        POST. A route from `config.yaml` is `409` (`details.reason = webhook_static`). When no
+        route is left the profile's listener is switched off again and its gateway follows.
+      x-roles: [owner, admin]
+      x-rt-events: []
+      responses:
+        '204':
+          description: Deleted.
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+  /agents/{agent_id}/webhooks/{route_name}/test:
+    parameters:
+      - $ref: '#/components/parameters/Profile'
+      - $ref: '#/components/parameters/AgentId'
+      - $ref: '#/components/parameters/WebhookRouteName'
+    post:
+      operationId: agents.testWebhook
+      tags: [agents]
+      summary: Send the route a signed test POST from this machine (admin)
+      description: >-
+        What `hermes webhook test` does: a POST to the profile's listener on this machine, signed
+        with the route's secret (`X-Hub-Signature-256`) and marked as the `test` event, with
+        `{"test": true, "event_type": "test", "message": …}` as the body — so the agent runs once
+        with the route's prompt. It proves the route and the listener, not the public address.
+        `status` and `body` are the listener's answer (`202` accepted); a listener that is not up
+        is `503`.
+      x-roles: [owner, admin]
+      x-rt-events: []
+      responses:
+        '200':
+          description: What the listener answered.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HermesWebhookTestResult'
+              example:
+                status: 202
+                body:
+                  status: accepted
+                  route: github-issues
+                  event: test
+                  delivery_id: corehub-test-01J8QK3ZR2W7M5N4P6T8V9X0WH
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
+  /hermes-webhooks/{profile}/{route_name}:
+    parameters:
+      - name: profile
+        in: path
+        required: true
+        description: The profile's slug on this hub.
+        schema:
+          $ref: '#/components/schemas/ProfileSlug'
+        example: default
+      - $ref: '#/components/parameters/WebhookRouteName'
+    post:
+      operationId: agents.receiveWebhook
+      tags: [agents]
+      summary: The public address of a webhook route; what an outside service POSTs to
+      description: >-
+        Not a client API. No bearer: the route's secret is the permission, checked by Hermes. The
+        hub passes the body as received, byte for byte (at most 1 MiB), with the headers Hermes
+        reads a signature and an event from (`X-Hub-Signature-256`, `X-GitHub-Event`,
+        `X-GitHub-Delivery`, `X-Gitlab-Token`, `X-GitLab-Event`, `svix-*`, `webhook-*`,
+        `Linear-Signature`, `X-Webhook-Signature`, `X-Webhook-Signature-V2`,
+        `X-Webhook-Timestamp`, `X-Request-ID`, `Content-Type`), to the profile's listener on
+        this machine, and answers what it answered: `202` when the agent's run was started, `200`
+        when the event was ignored by the route's filter or was a repeat of a delivery already
+        taken. Hermes's refusals come back in the hub's error envelope with Hermes's words:
+        `401` a missing or wrong signature, `404` no such route, `413` too large, `429` more than
+        the route's rate. `503` when the profile's listener is not up.
+      security: []
+      x-scope: global
+      requestBody:
+        required: true
+        content:
+          '*/*':
+            schema: {}
+      x-rt-events: []
+      responses:
+        '200':
+          description: Received and ignored (filtered, or a delivery already taken).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HermesWebhookReceipt'
+              example:
+                status: duplicate
+                delivery_id: 72d3162e-cc78-11e3-81ab-4c9367dc0958
+        '202':
+          description: Accepted; the agent's run started.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HermesWebhookReceipt'
+              example:
+                status: accepted
+                route: github-issues
+                event: issues
+                delivery_id: 72d3162e-cc78-11e3-81ab-4c9367dc0958
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '413':
+          $ref: '#/components/responses/PayloadTooLarge'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
   # ---------------------------------------------------------------- pairing (who may message the agent)
   /agents/{agent_id}/pairing:
     parameters:
@@ -8443,6 +9237,13 @@ paths:
         room's lead seat answers (`lead_seat_id`), or nobody when it has none (DECISIONS §69).
         Each triggered seat gets a run; the runs are returned so the client can show the queue at
         once. An archived room refuses new messages with `409 state_invalid`.
+
+        `content` is text and, since contract decision §99, `image` and `file` blocks naming
+        attachments uploaded into the room's profile (`sessions.uploadAttachment`,
+        `sessions.startUpload`) — words, files, or both. An id that names no attachment there is
+        `404`; any other block (audio, location) is `400 validation_failed` with
+        `details.reason: unsupported_block`. The files go with each seat's next turn, as a
+        chat's files go with its run.
       parameters:
         - $ref: '#/components/parameters/IdempotencyKey'
       requestBody:
@@ -9187,6 +9988,12 @@ paths:
             $ref: '#/components/schemas/Ulid'
         - name: include_archived
           in: query
+          description: >-
+            `true`: the `archived` column carries its tasks. Without it the `archived` column
+            still says how many there are (`count`, and `counts.by_status.archived`) but its
+            `tasks` is empty, so a client asks for the archive only when a person opens it
+            (contract decision §93). `counts.total` counts only the columns whose tasks are
+            included.
           schema:
             type: boolean
             default: false
@@ -9434,7 +10241,7 @@ paths:
     patch:
       operationId: tasks.bulkUpdateTasks
       tags: [tasks]
-      summary: Bulk edit tasks (archive, priority, tags, project)
+      summary: Bulk edit tasks (archive, priority, tags, project, a comment)
       parameters:
         - $ref: '#/components/parameters/Profile'
       requestBody:
@@ -12671,6 +13478,14 @@ paths:
       operationId: models.listVoices
       tags: [models]
       summary: Voices a TTS provider offers (may be empty for providers that take free-form voice ids)
+      description: >-
+        The provider's own list whenever it has an endpoint for one (`source: provider`: ElevenLabs,
+        Deepgram, Azure). A provider with no such endpoint answers the list its public
+        documentation gives (`source: documented`: Groq, OpenAI), kept in one data file of the hub
+        and labelled as such by clients. `source: none` is a provider with neither: the voice is
+        typed by hand. `model` narrows the list to the voices that model speaks with (Groq's
+        English and Arabic models have different voices; Deepgram's `aura-2` and `aura`). A
+        person may always type a voice id the list does not show (DECISIONS §94).
       parameters:
         - $ref: '#/components/parameters/Profile'
         - name: provider_id
@@ -12678,6 +13493,13 @@ paths:
           required: true
           schema:
             $ref: '#/components/schemas/Ulid'
+        - name: model
+          in: query
+          required: false
+          description: Only the voices this model speaks with. Omitted, every voice of the provider.
+          schema:
+            type: string
+            maxLength: 200
       x-rt-events: []
       responses:
         '200':
@@ -12686,18 +13508,23 @@ paths:
             application/json:
               schema:
                 type: object
-                required: [items]
+                required: [items, source]
                 properties:
                   items:
                     type: array
                     items:
                       $ref: '#/components/schemas/Voice'
+                  source:
+                    $ref: '#/components/schemas/VoiceListSource'
               example:
+                source: documented
                 items:
-                  - id: Rachel
-                    name: Rachel
-                    language: en-US
+                  - id: noura
+                    name: Noura
+                    language: ar-SA
                     gender: female
+                    description: Saudi dialect
+                    models: [canopylabs/orpheus-arabic-saudi]
         '400':
           $ref: '#/components/responses/BadRequest'
         '401':
@@ -12777,7 +13604,13 @@ paths:
       operationId: models.synthesize
       tags: [models]
       summary: Synthesize speech with the active TTS provider
-      description: Returns audio bytes; `X-Speech-Provider` says which provider actually spoke. Text over 2 000 characters is `413`.
+      description: >-
+        Returns audio bytes; `X-Speech-Provider` says which provider actually spoke. Text over
+        2 000 characters is `413`. `format` asks for audio the client can play (iOS cannot play
+        Ogg); the `Content-Type` says what came. A provider that takes less per request (Groq's
+        Orpheus: 200 characters) is sent the text in parts split at sentence, then word,
+        boundaries under its limit, and the parts' audio comes back joined in order as one file
+        (DECISIONS §94).
       parameters:
         - $ref: '#/components/parameters/Profile'
       requestBody:
@@ -12810,6 +13643,10 @@ paths:
                 type: string
                 format: binary
             audio/ogg:
+              schema:
+                type: string
+                format: binary
+            audio/aac:
               schema:
                 type: string
                 format: binary
@@ -13259,16 +14096,21 @@ paths:
     post:
       operationId: devices.createRequest
       tags: [devices]
-      summary: Ask a device for a capability (used by adapters and integrations with the `device` scope)
+      summary: Ask a device for a capability (used by adapters, integrations with the `device` scope, and the hub's `devices` tools)
       description: >-
         A job (`device_request`) that ends when the device answers: `succeeded` when it fulfils,
         `failed` when it declines, fails or lets `timeout_ms` pass (the request is then `expired`
         with `timeout`), `cancelled` when the job is cancelled (so is the request). The job
         carries only `{request_id, status}`: what the device sends stays in the request, which
         only its person and the device read. Only the device's own person may ask it — their web
-        session, or a token of theirs with the `device` scope (else `403`); anyone else's device,
-        an admin's included, is `404`. A device that lacks the capability, or switched it off, is
-        answered `denied` with `unavailable` by the hub at once, without being asked.
+        session, a token of theirs with the `device` scope, or the run token of one of their
+        agent runs for `files`, `apps` (DECISIONS §89) and `location` (§105) only — the request
+        then carries the run's id — else `403`; anyone else's device, an admin's included, is `404`. A device
+        whose `profiles` leave out the profile asked in is `403` with `details.reason =
+        device_not_in_profile`. A device that lacks the capability, or switched it off, is
+        answered `denied` with `unavailable` by the hub at once, without being asked; a `files`,
+        `apps` or `screen` request to a device with no live `/rt/devices` socket is `failed` with
+        `unavailable` ("the device is offline") at once, since nothing would answer it.
       parameters:
         - $ref: '#/components/parameters/Profile'
       requestBody:
@@ -13429,25 +14271,43 @@ paths:
     get:
       operationId: devices.getRelay
       tags: [devices]
-      summary: State of the message relay that lets phones reach the hub from outside the LAN (admin)
+      summary: The way in from outside for a hub the desktop app runs on this computer (admin)
+      description: |
+        A hub the desktop app runs on a person's own computer (local mode) listens on that
+        computer only. To let their phone reach it from outside the house, the person opens a way
+        in on an account of their own: a Cloudflare Tunnel (the desktop app runs `cloudflared`
+        with the tunnel's token) or their Tailscale network (the app listens on this computer's
+        tailnet address too). Nothing is run for them by anyone else (DECISIONS §80, §95).
+        A hub on a server has no way in to open (`available: false`): phones reach it at its
+        own address.
       x-scope: global
       x-roles: [owner, admin]
       x-rt-events: []
       responses:
         '200':
-          description: Relay state.
+          description: The way in.
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/Relay'
               example:
+                available: true
                 enabled: true
                 connected: true
                 route: cloudflare
-                relay_url: https://relay.example/h/abc123
-                hub_id: hub_7f3a
+                relay_url: https://hub.example.com
+                hub_port: 47113
+                token_set: true
+                tunnel_id: 6ff42ae2-765d-4adf-8112-31c55c1551ef
+                hostname: hub.example.com
+                hostnames:
+                  - hostname: hub.example.com
+                    service: http://localhost:47113
+                    matches: true
+                tailnet: null
                 error: null
-                connected_at: '2026-09-21T08:00:00Z'
+                error_detail: null
+                connected_at: '2026-09-27T08:00:00Z'
         '401':
           $ref: '#/components/responses/Unauthorized'
         '403':
@@ -13455,7 +14315,12 @@ paths:
     put:
       operationId: devices.setRelay
       tags: [devices]
-      summary: Enable, disable or re-route the relay (admin)
+      summary: Open, close or change the way in from outside (admin)
+      description: |
+        Only a hub the desktop app runs (local mode) can open one; any other hub answers `409`
+        `relay_unavailable`. `token` is written once and kept by the computer's keychain; it is
+        never returned and never logged. The answer is the state right after the change: the
+        connection itself follows in the background (read again for `connected`).
       x-scope: global
       x-roles: [owner, admin]
       requestBody:
@@ -13463,31 +14328,34 @@ paths:
         content:
           application/json:
             schema:
-              type: object
-              properties:
-                enabled:
-                  type: boolean
-                route:
-                  type: string
-                  enum: [official, cloudflare]
+              $ref: '#/components/schemas/RelayUpdate'
             example:
               enabled: true
-              route: official
-      x-rt-events: [job.queued]
+              route: cloudflare
+              token: eyJhIjoiYWNjb3VudCIsInQiOiJ0dW5uZWwiLCJzIjoic2VjcmV0In0=
+              hostname: hub.example.com
+      x-rt-events: []
       responses:
         '200':
-          description: Relay state (connection happens in the background).
+          description: The way in after the change (connecting happens in the background).
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/Relay'
               example:
+                available: true
                 enabled: true
                 connected: false
-                route: official
-                relay_url: null
-                hub_id: hub_7f3a
+                route: cloudflare
+                relay_url: https://hub.example.com
+                hub_port: 47113
+                token_set: true
+                tunnel_id: 6ff42ae2-765d-4adf-8112-31c55c1551ef
+                hostname: hub.example.com
+                hostnames: []
+                tailnet: null
                 error: null
+                error_detail: null
                 connected_at: null
         '400':
           $ref: '#/components/responses/BadRequest'
@@ -13495,17 +14363,29 @@ paths:
           $ref: '#/components/responses/Unauthorized'
         '403':
           $ref: '#/components/responses/Forbidden'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
+  # ---------------------------------------------------------------- linked hubs (ADR 0026)
   /peers:
     get:
       operationId: devices.listPeers
       tags: [devices]
-      summary: Other Core Hub installations linked to this one (the admin `Devices` tab)
+      summary: Other Core Hub installations linked to this one, and the ones waiting (admin)
+      description: >-
+        A peer is another Core Hub this one is linked with (ADR 0026). Linking is mutual and
+        needs both owners: one creates an invite (`devices.createPeerInvite`), the other's owner
+        redeems it (`devices.requestPeer`), and the first approves (`devices.updatePeer` with
+        `approve`). `inbound` rows used this hub's invite; `outbound` rows are invites this hub
+        redeemed. `fingerprint` is the peer's public key in short form, for comparing by eye
+        with what the other hub shows.
       x-scope: global
       x-roles: [owner, admin]
       x-rt-events: []
       responses:
         '200':
-          description: Peers (not paged).
+          description: Peers (not paged; at most 50).
           content:
             application/json:
               schema:
@@ -13519,14 +14399,18 @@ paths:
               example:
                 items:
                   - id: 01J8QK3ZR2W7M5N4P6T8V9X0PZ
-                    name: 'حاسوب المكتب'
-                    url: https://desk.local:8443
-                    version: 0.1.0
-                    online: true
-                    inbound_status: approved
-                    outbound_status: connected
-                    last_seen_at: '2026-09-21T13:00:00Z'
-                    created_at: '2026-09-19T00:00:00Z'
+                    name: 'مركز المكتب'
+                    hub_name: Core Hub
+                    url: https://desk.example
+                    direction: inbound
+                    status: linked
+                    enabled: true
+                    fingerprint: 3F9A-1C0B-77DE-5A21-90C4-E2B8-4D17-6A3E
+                    version: 1.1.1
+                    asks_per_hour: 30
+                    last_seen_at: '2026-09-27T01:00:00Z'
+                    approved_at: '2026-09-27T00:40:00Z'
+                    created_at: '2026-09-27T00:30:00Z'
         '401':
           $ref: '#/components/responses/Unauthorized'
         '403':
@@ -13534,7 +14418,16 @@ paths:
     post:
       operationId: devices.requestPeer
       tags: [devices]
-      summary: Ask another hub to link with this one, by URL or invite link (admin)
+      summary: Redeem another hub's invite link, asking to link with it (admin)
+      description: >-
+        The hub calls the invite's hub over HTTPS (`devices.peerJoin`) with its own name,
+        address and public key, and checks that the key it gets back matches the fingerprint in
+        the link. The row starts `waiting` until the other hub's owner approves. Needs this
+        hub to be reached over HTTPS itself (the other hub calls back); `400
+        validation_failed` with `details.reason` = `invite_url_invalid`, `https_required` or
+        `own_url_not_https`. The other hub's refusals come back as `409 state_invalid` with
+        `details.reason` = `invite_refused` (expired, used or unknown), `fingerprint_mismatch`
+        or `peer_unreachable`.
       x-scope: global
       x-roles: [owner, admin]
       requestBody:
@@ -13544,29 +14437,50 @@ paths:
             schema:
               type: object
               required: [url]
+              additionalProperties: false
               properties:
                 url:
                   type: string
                   format: uri
-                  description: The peer's origin or its invite link.
+                  maxLength: 2048
+                  description: The invite link the other hub's owner shared.
+                name:
+                  type: string
+                  minLength: 1
+                  maxLength: 80
+                  description: What to call the other hub here; its own name when absent.
             example:
-              url: https://desk.local:8443/peer-invite/7KQ2M9XW
-      x-rt-events: [job.queued]
+              url: https://desk.example/peer-invite/K7QX2M9WTR4V8B3N6P5C1H0JYD?fp=3F9A1C0B77DE5A2190C4E2B84D176A3E
+      x-rt-events: []
       responses:
-        '202':
-          description: The link request was sent.
+        '201':
+          description: The link request was accepted by the other hub; waiting for its owner.
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/JobAccepted'
+                $ref: '#/components/schemas/Peer'
               example:
-                job_id: 01J8QK3ZR2W7M5N4P6T8V9X0K4
+                id: 01J8QK3ZR2W7M5N4P6T8V9X0PZ
+                name: 'مركز المكتب'
+                hub_name: Core Hub
+                url: https://desk.example
+                direction: outbound
+                status: waiting
+                enabled: true
+                fingerprint: 3F9A-1C0B-77DE-5A21-90C4-E2B8-4D17-6A3E
+                version: 1.1.1
+                asks_per_hour: 30
+                last_seen_at: '2026-09-27T00:31:00Z'
+                approved_at: null
+                created_at: '2026-09-27T00:31:00Z'
         '400':
           $ref: '#/components/responses/BadRequest'
         '401':
           $ref: '#/components/responses/Unauthorized'
         '403':
           $ref: '#/components/responses/Forbidden'
+        '409':
+          $ref: '#/components/responses/Conflict'
   /peers/{peer_id}:
     parameters:
       - name: peer_id
@@ -13577,7 +14491,13 @@ paths:
     patch:
       operationId: devices.updatePeer
       tags: [devices]
-      summary: Approve, reject, block or unblock a peer (admin)
+      summary: Approve a waiting peer, rename it, switch it on or off, or change its limit (admin)
+      description: >-
+        `approve: true` links a `pending` (inbound) peer and tells the other hub so; approving
+        anything else is `409 state_invalid`. `enabled: false` stops both directions at once:
+        this hub refuses the peer's signed calls and makes none to it. `asks_per_hour` is how
+        many questions the peer may ask this hub's shared agents in an hour. To refuse a
+        pending peer, delete it.
       x-scope: global
       x-roles: [owner, admin]
       requestBody:
@@ -13585,14 +14505,9 @@ paths:
         content:
           application/json:
             schema:
-              type: object
-              required: [inbound_status]
-              properties:
-                inbound_status:
-                  type: string
-                  enum: [approved, rejected, blocked]
+              $ref: '#/components/schemas/PeerPatch'
             example:
-              inbound_status: approved
+              approve: true
       x-rt-events: []
       responses:
         '200':
@@ -13603,14 +14518,18 @@ paths:
                 $ref: '#/components/schemas/Peer'
               example:
                 id: 01J8QK3ZR2W7M5N4P6T8V9X0PZ
-                name: 'حاسوب المكتب'
-                url: https://desk.local:8443
-                version: 0.1.0
-                online: true
-                inbound_status: approved
-                outbound_status: connected
-                last_seen_at: '2026-09-21T13:00:00Z'
-                created_at: '2026-09-19T00:00:00Z'
+                name: 'مركز المكتب'
+                hub_name: Core Hub
+                url: https://desk.example
+                direction: inbound
+                status: linked
+                enabled: true
+                fingerprint: 3F9A-1C0B-77DE-5A21-90C4-E2B8-4D17-6A3E
+                version: 1.1.1
+                asks_per_hour: 30
+                last_seen_at: '2026-09-27T00:31:00Z'
+                approved_at: '2026-09-27T00:40:00Z'
+                created_at: '2026-09-27T00:30:00Z'
         '400':
           $ref: '#/components/responses/BadRequest'
         '401':
@@ -13619,10 +14538,16 @@ paths:
           $ref: '#/components/responses/Forbidden'
         '404':
           $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
     delete:
       operationId: devices.deletePeer
       tags: [devices]
-      summary: Disconnect and forget a peer (admin)
+      summary: Unlink and forget a peer (admin); its key is dropped at once
+      description: >-
+        Revokes the link on this side immediately — the peer's key is deleted, so no signed
+        call from it verifies again — and tells the other hub, best effort, so it drops this
+        hub too. Also how a pending request is refused. The audit lines stay.
       x-scope: global
       x-roles: [owner, admin]
       x-rt-events: []
@@ -13635,35 +14560,428 @@ paths:
           $ref: '#/components/responses/Forbidden'
         '404':
           $ref: '#/components/responses/NotFound'
+  /peers/{peer_id}/events:
+    parameters:
+      - name: peer_id
+        in: path
+        required: true
+        schema:
+          $ref: '#/components/schemas/Ulid'
+    get:
+      operationId: devices.listPeerEvents
+      tags: [devices]
+      summary: The audit log of one peer, newest first (admin)
+      description: >-
+        Every link step, every question asked in either direction and every refused call
+        (bad signature, replay, unshared agent, over the limit), kept after the peer is deleted.
+        The questions' words are not kept, only who asked which agent and how it ended.
+      x-scope: global
+      x-roles: [owner, admin]
+      x-rt-events: []
+      responses:
+        '200':
+          description: The last 200 events.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/PeerEvent'
+              example:
+                items:
+                  - id: 01J8QK3ZR2W7M5N4P6T8V9X0PE
+                    peer_id: 01J8QK3ZR2W7M5N4P6T8V9X0PZ
+                    kind: ask_in
+                    ok: true
+                    detail: 'bahth'
+                    actor_id: null
+                    created_at: '2026-09-27T01:00:00Z'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /peers/{peer_id}/agents:
+    parameters:
+      - name: peer_id
+        in: path
+        required: true
+        schema:
+          $ref: '#/components/schemas/Ulid'
+    get:
+      operationId: devices.listPeerAgents
+      tags: [devices]
+      summary: The agents a linked peer shares with this hub (admin)
+      description: >-
+        Asks the peer (`devices.peerAgents`, signed) and answers what it said: names and
+        descriptions only. `409 state_invalid` with `details.reason` = `peer_not_linked`,
+        `peer_disabled` or `peer_unreachable`, or the peer's own refusal code.
+      x-scope: global
+      x-roles: [owner, admin]
+      x-rt-events: []
+      responses:
+        '200':
+          description: The shared agents.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/PeerAgent'
+              example:
+                items:
+                  - id: 01J8QK3ZR2W7M5N4P6T8V9X0SH
+                    name: Hermes
+                    description: 'وكيل المكتب'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+  /peers/{peer_id}/agents/{share_id}/ask:
+    parameters:
+      - name: peer_id
+        in: path
+        required: true
+        schema:
+          $ref: '#/components/schemas/Ulid'
+      - name: share_id
+        in: path
+        required: true
+        description: A `PeerAgent.id` the peer listed.
+        schema:
+          $ref: '#/components/schemas/Ulid'
+    post:
+      operationId: devices.askPeerAgent
+      tags: [devices]
+      summary: Ask one of a peer's shared agents a single question and get its answer (admin)
+      description: >-
+        One prompt in, one answer out (`devices.peerAsk`, signed). The peer answers as its
+        peer guest: from the shared agent's model, without tools, files, memory or any other
+        state, within its own time limit. Refusals as `devices.listPeerAgents`, plus `429
+        rate_limited` when the peer says this hub asked too often.
+      x-scope: global
+      x-roles: [owner, admin]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PeerAsk'
+            example:
+              prompt: 'لخّص لي آخر ما تعرفه عن جدول الاجتماعات'
+      x-rt-events: []
+      responses:
+        '200':
+          description: The answer.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PeerAnswer'
+              example:
+                answer: 'لا أملك جدولًا هنا، لكن…'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+  /peer-shares:
+    get:
+      operationId: devices.listPeerShares
+      tags: [devices]
+      summary: Every agent of every profile, and whether linked hubs may ask it (admin)
+      description: >-
+        Sharing is per agent in a profile, off until an admin switches it on, and applies to
+        every linked peer that is enabled. A shared agent is only ever asked single questions
+        without tools (ADR 0026).
+      x-scope: global
+      x-roles: [owner, admin]
+      x-rt-events: []
+      responses:
+        '200':
+          description: The agents.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/PeerShare'
+              example:
+                items:
+                  - profile: default
+                    agent_id: 01J8QK3ZR2W7M5N4P6T8V9X0AC
+                    name: Hermes
+                    shared: false
+                    description: null
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+    put:
+      operationId: devices.setPeerShare
+      tags: [devices]
+      summary: Share an agent with linked hubs, or stop sharing it (admin)
+      x-scope: global
+      x-roles: [owner, admin]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PeerShareWrite'
+            example:
+              profile: default
+              agent_id: 01J8QK3ZR2W7M5N4P6T8V9X0AC
+              shared: true
+              description: 'وكيل المكتب'
+      x-rt-events: []
+      responses:
+        '200':
+          description: The agent's share.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PeerShare'
+              example:
+                profile: default
+                agent_id: 01J8QK3ZR2W7M5N4P6T8V9X0AC
+                name: Hermes
+                shared: true
+                description: 'وكيل المكتب'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
   /peer-invites:
     post:
       operationId: devices.createPeerInvite
       tags: [devices]
-      summary: Create a one-time invite link another hub can use to link (admin)
+      summary: Create a one-time invite link another hub's owner can redeem (admin)
+      description: >-
+        Single use, valid for 10 minutes. The link carries a code only this hub can check (it
+        keeps a hash of it) and this hub's key fingerprint, which the other hub checks against
+        the key it is sent. Only a hub reached over HTTPS can invite (`400 validation_failed`,
+        `details.reason = own_url_not_https`). At most 5 unused invites at a time.
       x-scope: global
       x-roles: [owner, admin]
       x-rt-events: []
       responses:
         '201':
-          description: The invite (render as QR client-side).
+          description: The invite (render as text or QR client-side).
           content:
             application/json:
               schema:
-                type: object
-                required: [url, expires_at]
-                properties:
-                  url:
-                    type: string
-                    format: uri
-                  expires_at:
-                    $ref: '#/components/schemas/Timestamp'
+                $ref: '#/components/schemas/PeerInvite'
               example:
-                url: https://hub.example/peer-invite/7KQ2M9XW
-                expires_at: '2026-09-21T13:40:00Z'
+                url: https://hub.example/peer-invite/K7QX2M9WTR4V8B3N6P5C1H0JYD?fp=3F9A1C0B77DE5A2190C4E2B84D176A3E
+                expires_at: '2026-09-27T00:40:00Z'
+                fingerprint: 3F9A-1C0B-77DE-5A21-90C4-E2B8-4D17-6A3E
+        '400':
+          $ref: '#/components/responses/BadRequest'
         '401':
           $ref: '#/components/responses/Unauthorized'
         '403':
           $ref: '#/components/responses/Forbidden'
+        '409':
+          $ref: '#/components/responses/Conflict'
+  # -------------------------------------------- hub to hub (ADR 0026; not a client API)
+  /peer-link/join:
+    post:
+      operationId: devices.peerJoin
+      tags: [devices]
+      summary: Another hub redeems this hub's invite (hub to hub)
+      description: >-
+        Not a client API; another Core Hub calls it from `devices.requestPeer`. No bearer: the
+        invite code is the permission, and the request is signed (ADR 0026, the `X-Peer-*`
+        headers) with the very key it registers, which proves the caller holds it. A code that
+        is unknown, used or past its 10 minutes is `404 not_found` — the same answer for all
+        three. Rate limited per caller address.
+      security: []
+      x-scope: global
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PeerJoin'
+            example:
+              code: K7QX2M9WTR4V8B3N6P5C1H0JYD
+              hub_id: 01J8QK3ZR2W7M5N4P6T8V9X0HB
+              name: Core Hub
+              url: https://home.example
+              public_key: MCowBQYDK2VwAyEAGb9ECWmEzf6FQbrBZ9w7lshQhqowtrbLDFw4rXAxZuE
+              version: 1.1.1
+      x-rt-events: []
+      responses:
+        '200':
+          description: The invite was taken; this hub's side of the link.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PeerJoined'
+              example:
+                hub_id: 01J8QK3ZR2W7M5N4P6T8V9X0HA
+                name: Core Hub
+                public_key: MCowBQYDK2VwAyEAvGw0mZm1dYBvS1yRZ6sFYLr3qfTGCkqmYSO3yGmS5CE
+                version: 1.1.1
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+  /peer-link/notice:
+    post:
+      operationId: devices.peerNotice
+      tags: [devices]
+      summary: A linked hub says it approved or dropped the link (hub to hub, signed)
+      security: []
+      x-scope: global
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [kind]
+              additionalProperties: false
+              properties:
+                kind:
+                  type: string
+                  enum: [approved, unlinked]
+            example:
+              kind: approved
+      x-rt-events: []
+      responses:
+        '204':
+          description: Taken.
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+  /peer-link/agents:
+    get:
+      operationId: devices.peerAgents
+      tags: [devices]
+      summary: The agents this hub shares, as the peer guest sees them (hub to hub, signed)
+      security: []
+      x-scope: global
+      x-rt-events: []
+      responses:
+        '200':
+          description: Names and descriptions of the shared agents.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/PeerAgent'
+              example:
+                items:
+                  - id: 01J8QK3ZR2W7M5N4P6T8V9X0SH
+                    name: Hermes
+                    description: 'وكيل المكتب'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+  /peer-link/ask:
+    post:
+      operationId: devices.peerAsk
+      tags: [devices]
+      summary: The peer guest asks one shared agent one question (hub to hub, signed)
+      description: >-
+        The only thing a peer can make this hub do. The agent must be shared; the question is
+        answered by its model without tools, files, memory or conversation, within 120 seconds
+        and 2,000 tokens. `403 forbidden` when the agent is not shared (the same as one that
+        does not exist), `429 rate_limited` past the peer's `asks_per_hour`, `422
+        agent_unavailable` when the agent could not answer.
+      security: []
+      x-scope: global
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [agent, prompt]
+              additionalProperties: false
+              properties:
+                agent:
+                  $ref: '#/components/schemas/Ulid'
+                prompt:
+                  type: string
+                  minLength: 1
+                  maxLength: 8000
+                asked_by:
+                  type: [string, 'null']
+                  maxLength: 80
+                  description: The asking person's display name on the other hub, for the audit.
+            example:
+              agent: 01J8QK3ZR2W7M5N4P6T8V9X0SH
+              prompt: 'لخّص لي آخر ما تعرفه عن جدول الاجتماعات'
+              asked_by: 'طلال'
+      x-rt-events: []
+      responses:
+        '200':
+          description: The answer.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PeerAnswer'
+              example:
+                answer: 'لا أملك جدولًا هنا، لكن…'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '422':
+          $ref: '#/components/responses/AgentUnavailable'
+        '429':
+          $ref: '#/components/responses/RateLimited'
   /push/config:
     get:
       operationId: devices.getPushConfig
@@ -14876,9 +16194,10 @@ paths:
       summary: The bytes of one file (owner and admin)
       description: |
         Streams the file with its media type and an `ETag`. `disposition=inline` lets a
-        client show an image or a PDF; `attachment` (the default) saves it under its name.
-        A folder is `400 validation_failed` (`details.reason = not_a_file`); use
-        `knowledge.downloadWorkspaceFolder` for a folder.
+        client show an image, a PDF, a video or a sound; `attachment` (the default) saves it
+        under its name. A folder is `400 validation_failed` (`details.reason = not_a_file`); use
+        `knowledge.downloadWorkspaceFolder` for a folder. One `Range: bytes=…` is honoured as
+        `sessions.readFile` honours it (`206`, or `416` past the end; DECISIONS §98).
       parameters:
         - $ref: '#/components/parameters/Profile'
         - $ref: '#/components/parameters/WorkspaceFilePath'
@@ -14889,6 +16208,7 @@ paths:
             type: string
             enum: [inline, attachment]
             default: attachment
+        - $ref: '#/components/parameters/ByteRange'
       x-roles: [owner, admin]
       x-rt-events: []
       responses:
@@ -14904,6 +16224,17 @@ paths:
               schema:
                 type: string
                 format: binary
+        '206':
+          description: The requested byte range.
+          headers:
+            Content-Range:
+              schema:
+                type: string
+          content:
+            '*/*':
+              schema:
+                type: string
+                format: binary
         '400':
           $ref: '#/components/responses/BadRequest'
         '401':
@@ -14912,6 +16243,86 @@ paths:
           $ref: '#/components/responses/Forbidden'
         '404':
           $ref: '#/components/responses/NotFound'
+        '416':
+          $ref: '#/components/responses/RangeNotSatisfiable'
+  /workspace-files/stream:
+    post:
+      operationId: knowledge.createWorkspaceFileStream
+      tags: [knowledge]
+      summary: A short-lived address a media element can play one working file from (owner and admin)
+      description: >-
+        A one-hour ticket for this one file of the profile's working files, served by
+        `knowledge.streamFile` with byte ranges and no bearer (DECISIONS §98, after §90). The path
+        is checked now and on every read; the ticket stops when the person who asked may no
+        longer enter the profile or is no longer an owner or admin.
+      parameters:
+        - $ref: '#/components/parameters/Profile'
+        - $ref: '#/components/parameters/WorkspaceFilePath'
+      x-roles: [owner, admin]
+      x-rt-events: []
+      responses:
+        '201':
+          description: The address.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AttachmentStream'
+              example:
+                url: /api/v1/file-streams/9d2c4e6f8a0b1c3d5e7f9a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d
+                expires_at: '2026-09-27T02:14:50Z'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /file-streams/{ticket}:
+    parameters:
+      - name: ticket
+        in: path
+        required: true
+        schema:
+          type: string
+          pattern: '^[0-9a-f]{64}$'
+        example: 9d2c4e6f8a0b1c3d5e7f9a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d
+    get:
+      operationId: knowledge.streamFile
+      tags: [knowledge]
+      summary: Stream the file a ticket names (supports `Range`)
+      description: >-
+        No bearer; the ticket from `sessions.createFileStream` or
+        `knowledge.createWorkspaceFileStream` is the permission. The type is chosen from the
+        name, `inline`, `nosniff`, sandboxed and `Cache-Control: private, no-store`. An unknown,
+        expired or withdrawn ticket, or a file no longer there, is `404`.
+      security: []
+      parameters:
+        - $ref: '#/components/parameters/ByteRange'
+      x-rt-events: []
+      responses:
+        '200':
+          description: The whole file.
+          content:
+            '*/*':
+              schema:
+                type: string
+                format: binary
+        '206':
+          description: The requested byte range.
+          headers:
+            Content-Range:
+              schema:
+                type: string
+          content:
+            '*/*':
+              schema:
+                type: string
+                format: binary
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '416':
+          $ref: '#/components/responses/RangeNotSatisfiable'
   /workspace-files/archive:
     get:
       operationId: knowledge.downloadWorkspaceFolder
@@ -15878,6 +17289,22 @@ components:
       required: true
       schema:
         $ref: '#/components/schemas/Ulid'
+    ByteRange:
+      name: Range
+      in: header
+      required: false
+      description: 'One byte range, `bytes=<start>-<end>`, `bytes=<start>-` or `bytes=-<suffix>`.'
+      schema:
+        type: string
+      example: bytes=0-1048575
+    WebhookRouteName:
+      name: route_name
+      in: path
+      required: true
+      description: A webhook route's name, as Hermes takes it.
+      schema:
+        $ref: '#/components/schemas/HermesWebhookName'
+      example: github-issues
     RoomId:
       name: room_id
       in: path
@@ -16130,6 +17557,25 @@ components:
               from: done
               to: in_progress
               allowed: [archived]
+    RangeNotSatisfiable:
+      description: >-
+        The byte range starts past the end of the file (`bad_request`,
+        `details.reason = range_not_satisfiable`, `details.size_bytes`); `Content-Range:
+        bytes */<size>` says how large it is.
+      headers:
+        Content-Range:
+          schema:
+            type: string
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            error: 'نطاق البايتات خارج حجم الملف'
+            code: bad_request
+            details:
+              reason: range_not_satisfiable
+              size_bytes: 1048576
     PayloadTooLarge:
       description: The upload exceeds the limit (`payload_too_large`).
       content:
@@ -16641,7 +18087,11 @@ components:
         workspace_name:
           type: string
           maxLength: 80
-          description: Name of the `default` workspace created with the owner; defaults to "Default".
+          description: >-
+            Name of the `default` workspace created with the owner; defaults to "Default". Where
+            the hub mirrors Hermes's profiles it is written as Hermes's display name of its
+            `default` profile too (contract decision §103); without it, a display name Hermes's
+            `default` profile already has becomes the workspace's name.
     LoginRequest:
       type: object
       required: [username, password]
@@ -16995,7 +18445,7 @@ components:
     PairingConnection:
       type: string
       enum: [lan, relay]
-      description: '`lan` when the device reaches the hub directly; `relay` when it goes through the message relay.'
+      description: '`lan` when the device reaches the hub directly; `relay` when it goes through the way in from outside of a hub the desktop app runs (`devices.getRelay`, DECISIONS §95).'
     PairingCreate:
       type: object
       properties:
@@ -17324,6 +18774,49 @@ components:
           description: |
             `true` when the agent counted `used_tokens` roughly rather than taking it from
             the provider's own report of the last request. Absent is `false`.
+    SessionContextCategory:
+      type: object
+      required: [id, label, tokens]
+      properties:
+        id:
+          type: string
+          maxLength: 60
+          description: |
+            The agent's name for the category. Hermes's today: `system_prompt`,
+            `tool_definitions`, `rules`, `skills`, `mcp`, `subagent_definitions`, `memory`,
+            `conversation`. A client names the ones it knows in the person's language and shows
+            `label` for any other.
+        label:
+          type: string
+          maxLength: 120
+          description: The agent's own English name for it.
+        tokens:
+          type: integer
+          minimum: 0
+    SessionContextBreakdown:
+      type: object
+      required: [available, used_tokens, window_tokens, estimated, categories]
+      properties:
+        available:
+          type: boolean
+          description: |
+            `false` when the agent had no open conversation to ask, or cannot split its window;
+            then `categories` is empty and the counts are `0` / `null`.
+        used_tokens:
+          type: integer
+          minimum: 0
+        window_tokens:
+          type: [integer, 'null']
+          minimum: 1
+        estimated:
+          type: boolean
+          description: "`true` when `used_tokens` is the agent's rough count rather than the provider's report."
+        categories:
+          type: array
+          maxItems: 32
+          description: Only the categories that take something, in the agent's order.
+          items:
+            $ref: '#/components/schemas/SessionContextCategory'
     SessionMatch:
       type: object
       description: Present only on search results.
@@ -17772,6 +19265,12 @@ components:
           $ref: '#/components/schemas/Timestamp'
         last_message_at:
           $ref: '#/components/schemas/Timestamp'
+        hidden:
+          type: boolean
+          description: >-
+            The caller hid it from their list (`sessions.hideChannelConversation`, contract
+            decision §88). Only a list asked with `hidden=include` carries hidden ones; absent
+            means `false`.
     ChannelMessagePreview:
       type: object
       required: [role, text]
@@ -17821,9 +19320,36 @@ components:
           description: '`user` is the person on the channel; `assistant` is the agent.'
         text:
           type: string
-          description: Markdown as the agent wrote it; plain text as the person did. Cut at 20 000 characters.
+          description: >-
+            Markdown as the agent wrote it; plain text as the person did. Cut at 20 000
+            characters. Hermes's own notes about a picture (where it saved it, what its vision
+            model saw) are left out: the picture is in `attachments`.
         created_at:
           $ref: '#/components/schemas/Timestamp'
+        attachments:
+          type: array
+          description: >-
+            The pictures the person sent with this message, in order (contract decision §103).
+            Always sent by the hub; empty when there are none.
+          items:
+            $ref: '#/components/schemas/ChannelAttachment'
+    ChannelAttachment:
+      type: object
+      description: >-
+        A picture sent on a channel. Hermes keeps it in its image cache for a day and then
+        deletes it (its gateway's housekeeping), so an older one is named but `available: false`.
+      required: [id, kind, available]
+      properties:
+        id:
+          type: string
+          pattern: '^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$'
+          description: The picture's file name in Hermes's image cache; `sessions.getChannelPicture` reads it.
+        kind:
+          type: string
+          enum: [image]
+        available:
+          type: boolean
+          description: Hermes still has the file.
     ChannelConversationsUnavailable:
       type: object
       description: Why one profile's channel conversations could not be read.
@@ -18547,10 +20073,14 @@ components:
     # ---------------------------------------------------------------- session files
     SessionFilePreview:
       type: string
-      enum: [html, pdf, image, markdown, code, text, csv, xlsx, docx, pptx, none]
+      enum: [html, pdf, image, markdown, code, text, csv, xlsx, docx, pptx, video, audio, none]
       description: |
         How a client previews the file, decided from its name. `none` is offered for download
         only. `html` is rendered in a sandboxed frame, never in the client's own origin.
+        `video` and `audio` are played by the client's own player from a stream address
+        (`sessions.createFileStream`, `sessions.createAttachmentStream`), asking for byte ranges
+        as it plays, so a long file starts at once and seeks (DECISIONS §98); a client that
+        cannot play the format offers the file for download.
     SessionFileSource:
       type: string
       enum: [tool, working_dir, attachment]
@@ -18722,6 +20252,12 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/RunFileChange'
+        live:
+          type: boolean
+          description: |
+            `true` while the run is still going: what it has changed so far, read at
+            `recorded_at` (decision §102). Not recorded, so its files have no diff to fetch yet
+            (`sessions.getRunChangeDiff` answers `404` until the run ends). Absent is `false`.
     RunChangesList:
       allOf:
         - $ref: '#/components/schemas/Page'
@@ -18996,6 +20532,7 @@ components:
                 - $ref: '#/components/schemas/Ulid'
                 - type: 'null'
             room_id:
+              description: The room whose seat asked, when a seat's own conversation asked (contract decision §99).
               oneOf:
                 - $ref: '#/components/schemas/Ulid'
                 - type: 'null'
@@ -19087,6 +20624,18 @@ components:
             sha256:
               type: string
               pattern: '^[0-9a-f]{64}$'
+    AttachmentStream:
+      type: object
+      required: [url, expires_at]
+      properties:
+        url:
+          type: string
+          description: >-
+            A path on this hub; put it in a media element's `src` as it is. The same shape answers
+            `sessions.createAttachmentStream`, `sessions.createFileStream` and
+            `knowledge.createWorkspaceFileStream`.
+        expires_at:
+          $ref: '#/components/schemas/Timestamp'
     UploadStart:
       type: object
       required: [name, mime, size_bytes]
@@ -19196,7 +20745,9 @@ components:
           type: [string, 'null']
         package:
           type: [string, 'null']
-          description: npm/pip package the hub installs.
+          description: >-
+            npm/pip package the hub installs; `null` for an agent installed from a pinned release
+            download (Goose, Grok Build), which has no registry to update from.
         command:
           type: [string, 'null']
         version:
@@ -19228,6 +20779,11 @@ components:
             of the agent is in flight; a run asked for during the update waits for it.
         auto_update_supported:
           type: boolean
+        sign_in:
+          type: boolean
+          description: >-
+            The agent can be signed in to its own vendor account from the hub
+            (`agents.startSignIn`), once installed. Absent means false.
         checked_at:
           oneOf:
             - $ref: '#/components/schemas/Timestamp'
@@ -19549,6 +21105,9 @@ components:
           type: [string, 'null']
         enabled:
           type: boolean
+          description: >-
+            Off when the profile's Hermes lists it in `skills.disabled` (its `config.yaml`), or
+            when its `SKILL.md` was renamed off by an older hub (contract decision §103).
         pinned:
           type: boolean
         source:
@@ -19718,7 +21277,7 @@ components:
     HubToolGroupId:
       type: string
       description: A group of the hub's own tools (contract decision §67).
-      enum: [tasks, schedules, conversations, notifications, workflows, files]
+      enum: [tasks, schedules, conversations, notifications, workflows, files, devices]
     HubTool:
       type: object
       required: [name, access]
@@ -19910,6 +21469,29 @@ components:
           oneOf:
             - $ref: '#/components/schemas/Timestamp'
             - type: 'null'
+        entries:
+          type: [array, 'null']
+          items:
+            type: string
+          description: |
+            A list document's entries as the agent reads them (Hermes: split on a line holding
+            only `§`, each trimmed, empty ones dropped), so every client draws them one by one
+            the same way. `null` for a document that is one text (`soul`) and for entries.
+            Absent from older hubs: split `content` then.
+        char_limit:
+          type: [integer, 'null']
+          minimum: 1
+          description: |
+            The agent's budget for this document in characters (Hermes:
+            `memory.memory_char_limit` / `memory.user_char_limit` in the profile's `config.yaml`,
+            else its defaults). A write that would grow the document past it is refused
+            (`400`, `details.reason: memory_too_long`). `null` when there is no budget.
+        char_count:
+          type: [integer, 'null']
+          minimum: 0
+          description: |
+            What this document counts against `char_limit`: characters (code points, not
+            UTF-16 units) of its entries joined by the separator. `null` when `char_limit` is.
     MemoryItemWrite:
       type: object
       required: [content]
@@ -20105,23 +21687,145 @@ components:
                 enum: ['true', 'false', conditional]
     AgentPreset:
       type: object
-      required: [id, name, description, trust, is_default, broken, content]
+      description: A saved, named bundle of one agent's settings in one profile (decision §100).
+      required:
+        [
+          id,
+          profile,
+          owner_id,
+          agent_id,
+          name,
+          description,
+          content,
+          last_activated_at,
+          created_at,
+          updated_at,
+        ]
       properties:
         id:
-          type: string
+          $ref: '#/components/schemas/Ulid'
+        profile:
+          $ref: '#/components/schemas/ProfileSlug'
+        owner_id:
+          description: The admin who saved it.
+          $ref: '#/components/schemas/Ulid'
+        agent_id:
+          $ref: '#/components/schemas/Ulid'
         name:
           type: string
+          minLength: 1
+          maxLength: 80
         description:
           type: [string, 'null']
-        trust:
-          type: string
-          enum: [system, user]
-        is_default:
-          type: boolean
-        broken:
-          type: boolean
+          maxLength: 280
         content:
+          $ref: '#/components/schemas/AgentPresetContent'
+        last_activated_at:
+          oneOf:
+            - $ref: '#/components/schemas/Timestamp'
+            - type: 'null'
+        created_at:
+          $ref: '#/components/schemas/Timestamp'
+        updated_at:
+          $ref: '#/components/schemas/Timestamp'
+    AgentPresetContent:
+      type: object
+      description: >-
+        What a preset sets. Each part is `null` when the agent did not have it when the preset
+        was saved, and a `null` part is left alone on activation. No part ever holds a secret:
+        providers are named by id, MCP servers by name, and secret settings are never saved.
+      required: [model, skills, mcp_servers, settings]
+      properties:
+        model:
+          oneOf:
+            - type: 'null'
+            - type: object
+              required: [default, fallbacks, agent]
+              properties:
+                default:
+                  description: >-
+                    The profile's chat model (`models.getDefaults`); `null` when the profile
+                    inherits the `default` profile's, and activation goes back to inheriting.
+                  oneOf:
+                    - $ref: '#/components/schemas/ModelRef'
+                    - type: 'null'
+                fallbacks:
+                  type: array
+                  items:
+                    $ref: '#/components/schemas/ModelRef'
+                agent:
+                  description: The agent's own model (`Agent.default_model`); `null` for none.
+                  oneOf:
+                    - $ref: '#/components/schemas/ModelRef'
+                    - type: 'null'
+        skills:
+          description: Skill key → on or off. Hermes's built-in skills are not switched and not saved.
+          oneOf:
+            - type: 'null'
+            - type: object
+              additionalProperties:
+                type: boolean
+        mcp_servers:
+          description: MCP server name → on or off. The servers' configuration is not saved.
+          oneOf:
+            - type: 'null'
+            - type: object
+              additionalProperties:
+                type: boolean
+        settings:
+          description: >-
+            Settings section key → field key → value, as `agents.updateSettings` takes them.
+            Fields of kind `secret`, and text values that carry a user and password, are left out.
+          oneOf:
+            - type: 'null'
+            - type: object
+              additionalProperties:
+                type: object
+                additionalProperties: true
+    AgentPresetWrite:
+      type: object
+      required: [name]
+      additionalProperties: false
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 80
+        description:
           type: [string, 'null']
+          maxLength: 280
+    AgentPresetActivation:
+      type: object
+      required: [preset, applied, skipped, restart_job_ids]
+      properties:
+        preset:
+          $ref: '#/components/schemas/AgentPreset'
+        applied:
+          type: array
+          description: The parts that were applied in full.
+          items:
+            $ref: '#/components/schemas/AgentPresetPart'
+        skipped:
+          type: array
+          description: What could not be applied, and the refusal's code.
+          items:
+            type: object
+            required: [part, key, code]
+            properties:
+              part:
+                $ref: '#/components/schemas/AgentPresetPart'
+              key:
+                type: [string, 'null']
+                description: The skill, server or `section.field` refused; `null` for the whole part.
+              code:
+                $ref: '#/components/schemas/ErrorCode'
+        restart_job_ids:
+          type: array
+          items:
+            $ref: '#/components/schemas/Ulid'
+    AgentPresetPart:
+      type: string
+      enum: [model, skills, mcp_servers, settings]
     ChannelField:
       type: object
       required: [key, label, kind, target, value, hint]
@@ -20300,6 +22004,130 @@ components:
           enum: [now, on_restart]
         error:
           type: [string, 'null']
+    HermesWebhookName:
+      type: string
+      pattern: '^[a-z0-9][a-z0-9_-]{0,63}$'
+      description: Lowercase letters, digits, `-` and `_`, starting with a letter or a digit (Hermes's own rule).
+      examples: [github-issues]
+    HermesWebhook:
+      type: object
+      description: >-
+        One incoming webhook route of Hermes (DECISIONS §97). A POST to `path` on this hub, signed
+        with `secret`, starts a run of the agent asked `prompt` with the posted values filled in.
+      required: [name, description, prompt, events, deliver, secret, path, static, created_at]
+      properties:
+        name:
+          $ref: '#/components/schemas/HermesWebhookName'
+        description:
+          type: [string, 'null']
+        prompt:
+          type: string
+          description: >-
+            What the agent is asked. `{dot.path}` is replaced with that value of the posted JSON
+            (`{issue.title}`), `{event_type}` with the event's name and `{__raw__}` with the whole
+            body; empty asks with the whole body.
+        events:
+          type: array
+          items:
+            type: string
+          description: The events the route takes (`X-GitHub-Event`, `X-GitLab-Event`, or the body's `event_type`/`type`); empty takes every event.
+        deliver:
+          type: string
+          description: >-
+            Where Hermes sends the agent's answer: `log` keeps it in Hermes's own record of the run;
+            a messaging platform's name (`telegram` …) sends it to that channel's home chat in the
+            profile.
+        secret:
+          type: [string, 'null']
+          description: The shared secret the sender signs with (HMAC-SHA256). `null` for a static route whose secret is the listener's global one.
+        path:
+          type: string
+          description: The route's address on this hub, to be put after the hub's public origin.
+        static:
+          type: boolean
+          description: Written in `config.yaml` by hand; listed, not deletable here.
+        created_at:
+          oneOf:
+            - $ref: '#/components/schemas/Timestamp'
+            - type: 'null'
+    HermesWebhookList:
+      type: object
+      required: [listener, items]
+      properties:
+        listener:
+          $ref: '#/components/schemas/HermesWebhookListener'
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/HermesWebhook'
+    HermesWebhookListener:
+      type: object
+      description: The profile's webhook listener (Hermes's `webhook` platform in its gateway).
+      required: [enabled, port, status, error]
+      properties:
+        enabled:
+          type: boolean
+        port:
+          type: [integer, 'null']
+          description: The port it listens on, on this machine only.
+        status:
+          type: string
+          enum: [online, offline, error, unknown]
+          description: As `Channel.status` says it for the `webhook` platform.
+        error:
+          type: [string, 'null']
+    HermesWebhookCreate:
+      type: object
+      required: [name, prompt]
+      additionalProperties: false
+      properties:
+        name:
+          $ref: '#/components/schemas/HermesWebhookName'
+        prompt:
+          type: string
+          maxLength: 8000
+        description:
+          type: [string, 'null']
+          maxLength: 200
+        events:
+          type: array
+          maxItems: 50
+          items:
+            type: string
+            minLength: 1
+            maxLength: 100
+        deliver:
+          type: string
+          pattern: '^[a-z][a-z0-9_]{0,39}$'
+          default: log
+          description: '`log`, or the name of a messaging platform switched on in the profile.'
+    HermesWebhookTestResult:
+      type: object
+      required: [status, body]
+      properties:
+        status:
+          type: integer
+          description: The listener's HTTP status.
+        body:
+          description: The listener's JSON answer; `null` when it was not JSON.
+          type: [object, 'null']
+          additionalProperties: true
+    HermesWebhookReceipt:
+      type: object
+      description: The listener's answer to a delivery it took.
+      required: [status]
+      properties:
+        status:
+          type: string
+          description: '`accepted`, `ignored`, `duplicate`, `delivered` (a route that only forwards).'
+        route:
+          type: string
+        event:
+          type: string
+        reason:
+          type: string
+        delivery_id:
+          type: string
     MessagingGateway:
       type: object
       description: >-
@@ -20906,6 +22734,9 @@ components:
                 $ref: '#/components/schemas/Run'
             pending_approvals:
               type: array
+              description: |
+                What waits for a person in the seats' own conversations (their approvals and
+                questions), oldest first, each with this room's `room_id` (contract decision §99).
               items:
                 $ref: '#/components/schemas/Approval'
             handoff_chains:
@@ -21016,6 +22847,7 @@ components:
         content:
           type: array
           minItems: 1
+          description: Text, and `image` / `file` blocks of the room's profile (contract decision §99).
           items:
             $ref: '#/components/schemas/ContentBlock'
         mentions:
@@ -21369,6 +23201,92 @@ components:
                       maxLength: 64
                       description: The card's id on that board.
                 - type: 'null'
+            waiting_on:
+              type: array
+              description: >-
+                The tasks of `depends_on` that are not done yet, with their title and column, so a
+                card and its details can say what it waits for (empty when there is nothing to wait
+                for). `done` counts as done, and so does `archived` after `done` (the weekly
+                archive); archived without having been done does not. A task with `auto_start`
+                does not start on its own while this is not empty, and starts itself when the last
+                of them reaches `done`. A person's "assign and start" is not held back by it —
+                clients warn first. Always sent by the hub (contract decision §93).
+              items:
+                $ref: '#/components/schemas/TaskDependencyState'
+            stuck_since:
+              description: >-
+                Set while the task is `running` and its run has shown no activity (no text, tool
+                call or step) since this moment for longer than `COREHUB_TASK_STUCK_MINUTES` — the
+                stuck-task watchdog, which also sends the task's owner a notice once. Cleared
+                when the run shows activity again or the task leaves `running`. `null` otherwise;
+                always sent by the hub (contract decision §93).
+              oneOf:
+                - $ref: '#/components/schemas/Timestamp'
+                - type: 'null'
+            definition_of_done:
+              type: array
+              maxItems: 30
+              description: >-
+                What must be true for the task to count as done, one line each, in the order the
+                person wrote them. Sent to the agent with every run of the task, in its prompt,
+                and shown at review, where the reviewer ticks each line that holds (`checked`).
+                A new run of the task clears the ticks: they are about the work being reviewed.
+                A card on Hermes's own kanban cannot be given lists (`409 conflict`,
+                `details.reason: hermes_owns_card`): Hermes briefs its own worker from the card.
+                A hub task handed to Hermes and started carries them into that card's brief.
+                Always sent by the hub (contract decision §104).
+              items:
+                $ref: '#/components/schemas/TaskCheckItem'
+            constraints:
+              type: array
+              maxItems: 30
+              description: >-
+                What the agent must not do or must keep to while doing the task (a file not to
+                touch, a library not to add…), one line each. Sent with the run and shown at
+                review exactly as `definition_of_done`. Always sent by the hub (contract decision
+                §104).
+              items:
+                $ref: '#/components/schemas/TaskCheckItem'
+    TaskCheckItem:
+      type: object
+      description: >-
+        One line of a task's definition of done or its constraints. `checked` is the reviewer's
+        tick: this line holds for the work in review.
+      required: [text, checked]
+      properties:
+        text:
+          type: string
+          minLength: 1
+          maxLength: 500
+        checked:
+          type: boolean
+    TaskCheckItemWrite:
+      type: object
+      description: >-
+        A line as a client writes it. The whole list is sent each time, in its order; a line
+        without `checked` is not ticked.
+      required: [text]
+      additionalProperties: false
+      properties:
+        text:
+          type: string
+          minLength: 1
+          maxLength: 500
+        checked:
+          type: boolean
+          default: false
+    TaskDependencyState:
+      type: object
+      description: One task another task depends on, as far as waiting for it goes.
+      required: [id, title, status]
+      properties:
+        id:
+          $ref: '#/components/schemas/Ulid'
+        title:
+          type: string
+          maxLength: 300
+        status:
+          $ref: '#/components/schemas/TaskStatus'
     Subtask:
       type: object
       required: [id, task_id, index, title, status, note, blocked_reason, completed_at, updated_at]
@@ -21474,6 +23392,88 @@ components:
               description: Recent runs, newest first (max 20; the rest via the task session).
               items:
                 $ref: '#/components/schemas/Run'
+            hermes:
+              description: >-
+                For a card on Hermes's own kanban, read from Hermes when the card is opened: what
+                happened on the card (Hermes's own event log) and each attempt Hermes's
+                dispatcher made at it (its runs), newest first — at most 100 events and 20 runs
+                (contract decision §103). `null` for any other task, and for a Hermes card the
+                hub could not read from Hermes just now (the rest of the card is its last
+                reflection).
+              oneOf:
+                - $ref: '#/components/schemas/HermesCardHistory'
+                - type: 'null'
+    HermesCardHistory:
+      type: object
+      description: >-
+        A Hermes card's history as Hermes keeps it (`task_events` and `task_runs` of its kanban),
+        in Hermes's own words: an event's `kind` and a run's `status` and `outcome` are Hermes's
+        values, which a client names where it knows them and shows as they are where it does not.
+      required: [events, runs]
+      properties:
+        events:
+          type: array
+          maxItems: 100
+          items:
+            $ref: '#/components/schemas/HermesCardEvent'
+        runs:
+          type: array
+          maxItems: 20
+          items:
+            $ref: '#/components/schemas/HermesCardRun'
+    HermesCardEvent:
+      type: object
+      required: [id, kind, run_id, payload, created_at]
+      properties:
+        id:
+          type: integer
+        kind:
+          type: string
+          maxLength: 64
+          description: >-
+            Hermes's name for what happened: `created`, `assigned`, `claimed`, `spawned`,
+            `completed`, `blocked`, `unblocked`, `commented`, `edited`, `reprioritized`, `status`,
+            `archived`, `reclaimed`, `timed_out`, `review_requested`, `changes_requested`,
+            `scheduled`… — Hermes has more, and may add others.
+        run_id:
+          type: [integer, 'null']
+          description: The attempt it belongs to, or `null` for the card itself.
+        payload:
+          type: [object, 'null']
+          additionalProperties: true
+          description: Hermes's details of the event (who, why, which field…), as Hermes wrote them.
+        created_at:
+          $ref: '#/components/schemas/Timestamp'
+    HermesCardRun:
+      type: object
+      description: One attempt of Hermes's dispatcher at the card.
+      required: [id, profile, status, outcome, summary, error, started_at, ended_at]
+      properties:
+        id:
+          type: integer
+        profile:
+          type: [string, 'null']
+          description: The Hermes profile that worked it.
+        status:
+          type: string
+          maxLength: 64
+          description: Hermes's run status (`running`, `done`, `blocked`, `reclaimed`, `crashed`…).
+        outcome:
+          type: [string, 'null']
+          maxLength: 64
+          description: How it ended (`completed`, `blocked`, `review_requested`, `reclaimed`…); `null` while it runs.
+        summary:
+          type: [string, 'null']
+          description: The worker's hand-off summary, cut at 4 000 characters.
+        error:
+          type: [string, 'null']
+          description: Hermes's error when the attempt failed, cut at 4 000 characters.
+        started_at:
+          $ref: '#/components/schemas/Timestamp'
+        ended_at:
+          oneOf:
+            - $ref: '#/components/schemas/Timestamp'
+            - type: 'null'
     TaskCreate:
       type: object
       required: [title]
@@ -21527,6 +23527,18 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/Ulid'
+        definition_of_done:
+          type: array
+          maxItems: 30
+          description: See `Task.definition_of_done`. Not for a card made on Hermes's kanban.
+          items:
+            $ref: '#/components/schemas/TaskCheckItemWrite'
+        constraints:
+          type: array
+          maxItems: 30
+          description: See `Task.constraints`. Not for a card made on Hermes's kanban.
+          items:
+            $ref: '#/components/schemas/TaskCheckItemWrite'
     TaskPatch:
       type: object
       properties:
@@ -21554,6 +23566,21 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/Ulid'
+        definition_of_done:
+          type: array
+          maxItems: 30
+          description: >-
+            Replaces the whole list (`Task.definition_of_done`), ticks included — which is how a
+            reviewer ticks a line: the list as it is, with that line `checked`. On a card from
+            Hermes's kanban it is `409 conflict` (`details.reason: hermes_owns_card`).
+          items:
+            $ref: '#/components/schemas/TaskCheckItemWrite'
+        constraints:
+          type: array
+          maxItems: 30
+          description: Replaces the whole list (`Task.constraints`), as `definition_of_done`.
+          items:
+            $ref: '#/components/schemas/TaskCheckItemWrite'
     TaskBulkUpdate:
       type: object
       required: [task_ids, patch]
@@ -21578,6 +23605,16 @@ components:
                 type: string
             project_id:
               $ref: '#/components/schemas/Ulid'
+            comment:
+              type: string
+              minLength: 1
+              maxLength: 8000
+              description: >-
+                Say the same thing on every task, in the caller's name — on a card from
+                Hermes's kanban it is said on Hermes's card first, as `tasks.createComment` does
+                (contract decision §103). `priority` on such a card is likewise set on Hermes
+                first; a refusal is that task's `ok: false`, with Hermes's words not lost to the
+                others.
     TaskMove:
       type: object
       required: [status]
@@ -21672,6 +23709,9 @@ components:
                 $ref: '#/components/schemas/TaskStatus'
               count:
                 type: integer
+                description: >-
+                  How many tasks the column holds. For `archived` without `include_archived`,
+                  the number in the archive while `tasks` is empty.
               tasks:
                 type: array
                 description: In `position` order.
@@ -22504,6 +24544,15 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/ModelCapability'
+        image_only:
+          type: boolean
+          description: >-
+            The model answers with images only (contract decision §87) — an Images-API model
+            such as `gpt-image-*`, DALL·E, Imagen or FLUX, or the ChatGPT subscription's image
+            model. It is offered as the profile's image model and never as a chat model: clients
+            leave it out of every chat-model picker (the composer, the defaults, the fallback
+            chain). A model that draws and also chats (`gemini-*-image`) is not image-only.
+            Absent from an older hub, which means `false`.
         pricing:
           oneOf:
             - $ref: '#/components/schemas/ModelPricing'
@@ -22687,6 +24736,20 @@ components:
             adding it, `models.startProviderSignIn` shows a code and a link (decision §55).
             Only the providers whose sign-in the agent runtime can complete on the hub's behalf
             say `true`; `key` is then `optional` and a client does not ask for one.
+        base_url_example:
+          type: [string, 'null']
+          description: >-
+            An example of the address to type when `base_url` is null — the shape, never a
+            value the hub would use (Azure Speech: `https://<region>.api.cognitive.microsoft.com`).
+        key_on_file:
+          type: array
+          items:
+            type: string
+            enum: [all, profile]
+          description: >-
+            The scopes (`ProviderCreate.scope`) in which a provider of the same credential
+            family already holds a key. Added there, this provider uses that key and none need
+            be typed: Groq added for chat also speaks (DECISIONS §94).
     ProviderHost:
       type: object
       required: [containerized, loopback_alias]
@@ -22736,6 +24799,12 @@ components:
                 type: string
               label:
                 type: string
+              image_only:
+                type: boolean
+                description: >-
+                  The model only draws (`Model.image_only`, DECISIONS §87), by the same rule the
+                  hub applies to its catalogue; clients leave it out of a chat-model picker.
+                  Absent from an older hub means `false`.
     ProviderCreate:
       type: object
       required: [label, kind]
@@ -23079,9 +25148,24 @@ components:
           type: string
         language:
           type: [string, 'null']
+          description: BCP-47 tag (`ar-SA`, `en-US`) or a bare language (`ar`), as the provider names it.
         gender:
           type: [string, 'null']
           enum: [female, male, neutral, null]
+        description:
+          type: [string, 'null']
+          description: The provider's own short words about the voice (accent, style), when it gives any.
+        models:
+          type: [array, 'null']
+          items:
+            type: string
+          description: The models this voice speaks with; null or absent is every model of the provider.
+    VoiceListSource:
+      type: string
+      enum: [provider, documented, none]
+      description: >-
+        Where a voice list came from: the provider's own endpoint, the provider's public
+        documentation (it has no list endpoint), or nowhere (type the voice id).
     Transcription:
       type: object
       required: [text, language, duration_ms, provider_id, model]
@@ -23110,10 +25194,30 @@ components:
         voice:
           type: [string, 'null']
           description: Overrides the provider's default voice for this request.
+        model:
+          type: [string, 'null']
+          maxLength: 200
+          description: >-
+            Overrides the provider's model for this request — how the Models page previews a
+            model and voice before saving them.
         provider_id:
           oneOf:
             - $ref: '#/components/schemas/Ulid'
             - type: 'null'
+        format:
+          oneOf:
+            - $ref: '#/components/schemas/SpeechFormat'
+            - type: 'null'
+          description: >-
+            The audio the client can play (DECISIONS §91). The hub asks the provider for it
+            where the provider lets it choose, else the provider's own format comes back; the
+            response `Content-Type` always says which. Omitted or null: the provider's default.
+    SpeechFormat:
+      type: string
+      description: >-
+        An audio format a client asks speech in: `mp3`, `aac` (in an MP4/M4A container, what
+        iOS and Android play natively), `wav`, or `ogg` (Ogg Opus).
+      enum: [mp3, aac, wav, ogg]
     # ---------------------------------------------------------------- devices
     DevicePlatform:
       type: string
@@ -23311,10 +25415,102 @@ components:
           description: What the device last said stops push on it; null when it never said (an older app, a browser).
         this_device:
           type: boolean
+        profiles:
+          type: [array, 'null']
+          items:
+            $ref: '#/components/schemas/ProfileSlug'
+          description: |
+            The profiles whose agents may ask this device for something (DECISIONS §89). `null`, the
+            default, is every profile of the device's person; a list narrows it. Absent from a hub
+            older than the field.
+        helper:
+          oneOf:
+            - $ref: '#/components/schemas/DeviceHelper'
+            - type: 'null'
+          description: What a computer's local helper offers the hub's agents, as the desktop app last reported it; `null` when it never did (a phone, a browser, a helper that is off).
         created_at:
           $ref: '#/components/schemas/Timestamp'
         updated_at:
           $ref: '#/components/schemas/Timestamp'
+    DeviceHelper:
+      type: object
+      description: |
+        A computer's local helper as the hub's agents may use it (ADR 0025): the folders the person
+        shared, whether opening files and links is allowed, and the programs switched on with the
+        profiles each one serves and its tools. Reported by the desktop app itself
+        (`devices.update`), again whenever it changes.
+      required: [folders, allow_open, programs, reported_at]
+      properties:
+        folders:
+          type: array
+          maxItems: 20
+          items:
+            $ref: '#/components/schemas/DeviceHelperFolder'
+        allow_open:
+          type: boolean
+        programs:
+          type: array
+          maxItems: 50
+          items:
+            $ref: '#/components/schemas/DeviceProgram'
+        reported_at:
+          $ref: '#/components/schemas/Timestamp'
+    DeviceHelperFolder:
+      type: object
+      required: [path, write]
+      properties:
+        path:
+          type: string
+          maxLength: 1024
+          description: Absolute, on the computer.
+        write:
+          type: boolean
+          description: Shared as writable; read only otherwise.
+        default:
+          type: boolean
+          description: The folder the app made for Core Hub's own files (`~/Core Hub`); program output goes there unless the person says otherwise.
+    DeviceProgram:
+      type: object
+      description: |
+        A program on the computer the person switched on for some profiles: an MCP server another
+        assistant registered (Claude Desktop and its extensions, Claude Code, Codex, Cursor,
+        Windsurf), started by the desktop app as its own child and reached only through it.
+      required: [id, name, source, profiles, tools]
+      properties:
+        id:
+          type: string
+          pattern: '^[a-z0-9][a-z0-9_-]{0,47}$'
+          description: The app's stable id for it, used in `apps` requests.
+        name:
+          type: string
+          maxLength: 120
+        source:
+          type: string
+          enum: [claude_desktop, claude_desktop_extension, claude_code, codex, cursor, windsurf]
+        profiles:
+          type: array
+          minItems: 1
+          items:
+            $ref: '#/components/schemas/ProfileSlug'
+          description: The profiles whose agents may use it.
+        tools:
+          type: array
+          maxItems: 200
+          items:
+            $ref: '#/components/schemas/DeviceProgramTool'
+    DeviceProgramTool:
+      type: object
+      required: [name, description, input_schema]
+      properties:
+        name:
+          type: string
+          maxLength: 128
+        description:
+          type: string
+          maxLength: 2000
+        input_schema:
+          type: object
+          additionalProperties: true
     PushProvider:
       type: string
       enum: [webpush, fcm, apns]
@@ -23506,6 +25702,17 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/DeviceCapability'
+        profiles:
+          type: [array, 'null']
+          maxItems: 100
+          items:
+            $ref: '#/components/schemas/ProfileSlug'
+          description: The device's person only (anyone else, the device itself included, `403`). `null` gives it back to every profile of theirs.
+        helper:
+          oneOf:
+            - $ref: '#/components/schemas/DeviceHelper'
+            - type: 'null'
+          description: The device itself only (its own token; anyone else `403`). `reported_at` is set by the hub.
     DeviceRequestStatus:
       type: string
       enum: [pending, fulfilled, denied, failed, expired, cancelled]
@@ -23547,7 +25754,14 @@ components:
               description: Shown to the person in the consent sheet.
             params:
               type: object
-              description: 'Capability-specific: `location` takes `accuracy: coarse | precise`.'
+              description: |
+                Capability-specific. `location` takes `accuracy: coarse | precise`. `files` (a
+                computer's helper, ADR 0022/0025) takes `{tool, arguments}` where `tool` is one of
+                `list_allowed_folders`, `list_directory`, `read_text_file`, `write_text_file`,
+                `open_path`, `open_url` or `send_file` (the device uploads the file with the
+                resumable upload in this profile). `apps` takes `{op: call, program, tool,
+                arguments}` (one tool call of a program the device shares) or `{op: status,
+                call_id}` (how a long call stands).
               additionalProperties: true
             status:
               $ref: '#/components/schemas/DeviceRequestStatus'
@@ -23555,7 +25769,13 @@ components:
               $ref: '#/components/schemas/Timestamp'
             result:
               type: [object, 'null']
-              description: 'Capability-specific: `location` returns `latitude, longitude, accuracy_m, captured_at`.'
+              description: |
+                Capability-specific. `location` returns `latitude, longitude, accuracy_m,
+                captured_at`. `files` returns the tool's MCP result `{content, is_error}`, and
+                `send_file` `{attachment_id, name, mime, size_bytes, kind}`. `apps` returns
+                `{state: done, content, is_error}`, or `{state: running, call_id, progress}` when
+                the call is still going after the device's soft deadline (the program keeps
+                running; ask again with `op: status`).
               additionalProperties: true
             error:
               oneOf:
@@ -23592,7 +25812,10 @@ components:
           type: integer
           minimum: 1000
           maximum: 300000
-          default: 30000
+          description: |
+            How long the device has to answer. Absent, it depends on the capability (DECISIONS
+            §89): `files` 60 s and `apps` 120 s (the person may be asked first), everything else
+            30 s.
     DeviceRequestResponse:
       type: object
       required: [status]
@@ -23609,52 +25832,342 @@ components:
             - type: 'null'
     Relay:
       type: object
-      required: [enabled, connected, route, relay_url, hub_id, error, connected_at]
+      description: |
+        The way in from outside for a hub the desktop app runs on a person's computer
+        (DECISIONS §95). `relay_url` is the address a phone pairs with while it is open.
+      required:
+        [
+          available,
+          enabled,
+          connected,
+          route,
+          relay_url,
+          hub_port,
+          token_set,
+          tunnel_id,
+          hostname,
+          hostnames,
+          tailnet,
+          error,
+          error_detail,
+          connected_at,
+        ]
       properties:
+        available:
+          type: boolean
+          description: Whether this hub can open a way in at all (a hub the desktop app runs in local mode).
         enabled:
           type: boolean
         connected:
           type: boolean
+          description: 'Cloudflare: the tunnel holds at least one connection to Cloudflare. Tailscale: the app listens on the tailnet address.'
         route:
-          type: string
-          enum: [official, cloudflare]
+          type: [string, 'null']
+          enum: [cloudflare, tailscale, null]
         relay_url:
           type: [string, 'null']
-        hub_id:
+          description: The address a phone pairs with (`https://<hostname>` or `http://<tailnet address>:<port>`), or null.
+        hub_port:
+          type: [integer, 'null']
+          description: The port the hub listens on, on this computer; a tunnel's service is `http://localhost:<hub_port>`.
+        token_set:
+          type: boolean
+          description: A Cloudflare tunnel token is kept (sealed by the computer's keychain; never returned).
+        tunnel_id:
           type: [string, 'null']
+          description: The tunnel the kept token belongs to (read from the token; not a secret).
+        hostname:
+          type: [string, 'null']
+          description: The public hostname the person gave the tunnel in Cloudflare.
+        hostnames:
+          type: array
+          description: What Cloudflare routes to this tunnel, as `cloudflared` reports it; `matches` is false when a route points anywhere but the hub's port.
+          items:
+            type: object
+            required: [hostname, service, matches]
+            properties:
+              hostname:
+                type: string
+              service:
+                type: string
+              matches:
+                type: boolean
+        tailnet:
+          description: This computer on a Tailscale network, when it is on one.
+          oneOf:
+            - type: object
+              required: [address, dns_name]
+              properties:
+                address:
+                  type: string
+                dns_name:
+                  type: [string, 'null']
+            - type: 'null'
         error:
           type: [string, 'null']
+          enum:
+            [
+              token_invalid,
+              download_failed,
+              checksum_mismatch,
+              unsupported_platform,
+              start_failed,
+              tunnel_exited,
+              not_on_tailnet,
+              listen_failed,
+              null,
+            ]
+          description: Why the way in is not open, when it should be.
+        error_detail:
+          type: [string, 'null']
+          description: The program's own words for the error (never the token).
         connected_at:
           oneOf:
             - $ref: '#/components/schemas/Timestamp'
             - type: 'null'
+    RelayUpdate:
+      type: object
+      properties:
+        enabled:
+          type: boolean
+        route:
+          type: string
+          enum: [cloudflare, tailscale]
+        token:
+          type: string
+          minLength: 20
+          maxLength: 4096
+          writeOnly: true
+          description: The Cloudflare tunnel token (Zero Trust › Networks › Tunnels). Kept by the computer's keychain, never returned or logged.
+        forget_token:
+          type: boolean
+          description: Forget the kept token (and close the tunnel).
+        hostname:
+          type: [string, 'null']
+          maxLength: 253
+          description: The public hostname given to the tunnel in Cloudflare, without `https://`.
     Peer:
       type: object
+      description: Another Core Hub linked with this one, or waiting to be (ADR 0026).
       required:
-        [id, name, url, version, online, inbound_status, outbound_status, last_seen_at, created_at]
+        [
+          id,
+          name,
+          hub_name,
+          url,
+          direction,
+          status,
+          enabled,
+          fingerprint,
+          version,
+          asks_per_hour,
+          last_seen_at,
+          approved_at,
+          created_at,
+        ]
       properties:
         id:
           $ref: '#/components/schemas/Ulid'
         name:
           type: string
+          description: What this hub calls the peer; starts as the peer's own name.
+        hub_name:
+          type: string
+          description: The name the peer gave itself when linking.
         url:
           type: string
+          description: The peer's HTTPS origin.
+        direction:
+          type: string
+          description: "`inbound`: it redeemed this hub's invite. `outbound`: this hub redeemed its invite."
+          enum: [inbound, outbound]
+        status:
+          type: string
+          description: >-
+            `pending`: it asked, and this hub's owner has not approved yet. `waiting`: this hub
+            asked, and the peer's owner has not approved yet. `linked`: both owners agreed.
+          enum: [pending, waiting, linked]
+        enabled:
+          type: boolean
+        fingerprint:
+          type: string
+          description: SHA-256 of the peer's public key, first 16 bytes in hex groups.
         version:
           type: [string, 'null']
-        online:
-          type: boolean
-        inbound_status:
-          type: string
-          enum: [pending, approved, rejected, blocked]
-        outbound_status:
-          type: string
-          enum: [none, requested, connected, rejected, error]
+        asks_per_hour:
+          type: integer
+          minimum: 1
+          maximum: 1000
+          description: How many questions the peer may ask this hub's shared agents in an hour.
         last_seen_at:
+          oneOf:
+            - $ref: '#/components/schemas/Timestamp'
+            - type: 'null'
+        approved_at:
           oneOf:
             - $ref: '#/components/schemas/Timestamp'
             - type: 'null'
         created_at:
           $ref: '#/components/schemas/Timestamp'
+    PeerPatch:
+      type: object
+      additionalProperties: false
+      minProperties: 1
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 80
+        enabled:
+          type: boolean
+        approve:
+          type: boolean
+          const: true
+        asks_per_hour:
+          type: integer
+          minimum: 1
+          maximum: 1000
+    PeerInvite:
+      type: object
+      required: [url, expires_at, fingerprint]
+      properties:
+        url:
+          type: string
+          format: uri
+        expires_at:
+          $ref: '#/components/schemas/Timestamp'
+        fingerprint:
+          type: string
+          description: This hub's key fingerprint, to compare with what the other hub shows.
+    PeerEvent:
+      type: object
+      required: [id, peer_id, kind, ok, detail, actor_id, created_at]
+      properties:
+        id:
+          $ref: '#/components/schemas/Ulid'
+        peer_id:
+          $ref: '#/components/schemas/Ulid'
+        kind:
+          type: string
+          enum:
+            [
+              joined,
+              requested,
+              approved,
+              approved_by_peer,
+              updated,
+              unlinked,
+              unlinked_by_peer,
+              list_in,
+              list_out,
+              ask_in,
+              ask_out,
+              refused,
+            ]
+        ok:
+          type: boolean
+        detail:
+          type: [string, 'null']
+          description: A short fact (an agent's name, a refusal's reason); never a question's words.
+        actor_id:
+          description: The person on this hub who acted; `null` when the peer did.
+          oneOf:
+            - $ref: '#/components/schemas/Ulid'
+            - type: 'null'
+        created_at:
+          $ref: '#/components/schemas/Timestamp'
+    PeerShare:
+      type: object
+      required: [profile, agent_id, name, shared, description]
+      properties:
+        profile:
+          $ref: '#/components/schemas/ProfileSlug'
+        agent_id:
+          $ref: '#/components/schemas/Ulid'
+        name:
+          type: string
+        shared:
+          type: boolean
+        description:
+          type: [string, 'null']
+          description: What linked hubs are shown beside the name.
+    PeerShareWrite:
+      type: object
+      required: [profile, agent_id, shared]
+      additionalProperties: false
+      properties:
+        profile:
+          $ref: '#/components/schemas/ProfileSlug'
+        agent_id:
+          $ref: '#/components/schemas/Ulid'
+        shared:
+          type: boolean
+        description:
+          type: [string, 'null']
+          maxLength: 280
+    PeerAgent:
+      type: object
+      required: [id, name, description]
+      properties:
+        id:
+          description: The share's id on the peer (not the agent's own id there).
+          $ref: '#/components/schemas/Ulid'
+        name:
+          type: string
+        description:
+          type: [string, 'null']
+    PeerAsk:
+      type: object
+      required: [prompt]
+      additionalProperties: false
+      properties:
+        prompt:
+          type: string
+          minLength: 1
+          maxLength: 8000
+    PeerAnswer:
+      type: object
+      required: [answer]
+      properties:
+        answer:
+          type: string
+    PeerJoin:
+      type: object
+      required: [code, hub_id, name, url, public_key, version]
+      additionalProperties: false
+      properties:
+        code:
+          type: string
+          pattern: '^[0-9A-Z]{26}$'
+        hub_id:
+          $ref: '#/components/schemas/Ulid'
+        name:
+          type: string
+          minLength: 1
+          maxLength: 80
+        url:
+          type: string
+          maxLength: 2048
+          description: The joining hub's HTTPS origin.
+        public_key:
+          type: string
+          maxLength: 200
+          description: Ed25519 public key, SPKI DER in base64url.
+        version:
+          type: [string, 'null']
+          maxLength: 40
+    PeerJoined:
+      type: object
+      required: [hub_id, name, public_key, version]
+      properties:
+        hub_id:
+          $ref: '#/components/schemas/Ulid'
+        name:
+          type: string
+        public_key:
+          type: string
+        version:
+          type: [string, 'null']
     # ---------------------------------------------------------------- notify
     NoticeKind:
       type: string

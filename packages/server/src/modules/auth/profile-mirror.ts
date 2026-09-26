@@ -34,6 +34,11 @@ export interface ProfileMirror {
    */
   setDisplayName(name: string, displayName: string): Promise<void>;
   /**
+   * The runtime's display name for a profile (`default` included), `''` when it has none.
+   * Optional: a runtime that cannot say leaves the hub's names as they are.
+   */
+  displayName?(name: string): string;
+  /**
    * The profile's automatic context compression as the runtime will use it (decision §57),
    * or `null` when the runtime has no such profile. Throws `ProfileMirrorError` when its
    * configuration cannot be read.
@@ -131,6 +136,7 @@ export function adoptProfiles(
   db: ModuleDb,
   ownerId: string,
   names: readonly string[],
+  displayNameOf: (name: string) => string = () => '',
 ): AdoptResult {
   const result: AdoptResult = { adopted: [], unnamed: [] };
   for (const name of names) {
@@ -145,8 +151,40 @@ export function adoptProfiles(
       .where(eq(workspaces.slug, name))
       .get();
     if (taken) continue;
-    db.insert(workspaces).values({ ownerId, slug: name, name, settings: {} }).run();
+    // Hermes's display name when it has one (decision §103), else the id as before.
+    const shown = cleanName(displayNameOf(name)) || name;
+    db.insert(workspaces).values({ ownerId, slug: name, name: shown, settings: {} }).run();
     result.adopted.push(name);
   }
   return result;
+}
+
+/** A runtime display name as a workspace name: trimmed, within the hub's limit. */
+function cleanName(value: string): string {
+  return value.trim().slice(0, 64);
+}
+
+/**
+ * The workspaces whose runtime display name was changed outside the hub take it (decision
+ * §103): every rename made here is written to the runtime first, so a runtime name that
+ * differs was set there — `hermes profile rename`, Hermes's dashboard. A profile with no
+ * display name leaves the hub's name alone (a name the runtime refused to take is not undone),
+ * and so does a named profile whose display name is its id. Archived workspaces are left as
+ * they are. Returns the slugs renamed.
+ */
+export function syncDisplayNames(db: ModuleDb, displayNameOf: (name: string) => string): string[] {
+  const renamed: string[] = [];
+  const rows = db.select().from(workspaces).all();
+  for (const row of rows) {
+    if (row.archivedAt) continue;
+    const runtime = cleanName(displayNameOf(runtimeProfileName(row)));
+    if (runtime === '' || runtime === row.name) continue;
+    if (!row.isDefault && runtime === row.slug) continue;
+    db.update(workspaces)
+      .set({ name: runtime, updatedAt: new Date() })
+      .where(eq(workspaces.id, row.id))
+      .run();
+    renamed.push(row.slug);
+  }
+  return renamed;
 }

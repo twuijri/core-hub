@@ -43,6 +43,7 @@ import type {
   AgentAskRequest,
   AgentCompressRequest,
   AgentCompressResult,
+  AgentContextBreakdown,
   AgentEvent,
   AgentRunAccepted,
   AgentRunInput,
@@ -71,7 +72,7 @@ type Step =
   | { type: 'delay'; ms: number }
   | { type: 'await_input' }
   /** Write a file in the session's working folder, as an agent's tool would. */
-  | { type: 'write'; path: string; content: string }
+  | { type: 'write'; path: string; content: string | Buffer }
   /** Leave a file in the run's output folder, for the reply (`base64` bytes). */
   | { type: 'produce'; name: string; base64: string }
   // The real direct path (journey 34): the models module answers the turn, fallback chain and all.
@@ -92,7 +93,34 @@ const REPORT_HTML =
 const DATA_CSV = 'البند,المبلغ\nإيجار,1200\nكهرباء,300\n';
 const NOTES_MD = '# ملاحظات\n\n- راجع **الميزانية** قبل الخميس\n';
 
-function writes(ref: string, file: string, content: string): Step[] {
+/**
+ * A plain 440 Hz tone as a WAV file a browser plays: `seconds` of 16-bit mono at 22 050 Hz, about
+ * 43 KiB a second — two minutes is a file large enough that a player seeks through byte ranges.
+ */
+function toneWav(seconds: number): Buffer {
+  const rate = 22_050;
+  const samples = rate * seconds;
+  const data = Buffer.alloc(samples * 2);
+  for (let i = 0; i < samples; i += 1) {
+    data.writeInt16LE(Math.round(Math.sin((2 * Math.PI * 440 * i) / rate) * 6000), i * 2);
+  }
+  const header = Buffer.alloc(44);
+  header.write('RIFF', 0, 'ascii');
+  header.writeUInt32LE(36 + data.length, 4);
+  header.write('WAVEfmt ', 8, 'ascii');
+  header.writeUInt32LE(16, 16);
+  header.writeUInt16LE(1, 20);
+  header.writeUInt16LE(1, 22);
+  header.writeUInt32LE(rate, 24);
+  header.writeUInt32LE(rate * 2, 28);
+  header.writeUInt16LE(2, 32);
+  header.writeUInt16LE(16, 34);
+  header.write('data', 36, 'ascii');
+  header.writeUInt32LE(data.length, 40);
+  return Buffer.concat([header, data]);
+}
+
+function writes(ref: string, file: string, content: string | Buffer): Step[] {
   return [
     {
       type: 'tool_started',
@@ -336,6 +364,17 @@ function scriptFor(prompt: string, workspace = ''): Step[] {
       { type: 'completed' },
     ];
   }
+  if (/نغمة طويلة|a long tone/i.test(prompt)) {
+    // Media in chat (journey 36, decision §98): a two-minute recording written in the session's
+    // folder, played and sought in the file panel; and a short one left for the reply, played in it.
+    return [
+      { type: 'message_delta', text: 'أسجّل النغمة.\n\n' },
+      ...writes('m1', 'tone.wav', toneWav(120)),
+      { type: 'produce', name: 'chime.wav', base64: toneWav(2).toString('base64') },
+      { type: 'message_delta', text: 'سجّلت tone.wav وأرفقت chime.wav.' },
+      { type: 'completed' },
+    ];
+  }
   if (/قط يطير|flying cat/i.test(prompt)) {
     // A reply's own files (journey 35, 2026-09-26): the owner's «سوي صورة قط يطير» — the agent
     // leaves the picture in the run's output folder and names it by that folder's full path.
@@ -354,6 +393,19 @@ function scriptFor(prompt: string, workspace = ''): Step[] {
         // `{{out}}` is the run's output folder, filled in when the run starts.
         text: 'I generated the image and saved it to: {{out}}/flying_cat.png',
       },
+      { type: 'completed' },
+    ];
+  }
+  if (/اكتب ببطء|write slowly/i.test(prompt)) {
+    // The live "files changed" card (decision §102): one file written, then a long pause while
+    // the run is still going — long enough for the card to be read and photographed — then a
+    // second file and the end, when the recorded card takes over.
+    return [
+      { type: 'message_delta', text: 'أكتب الملفات واحدًا واحدًا.\n\n' },
+      ...writes('s1', 'draft.md', '# مسودة\n\nالسطر الأول\n'),
+      { type: 'delay', ms: 8_000 },
+      ...writes('s2', 'final.md', '# النهائي\n'),
+      { type: 'message_delta', text: 'كتبت draft.md و final.md.' },
       { type: 'completed' },
     ];
   }
@@ -744,6 +796,25 @@ class ScriptedRunner implements AgentRunner {
   /** `/steer` into a running scripted turn: taken, as Hermes takes it. */
   async steer(): Promise<'queued' | 'rejected'> {
     return 'queued';
+  }
+
+  /**
+   * The window by category (decision §102), in the shape Hermes's `session.context_breakdown`
+   * gives after a compression like the one above: most of it tools and the conversation.
+   */
+  async contextBreakdown(): Promise<AgentContextBreakdown | null> {
+    return {
+      usedTokens: 24_000,
+      windowTokens: 200_000,
+      estimated: false,
+      categories: [
+        { id: 'system_prompt', label: 'System prompt', tokens: 3_100 },
+        { id: 'tool_definitions', label: 'Tool definitions', tokens: 9_800 },
+        { id: 'skills', label: 'Skills', tokens: 1_200 },
+        { id: 'memory', label: 'Memory', tokens: 400 },
+        { id: 'conversation', label: 'Conversation', tokens: 9_500 },
+      ],
+    };
   }
 
   /**

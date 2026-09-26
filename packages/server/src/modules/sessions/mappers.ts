@@ -18,6 +18,7 @@
  */
 import type { UsageTotals } from '../audit/index.js';
 import type { approvals, messages, runFileChanges, runs, sessions, toolCalls } from './schema.js';
+import type { RunChangesRecord } from './run-changes.js';
 
 export type SessionRow = typeof sessions.$inferSelect;
 export type MessageRow = typeof messages.$inferSelect;
@@ -449,6 +450,8 @@ export interface ApprovalView {
   sessionId: string | null;
   messageId: string | null;
   agent: { id: string; name: string };
+  /** The room whose seat asked, when a seat's session asked (DECISIONS §69). */
+  roomId?: string | null;
 }
 
 export function toApproval(view: ApprovalView, profile: string): Record<string, unknown> {
@@ -474,7 +477,7 @@ export function toApproval(view: ApprovalView, profile: string): Record<string, 
     session_id: view.sessionId,
     run_id: row.runId,
     message_id: view.messageId,
-    room_id: null,
+    room_id: view.roomId ?? null,
     workflow_run_id: row.workflowRunId ?? null,
     node_id: row.nodeId ?? null,
     agent: view.agent,
@@ -523,6 +526,33 @@ export function toRunChanges(run: RunRow, files: readonly RunFileChangeRow[]) {
     truncated: summary.truncated,
     recorded_at: new Date(summary.recordedAt).toISOString(),
     files: files.map(toRunFileChange),
+  };
+}
+
+/**
+ * The contract's `RunChanges` for a run still going (decision §102): the folder compared with
+ * the run's start at `at`, not recorded. Its files carry no diff to fetch until the run ends.
+ */
+export function toLiveRunChanges(runId: string, record: RunChangesRecord, at: Date) {
+  return {
+    run_id: runId,
+    source: record.source,
+    complete: record.complete,
+    files_changed: record.filesChanged,
+    additions: record.additions,
+    deletions: record.deletions,
+    truncated: record.truncated,
+    recorded_at: at.toISOString(),
+    files: record.files.map((file) => ({
+      path: file.path,
+      old_path: file.oldPath,
+      change: file.change,
+      additions: file.additions,
+      deletions: file.deletions,
+      binary: file.binary,
+      diff: file.diffState,
+    })),
+    live: true,
   };
 }
 

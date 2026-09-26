@@ -55,7 +55,7 @@ object AppPaths {
         return when (target.destination) {
             "new_chat" -> Route.NewChat
             "chat" -> target.params["sessionId"]?.let { Route.Chat(it, itemProfile) } ?: Route.NewChat
-            "rooms" -> Route.NewChat
+            "rooms" -> target.params["roomId"]?.let { Route.Room(it, itemProfile) } ?: Route.NewChat
             "search" -> Route.Search
             "agent_manager" -> Route.Agents
             "tasks" -> Route.Tasks

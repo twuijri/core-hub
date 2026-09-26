@@ -21,14 +21,16 @@
  *   the contract declares.
  */
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
-import { createReadStream } from 'node:fs';
+import { closeSync, createReadStream, readFileSync, statSync } from 'node:fs';
 import { z } from 'zod';
 import { HubError, notFound } from '../../lib/errors.js';
+import { rangeReply } from '../../lib/byte-range.js';
+import { streamed } from '../../lib/route.js';
 import { parse } from '../../lib/validate.js';
 import type { EngineScope } from './engine.js';
 import type { ScopeResolver } from './scope.js';
 import type { SessionsService } from './service.js';
-import type { ChannelConversations } from './channel-conversations.js';
+import { CONVERSATION_ID, type ChannelConversations } from './channel-conversations.js';
 import { DEFAULT_LIMIT, MAX_LIMIT } from './store.js';
 import { toSubagent } from './subagents.js';
 
@@ -322,16 +324,39 @@ export function registerSessionRoutes(app: FastifyInstance, deps: RouteDeps): vo
     );
     const file = deps.service(request).openFile(scope, session_id, query.path, query.download);
     const name = file.relative.split('/').at(-1) ?? 'file';
+    // One byte range, for a player that seeks (decision §98); past the end is `416`.
+    let window: ReturnType<typeof rangeReply>;
+    try {
+      window = rangeReply(request.headers.range, file.size);
+    } catch (error) {
+      closeSync(file.fd);
+      throw error;
+    }
     // Opened directly, an HTML file still runs nothing in the hub's origin: the sandbox
     // gives it an origin of its own and `default-src 'none'` loads nothing (decision §48).
-    return reply
+    reply
+      .status(window.status)
+      .headers(window.headers)
       .header('content-type', file.type.contentType)
-      .header('content-length', String(file.size))
       .header('x-content-type-options', 'nosniff')
       .header('content-security-policy', "sandbox; default-src 'none'")
       .header('cache-control', 'no-store')
       .header('content-disposition', contentDisposition(query.download, name))
-      .send(createReadStream('', { fd: file.fd, start: 0, end: Math.max(0, file.size - 1) }));
+      .send(createReadStream('', { fd: file.fd, start: window.start, end: window.end }));
+    // A reader that stops half-way (a player that seeks) is not an error (`lib/route.ts`).
+    return streamed(request, reply);
+  });
+
+  app.post('/sessions/:session_id/files/stream', async (request, reply: FastifyReply) => {
+    const scope = await scopeOf(request);
+    const session_id = pathId(request.params, 'session_id', 'session');
+    const body = parse(
+      z.object({ path: z.string().min(1).max(4096) }).strict(),
+      request.body ?? {},
+    );
+    return reply
+      .status(201)
+      .send(deps.service(request).createFileStream(scope, session_id, body.path));
   });
 
   // ---------------------------------------------------------- run changes
@@ -465,6 +490,12 @@ export function registerSessionRoutes(app: FastifyInstance, deps: RouteDeps): vo
     return deps.service(request).compress(scope, session_id, body);
   });
 
+  app.get('/sessions/:session_id/context', async (request) => {
+    const scope = await scopeOf(request);
+    const session_id = pathId(request.params, 'session_id', 'session');
+    return deps.service(request).contextBreakdown(scope, session_id);
+  });
+
   app.post('/sessions/:session_id/runs/:run_id/steer', async (request) => {
     const scope = await scopeOf(request);
     const params = {
@@ -565,6 +596,8 @@ export function registerSessionRoutes(app: FastifyInstance, deps: RouteDeps): vo
           .string()
           .regex(/^[a-z][a-z0-9_]{0,31}$/)
           .optional(),
+        hidden: z.enum(['include']).optional(),
+        limit: z.coerce.number().int().min(1).max(1000).optional(),
       }),
       request.query,
       'query',
@@ -577,19 +610,123 @@ export function registerSessionRoutes(app: FastifyInstance, deps: RouteDeps): vo
             profile: entry.profile,
           }))
         : [{ workspace: scope.workspace, profile: scope.profile }];
-    return deps.channels(request).list(scopes, query.channel);
+    const read = await deps.channels(request).list(scopes, query.channel, query.limit);
+    // What this person hid stays out of their list unless asked for (§88).
+    const workspaceOf = new Map(scopes.map((each) => [each.profile, each.workspace]));
+    const hidden = deps.service(request).channelHides.hiddenIn(
+      scopes.map((each) => each.workspace),
+      scope.userId,
+    );
+    const isHidden = (item: { id: string; profile: string }) =>
+      hidden.get(workspaceOf.get(item.profile) ?? '')?.has(item.id) ?? false;
+    return {
+      ...read,
+      items:
+        query.hidden === 'include'
+          ? read.items.map((item) => (isHidden(item) ? { ...item, hidden: true } : item))
+          : read.items.filter((item) => !isHidden(item)),
+    };
+  });
+
+  // Hide one from the caller's own list, or show it again (§88): the hub's mark only.
+  const conversationIdOf = (request: FastifyRequest): string => {
+    const id = (request.params as { conversation_id?: unknown }).conversation_id;
+    if (typeof id !== 'string' || !CONVERSATION_ID.test(id)) {
+      throw new HubError('validation_failed', {
+        details: { issues: [{ path: 'conversation_id', message: 'not a conversation id' }] },
+      });
+    }
+    return id;
+  };
+  app.put('/channel-conversations/:conversation_id/hidden', async (request, reply) => {
+    const scope = await scopeOf(request);
+    const id = conversationIdOf(request);
+    deps.service(request).channelHides.hide(scope.workspace, scope.userId, id);
+    return reply.status(204).send();
+  });
+  app.delete('/channel-conversations/:conversation_id/hidden', async (request, reply) => {
+    const scope = await scopeOf(request);
+    const id = conversationIdOf(request);
+    deps.service(request).channelHides.unhide(scope.workspace, scope.userId, id);
+    return reply.status(204).send();
+  });
+
+  // Delete it from Hermes, for good (§88; admins, by the contract's `x-roles`).
+  app.delete('/channel-conversations/:conversation_id', async (request, reply) => {
+    const role = request.principal?.user.role;
+    if (role !== 'owner' && role !== 'admin') {
+      throw new HubError('forbidden', {
+        messageKey: 'auth.admin_only',
+        details: { required_role: 'admin' },
+      });
+    }
+    const scope = await scopeOf(request);
+    const id = (request.params as { conversation_id?: unknown }).conversation_id;
+    const conversation = typeof id === 'string' ? id : '';
+    await deps
+      .channels(request)
+      .remove({ workspace: scope.workspace, profile: scope.profile }, conversation);
+    const service = deps.service(request);
+    service.channelHides.forget(scope.workspace, conversation);
+    service.audit.record({
+      actorKind: 'user',
+      actorId: scope.userId,
+      ownerId: scope.userId,
+      workspace: scope.workspace,
+      action: 'sessions.channel_conversation_deleted',
+      entityKind: 'channel_conversation',
+      entityId: conversation,
+      summary: 'Deleted a channel conversation from Hermes',
+      requestId: request.id,
+    });
+    return reply.status(204).send();
   });
 
   app.get('/channel-conversations/:conversation_id/messages', async (request) => {
     const scope = await scopeOf(request);
     const id = (request.params as { conversation_id?: unknown }).conversation_id;
+    const query = parse(
+      z.object({ offset: z.coerce.number().int().min(0).max(10_000_000).optional() }),
+      request.query,
+      'query',
+    );
     return deps
       .channels(request)
       .messages(
         { workspace: scope.workspace, profile: scope.profile },
         typeof id === 'string' ? id : '',
+        query.offset ?? 0,
       );
   });
+
+  // A picture the person sent on the channel (§103), from Hermes's image cache only.
+  app.get(
+    '/channel-conversations/:conversation_id/pictures/:picture_id',
+    async (request, reply) => {
+      const scope = await scopeOf(request);
+      const params = request.params as { conversation_id?: unknown; picture_id?: unknown };
+      const file = deps
+        .channels(request)
+        .picture(
+          { workspace: scope.workspace, profile: scope.profile },
+          typeof params.conversation_id === 'string' ? params.conversation_id : '',
+          typeof params.picture_id === 'string' ? params.picture_id : '',
+        );
+      let bytes: Buffer;
+      try {
+        if (statSync(file).size > PICTURE_MAX_BYTES) throw new Error('too large');
+        bytes = readFileSync(file);
+      } catch {
+        throw notFound({ resource: 'channel_picture' });
+      }
+      return reply
+        .header('Content-Type', pictureType(file))
+        .header('Cache-Control', 'private, no-store')
+        .header('X-Content-Type-Options', 'nosniff')
+        .header('Content-Security-Policy', "default-src 'none'; sandbox")
+        .send(bytes);
+    },
+  );
 
   // "Continue in Core Hub" (§62): read the conversation as above, then make the chat.
   app.post('/channel-conversations/:conversation_id/continue', async (request, reply) => {
@@ -612,4 +749,16 @@ export function registerSessionRoutes(app: FastifyInstance, deps: RouteDeps): vo
 function contentDisposition(download: boolean, name: string): string {
   const ascii = name.replace(/[^\x20-\x7e]/g, '_').replace(/["\\]/g, '_');
   return `${download ? 'attachment' : 'inline'}; filename="${ascii}"; filename*=UTF-8''${encodeURIComponent(name)}`;
+}
+
+/** Hermes refuses inbound media above its own caps; this is a ceiling well over them. */
+const PICTURE_MAX_BYTES = 50 * 1024 * 1024;
+
+/** The picture types a browser draws, by name; nothing else is served (§103). */
+function pictureType(file: string): string {
+  const ext = file.slice(file.lastIndexOf('.') + 1).toLowerCase();
+  if (ext === 'png') return 'image/png';
+  if (ext === 'gif') return 'image/gif';
+  if (ext === 'webp') return 'image/webp';
+  return 'image/jpeg';
 }

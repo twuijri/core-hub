@@ -39,6 +39,7 @@ enum DestinationID: String, CaseIterable, Hashable, Identifiable {
     case agentJobs = "agent_jobs"
     case agentChannels = "agent_channels"
     case agentPlugins = "agent_plugins"
+    case agentConfigFiles = "agent_config_files"
     case agentSettings = "agent_settings"
     case globalAgent = "global_agent"
 
@@ -53,6 +54,7 @@ enum DestinationID: String, CaseIterable, Hashable, Identifiable {
         case .agentJobs: return "jobs"
         case .agentChannels: return "channels"
         case .agentPlugins: return "plugins"
+        case .agentConfigFiles: return "config_files"
         default: return rawValue
         }
     }
@@ -64,7 +66,7 @@ enum DestinationID: String, CaseIterable, Hashable, Identifiable {
     var adminOnly: Bool {
         switch self {
         case .agentManager, .users, .webhooks, .logs, .performance, .workspaces, .updates, .plugins, .files,
-             .agentSkills, .agentMcp, .agentMemory, .agentJobs, .agentChannels, .agentPlugins, .agentSettings:
+             .agentSkills, .agentMcp, .agentMemory, .agentJobs, .agentChannels, .agentPlugins, .agentConfigFiles, .agentSettings:
             return true
         default:
             return false
@@ -81,6 +83,7 @@ enum DestinationID: String, CaseIterable, Hashable, Identifiable {
         case .agentJobs: return "jobs"
         case .agentChannels: return "channels"
         case .agentPlugins: return "plugins"
+        case .agentConfigFiles: return "config_files"
         case .agentSettings: return "settings"
         default: return nil
         }
@@ -99,7 +102,7 @@ enum NavigationMap {
     static let settingsTools: [DestinationID] = [
         .logs, .usage, .skillsUsage, .performance, .theme, .workspaces, .updates, .plugins, .files,
     ]
-    static let agentLevel: [DestinationID] = [.agentSkills, .agentMcp, .agentMemory, .agentJobs, .agentChannels, .agentPlugins, .agentSettings]
+    static let agentLevel: [DestinationID] = [.agentSkills, .agentMcp, .agentMemory, .agentJobs, .agentChannels, .agentPlugins, .agentConfigFiles, .agentSettings]
     /// Reached only from these entries (`secondaryEntries`).
     static let secondaryEntries: [DestinationID: [DestinationID]] = [.chat: [.search], .globalAgent: [.search]]
     /// The pre-auth screens (`preAuth`): not destinations.

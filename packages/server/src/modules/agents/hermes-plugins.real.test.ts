@@ -34,7 +34,7 @@ import {
   setPluginEnabled,
   type HermesCli,
 } from './hermes-plugins.js';
-import { listSkills } from './skills.js';
+import { getSkill, listSkills, setSkillEnabled } from './skills.js';
 
 const image = process.env.COREHUB_HERMES_IMAGE;
 const HERMES = '/opt/hermes/.venv/bin/hermes';
@@ -173,8 +173,52 @@ describe.skipIf(!image)(
         expect(mine.bundled, skill.name).toBe(skill.provenance === 'bundled');
       }
       expect(missing).toEqual([]);
-      // And nothing Hermes would not list (skills Hermes skips for this platform aside).
-      expect(ours.length).toBeGreaterThanOrEqual(theirs.length);
+      // And nothing Hermes would not list: skills for another system are left out, as Hermes
+      // leaves them out (§103). The one difference is on purpose: a skill Hermes offers only
+      // inside one of its own contexts (`environments:`, such as a kanban worker) is still this
+      // profile's skill, listed here to be switched, though Hermes's dashboard leaves it out.
+      const listed = new Set(theirs.map((skill) => skill.name));
+      const extra = ours.filter((skill) => !listed.has(skill.name));
+      console.log(`listed here only: ${extra.map((skill) => skill.name).join(', ')}`);
+      for (const skill of extra) {
+        expect(getSkill(work, skill.key)?.content ?? '', skill.name).toMatch(/^environments:/m);
+      }
+      expect(ours.length).toBe(theirs.length + extra.length);
+    }, 300_000);
+
+    it('switches a skill where Hermes keeps the switch, both ways (§103)', async () => {
+      type Theirs = Array<{ name: string; enabled: boolean; provenance: string }>;
+      const theirs = () =>
+        dashboard.request<Theirs>('GET', '/api/skills?profile=work', undefined, {
+          timeoutMs: 120_000,
+        });
+      const before = await theirs();
+      const [builtIn, other] = before.filter(
+        (skill) => skill.provenance === 'bundled' && skill.enabled && skill.name !== 'hermes-agent',
+      );
+      expect(builtIn && other).toBeTruthy();
+      // Off from the hub: Hermes's own list says so, and the skill's files are untouched.
+      const key = listSkills(work).find((skill) => skill.name === builtIn!.name)!.key;
+      expect(setSkillEnabled(work, key, false).enabled).toBe(false);
+      expect((await theirs()).find((skill) => skill.name === builtIn!.name)?.enabled).toBe(false);
+      // Off from Hermes's own dashboard: the hub reads it off.
+      await dashboard.request(
+        'PUT',
+        '/api/skills/toggle?profile=work',
+        { name: other!.name, enabled: false, profile: 'work' },
+        { timeoutMs: 120_000 },
+      );
+      expect(listSkills(work).find((skill) => skill.name === other!.name)?.enabled).toBe(false);
+      // Back on from the hub, and Hermes agrees again.
+      setSkillEnabled(work, key, true);
+      const otherKey = listSkills(work).find((skill) => skill.name === other!.name)!.key;
+      setSkillEnabled(work, otherKey, true);
+      const after = await theirs();
+      expect(after.find((skill) => skill.name === builtIn!.name)?.enabled).toBe(true);
+      expect(after.find((skill) => skill.name === other!.name)?.enabled).toBe(true);
+      // Hermes's manual stays on.
+      const manual = listSkills(work).find((skill) => skill.name === 'hermes-agent');
+      if (manual) expect(() => setSkillEnabled(work, manual.key, false)).toThrow(/skill_essential/);
     }, 300_000);
 
     it("lists Hermes's plugins in Hermes's words, and switches one on in one profile only", async () => {

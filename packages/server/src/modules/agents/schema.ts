@@ -237,3 +237,40 @@ export const hubToolCalls = sqliteTable(
   },
   (t) => [index('hub_tool_calls_workspace_idx').on(t.workspace, t.createdAt)],
 );
+
+/**
+ * Presets (contract decision §100): a named, saved bundle of one agent's settings in one
+ * profile — the chat model and its fallbacks, the agent's own model, which skills and MCP
+ * servers are on, and the settings sections. Never a secret: models name their provider by
+ * id, MCP servers by name, and secret settings are left out when the preset is saved.
+ */
+export interface AgentPresetModelBody {
+  default: { provider_id: string; model: string } | null;
+  fallbacks: Array<{ provider_id: string; model: string }>;
+  agent: { provider_id: string; model: string } | null;
+}
+
+export interface AgentPresetContentBody {
+  model: AgentPresetModelBody | null;
+  skills: Record<string, boolean> | null;
+  mcp_servers: Record<string, boolean> | null;
+  settings: Record<string, Record<string, unknown>> | null;
+}
+
+export const agentPresets = sqliteTable(
+  'agent_presets',
+  {
+    ...scopedColumns(),
+    agentId: ulid('agent_id')
+      .notNull()
+      .references(() => agents.id, { onDelete: 'cascade' }),
+    name: text('name').notNull(),
+    description: text('description'),
+    content: json<AgentPresetContentBody>('content').notNull(),
+    lastActivatedAt: timestampMs('last_activated_at'),
+  },
+  (t) => [
+    uniqueIndex('agent_presets_name_uq').on(t.workspace, t.agentId, t.name),
+    index('agent_presets_agent_idx').on(t.workspace, t.agentId),
+  ],
+);

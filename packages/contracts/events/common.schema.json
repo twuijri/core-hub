@@ -3719,29 +3719,60 @@
     },
     "AgentPreset": {
       "type": "object",
-      "required": ["id", "name", "description", "trust", "is_default", "broken", "content"],
+      "description": "A saved, named bundle of one agent's settings in one profile (decision §100).",
+      "required": [
+        "id",
+        "profile",
+        "owner_id",
+        "agent_id",
+        "name",
+        "description",
+        "content",
+        "last_activated_at",
+        "created_at",
+        "updated_at"
+      ],
       "properties": {
         "id": {
-          "type": "string"
+          "$ref": "#/$defs/Ulid"
+        },
+        "profile": {
+          "$ref": "#/$defs/ProfileSlug"
+        },
+        "owner_id": {
+          "description": "The admin who saved it.",
+          "$ref": "#/$defs/Ulid"
+        },
+        "agent_id": {
+          "$ref": "#/$defs/Ulid"
         },
         "name": {
-          "type": "string"
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 80
         },
         "description": {
-          "type": ["string", "null"]
-        },
-        "trust": {
-          "type": "string",
-          "enum": ["system", "user"]
-        },
-        "is_default": {
-          "type": "boolean"
-        },
-        "broken": {
-          "type": "boolean"
+          "type": ["string", "null"],
+          "maxLength": 280
         },
         "content": {
-          "type": ["string", "null"]
+          "$ref": "#/$defs/AgentPresetContent"
+        },
+        "last_activated_at": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/Timestamp"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "created_at": {
+          "$ref": "#/$defs/Timestamp"
+        },
+        "updated_at": {
+          "$ref": "#/$defs/Timestamp"
         }
       }
     },
@@ -7306,13 +7337,16 @@
         "kind",
         "brand",
         "model",
+        "os_version",
         "app_version",
         "connection",
         "online",
         "last_seen_at",
+        "paired_at",
         "app_token_id",
         "capabilities",
         "push",
+        "push_blocker",
         "this_device",
         "created_at",
         "updated_at"
@@ -7340,7 +7374,12 @@
           "type": ["string", "null"]
         },
         "model": {
-          "type": ["string", "null"]
+          "type": ["string", "null"],
+          "description": "The model's marketing name when the device knows it (`iPhone 16 Pro`, `Pixel 9`)."
+        },
+        "os_version": {
+          "type": ["string", "null"],
+          "description": "The operating system's version the device last reported; null from an app that does not say."
         },
         "app_version": {
           "type": ["string", "null"]
@@ -7360,7 +7399,19 @@
             {
               "type": "null"
             }
-          ]
+          ],
+          "description": "The device's last authenticated call to the hub, written at most once a minute: any call\nmade with its pairing token, or with the sign-in that registered it (`devices.register`).\n"
+        },
+        "paired_at": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/Timestamp"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "When the device was last paired (or registered, for one that signed in). Always set by\nthis hub; null-able so that an app reading an older hub, which does not send it, still\ndecodes the device.\n"
         },
         "app_token_id": {
           "oneOf": [
@@ -7388,8 +7439,37 @@
             }
           ]
         },
+        "push_blocker": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/PushBlocker"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "What the device last said stops push on it; null when it never said (an older app, a browser)."
+        },
         "this_device": {
           "type": "boolean"
+        },
+        "profiles": {
+          "type": ["array", "null"],
+          "items": {
+            "$ref": "#/$defs/ProfileSlug"
+          },
+          "description": "The profiles whose agents may ask this device for something (DECISIONS §89). `null`, the\ndefault, is every profile of the device's person; a list narrows it. Absent from a hub\nolder than the field.\n"
+        },
+        "helper": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/DeviceHelper"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "What a computer's local helper offers the hub's agents, as the desktop app last reported it; `null` when it never did (a phone, a browser, a helper that is off)."
         },
         "created_at": {
           "$ref": "#/$defs/Timestamp"
@@ -7615,15 +7695,20 @@
     },
     "Peer": {
       "type": "object",
+      "description": "Another Core Hub linked with this one, or waiting to be (ADR 0026).",
       "required": [
         "id",
         "name",
+        "hub_name",
         "url",
+        "direction",
+        "status",
+        "enabled",
+        "fingerprint",
         "version",
-        "online",
-        "inbound_status",
-        "outbound_status",
+        "asks_per_hour",
         "last_seen_at",
+        "approved_at",
         "created_at"
       ],
       "properties": {
@@ -7631,26 +7716,54 @@
           "$ref": "#/$defs/Ulid"
         },
         "name": {
-          "type": "string"
+          "type": "string",
+          "description": "What this hub calls the peer; starts as the peer's own name."
+        },
+        "hub_name": {
+          "type": "string",
+          "description": "The name the peer gave itself when linking."
         },
         "url": {
-          "type": "string"
+          "type": "string",
+          "description": "The peer's HTTPS origin."
+        },
+        "direction": {
+          "type": "string",
+          "description": "`inbound`: it redeemed this hub's invite. `outbound`: this hub redeemed its invite.",
+          "enum": ["inbound", "outbound"]
+        },
+        "status": {
+          "type": "string",
+          "description": "`pending`: it asked, and this hub's owner has not approved yet. `waiting`: this hub asked, and the peer's owner has not approved yet. `linked`: both owners agreed.",
+          "enum": ["pending", "waiting", "linked"]
+        },
+        "enabled": {
+          "type": "boolean"
+        },
+        "fingerprint": {
+          "type": "string",
+          "description": "SHA-256 of the peer's public key, first 16 bytes in hex groups."
         },
         "version": {
           "type": ["string", "null"]
         },
-        "online": {
-          "type": "boolean"
-        },
-        "inbound_status": {
-          "type": "string",
-          "enum": ["pending", "approved", "rejected", "blocked"]
-        },
-        "outbound_status": {
-          "type": "string",
-          "enum": ["none", "requested", "connected", "rejected", "error"]
+        "asks_per_hour": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 1000,
+          "description": "How many questions the peer may ask this hub's shared agents in an hour."
         },
         "last_seen_at": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/Timestamp"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "approved_at": {
           "oneOf": [
             {
               "$ref": "#/$defs/Timestamp"
@@ -8537,6 +8650,203 @@
         "error": {
           "type": ["string", "null"],
           "description": "The provider's own words, when it sent any."
+        }
+      }
+    },
+    "DeviceHelper": {
+      "type": "object",
+      "description": "A computer's local helper as the hub's agents may use it (ADR 0025): the folders the person\nshared, whether opening files and links is allowed, and the programs switched on with the\nprofiles each one serves and its tools. Reported by the desktop app itself\n(`devices.update`), again whenever it changes.\n",
+      "required": ["folders", "allow_open", "programs", "reported_at"],
+      "properties": {
+        "folders": {
+          "type": "array",
+          "maxItems": 20,
+          "items": {
+            "$ref": "#/$defs/DeviceHelperFolder"
+          }
+        },
+        "allow_open": {
+          "type": "boolean"
+        },
+        "programs": {
+          "type": "array",
+          "maxItems": 50,
+          "items": {
+            "$ref": "#/$defs/DeviceProgram"
+          }
+        },
+        "reported_at": {
+          "$ref": "#/$defs/Timestamp"
+        }
+      }
+    },
+    "DeviceHelperFolder": {
+      "type": "object",
+      "required": ["path", "write"],
+      "properties": {
+        "path": {
+          "type": "string",
+          "maxLength": 1024,
+          "description": "Absolute, on the computer."
+        },
+        "write": {
+          "type": "boolean",
+          "description": "Shared as writable; read only otherwise."
+        },
+        "default": {
+          "type": "boolean",
+          "description": "The folder the app made for Core Hub's own files (`~/Core Hub`); program output goes there unless the person says otherwise."
+        }
+      }
+    },
+    "DeviceProgram": {
+      "type": "object",
+      "description": "A program on the computer the person switched on for some profiles: an MCP server another\nassistant registered (Claude Desktop and its extensions, Claude Code, Codex, Cursor,\nWindsurf), started by the desktop app as its own child and reached only through it.\n",
+      "required": ["id", "name", "source", "profiles", "tools"],
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^[a-z0-9][a-z0-9_-]{0,47}$",
+          "description": "The app's stable id for it, used in `apps` requests."
+        },
+        "name": {
+          "type": "string",
+          "maxLength": 120
+        },
+        "source": {
+          "type": "string",
+          "enum": [
+            "claude_desktop",
+            "claude_desktop_extension",
+            "claude_code",
+            "codex",
+            "cursor",
+            "windsurf"
+          ]
+        },
+        "profiles": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/$defs/ProfileSlug"
+          },
+          "description": "The profiles whose agents may use it."
+        },
+        "tools": {
+          "type": "array",
+          "maxItems": 200,
+          "items": {
+            "$ref": "#/$defs/DeviceProgramTool"
+          }
+        }
+      }
+    },
+    "DeviceProgramTool": {
+      "type": "object",
+      "required": ["name", "description", "input_schema"],
+      "properties": {
+        "name": {
+          "type": "string",
+          "maxLength": 128
+        },
+        "description": {
+          "type": "string",
+          "maxLength": 2000
+        },
+        "input_schema": {
+          "type": "object",
+          "additionalProperties": true
+        }
+      }
+    },
+    "AgentPresetContent": {
+      "type": "object",
+      "description": "What a preset sets. Each part is `null` when the agent did not have it when the preset was saved, and a `null` part is left alone on activation. No part ever holds a secret: providers are named by id, MCP servers by name, and secret settings are never saved.",
+      "required": ["model", "skills", "mcp_servers", "settings"],
+      "properties": {
+        "model": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "type": "object",
+              "required": ["default", "fallbacks", "agent"],
+              "properties": {
+                "default": {
+                  "description": "The profile's chat model (`models.getDefaults`); `null` when the profile inherits the `default` profile's, and activation goes back to inheriting.",
+                  "oneOf": [
+                    {
+                      "$ref": "#/$defs/ModelRef"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "fallbacks": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/$defs/ModelRef"
+                  }
+                },
+                "agent": {
+                  "description": "The agent's own model (`Agent.default_model`); `null` for none.",
+                  "oneOf": [
+                    {
+                      "$ref": "#/$defs/ModelRef"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                }
+              }
+            }
+          ]
+        },
+        "skills": {
+          "description": "Skill key → on or off. Hermes's built-in skills are not switched and not saved.",
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "type": "object",
+              "additionalProperties": {
+                "type": "boolean"
+              }
+            }
+          ]
+        },
+        "mcp_servers": {
+          "description": "MCP server name → on or off. The servers' configuration is not saved.",
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "type": "object",
+              "additionalProperties": {
+                "type": "boolean"
+              }
+            }
+          ]
+        },
+        "settings": {
+          "description": "Settings section key → field key → value, as `agents.updateSettings` takes them. Fields of kind `secret`, and text values that carry a user and password, are left out.",
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "type": "object",
+              "additionalProperties": {
+                "type": "object",
+                "additionalProperties": true
+              }
+            }
+          ]
         }
       }
     }

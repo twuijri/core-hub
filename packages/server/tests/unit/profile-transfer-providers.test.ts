@@ -155,7 +155,8 @@ describe('profile export and providers (decision §37)', () => {
     try {
       const id = await designWithProviders(hub);
       const { result, bytes } = await exportOf(hub, id, { providers: true });
-      expect(result.providers).toBe(2);
+      // Groq is three rows and one key: chat, dictation and speech (decision §94).
+      expect(result.providers).toBe(4);
       const archive = unpack(bytes);
       expect(archive.entries).toEqual([
         'design',
@@ -172,6 +173,8 @@ describe('profile export and providers (decision §37)', () => {
       expect(bundle.providers.map((p) => [p.slug, p.api_key])).toEqual([
         ['anthropic', SHARED_KEY],
         ['groq', OWN_KEY],
+        ['groq-stt', OWN_KEY],
+        ['groq-tts', OWN_KEY],
       ]);
       expect(bundle.providers[1]!.models.map((m) => m.model_key)).toEqual([
         'llama-3.3-70b-versatile',
@@ -214,7 +217,7 @@ describe('profile export and providers (decision §37)', () => {
       const done = await job(hub, started.body.job_id as string);
       expect(done).toMatchObject({
         status: 'succeeded',
-        result: { slug: 'restored', providers: 2 },
+        result: { slug: 'restored', providers: 4 },
       });
 
       // Hermes got the profile without the file, and without a key.
@@ -229,6 +232,8 @@ describe('profile export and providers (decision §37)', () => {
         ['anthropic', 'profile', '[stored]'],
         ['anthropic', 'all', '[stored]'],
         ['groq', 'profile', '[stored]'],
+        ['groq-stt', 'profile', '[stored]'],
+        ['groq-tts', 'profile', '[stored]'],
       ]);
       const restoredId = String((done.result as Json).profile_id);
       expect(
@@ -286,7 +291,7 @@ describe('profile export and providers (decision §37)', () => {
       });
       expect(started.status).toBe(202);
       const done = await job(hub, started.body.job_id as string);
-      expect(done).toMatchObject({ status: 'succeeded', result: { slug: 'older', providers: 2 } });
+      expect(done).toMatchObject({ status: 'succeeded', result: { slug: 'older', providers: 4 } });
       // Hermes still never sees the file, whichever name it has.
       expect(unpack(fake.imported[0]!.bytes).entries).toEqual(['design', 'design/SOUL.md']);
     } finally {

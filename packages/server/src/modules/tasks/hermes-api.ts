@@ -37,10 +37,111 @@ export interface HermesComment {
   created_at: number;
 }
 
-/** A card as `GET /tasks/{id}` answers it: the card, what was said on it, its runs. */
+/**
+ * One line of a card's history as Hermes keeps it (`task_events`): what happened, to which
+ * attempt, with Hermes's details, when (epoch seconds).
+ */
+export interface HermesEvent {
+  id: number;
+  kind: string;
+  payload?: Record<string, unknown> | null;
+  created_at: number;
+  run_id?: number | null;
+}
+
+/** One attempt of Hermes's dispatcher at a card (`task_runs`). */
+export interface HermesRun {
+  id: number;
+  profile?: string | null;
+  status: string;
+  outcome?: string | null;
+  summary?: string | null;
+  error?: string | null;
+  started_at: number;
+  ended_at?: number | null;
+}
+
+/** A card as `GET /tasks/{id}` answers it: the card, what was said on it, its history. */
 export interface HermesCardDetail {
   task: HermesTask & { current_run_id?: number | null };
   comments: HermesComment[];
+  /** Oldest first, as Hermes answers them. */
+  events: HermesEvent[];
+  /** Oldest first, as Hermes answers them. */
+  runs: HermesRun[];
+}
+
+/** How much of a card's history the hub hands on (contract `HermesCardHistory`). */
+export const HISTORY_EVENTS_MAX = 100;
+export const HISTORY_RUNS_MAX = 20;
+const HISTORY_TEXT_MAX = 4_000;
+
+const epochIso = (seconds: unknown): string | null => {
+  const value = typeof seconds === 'number' ? seconds : Number(seconds);
+  if (!Number.isFinite(value) || value <= 0) return null;
+  return new Date(Math.round(value * 1000)).toISOString();
+};
+
+const shortText = (value: unknown): string | null => {
+  if (typeof value !== 'string' || value.trim() === '') return null;
+  return value.length > HISTORY_TEXT_MAX ? `${value.slice(0, HISTORY_TEXT_MAX - 1)}…` : value;
+};
+
+const wordOf = (value: unknown, fallback: string): string =>
+  typeof value === 'string' && value.trim() !== '' ? value.trim().slice(0, 64) : fallback;
+
+/**
+ * A card's history as the contract's `HermesCardHistory` (decision §103): Hermes's own words
+ * for each event and run, newest first, capped. Rows Hermes could not date are left out
+ * rather than dated now.
+ */
+export function toHermesHistory(detail: Pick<HermesCardDetail, 'events' | 'runs'>): {
+  events: Array<Record<string, unknown>>;
+  runs: Array<Record<string, unknown>>;
+} {
+  const events = [...detail.events]
+    .reverse()
+    .flatMap((event) => {
+      const created = epochIso(event.created_at);
+      const id = Number(event.id);
+      if (!created || !Number.isInteger(id)) return [];
+      const run = event.run_id === null || event.run_id === undefined ? null : Number(event.run_id);
+      return [
+        {
+          id,
+          kind: wordOf(event.kind, 'event'),
+          run_id: run !== null && Number.isInteger(run) ? run : null,
+          payload:
+            event.payload && typeof event.payload === 'object' && !Array.isArray(event.payload)
+              ? event.payload
+              : null,
+          created_at: created,
+        },
+      ];
+    })
+    .slice(0, HISTORY_EVENTS_MAX);
+  const runs = [...detail.runs]
+    .reverse()
+    .flatMap((run) => {
+      const started = epochIso(run.started_at);
+      const id = Number(run.id);
+      if (!started || !Number.isInteger(id)) return [];
+      return [
+        {
+          id,
+          profile: typeof run.profile === 'string' && run.profile !== '' ? run.profile : null,
+          status: wordOf(run.status, 'unknown'),
+          outcome:
+            typeof run.outcome === 'string' && run.outcome !== '' ? run.outcome.slice(0, 64) : null,
+          summary: shortText(run.summary),
+          error: shortText(run.error),
+          started_at: started,
+          ended_at: epochIso(run.ended_at),
+        },
+      ];
+    })
+    .slice(0, HISTORY_RUNS_MAX);
+  return { events, runs };
 }
 
 export type HubPriority = 'low' | 'normal' | 'high' | 'urgent';
@@ -75,7 +176,7 @@ export function fromHermesPriority(priority: number | null | undefined): HubPrio
 export interface HermesCardApi {
   /** Start Hermes's server in the background, so the next call does not wait for it. */
   warm(): void;
-  /** The card, its comments and its current run. */
+  /** The card, its comments, its event log and its runs. */
   show(id: string): Promise<HermesCardDetail>;
   /** Edit the card's words and priority. Answers the card as Hermes now has it. */
   update(
@@ -111,7 +212,12 @@ export function createHermesCardApi(port: {
     async show(id) {
       const answer = await request<Partial<HermesCardDetail> | null>('GET', task(id));
       if (!answer?.task) throw new HermesRefusal('show', `Hermes did not answer card ${id}`);
-      return { task: answer.task, comments: answer.comments ?? [] };
+      return {
+        task: answer.task,
+        comments: Array.isArray(answer.comments) ? answer.comments : [],
+        events: Array.isArray(answer.events) ? answer.events : [],
+        runs: Array.isArray(answer.runs) ? answer.runs : [],
+      };
     },
     async update(id, patch) {
       const body: Record<string, unknown> = {};

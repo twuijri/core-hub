@@ -108,6 +108,15 @@
 .ch-btn-danger:hover:not(:disabled) {
   background: color-mix(in srgb, var(--ch-color-danger) 85%, black);
 }
+.ch-btn-danger-quiet {
+  background: var(--ch-color-surface);
+  border-color: var(--ch-color-border);
+  color: var(--ch-color-danger-soft-text);
+}
+.ch-btn-danger-quiet:hover:not(:disabled) {
+  background: var(--ch-color-danger-soft);
+  border-color: var(--ch-color-danger-soft);
+}
 
 /* The one waiting glyph inside a control: the same ring the Spinner draws. */
 .ch-btn-spin {
@@ -600,6 +609,20 @@
   white-space: nowrap;
   max-inline-size: 100%;
 }
+/* A status that shrinks to its dot on a phone (Badge `narrow="dot"`, docs/design/family.md). */
+@media (max-width: 47.99rem) {
+  .ch-badge[data-narrow='dot'] {
+    background: transparent;
+    padding-inline: 0;
+  }
+  .ch-badge[data-narrow='dot'] .ch-badge-label {
+    display: none;
+  }
+  .ch-badge[data-narrow='dot'] .ch-badge-dot {
+    inline-size: 0.5rem;
+    block-size: 0.5rem;
+  }
+}
 .ch-badge-label {
   overflow: hidden;
   text-overflow: ellipsis;
@@ -644,6 +667,11 @@
   overflow: hidden;
   border-radius: var(--ch-radius-full);
   user-select: none;
+}
+.ch-avatar-xs {
+  inline-size: 1.125rem;
+  block-size: 1.125rem;
+  font-size: 0.625rem;
 }
 .ch-avatar-sm {
   inline-size: var(--ch-layout-avatar-sm);

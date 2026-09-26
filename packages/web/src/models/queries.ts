@@ -327,6 +327,18 @@ export function useSignInStatus(providerId: string, signInId: string | null) {
 }
 
 /** `<provider_id>|<model>` — one string a picker can carry for a `ModelRef`. */
+/**
+ * The models a chat can be held with: chat models, less the ones that only draw (contract
+ * decision §87 — `gpt-image-*`, DALL·E, FLUX …, which fail a chat turn). Every chat-model
+ * picker lists these: the composer, the defaults, the fallback chain, a provider's default, a
+ * workflow step. The image-only ones are offered on the Images tab alone.
+ */
+export function chatModels<T extends Pick<Model, 'kind' | 'image_only'>>(
+  models: readonly T[],
+): T[] {
+  return models.filter((model) => model.kind === 'chat' && model.image_only !== true);
+}
+
 export function refValue(ref: ModelRef | null | undefined): string {
   return ref ? `${ref.provider_id}|${ref.model}` : '';
 }
@@ -358,19 +370,53 @@ export function useUpdateSpeech() {
   });
 }
 
-/** The voices a TTS provider lists; empty for one that takes a free-form voice id. */
-export function useVoices(providerId: string | null) {
+/** One voice as `models.listVoices` answers it (DECISIONS §94). */
+export interface SpeechVoice {
+  id: string;
+  name: string;
+  language: string | null;
+  gender: 'female' | 'male' | 'neutral' | null;
+  description?: string | null;
+  models?: string[] | null;
+}
+
+/**
+ * The voices a TTS provider offers, for one model when it is given: the provider's own list,
+ * its documented list (`source: documented`) when it has no endpoint, or none (`source:
+ * none`) for a provider whose voice is typed by hand.
+ */
+export function useVoices(providerId: string | null, model?: string | null) {
   const { client, profile, session } = useAuth();
+  const wanted = model?.trim() || null;
   return useQuery({
-    queryKey: ['models', 'voices', profile, providerId] as const,
+    queryKey: ['models', 'voices', profile, providerId, wanted] as const,
     queryFn: async () =>
       (
         await client.request('get', '/models/speech/voices', {
-          query: { provider_id: providerId as string },
+          query: { provider_id: providerId as string, ...(wanted ? { model: wanted } : {}) },
         })
-      ).data.items as { id: string; name: string; language: string | null }[],
+      ).data as { items: SpeechVoice[]; source: 'provider' | 'documented' | 'none' },
     enabled: !!session && !!providerId,
     staleTime: 5 * 60_000,
+    retry: false,
+  });
+}
+
+/** The models of one speech provider, of its own kind, as its catalogue holds them. */
+export function useSpeechModels(providerId: string | null, kind: 'stt' | 'tts') {
+  const { client, profile, session } = useAuth();
+  return useQuery({
+    queryKey: ['models', 'speech-models', profile, providerId, kind] as const,
+    queryFn: async () =>
+      (
+        (
+          await client.request('get', '/models', {
+            query: { provider_id: providerId as string, kind, limit: 200 },
+          })
+        ).data as { items: Model[] }
+      ).items,
+    enabled: !!session && !!providerId,
+    staleTime: 60_000,
     retry: false,
   });
 }

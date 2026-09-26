@@ -57,8 +57,8 @@ vendor runs one small service that holds the keys; self-hosted servers ask it to
      signs `corehub-push-bind-v1`, platform, token and a timestamp; the hub forwards it
      (`PushRegistration.relay_proof`). The first proof recorded for a token fixes its key; a newer
      proof from the **same key** moves the binding (the most recent registration wins), an older
-     one or another key does not. **The apps do not send it yet** (a follow-up in the iOS and
-     Android apps);
+     one or another key does not. The iOS and Android apps send it since 2026-09-27
+     (DECISIONS §107);
    - or the binding went **30 days** without a push or a sync from its hub (a hub that is gone
      for good) (*proposed*).
 
@@ -112,5 +112,6 @@ vendor runs one small service that holds the keys; self-hosted servers ask it to
 - The owner runs one Worker and one D1 database, and can see (counts) and block any hub.
 - Notice titles and bodies pass through Cloudflare and Apple/Google in transit unless private
   push is on — as they already pass through Apple/Google for a hub with its own keys.
-- Until the apps send the device proof, a phone that moves hubs without signing out of the old
-  one gets push from the new hub only after the old hub lets go or 30 days pass.
+- A phone that moves hubs without signing out of the old one gets push from the new hub at once
+  when its app sends the device proof (DECISIONS §107) and the old binding recorded that key; an
+  older app, or a binding made without a proof, waits until the old hub lets go or 30 days pass.

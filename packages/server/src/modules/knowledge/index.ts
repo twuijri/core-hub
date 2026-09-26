@@ -29,6 +29,7 @@
  * What the rest of the hub gets is `attachmentsPortFor(app)`: resolve ids, put a
  * person's files where an agent can read them, and take back what the agent wrote.
  */
+import { statSync } from 'node:fs';
 import { Readable } from 'node:stream';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import type { Server as SocketServer } from 'socket.io';
@@ -37,17 +38,19 @@ import { loadOpenApiDocument } from '@corehub/contracts';
 import { createContractIndex } from '../../lib/contract.js';
 import { clampLimit, decodeCursor, encodeCursor } from '../../lib/pagination.js';
 import { requireSqlite } from '../../lib/db.js';
-import { HubError } from '../../lib/errors.js';
+import { HubError, notFound } from '../../lib/errors.js';
 import { defineModule } from '../../lib/module.js';
 import { defineRoute } from '../../lib/route.js';
-import { requireRole, requireUser, requireWorkspace } from '../auth/index.js';
+import { canEnter, findUser, requireRole, requireUser, requireWorkspace } from '../auth/index.js';
+import { StreamTickets, type FileTicket } from './streams.js';
 import { MAX_UPLOAD_BYTES } from './limits.js';
-import { sanitiseFilename } from './media.js';
+import { contentDispositionOf, sanitiseFilename } from './media.js';
 import { KnowledgeItems, type ItemKind } from './items.js';
 import { KnowledgeService, type AttachmentScope } from './service.js';
 import { attachmentUrl, toAttachment } from './serialize.js';
 import type { AttachmentRow } from './store.js';
 import { registerWorkspaceFileRoutes } from './workspace-files-routes.js';
+import { WorkspaceFiles } from './workspace-files.js';
 
 export { KnowledgeItems } from './items.js';
 export type { ItemKind, ItemQuery, KnowledgeItem } from './items.js';
@@ -100,9 +103,52 @@ export interface AttachmentsPort {
     scope: { workspace: string; userId: string },
     file: { name: string; mime: string; bytes: Buffer },
   ): Promise<{ id: string; name: string; mime: string; sizeBytes: number; kind: string }>;
+  /**
+   * A one-hour address a media element plays one file of a folder from (decision §98): the
+   * file is `relative` inside `root`, checked again on every read.
+   */
+  streamFile(
+    scope: { workspace: string; profile: string; userId: string },
+    file: { root: string; relative: string; mime: string },
+  ): { url: string; expires_at: string };
 }
 
 const services = new WeakMap<SocketServer, KnowledgeService>();
+
+/** The file stream tickets of one hub (decision §98); the attachment ones are §90's. */
+const fileTickets = new WeakMap<SocketServer, StreamTickets<FileTicket>>();
+
+function fileTicketsFor(app: FastifyInstance): StreamTickets<FileTicket> {
+  const existing = fileTickets.get(app.hub.io);
+  if (existing) return existing;
+  const created = new StreamTickets<FileTicket>();
+  fileTickets.set(app.hub.io, created);
+  return created;
+}
+
+const wireTime = (at: number) => new Date(at).toISOString().replace(/\.\d{3}Z$/, 'Z');
+
+/** Issues a file ticket and answers the contract's `AttachmentStream`. */
+export function issueFileStream(
+  app: FastifyInstance,
+  ticket: FileTicket,
+): { url: string; expires_at: string } {
+  const { ticket: id, expiresAt } = fileTicketsFor(app).issue(ticket);
+  return { url: `/api/v1/file-streams/${id}`, expires_at: wireTime(expiresAt) };
+}
+
+/**
+ * Types a file ticket serves in place: things a browser plays or shows and never runs. Anything
+ * else is sent as bytes to save, whatever its name says.
+ */
+function streamsInline(mime: string): boolean {
+  return (
+    mime.startsWith('video/') ||
+    mime.startsWith('audio/') ||
+    (mime.startsWith('image/') && mime !== 'image/svg+xml') ||
+    mime === 'application/pdf'
+  );
+}
 
 export function knowledgeServiceFor(app: FastifyInstance): KnowledgeService {
   const { hub } = app;
@@ -159,6 +205,9 @@ export function attachmentsPort(app: FastifyInstance): AttachmentsPort {
         sourceId,
       );
       return summary(row);
+    },
+    streamFile(scope, file) {
+      return issueFileStream(app, { ...scope, ...file, adminOnly: false });
     },
     // Bytes the hub wrote for the caller (a transcript): an upload of theirs in every way.
     async store(scope, file) {
@@ -382,6 +431,99 @@ export const knowledgeModule = defineModule({
       },
     });
 
+    // A media element cannot send the bearer: it plays from a one-attachment ticket (§90).
+    const tickets = new StreamTickets();
+    defineRoute(app, deps, {
+      operationId: 'sessions.createAttachmentStream',
+      status: 201,
+      handler: (request, { params }) => {
+        const scope = scopeOf(request);
+        const row = knowledge().require(scope, String(params.attachment_id));
+        const { ticket, expiresAt } = tickets.issue({
+          attachmentId: row.id,
+          workspace: scope.workspace,
+          profile: scope.profile,
+          userId: scope.userId,
+        });
+        return {
+          url: `/api/v1/attachment-streams/${ticket}`,
+          expires_at: wireTime(expiresAt),
+        };
+      },
+    });
+
+    defineRoute(app, deps, {
+      operationId: 'sessions.streamAttachment',
+      handler: (request, { params }, reply: FastifyReply) => {
+        const found = tickets.read(String(params.ticket));
+        const gone = notFound({ resource: 'attachment_stream' });
+        if (!found) throw gone;
+        // Whoever asked for it must still be able to read it.
+        const db = requireSqlite(app.hub.database);
+        const person = findUser(db, found.userId);
+        if (
+          !person ||
+          person.status !== 'active' ||
+          !canEnter(db, { id: person.id, role: person.role }, found.workspace)
+        ) {
+          throw gone;
+        }
+        const handle = knowledge().download(
+          { workspace: found.workspace, profile: found.profile, userId: found.userId },
+          found.attachmentId,
+          request.headers.range,
+        );
+        // The ticket is in the path: never let a proxy or the browser keep it.
+        return reply
+          .status(handle.status)
+          .headers({ ...handle.headers, 'cache-control': 'private, no-store' })
+          .send(handle.stream);
+      },
+    });
+
+    // A file of a folder, from a ticket `sessions.createFileStream` or
+    // `knowledge.createWorkspaceFileStream` made (§98): opened again, by the working-file rules,
+    // on every read.
+    defineRoute(app, deps, {
+      operationId: 'knowledge.streamFile',
+      handler: (request, { params }, reply: FastifyReply) => {
+        const found = fileTicketsFor(app).read(String(params.ticket));
+        const gone = notFound({ resource: 'file_stream' });
+        if (!found) throw gone;
+        const db = requireSqlite(app.hub.database);
+        const person = findUser(db, found.userId);
+        if (
+          !person ||
+          person.status !== 'active' ||
+          !canEnter(db, { id: person.id, role: person.role }, found.workspace) ||
+          (found.adminOnly && person.role !== 'owner' && person.role !== 'admin')
+        ) {
+          throw gone;
+        }
+        try {
+          if (!statSync(found.root).isDirectory()) throw gone;
+        } catch {
+          throw gone;
+        }
+        const file = new WorkspaceFiles(found.root).open(found.relative, request.headers.range);
+        const inline = streamsInline(found.mime);
+        return reply
+          .status(file.status)
+          .headers({
+            ...file.lengthHeaders,
+            'content-type': inline ? found.mime : 'application/octet-stream',
+            'content-disposition': inline
+              ? contentDispositionOf(file.name).replace(/^attachment/, 'inline')
+              : contentDispositionOf(file.name),
+            'x-content-type-options': 'nosniff',
+            'content-security-policy': "sandbox; default-src 'none'",
+            // The ticket is in the path: never let a proxy or the browser keep it.
+            'cache-control': 'private, no-store',
+          })
+          .send(file.stream);
+      },
+    });
+
     // ----------------------------------------------------------- resumable
 
     defineRoute(app, deps, {
@@ -427,7 +569,7 @@ export const knowledgeModule = defineModule({
 
     // ------------------------------------------- the profile's working files (§65)
 
-    registerWorkspaceFileRoutes(app, deps, knowledge);
+    registerWorkspaceFileRoutes(app, deps, knowledge, (ticket) => issueFileStream(app, ticket));
   },
   registerEvents(_io) {
     // This module does not stream (ARCHITECTURE §Realtime).

@@ -13,6 +13,8 @@ sealed interface Route {
 
     data object NewChat : Route { override val destination = "new_chat" }
     data class Chat(val sessionId: String, val profile: String) : Route { override val destination = "chat" }
+    /** One room, opened from the drawer's Rooms list (the `rooms` segment), in its own profile. */
+    data class Room(val roomId: String, val profile: String) : Route { override val destination = "rooms" }
     data object Search : Route { override val destination = "search" }
     data object Agents : Route { override val destination = "agent_manager" }
     data object Tasks : Route { override val destination = "tasks" }
@@ -48,7 +50,7 @@ object Screens {
 
     /** An agent's pages, in order; each shows only when the adapter declares its capability. */
     val agentLevel = listOf(
-        "agent_skills", "agent_mcp", "agent_memory", "agent_jobs", "agent_channels", "agent_plugins", "agent_settings",
+        "agent_skills", "agent_mcp", "agent_memory", "agent_jobs", "agent_channels", "agent_plugins", "agent_config_files", "agent_settings",
     )
 
     /** The drawer's primary rows (the manifest's `rail`), segments and footer. */
@@ -70,7 +72,7 @@ object Screens {
     /** The capability an agent page needs (`agent_settings` is shown for every installed agent). */
     val capabilityOf = mapOf(
         "agent_skills" to "skills", "agent_mcp" to "mcp", "agent_memory" to "memory", "agent_jobs" to "jobs",
-        "agent_channels" to "channels", "agent_plugins" to "plugins", "agent_settings" to "settings",
+        "agent_channels" to "channels", "agent_plugins" to "plugins", "agent_config_files" to "config_files", "agent_settings" to "settings",
     )
 
     /**
@@ -85,7 +87,7 @@ object Screens {
 }
 
 /**
- * A back stack. The root is always the new-chat draft or a conversation; everything else is
+ * A back stack. The root is always the new-chat draft, a conversation or a room; everything else is
  * pushed on top and Back returns through it, the way the web's history does.
  */
 @Stable
@@ -96,7 +98,7 @@ class Navigator(start: Route = Route.NewChat) {
     /** Opens a route; a destination already on the stack is brought back rather than stacked twice. */
     fun go(route: Route) {
         if (current == route) return
-        if (route is Route.NewChat || route is Route.Chat) {
+        if (route is Route.NewChat || route is Route.Chat || route is Route.Room) {
             stack.clear()
             stack.add(route)
             return
@@ -113,7 +115,7 @@ class Navigator(start: Route = Route.NewChat) {
 
     /** The route Settings' "back to chats" row returns to: the last conversation or the draft. */
     fun backToChats() {
-        val chat = stack.lastOrNull { it is Route.Chat || it is Route.NewChat } ?: Route.NewChat
+        val chat = stack.lastOrNull { it is Route.Chat || it is Route.NewChat || it is Route.Room } ?: Route.NewChat
         stack.clear()
         stack.add(chat)
     }

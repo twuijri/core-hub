@@ -49,10 +49,15 @@ final class AppModel {
     let realtime: RealtimeClient
     /// This phone's own voice and reading choices («This device»).
     let device = DeviceSettings()
+    /// The agents of each profile, for their names, marks and pictures (AgentIdentity.swift).
+    let agentDirectory = AgentDirectory()
     /// Text shared from another app, waiting to become a new chat.
     var pendingDraft: String?
+    /// Pictures and files shared from another app, waiting to become a new chat's attachments.
+    var pendingFiles: [URL] = []
     private let defaults: UserDefaults
     @ObservationIgnored private var sessionsNamespace: RealtimeNamespace?
+    @ObservationIgnored private var roomsNamespace: RealtimeNamespace?
     /// A link that opened the app before it knew whether anyone was signed in.
     @ObservationIgnored private var pendingLink: URL?
 
@@ -73,6 +78,7 @@ final class AppModel {
         self.realtime = RealtimeClient(keeper: keeper)
         api.language = language
         realtime.onStateChange = { [weak self] state in self?.connection = state }
+        agentDirectory.app = self
     }
 
     var isAdmin: Bool {
@@ -202,7 +208,7 @@ final class AppModel {
             appVersion: described.appVersion,
             osVersion: described.osVersion,
             pushBlocker: pushBlocker,
-            capabilities: [.camera, .microphone, .notifications, .clipboard]
+            capabilities: [.camera, .microphone, .notifications, .clipboard, .location]
         )
     }
 
@@ -211,7 +217,8 @@ final class AppModel {
     func thisDeviceReport(pushBlocker: PushBlocker?) -> DevicePatch {
         let described = DeviceInfo.current(appVersion: appVersion)
         return DevicePatch(brand: "Apple", model: described.model, osVersion: described.osVersion,
-                           appVersion: described.appVersion, pushBlocker: pushBlocker)
+                           appVersion: described.appVersion, pushBlocker: pushBlocker,
+                           capabilities: [Locating.capability(Locating.storedChoice())])
     }
 
     /// Claims a pairing the web made (Settings → Device connections → App).
@@ -262,13 +269,27 @@ final class AppModel {
         sessionsNamespace = realtime.namespace("/rt/sessions") { [weak self] in
             await self?.handshake(all: true) ?? [:]
         }
+        // A room opens in its own profile, whatever the selector: the handshake admits them all.
+        roomsNamespace = realtime.namespace("/rt/rooms") { [weak self] in
+            await self?.handshake(all: true) ?? [:]
+        }
         LocalNotices.shared.start(app: self)
+        // An agent may ask where this phone is (§105): requests reach `/rt/devices`.
+        LocationRequests.shared.start(app: self)
         takeShared()
     }
 
-    /// Text the share extension left for the app becomes a new chat's draft.
+    /// Text the share extension left for the app becomes a new chat's draft; its files, the
+    /// new chat's attachments.
     func takeShared() {
-        if let text = ShareInbox.take(from: ShareInbox.defaults()) { pendingDraft = text }
+        let files = ShareInbox.takeFiles(from: ShareInbox.defaults(), folder: ShareInbox.folder())
+        if !files.isEmpty { pendingFiles += files }
+        if let text = ShareInbox.take(from: ShareInbox.defaults()) {
+            pendingDraft = text
+        } else if !files.isEmpty {
+            // Files alone still open a new chat.
+            pendingDraft = pendingDraft ?? ""
+        }
     }
 
     /// The profile the app opens on: the one used last if still allowed, else the person's
@@ -291,6 +312,9 @@ final class AppModel {
 
     /// `/rt/sessions`, heard across every profile the person may enter.
     var sessions: RealtimeNamespace? { sessionsNamespace }
+
+    /// `/rt/rooms`: an open room joins its channel here.
+    var rooms: RealtimeNamespace? { roomsNamespace }
 
     /// Re-reads who the person is, the profiles and the agents.
     func refreshAccount() async {
@@ -315,6 +339,7 @@ final class AppModel {
         do {
             let list = try await api.call { try await AgentsAPI.agentsList(xHubProfile: profile, apiConfiguration: $0) }
             if profile == currentProfile { agents = list.items }
+            agentDirectory.put(profile, list.items)
         } catch {
             if profile == currentProfile { agents = [] }
         }
@@ -327,6 +352,7 @@ final class AppModel {
         currentProfile = slug
         defaults.set(slug, forKey: Keys.profile)
         if let sessionsNamespace { sessionsNamespace.reconnect() }
+        if let roomsNamespace { roomsNamespace.reconnect() }
         Task { await reloadAgents() }
     }
 
@@ -342,6 +368,7 @@ final class AppModel {
 
     private func signedOutByHub() {
         notice = l10n("errors.signed_out")
+        PushCenter.shared.endedByHub()
         Task { await clearSession() }
     }
 
@@ -351,10 +378,12 @@ final class AppModel {
         Speaker.shared.stop()
         realtime.stop()
         sessionsNamespace = nil
+        roomsNamespace = nil
         await keeper.set(nil)
         credentials = nil
         profiles = []
         agents = []
+        agentDirectory.forget()
         phase = .signedOut
     }
 
@@ -398,6 +427,10 @@ final class AppModel {
             guard let id = params["sessionId"] else { return .newChat }
             let profile = components.queryItems?.first { $0.name == "profile" }?.value ?? selector
             return .chat(sessionID: id, profile: profile)
+        case .rooms:
+            guard let id = params["roomId"] else { return .newChat }
+            let profile = components.queryItems?.first { $0.name == "profile" }?.value ?? selector
+            return .room(roomID: id, profile: profile)
         case .newChat:
             return .newChat
         case .settings:
@@ -418,6 +451,7 @@ final class AppModel {
         #endif
         realtime.resume()
         takeShared()
+        Task { await LocationRequests.shared.catchUp() }
         Task {
             if let stored = await keeper.credentials, stored.needsRenewal() { _ = await keeper.refresh() }
             // Not asked yet, turned on in Settings, or the hub has a sender now: try again.

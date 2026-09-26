@@ -108,6 +108,7 @@ describe.skipIf(!doc)('contract: channel conversations', () => {
     expect(listed).toEqual({
       items: [],
       unavailable: [{ profile: null, reason: 'hermes_not_managed', message: null }],
+      has_more: false,
     });
     const opened = await call('sessions.listChannelMessages', 503, {
       params: { conversation_id: CONVERSATION },
@@ -163,6 +164,10 @@ describe.skipIf(!doc)('contract: channel conversations', () => {
     await call('sessions.listChannelConversations', 200, { query: { profiles: 'all' } });
     await call('sessions.listChannelConversations', 200, { query: { channel: 'whatsapp' } });
     await call('sessions.listChannelConversations', 400, { query: { channel: 'Not A Slug' } });
+    // Paging (§103): a larger `limit`, and a bound on it.
+    const more = await call('sessions.listChannelConversations', 200, { query: { limit: '300' } });
+    expect(more.has_more).toBe(false);
+    await call('sessions.listChannelConversations', 400, { query: { limit: '1001' } });
 
     const opened = await call('sessions.listChannelMessages', 200, {
       params: { conversation_id: CONVERSATION },
@@ -177,6 +182,18 @@ describe.skipIf(!doc)('contract: channel conversations', () => {
     await call('sessions.listChannelMessages', 404, {
       params: { conversation_id: 'no_such_conversation' },
     });
+    expect(opened.next_offset).toBeNull();
+    expect((opened.items as Array<{ attachments: unknown[] }>)[0]?.attachments).toEqual([]);
+    const older = await call('sessions.listChannelMessages', 200, {
+      params: { conversation_id: CONVERSATION },
+      query: { offset: '2' },
+    });
+    expect(older.items).toEqual([]);
+    // A picture Hermes no longer keeps, or never did (§103).
+    const gone = await call('sessions.getChannelPicture', 404, {
+      params: { conversation_id: CONVERSATION, picture_id: 'img_a1b2c3d4e5f6.jpg' },
+    });
+    expect(gone).toMatchObject({ details: { resource: 'channel_picture' } });
 
     // "Continue in Core Hub" (§62): a chat and its first message, as the contract says.
     const continued = await call('sessions.continueChannelConversation', 201, {

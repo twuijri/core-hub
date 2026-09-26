@@ -202,7 +202,7 @@ export function ChannelSettingsPanel({
 
   return (
     <section
-      className="flex flex-col gap-4 rounded-md border border-border p-4"
+      className="flex flex-col gap-4 rounded-md border border-line p-4"
       data-testid={ids('settings')}
     >
       <div className="flex flex-wrap items-center gap-2">

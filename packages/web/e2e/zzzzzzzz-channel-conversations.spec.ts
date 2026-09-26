@@ -81,3 +81,50 @@ test('33. a Telegram conversation shows under «تيليجرام» and opens rea
     await request.post('/__e2e/channels', { data: { on: false } });
   }
 });
+
+test('33b. a Telegram conversation is hidden from one’s list and shown again; deleting asks first', async ({
+  page,
+  request,
+}) => {
+  expect((await request.post('/__e2e/channels', { data: { on: true } })).ok()).toBe(true);
+  try {
+    await login(page);
+    const list = page.getByTestId('session-list');
+    const row = list.getByTestId('channel-row');
+    await expect(row).toHaveCount(1);
+
+    // Hide (§88): only this person's list; Hermes keeps it.
+    await row.hover();
+    await row.getByTestId('channel-more-button').click();
+    await page.getByRole('menuitem', { name: 'إخفاء من قائمتي' }).click();
+    await expect(row).toHaveCount(0);
+    const toggle = page.getByTestId('channel-show-hidden');
+    await expect(toggle).toHaveText('إظهار المحادثات المخفية (1)');
+    await toggle.click();
+    await expect(row).toHaveAttribute('data-hidden', 'true');
+    await page.waitForTimeout(300);
+    await list.screenshot({ path: path.join(shots, 'channel-hidden-ar-light.png') });
+
+    // Shown again, as it was.
+    await row.hover();
+    await row.getByTestId('channel-more-button').click();
+    await page.getByRole('menuitem', { name: 'إظهار مرة أخرى' }).click();
+    await expect(row).not.toHaveAttribute('data-hidden', 'true');
+    await expect(toggle).toHaveCount(0);
+
+    // Delete from Hermes asks, and says it is permanent. Cancelled here: the conversation is
+    // the scripted Hermes's only one, and a retry must find it.
+    await row.getByRole('link').click();
+    await expect(page.getByTestId('channel-readonly')).toBeVisible();
+    await page.getByTestId('chat-header').getByTestId('channel-actions').click();
+    await page.getByRole('menuitem', { name: 'حذف من هرمز…' }).click();
+    const dialog = page.getByTestId('confirm-dialog');
+    await expect(dialog).toContainText('نهائيًا');
+    await page.screenshot({ path: path.join(shots, 'channel-delete-confirm-ar-light.png') });
+    await dialog.getByRole('button', { name: 'إلغاء' }).click();
+    await expect(dialog).toHaveCount(0);
+    await expect(row).toHaveCount(1);
+  } finally {
+    await request.post('/__e2e/channels', { data: { on: false } });
+  }
+});

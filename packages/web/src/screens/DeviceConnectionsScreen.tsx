@@ -102,6 +102,16 @@ export function QrCode({ text }: { text: string }) {
   );
 }
 
+/** The address a pairing's QR gives the phone. */
+function hubUrlOf(qrPayload: string): string | null {
+  try {
+    const url = (JSON.parse(qrPayload) as { hub_url?: unknown }).hub_url;
+    return typeof url === 'string' ? url : null;
+  } catch {
+    return null;
+  }
+}
+
 export function DeviceConnectionsScreen() {
   const { t } = useI18n();
   const { client, user } = useAuth();
@@ -208,6 +218,13 @@ export function DeviceConnectionsScreen() {
                     {t('devices.expires_in', { seconds: secondsLeft })}
                   </p>
                   <PairingLink qrPayload={pairing.qr_payload} />
+                  {pairing.connection === 'relay' && (
+                    <p className="text-xs text-muted" data-testid="pairing-relay">
+                      {t('devices.pair_through_relay', {
+                        url: `⁨${hubUrlOf(pairing.qr_payload) ?? '—'}⁩`,
+                      })}
+                    </p>
+                  )}
                 </>
               ) : (
                 <Notice tone="warning">

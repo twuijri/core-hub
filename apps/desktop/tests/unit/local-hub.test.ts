@@ -70,4 +70,58 @@ describe('local hub', () => {
     await hub.stop();
     expect(Date.now() - started).toBeLessThan(5_000);
   });
+
+  it('asks for the port used last, and carries the way-in questions both ways', async () => {
+    const lines: string[] = [];
+    const asked: unknown[] = [];
+    let reply: ((message: unknown) => void) | null = null;
+    const hub = await startLocalHub({
+      entry,
+      dataDir: dataDir(),
+      pathEnv: '',
+      env: { FAKE_HUB_MODE: 'relay' },
+      preferredPort: 47113,
+      onLog: (line) => lines.push(line),
+      onMessage: (message) => {
+        asked.push(message);
+        reply?.(message);
+      },
+      forkImpl,
+    });
+    expect(hub.port).toBe(47113);
+    const state = {
+      enabled: true,
+      connected: true,
+      route: 'cloudflare' as const,
+      relay_url: 'https://hub.example.com',
+      hub_port: 47113,
+      token_set: true,
+      tunnel_id: 't',
+      hostname: 'hub.example.com',
+      hostnames: [],
+      tailnet: null,
+      error: null,
+      error_detail: null,
+      connected_at: null,
+    };
+    reply = () => hub.send({ type: 'relay-answer', id: 7, ok: true, state });
+    // The question may have come before `reply` was set: answer it now as well.
+    if (asked.length > 0) hub.send({ type: 'relay-answer', id: 7, ok: true, state });
+    hub.send({ type: 'relay-state', state });
+    const deadline = Date.now() + 5_000;
+    while (
+      Date.now() < deadline &&
+      !(
+        lines.some((l) => l.includes('relay answer 7 connected=true')) &&
+        lines.some((l) => l.includes('relay state url=https://hub.example.com'))
+      )
+    )
+      await new Promise((resolve) => setTimeout(resolve, 20));
+    await hub.stop();
+    expect(asked).toContainEqual({ type: 'relay', id: 7, op: 'get' });
+    expect(lines.join('\n')).toContain('relay answer 7 connected=true');
+    expect(lines.join('\n')).toContain('relay state url=https://hub.example.com');
+    // Once the hub is gone, telling it anything is a no-op, not a crash.
+    hub.send({ type: 'relay-state', state });
+  });
 });
