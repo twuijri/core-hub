@@ -722,23 +722,33 @@ describe('models screen', () => {
     });
   });
 
-  it('folds the Runtime card to one line when every check passes', async () => {
+  it('folds the Runtime card to one line when every check passes, and the line opens it', async () => {
     const { fetchImpl } = hub();
     const user = userEvent.setup();
     renderScreen(fetchImpl);
     const card = await screen.findByTestId('runtime-report');
     expect(card.getAttribute('data-collapsed')).toBe('true');
-    expect(within(card).getByTestId('runtime-all-ok').textContent).toBe('Everything works');
+    // One line that says it is ready and counts the checks (owner, 2026-09-26).
+    expect(within(card).getByTestId('runtime-all-ok').textContent).toBe(
+      'Runtime ready · 4/4 checks',
+    );
     // Nothing to read, so the list is not on the page until somebody asks for it.
     expect(within(card).queryByTestId('runtime-checks')).toBeNull();
-    await user.click(within(card).getByTestId('runtime-toggle'));
-    expect(within(card).getByTestId('runtime-checks')).toBeTruthy();
+    const line = within(card).getByTestId('runtime-toggle');
+    // The whole line is the button, and it says whether it is open.
+    expect(line.tagName).toBe('BUTTON');
+    expect(line.closest('h2')).toBeTruthy();
+    expect(line.getAttribute('aria-expanded')).toBe('false');
+    await user.click(line);
+    expect(line.getAttribute('aria-expanded')).toBe('true');
+    const list = within(card).getByTestId('runtime-checks');
+    expect(list.parentElement?.id).toBe(line.getAttribute('aria-controls'));
     expect(card.getAttribute('data-collapsed')).toBeNull();
-    await user.click(within(card).getByTestId('runtime-toggle'));
+    await user.click(line);
     expect(within(card).queryByTestId('runtime-checks')).toBeNull();
   });
 
-  it('opens the Runtime card by itself when a check fails', async () => {
+  it('opens the Runtime card by itself when a check fails, the failing checks first', async () => {
     const { fetchImpl } = hub({
       runtime: {
         agent: 'hermes',
@@ -747,9 +757,9 @@ describe('models screen', () => {
         reloaded_at: null,
         checks: [
           { id: 'runtime_writable', ok: true, detail: 'managed' },
+          { id: 'gateway_reloaded', ok: false, detail: null },
           { id: 'provider_keys', ok: true, detail: '1' },
           { id: 'model_selected', ok: false, detail: null },
-          { id: 'gateway_reloaded', ok: true, detail: null },
         ],
       },
     });
@@ -758,7 +768,18 @@ describe('models screen', () => {
     expect(card.getAttribute('data-collapsed')).toBeNull();
     expect(within(card).getByTestId('runtime-checks')).toBeTruthy();
     expect(within(card).getByText(/No chat model is selected/)).toBeTruthy();
-    // A failure is not folded away behind a toggle, nor summed up as "everything works".
+    // What failed on top, each half in the order the steps happen in.
+    const order = Array.from(card.querySelectorAll('[data-check-id]')).map((row) =>
+      row.getAttribute('data-check-id'),
+    );
+    expect(order).toEqual([
+      'model_selected',
+      'gateway_reloaded',
+      'runtime_writable',
+      'provider_keys',
+    ]);
+    expect(within(card).getByTestId('runtime-count').textContent).toBe('2 of 4 checks pass');
+    // A failure is not folded away behind a toggle, nor summed up as ready.
     expect(within(card).queryByTestId('runtime-toggle')).toBeNull();
     expect(within(card).queryByTestId('runtime-all-ok')).toBeNull();
   });

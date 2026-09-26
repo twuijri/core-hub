@@ -963,10 +963,9 @@
         "ok": "The runtime restarted after the last change.",
         "missing": "Settings changed after Hermes last started — restart it to apply them."
       },
-      "all_ok": "Everything works",
-      "restart_now": "Restart now",
-      "show": "Show checks",
-      "hide": "Hide checks"
+      "ready": "Runtime ready · {passed}/{total} checks",
+      "passed": "{passed} of {total} checks pass",
+      "restart_now": "Restart now"
     },
     "speech": {
       "active_stt": "Speech to text for this profile",
