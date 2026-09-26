@@ -74,7 +74,7 @@ in the iOS unit tests. To change what the screenshots show, edit the script and 
 
 Both upload paths use fastlane `deliver` with the App Store Connect API key (`ASC_API_KEY_ID`,
 `ASC_API_KEY_P8`, `ASC_API_ISSUER_ID`, the same secrets as `ios-signed.yml`), with
-`--skip_binary_upload --skip_submission --submit_for_review false`. They are off unless the owner
+`--skip_binary_upload --submit_for_review false`. They are off unless the owner
 ticks `upload` on a manual run:
 
 - `ios-screenshots.yml` with **upload**: the listing and the light screenshots of that run

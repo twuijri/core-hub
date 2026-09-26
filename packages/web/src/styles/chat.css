@@ -951,8 +951,91 @@ button.context-ring {
    Time flows in the reading direction: bars are placed with `inset-inline-start`,
    so the first step is at the right edge in Arabic and at the left in English.
    ============================================================================= */
-.chat-header-tabs {
-  margin-inline-start: auto;
+/* ------------------------------------------ the conversation's bar, in the top bar
+   The agent, the folder, Files and the Chat | Trajectory switch sit after the title in the one
+   pinned bar (ConversationBar.tsx). Compact icons; the switch is a small segmented pill. */
+.topbar-slot {
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+  min-inline-size: 0;
+}
+.topbar-slot:empty {
+  display: none;
+}
+/* Room for the conversation's controls: the hub's own name steps aside on all but wide bars. */
+@media (max-width: 80rem) {
+  .topbar-slot:not(:empty) ~ .topbar-hub {
+    display: none;
+  }
+}
+.convo-bar {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  min-inline-size: 0;
+}
+.convo-bar .ch-pending-count {
+  background: var(--ch-color-surface-3);
+  color: var(--ch-color-text);
+}
+.convo-tabs .ch-tabs {
+  flex-wrap: nowrap;
+  gap: 2px;
+  padding: 2px;
+  border-radius: var(--ch-radius-full);
+  background: var(--ch-color-surface-2);
+}
+.convo-bar .convo-tabs {
+  margin-inline-start: var(--ch-space-1);
+}
+.convo-tabs .ch-tab {
+  block-size: var(--ch-control-height-sm);
+  padding-inline: var(--ch-space-3);
+  border-radius: var(--ch-radius-full);
+  font-size: var(--ch-font-size-xs);
+  white-space: nowrap;
+}
+.convo-tabs .ch-tab::after {
+  display: none;
+}
+.convo-tabs .ch-tab[data-state='active'] {
+  background: var(--ch-color-bg-raised);
+  box-shadow: var(--ch-shadow-sm);
+}
+.convo-more {
+  display: flex;
+  flex-direction: column;
+  gap: var(--ch-space-2);
+  inline-size: min(20rem, calc(100vw - 2rem));
+}
+.convo-more .convo-tabs .ch-tabs {
+  inline-size: fit-content;
+}
+.convo-more-row {
+  display: flex;
+  align-items: center;
+  gap: var(--ch-space-2);
+  inline-size: 100%;
+  padding: var(--ch-space-2);
+  border-radius: var(--ch-radius-sm);
+  font-size: var(--ch-font-size-sm);
+  text-align: start;
+}
+.convo-more-row:hover {
+  background: var(--ch-color-surface-2);
+}
+.working-dir-current {
+  display: flex;
+  flex-direction: column;
+  gap: var(--ch-space-1);
+  max-inline-size: 22rem;
+}
+.working-dir-path {
+  font-family: var(--ch-font-mono);
+  font-size: var(--ch-font-size-xs);
+  color: var(--ch-color-text-muted);
+  overflow-wrap: anywhere;
 }
 .chat-flow[data-view='trajectory'] .composer-dock,
 .chat-flow[data-view='trajectory'] .chat-pad {
@@ -1252,6 +1335,25 @@ button.context-ring {
   border-radius: var(--ch-radius-md);
   background: var(--ch-color-surface-2);
   object-fit: contain;
+}
+/* A video or a sound on a message, played in place from a stream ticket (§90). */
+.msg-attachment-media {
+  display: flex;
+  flex-basis: 100%;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--ch-space-1);
+}
+.msg-video {
+  display: block;
+  max-inline-size: min(100%, 32rem);
+  max-block-size: 24rem;
+  border: 1px solid var(--ch-color-border);
+  border-radius: var(--ch-radius-md);
+  background: var(--ch-color-surface-2);
+}
+.msg-audio {
+  max-inline-size: min(100%, 24rem);
 }
 
 .file-list {

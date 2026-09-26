@@ -86,7 +86,14 @@ export function Combobox({
   const ids = useId();
 
   const rows = useMemo(
-    () => buildRows({ options, query, recent, recentLabel: t('combobox.recent') }),
+    () =>
+      buildRows({
+        options,
+        query,
+        recent,
+        recentLabel: t('combobox.recent'),
+        restLabel: t('combobox.all'),
+      }),
     [options, query, recent, t],
   );
   const chosen = options.find((option) => option.value === value) ?? null;
@@ -164,14 +171,17 @@ export function Combobox({
     }
   };
 
+  // The header of the group being scrolled through, once its own row has gone past the top.
+  // While that row is still on screen it is the header, and a second one would read twice
+  // (owner, 2026-09-26: "Recent" showed twice).
   const sticky = (() => {
-    const first = virtualizer.getVirtualItems()[0];
-    if (!first) return null;
-    for (let i = first.index; i >= 0; i -= 1) {
-      const row = rows[i];
-      if (row?.kind === 'group') return row.label;
+    const offset = virtualizer.scrollOffset ?? 0;
+    let label: string | null = null;
+    for (const item of virtualizer.getVirtualItems()) {
+      const row = rows[item.index];
+      if (row?.kind === 'group' && item.start < offset) label = row.label;
     }
-    return null;
+    return label;
   })();
 
   const trigger = (
@@ -234,7 +244,7 @@ export function Combobox({
       );
     }
     return (
-      <>
+      <div className="ch-combo-body">
         {sticky !== null && (
           <div className="ch-combo-sticky" aria-hidden data-testid="combobox-sticky">
             {sticky}
@@ -296,7 +306,7 @@ export function Combobox({
             })}
           </div>
         </div>
-      </>
+      </div>
     );
   };
 

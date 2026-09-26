@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "a21975a4-2e36-4118-b550-7de652af46c9",
+  "id": "e7b9a9a0-1ac3-4892-9474-bd98090b707e",
   "prevId": "53e26911-e4f0-484f-96b8-0f08f2b60946",
   "tables": {
     "app_tokens": {
@@ -1783,6 +1783,68 @@
           "value": "\"approvals\".\"status\" in ('pending', 'approved', 'denied', 'answered', 'expired', 'cancelled')"
         }
       }
+    },
+    "channel_conversation_hides": {
+      "name": "channel_conversation_hides",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text(26)",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "owner_id": {
+          "name": "owner_id",
+          "type": "text(26)",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "workspace": {
+          "name": "workspace",
+          "type": "text(26)",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "conversation_id": {
+          "name": "conversation_id",
+          "type": "text(128)",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "channel_conversation_hides_uq": {
+          "name": "channel_conversation_hides_uq",
+          "columns": [
+            "workspace",
+            "owner_id",
+            "conversation_id"
+          ],
+          "isUnique": true
+        }
+      },
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {}
     },
     "messages": {
       "name": "messages",
@@ -5120,13 +5182,6 @@
         },
         "archived_at": {
           "name": "archived_at",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "stuck_at": {
-          "name": "stuck_at",
           "type": "integer",
           "primaryKey": false,
           "notNull": false,

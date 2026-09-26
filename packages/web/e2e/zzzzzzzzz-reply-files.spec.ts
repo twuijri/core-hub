@@ -61,5 +61,5 @@ test('35. the picture an agent left for the person is drawn on its reply', async
   await expect(pane.locator('img')).toBeVisible();
 
   // …and the conversation's Files list has it.
-  await expect(page.getByTestId('chat-files')).toHaveText('الملفات (1)');
+  await expect(page.getByTestId('chat-files')).toHaveAccessibleName('الملفات (1)');
 });

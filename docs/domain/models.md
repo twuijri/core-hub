@@ -197,6 +197,10 @@ with a key"; `reason` is an i18n key, never a sentence in one language.
   Images role take it. `image_api.py`'s `codex` protocol draws through the backend's
   `image_generation` tool with the token it asks Hermes for; nothing but the protocol, the address
   and the model is written to `.env`.
+- **Image-only models** (decision §87): `Model.image_only` marks the Images-API families
+  (`isImageOnlyModel` in `images.ts`: an image model whose id is one of the families spoken to
+  through `/images/generations`, `gpt-image-2` of the subscription included). Clients keep them
+  out of chat-model pickers; a model that draws and chats (`gemini-*-image`) is not one.
 - Usage roll-up by provider: audit `usage_records` grouped by `provider_id`.
 
 ## Propagation (ADR 0010)

@@ -236,7 +236,6 @@ jobs:
             --screenshots_path "$RUNNER_TEMP/screenshots" \
             --overwrite_screenshots true \
             --skip_binary_upload true \
-            --skip_submission true \
             --submit_for_review false \
             --automatic_release false \
             --run_precheck_before_submit false \

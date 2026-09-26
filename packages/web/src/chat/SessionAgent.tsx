@@ -34,10 +34,13 @@ import { useProfileInLink } from '../shell/profiles.js';
 export function SessionAgent({
   sessionId,
   agentId,
+  compact = false,
 }: {
   sessionId: string;
   /** `null` only while the session document is still loading. */
   agentId: string | null;
+  /** In the top bar: the agent's mark and the chevron; its name is the tooltip and label. */
+  compact?: boolean;
 }) {
   const { t } = useI18n();
   const navigate = useNavigate();
@@ -70,7 +73,8 @@ export function SessionAgent({
   return (
     <>
       <Menu
-        align="start"
+        align={compact ? 'end' : 'start'}
+        side={compact ? 'bottom' : 'top'}
         testId="session-agent-menu"
         tooltip={t('chat.agent_menu', { name: current.name })}
         trigger={
@@ -83,7 +87,9 @@ export function SessionAgent({
             data-agent-id={current.id}
             icon={agentMark(current.slug, 14) ?? <IconAgents size={14} />}
           >
-            <span dir="auto">{current.name}</span>
+            <span className={compact ? 'sr-only' : undefined} dir="auto">
+              {current.name}
+            </span>
             <IconChevron size={12} />
           </Button>
         }

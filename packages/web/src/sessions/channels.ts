@@ -5,7 +5,7 @@
 // Hermes announces nothing when a channel message arrives, so the list asks again every
 // `POLL_MS` while it is on screen (and the tab is visible); the hub answers from what it read
 // unless Hermes's store changed, so the polling costs Hermes nothing when nothing happens.
-import { useQuery } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '../auth/context.js';
 import { ALL_PROFILES_KEY } from '../hub/queries.js';
 import type { Translator } from '../i18n/index.js';
@@ -49,7 +49,11 @@ export function useChannelConversations(
     queryFn: async () =>
       (
         await client.request('get', '/channel-conversations', {
-          ...(filters.allProfiles ? { query: { profiles: 'all' as const } } : {}),
+          // Hidden ones too, marked: the list leaves them out unless asked to show them (§88).
+          query: {
+            hidden: 'include' as const,
+            ...(filters.allProfiles ? { profiles: 'all' as const } : {}),
+          },
           ...inProfile(filters.profile),
         })
       ).data,
@@ -75,6 +79,43 @@ export function useChannelConversation(id: string) {
     refetchInterval: TRANSCRIPT_POLL_MS,
     refetchIntervalInBackground: false,
   });
+}
+
+/**
+ * Hiding one from the person's own list, showing it again, and — for an admin — deleting it
+ * from Hermes for good (contract decision §88). Each in the conversation's own profile; the
+ * lists read again afterwards.
+ */
+export function useChannelConversationWrites() {
+  const { client } = useAuth();
+  const queryClient = useQueryClient();
+  const settle = () => queryClient.invalidateQueries({ queryKey: channelKeys.all });
+  const call =
+    (method: 'put' | 'delete', path: '/channel-conversations/{conversation_id}/hidden') =>
+    async (conversation: Pick<ChannelConversation, 'id' | 'profile'>) => {
+      await client.request(method, path, {
+        params: { conversation_id: conversation.id },
+        ...inProfile(conversation.profile),
+      });
+    };
+  const hide = useMutation({
+    mutationFn: call('put', '/channel-conversations/{conversation_id}/hidden'),
+    onSettled: settle,
+  });
+  const unhide = useMutation({
+    mutationFn: call('delete', '/channel-conversations/{conversation_id}/hidden'),
+    onSettled: settle,
+  });
+  const remove = useMutation({
+    mutationFn: async (conversation: Pick<ChannelConversation, 'id' | 'profile'>) => {
+      await client.request('delete', '/channel-conversations/{conversation_id}', {
+        params: { conversation_id: conversation.id },
+        ...inProfile(conversation.profile),
+      });
+    },
+    onSettled: settle,
+  });
+  return { hide, unhide, remove };
 }
 
 /** The address a channel conversation opens at: the chat's, marked as Hermes's id. */

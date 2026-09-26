@@ -9,6 +9,7 @@ import { PaneProvider } from './pane.js';
 import { Sidebar } from './Sidebar.js';
 import { SplitPane } from './SplitPane.js';
 import { TopBar } from './TopBar.js';
+import { TopBarSlotProvider } from './topBarSlot.js';
 
 /**
  * The frame: sidebar (glass) · the page · the split pane at the inline end.
@@ -20,6 +21,8 @@ import { TopBar } from './TopBar.js';
 export function AppShell({ title, children }: { title: string; children: ReactNode }) {
   const { t } = useI18n();
   const [menuOpen, setMenuOpen] = useState(false);
+  // The place in the top bar a page puts its own controls in (`topBarSlot.tsx`).
+  const [slot, setSlot] = useState<HTMLElement | null>(null);
   const location = useLocation();
   useEffect(() => setMenuOpen(false), [location.pathname]);
   useEffect(() => {
@@ -53,7 +56,7 @@ export function AppShell({ title, children }: { title: string; children: ReactNo
         </Sheet>
         <div className="flex min-w-0 flex-1 flex-col">
           <ChromeScope>
-            <TopBar title={title} onMenu={() => setMenuOpen(true)} />
+            <TopBar title={title} onMenu={() => setMenuOpen(true)} slotRef={setSlot} />
           </ChromeScope>
           <div className="flex min-h-0 flex-1">
             <main className="relative flex min-w-0 flex-1 flex-col overflow-y-auto" id="main">
@@ -70,7 +73,7 @@ export function AppShell({ title, children }: { title: string; children: ReactNo
                     {t(`nav.${navigation.agentShell.back}`)}
                   </Link>
                 )}
-                {children}
+                <TopBarSlotProvider value={slot}>{children}</TopBarSlotProvider>
               </div>
             </main>
             <SplitPane />

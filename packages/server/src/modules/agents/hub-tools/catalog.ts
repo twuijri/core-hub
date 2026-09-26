@@ -30,6 +30,7 @@ export const HUB_TOOL_GROUPS = [
   'notifications',
   'workflows',
   'files',
+  'devices',
 ] as const;
 export type HubToolGroup = (typeof HUB_TOOL_GROUPS)[number];
 export type HubToolAccess = 'read' | 'write';
@@ -61,6 +62,15 @@ export interface ToolContext {
   /** A notice in the run owner's inbox, in this profile. */
   notify(title: string, body: string | null): void;
   timezone: string;
+  /** The conversation the run belongs to, when there is one (a device request names it). */
+  sessionId?: string | null;
+  /**
+   * Put an attachment of the run's profile on the reply the run is writing (a file a device
+   * sent, §89); false when the run has no reply to put it on.
+   */
+  handOver?(attachment: { id: string; kind: string }): boolean;
+  /** Waits between looks at a device request; a test makes it instant. */
+  sleep?(ms: number): Promise<void>;
 }
 
 export interface HubToolDefinition {
@@ -196,6 +206,339 @@ export function confined(root: string, requested: string | undefined): string {
 
 function relative(root: string, target: string): string {
   return path.relative(realpathSync(root), target) || '.';
+}
+
+// ------------------------------------------------------------------ devices (§89)
+
+/** A request past its deadline is looked at once more before the tool gives up. */
+const DEVICE_GRACE_MS = 5_000;
+/** The longest a program tool waits for its request (the device answers `running` before). */
+const PROGRAM_TIMEOUT_MS = 120_000;
+const FILES_TIMEOUT_MS = 60_000;
+
+interface DeviceRequestView {
+  id: string;
+  status: string;
+  result: Record<string, unknown> | null;
+  error: { code: string; message: string | null } | null;
+}
+
+/**
+ * One request to one of the person's devices, and its answer: created through the contract's
+ * `devices.createRequest` as the run (the hub checks it is the person's own device, that this
+ * profile may use it and that it is online), then read until the device answers.
+ */
+async function askDevice(
+  ctx: ToolContext,
+  input: {
+    deviceId: string;
+    capability: 'files' | 'apps';
+    purpose: string;
+    params: Record<string, unknown>;
+    timeoutMs: number;
+  },
+): Promise<Record<string, unknown>> {
+  const created = (await ctx.call('POST', '/device-requests', {
+    body: {
+      device_id: input.deviceId,
+      capability: input.capability,
+      purpose: input.purpose.slice(0, 200),
+      params: input.params,
+      session_id: ctx.sessionId ?? null,
+      timeout_ms: input.timeoutMs,
+    },
+  })) as { request_id?: string };
+  const id = created?.request_id;
+  if (!id) throw new ToolRefusal('internal', 'the hub did not say which request it made');
+  const sleep = ctx.sleep ?? ((ms: number) => new Promise((r) => setTimeout(r, ms)));
+  const deadline = Date.now() + input.timeoutMs + DEVICE_GRACE_MS;
+  let wait = 100;
+  for (;;) {
+    const row = (await ctx.call('GET', `/device-requests/${seg(id)}`)) as DeviceRequestView;
+    if (row.status === 'fulfilled') return row.result ?? {};
+    if (row.status !== 'pending') {
+      const message = row.error?.message ?? `the device answered ${row.status}`;
+      const code =
+        row.status === 'denied'
+          ? row.error?.code === 'unavailable'
+            ? 'device_capability_off'
+            : 'device_denied'
+          : row.status === 'expired'
+            ? 'device_timeout'
+            : row.error?.code === 'unavailable'
+              ? 'device_unavailable'
+              : 'device_failed';
+      throw new ToolRefusal(code, message);
+    }
+    if (Date.now() > deadline) {
+      throw new ToolRefusal('device_timeout', 'the device did not answer in time');
+    }
+    await sleep(wait);
+    wait = Math.min(wait * 2, 1_000);
+  }
+}
+
+/** Text a model can read from an MCP result's content; pictures and blobs are named, not sent. */
+function contentText(content: unknown): string {
+  if (!Array.isArray(content)) return '';
+  return content
+    .map((item) => {
+      const part = (item ?? {}) as Record<string, unknown>;
+      if (part.type === 'text' && typeof part.text === 'string') return part.text;
+      if (part.type === 'image') return '[an image the program returned]';
+      if (part.type === 'resource_link' && typeof part.uri === 'string') return `[${part.uri}]`;
+      if (part.type === 'resource') return '[a resource the program returned]';
+      return '';
+    })
+    .filter(Boolean)
+    .join('\n');
+}
+
+function filesResult(result: Record<string, unknown>): string {
+  const text = contentText(result.content);
+  if (result.is_error === true) throw new ToolRefusal('device_tool_failed', text || 'refused');
+  return text;
+}
+
+interface DeviceView {
+  id: string;
+  name: string;
+  kind: string;
+  platform: string;
+  online: boolean;
+  profiles?: string[] | null;
+  helper?: {
+    folders: Array<{ path: string; write: boolean; default?: boolean }>;
+    allow_open: boolean;
+    programs: Array<{
+      id: string;
+      name: string;
+      profiles: string[];
+      tools: Array<{ name: string; description: string; input_schema: unknown }>;
+    }>;
+  } | null;
+}
+
+const DEVICE_ID = {
+  type: 'string',
+  minLength: 1,
+  description: "The computer's id (devices.list).",
+};
+const DEVICE_PATH = {
+  type: 'string',
+  minLength: 1,
+  description: 'Absolute path on that computer.',
+};
+
+function deviceTools(): HubToolDefinition[] {
+  const files = (
+    name: string,
+    access: HubToolAccess,
+    description: string,
+    properties: Record<string, unknown>,
+    required: string[],
+    tool: string | ((a: Record<string, unknown>) => string),
+    args: (a: Record<string, unknown>) => Record<string, unknown>,
+  ): HubToolDefinition => ({
+    name,
+    group: 'devices',
+    access,
+    description,
+    inputSchema: {
+      type: 'object',
+      required: ['device_id', ...required],
+      properties: { device_id: DEVICE_ID, ...properties },
+    },
+    async run(ctx, a) {
+      const result = await askDevice(ctx, {
+        deviceId: need(a, 'device_id'),
+        capability: 'files',
+        purpose: name,
+        params: { tool: typeof tool === 'string' ? tool : tool(a), arguments: args(a) },
+        timeoutMs: FILES_TIMEOUT_MS,
+      });
+      return { result: filesResult(result) };
+    },
+  });
+  return [
+    {
+      name: 'devices.list',
+      group: 'devices',
+      access: 'read',
+      description:
+        "The person's own computers this profile may use, whether each is online, the folders shared on it (the one marked default is where program output goes unless the person says otherwise), and the programs on it with their tools. Device work stays on the device: nothing is copied to the hub unless the person asks (devices.fetch_file).",
+      inputSchema: { type: 'object', properties: {} },
+      async run(ctx) {
+        const body = await ctx.call('GET', '/devices', { query: { limit: 50 } });
+        const devices = (items(body) as DeviceView[]).filter(
+          (d) => d.helper && (!d.profiles || d.profiles.includes(ctx.profile)),
+        );
+        return {
+          devices: devices.map((d) => ({
+            id: d.id,
+            name: d.name,
+            platform: d.platform,
+            online: d.online,
+            folders: d.helper!.folders,
+            can_open: d.helper!.allow_open,
+            programs: d
+              .helper!.programs.filter((p) => p.profiles.includes(ctx.profile))
+              .map((p) => ({ id: p.id, name: p.name, tools: p.tools })),
+          })),
+        };
+      },
+    },
+    files(
+      'devices.list_folder',
+      'read',
+      "List a folder shared on one of the person's computers; without a path, list the shared folders.",
+      { path: DEVICE_PATH },
+      [],
+      (a) => (str(a, 'path') ? 'list_directory' : 'list_allowed_folders'),
+      (a) => (str(a, 'path') ? { path: str(a, 'path') } : {}),
+    ),
+    files(
+      'devices.read_file',
+      'read',
+      "Read a text file (up to 1 MB) inside a folder shared on one of the person's computers.",
+      { path: DEVICE_PATH, max_bytes: { type: 'integer', minimum: 1, maximum: 1048576 } },
+      ['path'],
+      'read_text_file',
+      (a) => ({ path: need(a, 'path'), ...(a.max_bytes ? { max_bytes: a.max_bytes } : {}) }),
+    ),
+    files(
+      'devices.write_file',
+      'write',
+      "Write a text file inside a folder shared as writable on one of the person's computers. Refuses to replace a file unless overwrite is true.",
+      { path: DEVICE_PATH, content: { type: 'string' }, overwrite: { type: 'boolean' } },
+      ['path', 'content'],
+      'write_text_file',
+      (a) => ({
+        path: need(a, 'path'),
+        content: str(a, 'content') ?? '',
+        overwrite: a.overwrite === true,
+      }),
+    ),
+    files(
+      'devices.open',
+      'write',
+      "Open a file inside a shared folder with its default app, or an http(s) link, on one of the person's computers.",
+      { path: DEVICE_PATH, url: { type: 'string' } },
+      [],
+      (a) => (str(a, 'url') ? 'open_url' : 'open_path'),
+      (a) => (str(a, 'url') ? { url: str(a, 'url') } : { path: need(a, 'path') }),
+    ),
+    {
+      name: 'devices.fetch_file',
+      group: 'devices',
+      access: 'read',
+      description:
+        "Bring a file from a folder shared on one of the person's computers into this conversation: it is attached to your reply (a video plays there). Use it for results the person should see, such as a render; up to 50 MB.",
+      inputSchema: {
+        type: 'object',
+        required: ['device_id', 'path'],
+        properties: { device_id: DEVICE_ID, path: DEVICE_PATH },
+      },
+      async run(ctx, a) {
+        const result = await askDevice(ctx, {
+          deviceId: need(a, 'device_id'),
+          capability: 'files',
+          purpose: 'devices.fetch_file',
+          params: { tool: 'send_file', arguments: { path: need(a, 'path') } },
+          // A large file takes a while to upload.
+          timeoutMs: 300_000,
+        });
+        if (typeof result.attachment_id !== 'string') filesResult(result);
+        const attachment = {
+          id: String(result.attachment_id),
+          kind: typeof result.kind === 'string' ? result.kind : 'file',
+        };
+        const attached = ctx.handOver?.(attachment) ?? false;
+        return {
+          name: result.name ?? null,
+          size_bytes: result.size_bytes ?? null,
+          kind: attachment.kind,
+          attached_to_reply: attached,
+        };
+      },
+    },
+    {
+      name: 'devices.run',
+      group: 'devices',
+      access: 'write',
+      description:
+        "Call one tool of a program on one of the person's computers (devices.list names the programs and their tools). The computer may ask the person first. A long call answers {state: running, call_id}: follow it with devices.run_status.",
+      inputSchema: {
+        type: 'object',
+        required: ['device_id', 'program', 'tool'],
+        properties: {
+          device_id: DEVICE_ID,
+          program: { type: 'string', minLength: 1, description: "The program's id." },
+          tool: { type: 'string', minLength: 1 },
+          arguments: { type: 'object', additionalProperties: true },
+        },
+      },
+      async run(ctx, a) {
+        const args = a.arguments;
+        if (
+          args !== undefined &&
+          (typeof args !== 'object' || args === null || Array.isArray(args))
+        ) {
+          throw new ToolRefusal('validation_failed', 'arguments must be an object');
+        }
+        const result = await askDevice(ctx, {
+          deviceId: need(a, 'device_id'),
+          capability: 'apps',
+          purpose: `${need(a, 'program')}.${need(a, 'tool')}`,
+          params: {
+            op: 'call',
+            program: need(a, 'program'),
+            tool: need(a, 'tool'),
+            arguments: args ?? {},
+          },
+          timeoutMs: PROGRAM_TIMEOUT_MS,
+        });
+        return programResult(result);
+      },
+    },
+    {
+      name: 'devices.run_status',
+      group: 'devices',
+      access: 'read',
+      description:
+        'How a long program call (devices.run answered state: running) stands, and its result when it is done.',
+      inputSchema: {
+        type: 'object',
+        required: ['device_id', 'call_id'],
+        properties: { device_id: DEVICE_ID, call_id: { type: 'string', minLength: 1 } },
+      },
+      async run(ctx, a) {
+        const result = await askDevice(ctx, {
+          deviceId: need(a, 'device_id'),
+          capability: 'apps',
+          purpose: 'devices.run_status',
+          params: { op: 'status', call_id: need(a, 'call_id') },
+          timeoutMs: FILES_TIMEOUT_MS,
+        });
+        return programResult(result);
+      },
+    },
+  ];
+}
+
+function programResult(result: Record<string, unknown>): Record<string, unknown> {
+  if (result.state === 'running') {
+    return {
+      state: 'running',
+      call_id: result.call_id,
+      progress: result.progress ?? null,
+      next: 'call devices.run_status with this call_id in a little while',
+    };
+  }
+  const text = contentText(result.content);
+  if (result.is_error === true)
+    throw new ToolRefusal('program_error', text || 'the program failed');
+  return { state: 'done', result: text };
 }
 
 // ------------------------------------------------------------------ the tools
@@ -640,6 +983,7 @@ export const HUB_TOOLS: readonly HubToolDefinition[] = [
       return { path: relative(ctx.filesRoot, target), bytes: Buffer.byteLength(content) };
     },
   },
+  ...deviceTools(),
 ];
 
 /** The tools a group carries, in the catalog's order. */
