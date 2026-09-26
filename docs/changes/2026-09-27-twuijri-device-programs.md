@@ -138,6 +138,16 @@ Claude Desktop ويحتاج مفتاحه؛ تشغيل المساعد يصنع `~
 ✓ Lint, typecheck, contracts, tests, build in 3s
 ```
 
+**CI على طلب الليلة #165** بعد دفع هذا الفرع إلى `night/2026-09-27` (`74aa2c72`) — كله أخضر، ومنه مثبّتات سطح المكتب
+على الأنظمة الثلاثة:
+```
+✓ Lint, typecheck, contracts, client tests, build 4m49s · ✓ Server unit tests 1/3 4m13s · 2/3 4m14s · 3/3 2m43s
+✓ Desktop app smoke (Electron under Xvfb against the real hub) 1m23s · ✓ Web smoke journeys 7m17s
+✓ Installers (macos-latest) 2m8s · (ubuntu-latest) 3m11s · (windows-latest) 6m30s
+✓ db:generate + db:migrate 1m11s · ✓ Docker image 3m29s · ✓ Android 4m4s · ✓ iOS simulator 4m32s
+✓ PR adds or updates a change record · ✓ PR leaves graphify-out/ to the code-map bot
+```
+
 ## المخاطر والرجوع
 - **البرنامج يعمل بصلاحيات حساب الشخص**: ما يقف بين الوكيل وبينه هو نافذة الموافقة وسجل الاستعمال ومجموعة `devices`
   المطفأة افتراضيًا. هذا أكبر خطر، كما في سجلات التطبيق القديم.
