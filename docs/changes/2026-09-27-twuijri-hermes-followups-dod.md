@@ -136,6 +136,24 @@ server (9 files): Test Files  9 failed (9)   Tests  23 failed | 98 passed (121)
 web (4 files):    Test Files  4 failed (4)   Tests  10 failed | 18 passed (28)
 ```
 
+بعد دمج `origin/night/2026-09-27` (فيه §102 لمتابعات الويب؛ فأخذتُ §103 و§104، والعدّ ٣٤٩ من ٣٤٩ و
+sessions ٥٤) أُعيد ما مسّه الدمج:
+```
+$ pnpm lint → All matched files use Prettier code style!
+$ pnpm typecheck → exit 0
+$ pnpm contracts:lint → contracts:lint  OK
+$ pnpm contracts:check-clients → check-clients  OK — 743 client file(s) scanned, 252 contract path(s) known.
+$ pnpm i18n:check → i18n:check  OK
+$ pnpm nav:check → nav:check  OK — 39 destinations, 2 pre-auth screens (login, setup), 44 terms, ar/en complete, routes for web, ios, android, desktop
+$ pnpm change-record:check → change-record  OK — 23 record(s) valid
+$ pnpm exec vitest run --project contract   (packages/server)
+ Test Files  19 passed (19)   Tests  402 passed (402)
+$ pnpm exec vitest run --project unit tests/unit/status.test.ts … (18 files: tasks, skills, profiles, channels)
+ Test Files  16 passed | 2 skipped (18)   Tests  182 passed | 6 skipped (188)
+$ pnpm exec vitest run <18 web files>   (packages/web)
+ Test Files  18 passed (18)   Tests  441 passed (441)
+```
+
 CI على طلب الليلة #165: يُضاف بعد الدفع.
 
 ## المخاطر والرجوع
