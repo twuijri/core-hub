@@ -166,9 +166,7 @@ export async function resolveGroups(api, appId, names) {
   const found = [];
   const missing = [];
   for (const name of names) {
-    const group = groups.find(
-      (g) => groupKey(g.attributes?.name) === groupKey(name),
-    );
+    const group = groups.find((g) => groupKey(g.attributes?.name) === groupKey(name));
     if (group) {
       found.push({
         id: group.id,
