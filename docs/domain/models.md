@@ -189,7 +189,7 @@ with a key"; `reason` is an i18n key, never a sentence in one language.
 - **A model list is the provider's own** (decision §83, the owner's rule): a key provider's
   adapter asks the provider; a signed-in provider is asked from Hermes's Python in the home it was
   signed in to (`live-models.ts`: Hermes's resolver gives the token, refreshed once after a 401;
-  the ChatGPT subscription's `…/codex/models?client_version=0.0.0` with the account id, every
+  the ChatGPT subscription's `…/codex/models?client_version=<Codex CLI release>` with the account id (`0.0.0` answers a frozen older list and is only a fallback), every
   other one `GET {base}/models`). Only when the provider cannot be asked is Hermes's list
   (`/api/model/options`) used, and `catalogue.source = fallback` with `fallback_reason` says so.
 - **Images through the ChatGPT subscription** (decision §84): the subscription's list also carries
