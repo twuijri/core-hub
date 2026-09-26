@@ -266,7 +266,9 @@ export function verifySigned(
     recipient: me.hubId,
   });
   if (!verifyText(peer.publicKey, text, signature)) refuse('peer_signature_invalid');
-  db.delete(peerNonces).where(lt(peerNonces.expiresAt, new Date(now))).run();
+  db.delete(peerNonces)
+    .where(lt(peerNonces.expiresAt, new Date(now)))
+    .run();
   const taken = db
     .insert(peerNonces)
     .values({
@@ -282,7 +284,10 @@ export function verifySigned(
     logEvent(db, { peerId: peer.id, kind: 'refused', ok: false, detail: 'rate_limited', now });
     throw new HubError('rate_limited', { details: { reason: 'peer_calls' } });
   }
-  db.update(peers).set({ lastSeenAt: new Date(now) }).where(eq(peers.id, peer.id)).run();
+  db.update(peers)
+    .set({ lastSeenAt: new Date(now) })
+    .where(eq(peers.id, peer.id))
+    .run();
   return peer;
 }
 
@@ -363,7 +368,7 @@ async function callPeer(
     throw new PeerUnreachable('peer_unreachable');
   }
   const raw = await response.text().catch(() => '');
-  let parsed: unknown = null;
+  let parsed: unknown;
   try {
     parsed = raw ? JSON.parse(raw) : null;
   } catch {
@@ -379,7 +384,12 @@ const peerCode = (answer: PeerAnswerRaw): string | null => {
 };
 
 /** Tells the peer something, best effort: a peer that does not hear it learns on its next call. */
-function notify(ctx: PeerContext, app: FastifyInstance, peer: PeerRow, kind: 'approved' | 'unlinked') {
+function notify(
+  ctx: PeerContext,
+  app: FastifyInstance,
+  peer: PeerRow,
+  kind: 'approved' | 'unlinked',
+) {
   return callPeer(
     ctx,
     app,

@@ -131,9 +131,11 @@ export interface DevicesOverrides {
   /** The `fetch` linked-hub calls go through: the two-hub test routes them in process. */
   peerFetch?: typeof fetch;
   /** The peer guest's answer, in place of the agent's (the two-hub test has no model). */
-  peerAsk?: (input: { workspaceId: string; agentId: string; prompt: string }) => Promise<
-    string | null
-  >;
+  peerAsk?: (input: {
+    workspaceId: string;
+    agentId: string;
+    prompt: string;
+  }) => Promise<string | null>;
 }
 let overrides: DevicesOverrides = {};
 export function overrideDevices(next: DevicesOverrides): void {

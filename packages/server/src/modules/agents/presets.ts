@@ -22,11 +22,7 @@ import { HubError, conflict, notFound, stateInvalid } from '../../lib/errors.js'
 import { defineRoute, type RouteDeps } from '../../lib/route.js';
 import { newUlid } from '../../db/ids.js';
 import type { WorkspaceScope } from '../auth/index.js';
-import {
-  agentPresets,
-  type AgentPresetContentBody,
-  type AgentPresetModelBody,
-} from './schema.js';
+import { agentPresets, type AgentPresetContentBody, type AgentPresetModelBody } from './schema.js';
 
 /** At most this many presets per agent and profile. */
 export const MAX_PRESETS = 50;
@@ -245,7 +241,8 @@ export async function applyPreset(
       skip('mcp_servers', null, codeOf(listed));
     } else {
       const current = new Map<string, boolean>();
-      const items = isObject(listed.body) && Array.isArray(listed.body.items) ? listed.body.items : [];
+      const items =
+        isObject(listed.body) && Array.isArray(listed.body.items) ? listed.body.items : [];
       for (const server of items) {
         if (isObject(server) && typeof server.name === 'string') {
           current.set(server.name, server.enabled === true);
@@ -273,7 +270,8 @@ export async function applyPreset(
       skip('settings', null, codeOf(read));
     } else {
       const sections = new Map<string, Map<string, SettingsFieldView>>();
-      const body = isObject(read.body) && Array.isArray(read.body.sections) ? read.body.sections : [];
+      const body =
+        isObject(read.body) && Array.isArray(read.body.sections) ? read.body.sections : [];
       for (const section of body as SettingsSectionView[]) {
         sections.set(section.key, new Map((section.fields ?? []).map((f) => [f.key, f])));
       }
@@ -349,7 +347,7 @@ export function callerOf(app: FastifyInstance, request: FastifyRequest, base: st
       },
       ...(body !== undefined ? { payload: JSON.stringify(body) } : {}),
     });
-    let parsed: unknown = null;
+    let parsed: unknown;
     try {
       parsed = response.body ? JSON.parse(response.body) : null;
     } catch {

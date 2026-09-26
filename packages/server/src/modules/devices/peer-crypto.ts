@@ -60,7 +60,11 @@ export function generateKeys(): KeyPair {
 /** Whether `text` is an Ed25519 public key in the form this hub sends. */
 export function isPublicKey(text: string): boolean {
   try {
-    const key = createPublicKey({ key: Buffer.from(text, 'base64url'), format: 'der', type: 'spki' });
+    const key = createPublicKey({
+      key: Buffer.from(text, 'base64url'),
+      format: 'der',
+      type: 'spki',
+    });
     return key.asymmetricKeyType === 'ed25519';
   } catch {
     return false;

@@ -160,7 +160,10 @@ export const devicesModule = createDevicesModule({
       const service = agentsServiceFor(app);
       return listWorkspacesFor(db, { id: '', role: 'owner' }).flatMap((row) =>
         service
-          .list({ id: row.id, slug: row.slug, name: row.name, isDefault: row.isDefault }, { language })
+          .list(
+            { id: row.id, slug: row.slug, name: row.name, isDefault: row.isDefault },
+            { language },
+          )
           .map((agent) => ({
             workspaceId: row.id,
             profile: row.slug,

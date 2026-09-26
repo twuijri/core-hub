@@ -25464,7 +25464,7 @@ components:
           description: The peer's HTTPS origin.
         direction:
           type: string
-          description: '`inbound`: it redeemed this hub''s invite. `outbound`: this hub redeemed its invite.'
+          description: "`inbound`: it redeemed this hub's invite. `outbound`: this hub redeemed its invite."
           enum: [inbound, outbound]
         status:
           type: string
