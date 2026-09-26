@@ -1484,7 +1484,10 @@
   },
   "audit": {
     "period": "Period",
-    "days": "{count} days",
+    "period_7": "Last 7 days",
+    "period_30": "Last 30 days",
+    "period_90": "Last 90 days",
+    "period_365": "Last 365 days",
     "between": "{from} to {to}",
     "runs": "Runs",
     "runs_n": "{count} runs",

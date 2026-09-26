@@ -27,7 +27,7 @@ async function openWebhooks(page: Page) {
   await page.getByRole('link', { name: 'الإعدادات' }).first().click();
   await page
     .getByTestId('settings-nav')
-    .getByRole('link', { name: 'خطافات الويب', exact: true })
+    .getByRole('link', { name: 'وجهات الإشعار', exact: true })
     .click();
   await expect(page.getByTestId('webhooks-tab')).toBeVisible();
 }
@@ -69,7 +69,9 @@ test('webhooks: a scripted chat’s "run finished" reaches the receiver, signed,
     await dialog.getByTestId('webhook-url-input').fill(endpoint.url);
     await dialog.getByRole('checkbox', { name: /^انتهى تشغيل وكيل/ }).click();
     // The defaults a new webhook starts with: every profile, no message text, five retries.
-    await expect(dialog.getByRole('radio', { name: 'كل بروفايل أستطيع دخوله' })).toBeChecked();
+    await expect(
+      dialog.getByRole('radio', { name: 'كل البروفايلات التي أستطيع الوصول إليها' }),
+    ).toBeChecked();
     await expect(dialog.getByRole('switch', { name: /تضمين نص الرسائل/ })).not.toBeChecked();
     await expect(dialog.getByTestId('webhook-max-retries')).toHaveValue('5');
     await dialog.getByRole('switch', { name: /السماح بعنوان خاص/ }).click();

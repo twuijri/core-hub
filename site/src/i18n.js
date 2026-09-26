@@ -15,7 +15,7 @@ export const STRINGS = {
   ar: {
     'meta.title': 'كور هب — التحميل',
     'meta.description':
-      'حمّل كور هب لـ Windows و macOS و Linux و Android، أو شغّل مركزك الخاص بصورة Docker واحدة.',
+      'حمّل كور هب على Windows وmacOS وLinux وAndroid، أو شغّل مركزك الخاص بصورة Docker واحدة.',
     'brand.name': 'كور هب',
     'nav.skip': 'تخطَّ إلى التحميل',
     'nav.downloads': 'التحميل',
@@ -24,10 +24,10 @@ export const STRINGS = {
     'lang.switch': 'English',
     'lang.switchLabel': 'Switch to English',
     'hero.eyebrow': 'مفتوح المصدر · تستضيفه بنفسك',
-    'hero.title': 'كل وكلائك في مركز واحد',
+    'hero.title': 'وكلاؤك، كلهم في مكان واحد',
     'hero.lead':
-      'كور هب مركز تشغّله على جهازك أنت: محادثة ومهام وجدولة وسير عمل لكل وكلاء الذكاء الاصطناعي، من المتصفح والكمبيوتر والجوال.',
-    'hero.for': 'حمّل لـ {platform}',
+      'شغّل كور هب على جهازك أو خادمك، واجمع محادثات وكلائك ومهامهم وجداولهم وسير عملهم في مكان واحد. افتحه من المتصفح أو الكمبيوتر أو الجوال.',
+    'hero.for': 'حمّل كور هب على {platform}',
     'hero.soon': '{platform}: قريبًا',
     'hero.choose': 'اختر منصتك',
     'hero.all': 'كل المنصات',
@@ -37,7 +37,7 @@ export const STRINGS = {
     'release.unavailable': 'تعذّر جلب تفاصيل آخر إصدار الآن، والملفات كلها في صفحة الإصدارات.',
     'release.page': 'صفحة الإصدارات',
     'downloads.title': 'التحميل',
-    'downloads.lead': 'نسخة واحدة لكل منصة، من آخر إصدار منشور على GitHub.',
+    'downloads.lead': 'اختر منصتك وحمّل التطبيق من أحدث إصدار منشور على GitHub.',
     'platform.windows': 'Windows',
     'platform.macos': 'macOS',
     'platform.linux': 'Linux',
@@ -51,15 +51,15 @@ export const STRINGS = {
     'req.ios': 'iOS 17 أو أحدث',
     'dl.windows': 'تحميل المثبّت',
     'dl.macos': 'تحميل لأجهزة Mac',
-    'dl.appimage': 'تحميل AppImage',
-    'dl.deb': 'تحميل حزمة deb',
+    'dl.appimage': 'تحميل نسخة التشغيل',
+    'dl.deb': 'تحميل حزمة النظام',
     'dl.android': 'تحميل التطبيق',
     'dl.missing': 'من صفحة الإصدار',
     'store.open': 'افتح في المتجر',
     soon: 'قريبًا',
     'install.title': 'طريقة التثبيت',
     'html.install.windows':
-      'المثبّت غير موقّع بعد، فقد يعرض Windows رسالة <bdi>«Windows protected your PC»</bdi>. اضغط <b>مزيد من المعلومات</b> ثم <b>التشغيل على أي حال</b> (<bdi>More info → Run anyway</bdi>). نسخة Microsoft Store يوقّعها المتجر نفسه.',
+      'مثبّت Windows غير موقّع حاليًا، وقد يعرض النظام تحذير <bdi>SmartScreen</bdi>. حمّله من <b>صفحة الإصدارات الرسمية</b> فقط، وتأكد من مصدر الرابط واسم الملف قبل تثبيته. إذا لم تكن واثقًا من مصدره، فانتظر النسخة المنشورة عبر <bdi>Microsoft Store</bdi>.',
     'html.install.macos':
       'افتح الملف واسحب <b><bdi>Core Hub</bdi></b> إلى مجلد التطبيقات. التطبيق موقّع ومعتمد من Apple. أجهزة Mac بمعالج Intel غير مدعومة.',
     'install.linux.appimage': 'AppImage: اجعله قابلًا للتشغيل ثم شغّله.',
@@ -67,18 +67,18 @@ export const STRINGS = {
     'html.install.linux.fuse':
       'إن لم يعمل AppImage على Ubuntu فثبّت <bdi><code>libfuse2</code></bdi> (أو <bdi><code>libfuse2t64</code></bdi> على 24.04).',
     'html.install.android':
-      'افتح الملف بعد التحميل. سيطلب Android السماح بالتثبيت من هذا المصدر (المتصفح أو مدير الملفات): فعّل <b>السماح من هذا المصدر</b> ثم ارجع واضغط <b>تثبيت</b>.',
+      'افتح الملف بعد تحميله من صفحة الإصدارات الرسمية. إذا طلب Android إذن التثبيت من هذا المصدر، فعّله مؤقتًا وثبّت التطبيق، ثم أوقف الإذن من إعدادات الجهاز.',
     'install.ios': 'التطبيق يصل عبر App Store فقط، وسيظهر الرابط هنا حين يُنشر.',
     'server.eyebrow': 'الخادم',
     'server.title': 'شغّل مركزك الخاص',
     'server.lead':
-      'التطبيقات نوافذ على مركزك. المركز حاوية واحدة ومجلد بيانات واحد، على جهازك أو على خادمك.',
+      'تتصل التطبيقات بمركزك، سواء شغّلته على جهازك أو خادمك. تحتاج حاوية واحدة ومجلدًا للبيانات.',
     'server.image': 'صورة Docker',
     'server.arch': 'لمعالجات amd64 و arm64',
     'html.server.step1': 'احفظ هذا الملف باسم <bdi><code>docker-compose.yml</code></bdi>:',
     'server.step2': 'شغّله:',
     'html.server.step3':
-      'خلال ساعة من التشغيل افتح <bdi><code>http://&lt;host&gt;:8080</code></bdi> وأنشئ حساب المالك، ثم أضف مزوّد نماذج من صفحة النماذج.',
+      'خلال ساعة من التشغيل، افتح <bdi><code>http://localhost:8080</code></bdi> من جهاز التشغيل وأنشئ حساب المالك. للوصول من جهاز آخر، اضبط دومينًا واتصال <bdi>HTTPS</bdi> كما في دليل التشغيل. بعدها أضف مزوّد نماذج من صفحة النماذج.',
     'server.docs': 'دليل التشغيل الكامل',
     copy: 'نسخ',
     copied: 'نُسخ',
@@ -116,7 +116,7 @@ export const STRINGS = {
       'The latest release details could not be loaded right now; every file is on the releases page.',
     'release.page': 'Releases page',
     'downloads.title': 'Download',
-    'downloads.lead': 'One build per platform, from the latest release on GitHub.',
+    'downloads.lead': 'Choose your platform and download from the latest GitHub release.',
     'platform.windows': 'Windows',
     'platform.macos': 'macOS',
     'platform.linux': 'Linux',
@@ -138,7 +138,7 @@ export const STRINGS = {
     soon: 'Coming soon',
     'install.title': 'How to install',
     'html.install.windows':
-      'The installer is not code-signed yet, so Windows may say <b>“Windows protected your PC”</b>. Click <b>More info</b>, then <b>Run anyway</b>. The Microsoft Store version is signed by the Store.',
+      'The Windows installer is not code-signed yet and may trigger a <b>SmartScreen</b> warning. Download it only from the <b>official releases page</b> and check the link and filename before installing it. If you are unsure of its source, wait for the Microsoft Store version.',
     'html.install.macos':
       'Open the file and drag <b>Core Hub</b> into Applications. The app is signed and notarised by Apple. Intel Macs are not supported.',
     'install.linux.appimage': 'AppImage: make it executable, then run it.',
@@ -146,7 +146,7 @@ export const STRINGS = {
     'html.install.linux.fuse':
       'If the AppImage does not start on Ubuntu, install <code>libfuse2</code> (<code>libfuse2t64</code> on 24.04).',
     'html.install.android':
-      'Open the file once it has downloaded. Android asks you to allow installs from this source (your browser or file manager): turn on <b>Allow from this source</b>, go back and tap <b>Install</b>.',
+      'Open the file after downloading it from the official releases page. If Android asks to allow installs from this source, enable that permission temporarily, install the app, then turn the permission off in your device settings.',
     'install.ios':
       'The app ships through the App Store only; the link appears here as soon as it is live.',
     'server.eyebrow': 'The server',
@@ -158,7 +158,7 @@ export const STRINGS = {
     'html.server.step1': 'Save this as <code>docker-compose.yml</code>:',
     'server.step2': 'Start it:',
     'html.server.step3':
-      'Within an hour, open <code>http://&lt;host&gt;:8080</code> and create the owner account, then add a model provider on the Models screen.',
+      'Within an hour, open <code>http://localhost:8080</code> on the host machine and create the owner account. For access from another device, set up a domain and HTTPS as described in the deployment guide. Then add a model provider on the Models screen.',
     'server.docs': 'Full deployment guide',
     copy: 'Copy',
     copied: 'Copied',

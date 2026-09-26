@@ -71,7 +71,7 @@ test('24. Webhooks: a private address needs a yes, the secret shows once, and th
       page.getByTestId('settings-nav').getByRole('link', { name: 'هذا الجهاز' }),
     ).toHaveCount(0);
 
-    await openSettings(page, 'خطافات الويب');
+    await openSettings(page, 'وجهات الإشعار');
     await expect(page.getByTestId('webhooks-tab')).toBeVisible();
     // Not the placeholder, and it says how events are sent (decision §59).
     await expect(page.getByTestId('webhooks-forwarding-note')).toContainText('فور وقوعه');
@@ -108,7 +108,7 @@ test('24. Webhooks: a private address needs a yes, the secret shows once, and th
 
     await card.getByTestId('webhook-test').click();
     await expect(card.getByTestId('webhook-test-outcome')).toHaveText(
-      'سُلِّم — أجاب العنوان بـ 200.',
+      'تم التسليم — ردّت الوجهة برمز الحالة 200.',
     );
     // What arrived is what the receiver can verify with the secret it was given.
     expect(endpoint.received).toHaveLength(1);
