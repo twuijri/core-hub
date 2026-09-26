@@ -1,13 +1,24 @@
 package hub.core.android.ui.components
 
+import androidx.compose.foundation.layout.Row
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextDirection
+import androidx.compose.ui.unit.sp
+import hub.core.android.generated.FontTokens
+import hub.core.android.ui.kit.Badge
+import hub.core.android.ui.kit.BadgeTone
+import hub.core.android.ui.kit.ButtonKind
+import hub.core.android.ui.kit.ControlSize
+import hub.core.android.ui.kit.HubButton
+import hub.core.android.ui.kit.HubCard
+import hub.core.android.ui.kit.Lucide
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -53,13 +64,13 @@ fun <T> LoadView(loader: Loader<T>, modifier: Modifier = Modifier, content: @Com
         Load.Loading -> Loading(modifier)
         is Load.Failed -> Column(modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             ErrorNotice(s.error)
-            TextButton(onClick = loader.reload) { Text(stringResource(R.string.retry)) }
+            HubButton(stringResource(R.string.retry), loader.reload, kind = ButtonKind.Secondary, size = ControlSize.Md, icon = Lucide.RefreshCw)
         }
         is Load.Ready -> content(s.value)
     }
 }
 
-/** One row of a read-mostly list: a title, a line under it, and something at its end. */
+/** One row of a read-mostly list: a solid card with a title, a line under it, and something at its end. */
 @Composable
 fun ListRow(
     title: String,
@@ -69,22 +80,16 @@ fun ListRow(
     onClick: (() -> Unit)? = null,
 ) {
     val t = LocalTokens.current
-    Surface(
-        color = t.surface,
-        shape = MaterialTheme.shapes.medium,
-        onClick = onClick ?: {},
-        enabled = onClick != null,
-        modifier = modifier.fillMaxWidth(),
-    ) {
-        androidx.compose.foundation.layout.Row(
-            Modifier.padding(horizontal = 14.dp, vertical = 12.dp),
-            verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
+    HubCard(modifier, onClick = onClick, padding = 0.dp) {
+        Row(
+            Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 12.dp),
+            verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            Column(Modifier.weight(1f)) {
-                Text(title, style = MaterialTheme.typography.bodyLarge, maxLines = 2, overflow = TextOverflow.Ellipsis)
+            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                Text(title, fontSize = FontTokens.sizeMd.sp, fontWeight = FontWeight.Medium, color = t.text, maxLines = 2, overflow = TextOverflow.Ellipsis, style = TextStyle(textDirection = TextDirection.Content))
                 if (!subtitle.isNullOrBlank()) {
-                    Text(subtitle, style = MaterialTheme.typography.bodySmall, color = t.textMuted, maxLines = 3, overflow = TextOverflow.Ellipsis)
+                    Text(subtitle, fontSize = FontTokens.sizeSm.sp, color = t.textMuted, maxLines = 3, overflow = TextOverflow.Ellipsis, style = TextStyle(textDirection = TextDirection.Content))
                 }
             }
             trailing()
@@ -95,15 +100,14 @@ fun ListRow(
 /** A small label for a state (running, paused, failed…), tinted by what it means. */
 @Composable
 fun StatusBadge(text: String, tone: Tone? = null) {
-    val t = LocalTokens.current
-    val (bg, fg) = when (tone) {
-        Tone.SUCCESS -> t.successSoft to t.successSoftText
-        Tone.DANGER -> t.dangerSoft to t.dangerSoftText
-        Tone.WARNING -> t.warningSoft to t.warningSoftText
-        Tone.INFO -> t.infoSoft to t.infoSoftText
-        null -> t.surface2 to t.textMuted
-    }
-    Surface(color = bg, contentColor = fg, shape = MaterialTheme.shapes.small) {
-        Text(text, style = MaterialTheme.typography.labelSmall, modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp))
-    }
+    Badge(
+        text,
+        tone = when (tone) {
+            Tone.SUCCESS -> BadgeTone.Success
+            Tone.DANGER -> BadgeTone.Danger
+            Tone.WARNING -> BadgeTone.Warning
+            Tone.INFO -> BadgeTone.Info
+            null -> BadgeTone.Neutral
+        },
+    )
 }

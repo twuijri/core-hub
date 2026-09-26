@@ -19,9 +19,12 @@ import hub.core.android.data.StoredSession
 import hub.core.android.data.StoredUser
 import hub.core.android.data.TokenKind
 import hub.core.android.graph
+import hub.core.android.phone.VoiceSource
 import hub.core.android.repoRoot
 import hub.core.android.ui.theme.ThemeChoice
 import org.junit.After
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
@@ -52,7 +55,10 @@ class ScreenShots {
         hub = DemoHub(ExtraFixtures.answers).start()
     }
 
-    @After fun stop() = hub.stop()
+    @After fun stop() {
+        hub.missed.sorted().forEach { println("demo hub: no answer for $it") }
+        hub.stop()
+    }
 
     @Test fun lightEnglish() = shoot(ThemeChoice.LIGHT, AppLanguage.EN)
     @Test fun darkEnglish() = shoot(ThemeChoice.DARK, AppLanguage.EN)
@@ -63,9 +69,11 @@ class ScreenShots {
         val graph = ApplicationProvider.getApplicationContext<android.content.Context>().graph
         graph.prefs.language = language
         graph.prefs.setTheme(theme)
+        // The microphone shows as on a phone that can listen (Robolectric has no recognizer).
+        graph.device.update { it.copy(voiceSource = VoiceSource.HUB) }
         graph.store.save(
             StoredSession(
-                hub = hub.base, kind = TokenKind.DEVICE, accessToken = "demo",
+                hub = hub.base, kind = TokenKind.APP, accessToken = "demo",
                 user = StoredUser("01K5DM00000000000000000001", "sara", "Sara", "owner", listOf("work", "personal"), "work"),
                 profile = "work",
             ),
@@ -76,12 +84,21 @@ class ScreenShots {
         open("/chat/${hub.chatId}") { activity ->
             waitFor("message.agent")
             save(activity, dir, "01-chat")
+            // The composer reads as on iOS and the web: «+», the words, the microphone, Send —
+            // from the reading start to its end.
+            val order = listOf("composer.attach", "composer.input", "composer.dictate", "composer.send").map { left(it) }
+            val readingOrder = if (language == AppLanguage.AR) order.reversed() else order
+            assertEquals("the composer's order ($order)", readingOrder.sorted(), readingOrder)
             compose.onNodeWithTag("shell.menu").performClick()
             waitFor("chat.row.${hub.chatId}")
             save(activity, dir, "02-chats")
+            // The chats list starts in the upper half of the drawer, so most of it is the list.
+            val root = compose.onAllNodes(hasTestTag("shell.sidebar"), useUnmergedTree = true).fetchSemanticsNodes().first().boundsInRoot
+            val firstRow = compose.onNodeWithTag("chat.row.${hub.chatId}", useUnmergedTree = true).fetchSemanticsNode().boundsInRoot
+            assertTrue("the first chat row starts at ${firstRow.top} of ${root.height}", firstRow.top < root.height * 0.5f)
         }
         open("/agents") { activity ->
-            waitFor("screen.agents")
+            waitFor("screen.agent_manager")
             save(activity, dir, "03-agents")
         }
         open("/tasks") { activity ->
@@ -136,6 +153,9 @@ class ScreenShots {
         compose.mainClock.advanceTimeBy(600)
         compose.waitForIdle()
     }
+
+    private fun left(tag: String): Float =
+        compose.onNodeWithTag(tag, useUnmergedTree = true).fetchSemanticsNode().boundsInRoot.left
 
     private fun save(activity: Activity, dir: File, name: String) {
         val view = activity.window.decorView

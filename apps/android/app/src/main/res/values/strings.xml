@@ -344,4 +344,13 @@
     <string name="chat_export">Export</string>
     <string name="chat_export_failed">The chat could not be exported. Try again.</string>
     <string name="agent_fallback">Agent</string>
+    <!-- The redesign (docs/changes/2026-09-27-twuijri-android-redesign.md). -->
+    <string name="chats_filter">Filter chats</string>
+    <string name="chats_filter_show">Show</string>
+    <string name="shell_connected">Connected to the hub</string>
+    <string name="shell_offline">Not connected to the hub</string>
+    <string name="shell_language">Language</string>
+    <string name="pending_count">%1$d waiting for you</string>
+    <string name="chat_new_in_profile">New chat in %1$s</string>
+    <string name="chat_start_hint">Ask anything. The conversation starts with your first message.</string>
 </resources>
