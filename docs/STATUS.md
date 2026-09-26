@@ -370,7 +370,7 @@ its approval.
   library, a camera photo or a file, uploaded at once (`sessions.uploadAttachment` up to 25 MB, the
   resumable `sessions.startUpload` flow above it, up to the contract's 50 MB; a clear error above
   that or on the hub's `413`), shown as chips with a preview and ×, and sent as image / file blocks;
-  a message's files show as names under it. Since 2026-09-26 (second pass) photos go «Compressed»
+  a message's files show as names under it (pictures drawn in place since 2026-09-27). Since 2026-09-26 (second pass) photos go «Compressed»
   (≤ 2048 px, JPEG 0.8, as an image) or at «Original quality» (the untouched file, as a file), the
   choice in the «+» menu and remembered. Voice follows «Voice: Core Hub / This phone» (This device;
   This phone by default since the second pass): the profile's hub STT
@@ -382,6 +382,19 @@ its approval.
   registration failed), and registers again when it comes to the front. New icons come from Lucide
   (`scripts/icons/lucide-mobile.mjs`, pinned `lucide-static`). Unit and Compose UI tests (Robolectric)
   on Android, XCTest on the iOS simulator; **not yet tried on the owner's phones or hub**.
+  Since 2026-09-27 (`docs/changes/2026-09-27-twuijri-mobile-voice-language.md`, proposed — owner
+  to confirm): **dictation picks its language itself** — the active keyboard's (iOS
+  `textInputMode`, Android's current input subtype), else the conversation's script (Arabic, Latin,
+  Cyrillic, Devanagari, CJK, Hebrew, Greek, Thai → the phone's language in it), else the phone's
+  languages, else the app's; before, it followed the app's language, so an English app heard Arabic
+  as English. Android 13+ also lets the recognizer detect (14+: switch) among the person's
+  languages; the hub's STT gets no language with Auto. A long press on the mic chooses one — the
+  keyboards', popular ones, or any the phone's recognizer knows (searchable), with a small mark on
+  the mic. Dictation now **keeps listening through pauses** until stopped, the words appear in the
+  composer as they are spoken, and a strip over it shows the level with cancel, stop and send
+  (Android no longer opens the system's dialog). **A reply's pictures draw in the message** (fetched
+  with the bearer header), a tap opens them full screen; other files open in the phone's viewer or
+  share sheet. The phones ask the hub for MP3 speech (`SpeechRequest.format`, DECISIONS §87).
 - **App Store listing for the iPhone and iPad app** (since 2026-09-26, owner's decision of
   2026-09-25; `docs/store/apple/README.md`): the listing in English and Arabic
   (`apps/ios/fastlane/metadata`, name «كور هب» in Arabic), held to App Store Connect's limits by
