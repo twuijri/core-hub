@@ -38,9 +38,9 @@ function initialLang() {
     const saved = localStorage.getItem(LANG_KEY);
     if (saved === 'ar' || saved === 'en') return saved;
   } catch {
-    // Storage blocked: Arabic, the page's first language.
+    // Storage blocked: English, the page's first language (owner, 2026-09-26).
   }
-  return 'ar';
+  return 'en';
 }
 
 function storage() {
@@ -221,7 +221,7 @@ function wireCopy() {
 }
 
 async function main() {
-  if (!STRINGS[state.lang]) state.lang = 'ar';
+  if (!STRINGS[state.lang]) state.lang = 'en';
   wireLanguage();
   wireCopy();
   render();
