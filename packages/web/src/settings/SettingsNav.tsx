@@ -20,7 +20,7 @@ import {
   visibleEntries,
   webDestinations,
 } from '../navigation/manifest.js';
-import { IconDevices, IconKnowledge, IconModels } from '../ui/icons.js';
+import { IconDevices, IconGlobe, IconKnowledge, IconModels } from '../ui/icons.js';
 import { Badge, SidebarGroup, SidebarRow } from '../ui/index.js';
 import { useUnreadCount } from '../notify/queries.js';
 import { useTerminalAvailable } from '../terminal/queries.js';
@@ -57,7 +57,9 @@ function rowIcon(id: string) {
         ? IconDevices
         : id === 'knowledge'
           ? IconKnowledge
-          : null;
+          : id === 'linked_hubs'
+            ? IconGlobe
+            : null;
   return Icon ? <Icon size={16} /> : null;
 }
 
