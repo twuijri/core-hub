@@ -34,6 +34,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
@@ -136,13 +137,19 @@ fun SettingsScreen(isAdmin: Boolean, onOpen: (Route) -> Unit, onBackToChats: () 
 /** One page under Settings; «Back to Settings» is the top bar's back arrow. */
 @Composable
 fun SettingsPageScreen(destination: String, shell: ShellViewModel, onOpen: (Route) -> Unit, thisDevice: @Composable () -> Unit) {
+    val session by shell.session.collectAsState()
+    val s = session ?: return
     when (destination) {
+        // Native on the phone since phone parity (owner: «why are sections missing»).
+        "models" -> ModelsPage(s.profile, shell.profileName(s.profile), s.user.isAdmin)
+        "device_connections" -> DevicesPage(s.profile)
+        "usage" -> UsagePage(s.profile, s.user.isAdmin)
         "account" -> AccountPage(shell)
         "display", "theme" -> DisplayPage(showLanguage = destination == "display")
-        "notifications" -> NotificationsPage(onOpen)
+        "notifications" -> NotificationsPage(onOpen, s.profile)
         "about" -> AboutPage()
         "workspaces" -> ProfilesPage()
-        "users" -> UsersPage()
+        "users" -> PeoplePage(s.profile, s.user.id)
         "privacy" -> PrivacyPage()
         "this_device" -> thisDevice()
         "logs" -> LogsPage()
@@ -207,12 +214,24 @@ private fun DisplayPage(showLanguage: Boolean) {
 
 /** The notifications inbox: newest first, unread ones marked with a dot; a tap marks one read and opens what it is about. */
 @Composable
-private fun NotificationsPage(onOpen: (Route) -> Unit) {
+private fun NotificationsPage(onOpen: (Route) -> Unit, profile: String) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val t = LocalTokens.current
+    // The inbox, and the settings table beside it (which notice comes in the app and as a push).
+    var settings by androidx.compose.runtime.saveable.rememberSaveable { androidx.compose.runtime.mutableStateOf(false) }
     val notices = rememberLoad { context.graph.apis(context.graph.store.current!!).notify.notifyListNotices(limit = 100).items }
     LazyColumn(Modifier.fillMaxSize().testTag("notices.list"), contentPadding = pagePadding, verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        item {
+            Segmented(
+                listOf(Segment(false, stringResource(R.string.notify_inbox), tag = "notices.tab.inbox"), Segment(true, stringResource(R.string.notify_settings), tag = "notices.tab.settings")),
+                settings, { settings = it }, Modifier.fillMaxWidth(), size = ControlSize.Sm,
+            )
+        }
+        if (settings) {
+            item { NotificationSettings(profile) }
+            return@LazyColumn
+        }
         // Whether this phone can show them at all comes first.
         item { Column(verticalArrangement = Arrangement.spacedBy(8.dp)) { hub.core.android.phone.NotificationRows() } }
         item {
