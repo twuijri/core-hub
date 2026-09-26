@@ -1,16 +1,19 @@
 /**
- * The update check (ADR 0023): the repository's GitHub releases, read without a token, at most
- * once a day on its own and whenever the person asks. The result is a notice and a link to the
- * installer — nothing is downloaded or installed by the app.
+ * The `notify` update check (DECISIONS §108, for the .deb and development runs; also the
+ * fallback when the `install` updater cannot read its feed): the repository's GitHub releases,
+ * read without a token. The result is a notice and a link — nothing is downloaded or installed.
+ * Which way this copy updates: `appPackaging` here, `updateMode` in shared/updates.ts.
  */
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { PRODUCT } from '@corehub/contracts';
 import {
   checksGitHub,
+  packagingOf,
   pickUpdate,
   updateChannel,
   type GitHubRelease,
+  type Packaging,
   type UpdateChannel,
   type UpdateFound,
 } from '../shared/updates.js';
@@ -79,4 +82,31 @@ export function appChannel(appPath: string, env: NodeJS.ProcessEnv = process.env
   }
   const windowsStore = (process as NodeJS.Process & { windowsStore?: boolean }).windowsStore;
   return updateChannel({ metadata, windowsStore, env: env.COREHUB_CHANNEL });
+}
+
+/**
+ * How this copy was installed (see `packagingOf`): the channel, whether it is packaged, the
+ * AppImage runtime's `APPIMAGE`, and `resources/package-type`, which electron-builder writes
+ * into the .deb.
+ */
+export function appPackaging(input: {
+  channel: UpdateChannel;
+  packaged: boolean;
+  resourcesPath: string;
+  platform?: NodeJS.Platform;
+  env?: NodeJS.ProcessEnv;
+}): Packaging {
+  let packageType: string | null = null;
+  try {
+    packageType = readFileSync(path.join(input.resourcesPath, 'package-type'), 'utf8').trim();
+  } catch {
+    packageType = null;
+  }
+  return packagingOf({
+    platform: input.platform ?? process.platform,
+    channel: input.channel,
+    packaged: input.packaged,
+    appImage: (input.env ?? process.env).APPIMAGE,
+    packageType,
+  });
 }

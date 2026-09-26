@@ -1,9 +1,10 @@
 name: Desktop installers
 
 # Builds the desktop app's installers on Linux, macOS and Windows and keeps them as workflow
-# artifacts, with their sizes in the job summary: AppImage + deb, dmg, and on Windows both the
-# NSIS .exe (GitHub releases, its own update check) and the Microsoft Store MSIX (the Store
-# signs it; its update check is off). Unsigned: the signed and notarised macOS build is
+# artifacts, with their sizes in the job summary: AppImage + deb, dmg (+ the zip macOS updates
+# from), and on Windows both the NSIS .exe (GitHub releases, updates itself) and the Microsoft
+# Store MSIX (the Store signs and updates it; the app never looks), with the update feeds
+# (latest*.yml) and blockmaps the apps update from (DECISIONS §108). Unsigned: the signed and notarised macOS build is
 # desktop-signed.yml, never run on a pull request (docs/RELEASING.md). It publishes nothing
 # itself; publish-release.yml calls it on a release tag and attaches the files to the release.
 on:
@@ -65,6 +66,16 @@ jobs:
       - run: pnpm build
       - name: Package
         run: pnpm --filter @corehub/desktop package ${{ matrix.target }}
+      # The apps update from these feeds (DECISIONS §108): every file a feed names must be a
+      # release file, under that very name. A release of an older tag builds none.
+      - name: Check the update feed
+        if: hashFiles('apps/desktop/src/main/auto-update.ts') != ''
+        shell: bash
+        run: |
+          v="${COREHUB_VERSION:-$(node -p "require('./package.json').version")}"
+          case "$RUNNER_OS" in Windows) p=windows ;; macOS) p=macos ;; *) p=linux ;; esac
+          cat apps/desktop/release/latest*.yml
+          node apps/desktop/scripts/release-assets.mjs check-feeds "${v#v}" apps/desktop/release "$p"
       # The name a person sees is "Core Hub" (1.1.1 shipped `corehub.app` in a `corehub
       # 1.1.1-arm64` DMG window, `corehub.exe`, `/opt/Core Hub/corehub`); the .deb package, the Linux
       # desktop entry and window class keep `corehub`. A release of an older tag
@@ -199,6 +210,9 @@ jobs:
             apps/desktop/release/*.dmg
             apps/desktop/release/*.exe
             apps/desktop/release/*.msix
+            apps/desktop/release/*.zip
+            apps/desktop/release/*.blockmap
+            apps/desktop/release/latest*.yml
             apps/desktop/release/sizes.md
           retention-days: 14
           if-no-files-found: error

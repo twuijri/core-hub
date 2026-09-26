@@ -848,6 +848,20 @@
     translate: 0 0.5rem;
   }
 }
+/* The desktop app's new-version card (desktop/UpdateNotice.tsx): a toast's look, but it stays
+   until answered, at the same corner. */
+.ch-update-notice {
+  position: fixed;
+  z-index: var(--ch-z-toast);
+  inset-block-end: var(--ch-space-4);
+  inset-inline-end: var(--ch-space-4);
+  inline-size: min(22rem, calc(100vw - 2rem));
+  margin: 0;
+  animation: ch-toast-in var(--ch-motion-normal) var(--ch-motion-ease);
+}
+.ch-update-notice p {
+  margin: 0;
+}
 
 /* ----------------------------------------------------------------- the table */
 .ch-table-scroll {

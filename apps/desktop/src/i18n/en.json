@@ -78,7 +78,9 @@
     "devtools": "Developer tools",
     "hide": "Hide Core Hub",
     "hide_others": "Hide others",
-    "show_all": "Show all"
+    "show_all": "Show all",
+    "check_updates": "Check for updates…",
+    "restart_to_update": "Restart to update to {version}"
   },
   "dialog": {
     "pair_question": "Pair this computer with {hub}?",
@@ -112,7 +114,16 @@
   },
   "updates": {
     "available_title": "Core Hub {version} is available",
-    "available_body": "Open the download page to install it."
+    "available_body": "Open the download page to install it.",
+    "ready_title": "Core Hub {version} is ready to install",
+    "ready_body": "Restart Core Hub to update. Otherwise it is installed the next time you quit.",
+    "up_to_date": "Core Hub {version} is the newest version.",
+    "downloading": "Core Hub {version} is downloading. You will be asked to restart when it is ready.",
+    "failed": "Could not check for updates: {message}",
+    "restart": "Restart to update",
+    "download_page": "Open the download page",
+    "later": "Later",
+    "ok": "OK"
   },
   "legacy_app": {
     "question": "Move the old copy of Core Hub to the Trash?",

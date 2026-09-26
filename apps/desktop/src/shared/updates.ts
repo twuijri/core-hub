@@ -1,8 +1,16 @@
 /**
- * "Is there a newer Core Hub for this computer?" — read from the repository's GitHub releases.
+ * "Is there a newer Core Hub for this computer?", and what the app does about it.
  *
- * The app only says so and links the installer (ADR 0023): it never downloads or installs by
- * itself. A release counts when it is published (not a draft), is newer than this app, and
+ * Two ways, by how this copy was installed (`updateMode`, DECISIONS §108):
+ * - `install` — the Windows .exe (NSIS), the macOS dmg and the Linux AppImage: electron-updater
+ *   reads the release's `latest*.yml`, downloads the new version in the background and asks the
+ *   person to restart (src/main/auto-update.ts). It installs on quit too, never by restarting on
+ *   its own.
+ * - `notify` — the Linux .deb (and a development run): the GitHub releases API below says a
+ *   newer version is out, and the app links the download page. Nothing is downloaded.
+ * - `off` — the Microsoft Store build: the Store updates it; the app never asks GitHub.
+ *
+ * For `notify`, a release counts when it is published (not a draft), is newer than this app, and
  * carries an installer for this platform and architecture. Pre-releases (the `test` channel)
  * are offered only to an app that is itself a pre-release.
  */
@@ -107,14 +115,106 @@ export function pickUpdate(
   return best;
 }
 
-/** Once a day is enough to learn about a release; a person can always ask now. */
-export const AUTO_CHECK_INTERVAL_MS = 24 * 60 * 60 * 1000;
+/** The first look, a little after start so it never slows the launch. */
+export const FIRST_CHECK_DELAY_MS = 10_000;
+/** Then every six hours while the app runs (a person can always ask now). */
+export const AUTO_CHECK_INTERVAL_MS = 6 * 60 * 60 * 1000;
 
-export function checkIsDue(lastCheckedAt: string | null, now: number): boolean {
-  if (!lastCheckedAt) return true;
-  const last = Date.parse(lastCheckedAt);
-  return !Number.isFinite(last) || now - last >= AUTO_CHECK_INTERVAL_MS;
+export interface ScheduleTimers {
+  setTimeout(run: () => void, ms: number): unknown;
+  clearTimeout(handle: unknown): void;
+  setInterval(run: () => void, ms: number): unknown;
+  clearInterval(handle: unknown): void;
 }
+
+const realTimers: ScheduleTimers = {
+  setTimeout: (run, ms) => setTimeout(run, ms),
+  clearTimeout: (handle) => clearTimeout(handle as NodeJS.Timeout),
+  setInterval: (run, ms) => setInterval(run, ms),
+  clearInterval: (handle) => clearInterval(handle as NodeJS.Timeout),
+};
+
+/**
+ * The automatic checks: `run` about ten seconds after start, then every six hours. `run` itself
+ * reads the person's switch each time, so turning it off stops the next look without a restart.
+ * Returns the function that stops the schedule.
+ */
+export function scheduleUpdateChecks(
+  run: () => void,
+  timers: ScheduleTimers = realTimers,
+): () => void {
+  let interval: unknown = null;
+  const first = timers.setTimeout(() => {
+    run();
+    interval = timers.setInterval(run, AUTO_CHECK_INTERVAL_MS);
+  }, FIRST_CHECK_DELAY_MS);
+  return () => {
+    timers.clearTimeout(first);
+    if (interval !== null) timers.clearInterval(interval);
+  };
+}
+
+/**
+ * How this copy of the app was installed:
+ * - `nsis` — the Windows .exe from a GitHub release;
+ * - `msix` — the Microsoft Store package (the `store` channel);
+ * - `dmg` — the macOS app (from the signed dmg);
+ * - `appimage` — the Linux AppImage (Electron's AppImage runtime sets `APPIMAGE`);
+ * - `deb` — the Linux .deb (electron-builder writes `resources/package-type`);
+ * - `unpacked` — a packaged app run from its folder (`linux-unpacked`, the smoke tests);
+ * - `development` — `electron .` from the repository.
+ */
+export type Packaging = 'nsis' | 'msix' | 'dmg' | 'appimage' | 'deb' | 'unpacked' | 'development';
+
+export function packagingOf(input: {
+  platform: NodeJS.Platform;
+  channel: UpdateChannel;
+  packaged: boolean;
+  /** `process.env.APPIMAGE`, set only inside a running AppImage. */
+  appImage?: string | undefined;
+  /** The contents of `resources/package-type`, or null. */
+  packageType?: string | null | undefined;
+}): Packaging {
+  if (input.channel === 'store') return 'msix';
+  if (!input.packaged) return 'development';
+  if (input.platform === 'win32') return 'nsis';
+  if (input.platform === 'darwin') return 'dmg';
+  if (input.platform === 'linux') {
+    // The AppImage is built from the same folder as the .deb, so it may carry the .deb's
+    // `package-type` file; only a running AppImage has APPIMAGE.
+    if (input.appImage && input.appImage.trim() !== '') return 'appimage';
+    if (input.packageType?.trim() === 'deb') return 'deb';
+  }
+  return 'unpacked';
+}
+
+/**
+ * What the app does about a new version:
+ * - `install`: electron-updater downloads it in the background and asks to restart;
+ * - `notify`: says a new version is out and links the download page;
+ * - `off`: never looks (the Store updates the MSIX).
+ */
+export type UpdateMode = 'install' | 'notify' | 'off';
+
+export function updateMode(packaging: Packaging): UpdateMode {
+  switch (packaging) {
+    case 'msix':
+      return 'off';
+    case 'nsis':
+    case 'dmg':
+    case 'appimage':
+      return 'install';
+    default:
+      return 'notify';
+  }
+}
+
+/** The download page (site/, GitHub Pages): where a .deb user gets the new version. */
+export const DOWNLOAD_PAGE = 'https://twuijri.github.io/core-hub/';
+
+/** A release's own page, for "What's new". */
+export const releasePage = (repository: string, version: string) =>
+  `https://github.com/${repository}/releases/tag/v${version}`;
 
 /**
  * Where this copy of the app gets its updates. `github`: the releases above (the .exe, dmg,

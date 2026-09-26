@@ -6,7 +6,11 @@ name: Publish release
 # or updates the tag's release, attaches them and marks it latest:
 #   - Windows .exe (NSIS, unsigned) and .msix (the Microsoft Store package), Linux AppImage and
 #     .deb — desktop.yml;
-#   - the signed and notarised macOS dmg — desktop-signed.yml;
+#   - the signed and notarised macOS dmg, and the zip installed copies update from —
+#     desktop-signed.yml;
+#   - the update feeds latest.yml, latest-mac.yml, latest-linux.yml and the blockmaps the apps
+#     update from (DECISIONS §108); `collect` refuses a feed that names a file the release does
+#     not carry under that very name;
 #   - the signed Android APK — android-signed.yml.
 # One workflow with job dependencies rather than workflow_run: the release job starts only when
 # every build of this same run succeeded, for this tag's commit, and reads their artifacts
@@ -121,15 +125,20 @@ jobs:
         with:
           path: ${{ runner.temp }}/artifacts
           pattern: corehub-*
-      # A tag whose code predates the Microsoft Store package (v1.1.0) has no .msix to attach.
+      # A tag whose code predates the Microsoft Store package (v1.1.0) has no .msix to attach, and
+      # one before the self-updating apps (1.1.3) has no update feeds or macOS zip.
       - name: What this tag's code builds
         run: |
-          if git cat-file -e "$TAG:apps/desktop/scripts/msix-smoke.ps1" 2>/dev/null; then
-            echo 'WITHOUT=' >> "$GITHUB_ENV"
-          else
+          without=''
+          if ! git cat-file -e "$TAG:apps/desktop/scripts/msix-smoke.ps1" 2>/dev/null; then
             echo "::notice::$TAG predates the MSIX: its release has no Microsoft Store package."
-            echo 'WITHOUT=--without=windows-msix' >> "$GITHUB_ENV"
+            without="$without --without=windows-msix"
           fi
+          if ! git cat-file -e "$TAG:apps/desktop/src/main/auto-update.ts" 2>/dev/null; then
+            echo "::notice::$TAG predates the self-updating apps: its release has no update feeds."
+            without="$without --without=updates"
+          fi
+          echo "WITHOUT=$without" >> "$GITHUB_ENV"
       - name: The release files, under their release names
         run: node apps/desktop/scripts/release-assets.mjs collect "$VERSION" "$RUNNER_TEMP/artifacts" "$RUNNER_TEMP/release" $WITHOUT
       # The merged pull requests since the previous version tag, as GitHub lists them, kept short

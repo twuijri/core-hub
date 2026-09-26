@@ -69,7 +69,7 @@ export interface DesktopBridge {
   programs: DesktopProgramsBridge;
   /** This computer as a device of the hub it is connected to, for a hub on a server (ADR 0025). */
   device: DesktopDeviceBridge;
-  /** The update check (ADR 0023): a notice and a download link, never an install. */
+  /** New versions of the app (DECISIONS §108): download and restart, or a notice and a link. */
   updates: DesktopUpdatesBridge;
   /**
    * The microphone as the OS sees it, for dictation (B11). Absent in an app older than it:
@@ -112,18 +112,46 @@ export interface DesktopUpdatesState {
    * `releasesPage` is its Store page. Absent (an older app) means `github`.
    */
   channel?: 'github' | 'store';
-  /** Checks once a day on its own. */
+  /**
+   * What the app does about a new version (DECISIONS §108): `install` downloads it in the
+   * background and asks to restart (the Windows .exe, macOS, the Linux AppImage); `notify` says it
+   * is out and links `downloadPage` (the Linux .deb); `off` the Store build. Absent (an app before
+   * 1.1.3): the old notice with a link to the installer.
+   */
+  mode?: 'install' | 'notify' | 'off';
+  /** Checks on its own (about ten seconds after start, then every six hours). */
   auto: boolean;
   /** The last answer, or null before the first check. */
   last: DesktopUpdateCheck | null;
   /** Where every release is listed. */
   releasesPage: string;
+  /** `install` only: the new version downloading, or downloaded and waiting for a restart. */
+  pending?: DesktopPendingUpdate | null;
+  /** `notify` only: the download page the person gets the new version from. */
+  downloadPage?: string;
+  /** The version the person said "Later" to in this run; its notice stays hidden. */
+  dismissed?: string | null;
+  /** A check is running (one the menu started, or the schedule's). */
+  checking?: boolean;
+}
+
+export interface DesktopPendingUpdate {
+  version: string;
+  status: 'downloading' | 'ready';
+  /** 0–100 while downloading, when known. */
+  percent: number | null;
 }
 
 export interface DesktopUpdatesBridge {
   get(): Promise<DesktopUpdatesState>;
   check(): Promise<DesktopUpdatesState>;
   setAuto(value: boolean): Promise<DesktopUpdatesState>;
+  /** Installs the downloaded version and starts it again (`pending.status === 'ready'`). */
+  restart?(): Promise<void>;
+  /** "Later": hides the notice about `version` until the app starts again. */
+  dismiss?(version: string): Promise<DesktopUpdatesState>;
+  /** Every change the app makes on its own (a check, a download's progress, ready). */
+  onChange?(listener: (state: DesktopUpdatesState) => void): () => void;
 }
 
 export interface DesktopHelperFolder {

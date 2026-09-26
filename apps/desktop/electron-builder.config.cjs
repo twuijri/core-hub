@@ -1,6 +1,13 @@
 // Installers for the desktop app (ADR 0020). Built by `pnpm --filter @corehub/desktop package`
-// after `pnpm build`. Nothing here publishes: `publish: null`; CI keeps the files as workflow
-// artifacts, and publish-release.yml attaches them to a tag's GitHub release (docs/RELEASING.md).
+// after `pnpm build`. Nothing here publishes: package.mjs passes `--publish never`; CI keeps the
+// files as workflow artifacts, and publish-release.yml attaches them to a tag's GitHub release
+// (docs/RELEASING.md).
+//
+// Updates (DECISIONS §108): `publish` below names the GitHub releases the apps update from, so
+// packaging writes the update feeds — `latest.yml` (NSIS), `latest-mac.yml` (the zip, and the
+// dmg), `latest-linux.yml` (the AppImage, and the .deb) — and `resources/app-update.yml`. The
+// feeds name the files by these artifactName patterns; release-assets.mjs publishes them under
+// exactly those names and refuses a release where they differ.
 //
 // Windows ships two ways (owner, 2026-09-25): the NSIS `.exe` (unsigned, GitHub releases, the
 // app's own update check) and the Microsoft Store MSIX (`appx` below; the Store signs it). The
@@ -41,7 +48,7 @@ module.exports = {
   electronLanguages: ['ar', 'en-US'],
   npmRebuild: false,
   nodeGypRebuild: false,
-  publish: null,
+  publish: { provider: 'github', owner: 'twuijri', repo: 'core-hub', releaseType: 'release' },
   forceCodeSigning: signed,
   protocols: [{ name: 'Core Hub', schemes: ['corehub'] }],
   linux: {
@@ -64,7 +71,14 @@ module.exports = {
   mac: {
     // Apple silicon only: argon2 (the hub's password hashing) ships no darwin-x64 binary, so an
     // Intel build could not run local mode. Proposed — owner to confirm (ADR 0023).
-    target: [{ target: 'dmg', arch: ['arm64'] }],
+    // The dmg is the download; the zip of the same signed app is what an installed copy updates
+    // from (Squirrel.Mac takes only a zip; DECISIONS §108).
+    target: [
+      { target: 'dmg', arch: ['arm64'] },
+      { target: 'zip', arch: ['arm64'] },
+    ],
+    // The zip's name (the dmg has its own below).
+    artifactName: 'Core-Hub-${version}-${arch}-mac.${ext}',
     category: 'public.app-category.productivity',
     icon: 'assets/icon.icns',
     // Unsigned builds open with a Gatekeeper warning; a signed one fails loudly rather than

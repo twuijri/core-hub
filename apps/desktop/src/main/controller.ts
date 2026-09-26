@@ -64,9 +64,24 @@ import { LocalHubError, startLocalHub, type LocalHub } from './local-hub.js';
 import { startHelper, toolsFor, type HelperServer } from './helper.js';
 import { ThisComputerService } from './this-computer.js';
 import type { ConsentAnswer, ConsentQuestion } from './consent.js';
-import { RELEASES_PAGE, appChannel, checkForUpdate, type UpdateCheck } from './updates.js';
-import { STORE_PAGE, checkIsDue, checksGitHub, type UpdateChannel } from '../shared/updates.js';
-import { appMenuTemplate, trayMenuTemplate, type MenuActions } from './menu.js';
+import {
+  RELEASES_PAGE,
+  appChannel,
+  appPackaging,
+  checkForUpdate,
+  type UpdateCheck,
+} from './updates.js';
+import {
+  DOWNLOAD_PAGE,
+  STORE_PAGE,
+  releasePage,
+  scheduleUpdateChecks,
+  updateMode,
+  type UpdateChannel,
+  type UpdateMode,
+} from '../shared/updates.js';
+import { AutoInstaller, type PendingUpdate } from './auto-update.js';
+import { appMenuTemplate, trayMenuTemplate, type MenuActions, type MenuUpdates } from './menu.js';
 import { startProxy, type ProxyServer } from './proxy.js';
 import { isHubToApp } from '../shared/hub-ipc.js';
 import { RelayManager, RelayRefusal } from './relay.js';
@@ -79,6 +94,9 @@ import {
   type MicHooks,
 } from './microphone.js';
 import { findLegacyApp } from './legacy-mac-app.js';
+
+/** Settings → This device (docs/clients/navigation.json, `this_device`). */
+const THIS_DEVICE_PATH = '/settings/this-device';
 
 export interface ControllerPaths {
   /** The built web client. */
@@ -109,9 +127,24 @@ export class DesktopController {
   private helper: HelperServer | null = null;
   private helperError: string | null = null;
   private lastUpdateCheck: UpdateCheck | null = null;
-  private updateTimer: NodeJS.Timeout | null = null;
+  private stopUpdateSchedule: (() => void) | null = null;
   /** `store` in the Microsoft Store build: the Store updates it, the app never checks GitHub. */
   private readonly channel: UpdateChannel = appChannel(app.getAppPath());
+  /** `install`, `notify` or `off`, from how this copy was installed (DECISIONS §108). */
+  private readonly updateMode: UpdateMode = updateMode(
+    appPackaging({
+      channel: this.channel,
+      packaged: app.isPackaged,
+      resourcesPath: process.resourcesPath,
+    }),
+  );
+  /** electron-updater, in `install` mode only. */
+  private installer: AutoInstaller | null = null;
+  private checkingUpdates = false;
+  /** The version the person said "Later" to in this run. */
+  private dismissedUpdate: string | null = null;
+  /** The downloaded version the menus offer to restart into. */
+  private menuReady: string | null = null;
   /** Programs, the default folder, consent, the activity list and the hub's device connection. */
   private readonly computer: ThisComputerService;
   /** The way in from outside for the local hub (DECISIONS §95). */
@@ -184,12 +217,14 @@ export class DesktopController {
       // A file another assistant wrote badly never stops the app; the page can rescan.
     }
     if (this.config.get().helper.enabled) await this.syncHelper();
-    // The daily look for a newer release, a little after start so it never slows the launch.
-    // Tests turn it off: they must not ask GitHub anything. A Store build never looks.
-    if (process.env.COREHUB_DESKTOP_NO_AUTO_UPDATE !== '1' && checksGitHub(this.channel)) {
-      this.updateTimer = setInterval(() => void this.autoCheckUpdates(), 60 * 60 * 1000);
-      setTimeout(() => void this.autoCheckUpdates(), 15_000);
-    }
+    // New versions (DECISIONS §108): about ten seconds after start, then every six hours. Tests
+    // turn the schedule off: they must not ask GitHub anything. A Store build never looks.
+    if (this.updateMode === 'install')
+      this.installer = new AutoInstaller(process.platform, (pending) =>
+        this.onPendingUpdate(pending),
+      );
+    if (process.env.COREHUB_DESKTOP_NO_AUTO_UPDATE !== '1' && this.updateMode !== 'off')
+      this.stopUpdateSchedule = scheduleUpdateChecks(() => void this.autoCheckUpdates());
     if (this.options.tray) this.createTray();
     const config = this.config.get();
     if (config.mode === 'remote' && config.remote.url) this.openRemote(config.remote.url);
@@ -218,7 +253,7 @@ export class DesktopController {
     this.quitting = true;
     this.tray?.destroy();
     this.tray = null;
-    if (this.updateTimer) clearInterval(this.updateTimer);
+    this.stopUpdateSchedule?.();
     // The local hub is stopped properly (its database, its Hermes child); the rest never
     // holds up quitting: the process ending closes whatever socket is left.
     const helper = this.helper;
@@ -774,49 +809,189 @@ export class DesktopController {
 
   // ---------------------------------------------------------------- updates
 
-  private async checkUpdates(): Promise<UpdateCheck> {
-    const result = await checkForUpdate({
+  /** The releases API: the `notify` check, and `install`'s fallback when its feed fails. */
+  private releasesCheck(): Promise<UpdateCheck> {
+    return checkForUpdate({
       current: app.getVersion(),
       platform: process.platform,
       arch: process.arch,
       channel: this.channel,
     });
+  }
+
+  private async checkUpdates(): Promise<UpdateCheck> {
+    this.checkingUpdates = true;
+    this.emitUpdates();
+    let result: UpdateCheck;
+    try {
+      result = this.installer
+        ? await this.installerCheck(this.installer)
+        : await this.releasesCheck();
+    } finally {
+      this.checkingUpdates = false;
+    }
     this.lastUpdateCheck = result;
     this.config.update((c) => ({
       ...c,
       updates: { ...c.updates, lastCheckedAt: result.checkedAt },
     }));
+    this.emitUpdates();
     return result;
   }
 
-  /** Once a day when allowed; a newer version is announced by the OS once. */
+  private async installerCheck(installer: AutoInstaller): Promise<UpdateCheck> {
+    const current = app.getVersion();
+    const answer = await installer.check();
+    const checkedAt = new Date().toISOString();
+    if (answer.status === 'available') {
+      const page = releasePage(PRODUCT.repository, answer.version);
+      return {
+        status: 'available',
+        current,
+        checkedAt,
+        update: { version: answer.version, download: page, size: null, page },
+      };
+    }
+    if (answer.status === 'up_to_date') return { status: 'up_to_date', current, checkedAt };
+    // The feed could not be read (a release without its latest*.yml, a network error): the
+    // releases API may still tell that a newer version is out, with a link to its installer.
+    const fallback = await this.releasesCheck();
+    return fallback.status === 'available'
+      ? fallback
+      : { status: 'failed', current, checkedAt, message: answer.message };
+  }
+
+  /** On the schedule, while the person leaves the switch on. */
   private async autoCheckUpdates(): Promise<void> {
-    const settings = this.config.get().updates;
-    if (!checksGitHub(this.channel)) return;
-    if (!settings.auto || !checkIsDue(settings.lastCheckedAt, Date.now())) return;
+    if (this.updateMode === 'off' || !this.config.get().updates.auto) return;
     const result = await this.checkUpdates();
-    if (result.status !== 'available' || settings.notified === result.update.version) return;
-    const version = result.update.version;
-    this.config.update((c) => ({ ...c, updates: { ...c.updates, notified: version } }));
+    // `install` announces the version once it is downloaded (onPendingUpdate).
+    if (result.status === 'available' && !this.installer?.state)
+      this.tellOs('available', result.update.version);
+  }
+
+  private onPendingUpdate(pending: PendingUpdate | null): void {
+    this.emitUpdates();
+    const ready = pending?.status === 'ready' ? pending.version : null;
+    if (ready !== this.menuReady) {
+      this.menuReady = ready;
+      this.buildMenus();
+    }
+    if (ready) this.tellOs('ready', ready);
+  }
+
+  /**
+   * The OS says it once per version, and only when no window of the app is in front — there the
+   * page's own notice says it (`DesktopUpdateNotice` in the web client).
+   */
+  private tellOs(kind: 'available' | 'ready', version: string): void {
+    if (this.config.get().updates.notified === `${kind}:${version}`) return;
+    if (this.appWindow?.isFocused()) return;
+    this.config.update((c) => ({
+      ...c,
+      updates: { ...c.updates, notified: `${kind}:${version}` },
+    }));
     if (!Notification.isSupported()) return;
     const notice = new Notification({
-      title: this.t('updates.available_title', { version }),
-      body: this.t('updates.available_body'),
+      title: this.t(`updates.${kind}_title`, { version: isolate(version) }),
+      body: this.t(`updates.${kind}_body`),
       icon: path.join(this.paths.assetsDir, 'icon.png'),
     });
-    notice.on('click', () => void shell.openExternal(result.update.page));
+    notice.on('click', () => {
+      if (kind === 'available' && !this.appWindow) void shell.openExternal(DOWNLOAD_PAGE);
+      else this.showUpdates();
+    });
     notice.show();
   }
 
   private updatesState(): DesktopUpdatesState {
-    if (!checksGitHub(this.channel))
-      return { channel: 'store', auto: false, last: null, releasesPage: STORE_PAGE };
+    if (this.updateMode === 'off')
+      return {
+        channel: 'store',
+        mode: 'off',
+        auto: false,
+        last: null,
+        releasesPage: STORE_PAGE,
+        checking: false,
+      };
     return {
       channel: 'github',
+      mode: this.updateMode,
       auto: this.config.get().updates.auto,
       last: this.lastUpdateCheck,
       releasesPage: RELEASES_PAGE,
+      pending: this.installer?.state ?? null,
+      downloadPage: DOWNLOAD_PAGE,
+      dismissed: this.dismissedUpdate,
+      checking: this.checkingUpdates,
     };
+  }
+
+  private emitUpdates(): void {
+    this.appWindow?.webContents.send(CHANNELS.updatesChanged, this.updatesState());
+  }
+
+  /** The person chose "Restart to update": the app quits, installs, and starts again. */
+  private restartToUpdate(): void {
+    if (this.installer?.state?.status !== 'ready') return;
+    // Nothing may keep the app in the tray while it quits for the installer.
+    this.quitting = true;
+    if (!this.installer.restart()) this.quitting = false;
+  }
+
+  /** Settings → This device, where the Updates part shows the answer. */
+  private showUpdates(): void {
+    if (this.appWindow) this.openPath(THIS_DEVICE_PATH);
+    else this.showWindow();
+  }
+
+  /**
+   * "Check for updates…" in a menu. With the app window open, the answer shows in This device;
+   * on the first-run screen (no page to show it) the OS's dialog says it.
+   */
+  private async checkUpdatesFromMenu(): Promise<void> {
+    if (this.updateMode === 'off') return;
+    if (this.appWindow) {
+      this.showUpdates();
+      await this.checkUpdates();
+      return;
+    }
+    const result = await this.checkUpdates();
+    const pending = this.installer?.state ?? null;
+    const version = isolate(
+      pending?.version ??
+        (result.status === 'available' ? result.update.version : app.getVersion()),
+    );
+    const [message, buttons, act] =
+      pending?.status === 'ready'
+        ? [
+            this.t('updates.ready_title', { version }),
+            [this.t('updates.restart'), this.t('updates.later')],
+            () => this.restartToUpdate(),
+          ]
+        : pending?.status === 'downloading'
+          ? [this.t('updates.downloading', { version }), [this.t('updates.ok')], null]
+          : result.status === 'available'
+            ? [
+                this.t('updates.available_title', { version }),
+                [this.t('updates.download_page'), this.t('updates.later')],
+                () => void shell.openExternal(DOWNLOAD_PAGE),
+              ]
+            : result.status === 'up_to_date'
+              ? [this.t('updates.up_to_date', { version }), [this.t('updates.ok')], null]
+              : [
+                  this.t('updates.failed', { message: result.message }),
+                  [this.t('updates.ok')],
+                  null,
+                ];
+    const answer = await dialog.showMessageBox({
+      type: result.status === 'failed' && !pending ? 'warning' : 'info',
+      buttons,
+      defaultId: 0,
+      cancelId: buttons.length - 1,
+      message,
+    });
+    if (answer.response === 0 && act) act();
   }
 
   private registerUpdatesIpc(): void {
@@ -825,12 +1000,21 @@ export class DesktopController {
     );
     ipcMain.handle(CHANNELS.updatesCheck, async (event) => {
       if (!this.fromApp(event)) return null;
-      if (checksGitHub(this.channel)) await this.checkUpdates();
+      if (this.updateMode !== 'off') await this.checkUpdates();
       return this.updatesState();
     });
     ipcMain.handle(CHANNELS.updatesAuto, (event, value: unknown) => {
       if (!this.fromApp(event)) return null;
       this.config.update((c) => ({ ...c, updates: { ...c.updates, auto: value === true } }));
+      return this.updatesState();
+    });
+    ipcMain.handle(CHANNELS.updatesRestart, (event) => {
+      if (this.fromApp(event)) this.restartToUpdate();
+    });
+    ipcMain.handle(CHANNELS.updatesDismiss, (event, version: unknown) => {
+      if (!this.fromApp(event)) return null;
+      if (typeof version === 'string' && version.length <= 64) this.dismissedUpdate = version;
+      this.emitUpdates();
       return this.updatesState();
     });
   }
@@ -845,7 +1029,13 @@ export class DesktopController {
       this.quitting = true;
       app.quit();
     },
+    checkForUpdates: () => void this.checkUpdatesFromMenu(),
+    restartToUpdate: () => this.restartToUpdate(),
   };
+
+  private menuUpdates(): MenuUpdates {
+    return { check: this.updateMode !== 'off', ready: this.menuReady };
+  }
 
   private createTray(): void {
     try {
@@ -864,16 +1054,19 @@ export class DesktopController {
   }
 
   private buildMenus(): void {
-    const t = (key: string) => this.t(key);
+    const t = (key: string, params?: Record<string, string>) => this.t(key, params);
     Menu.setApplicationMenu(
       Menu.buildFromTemplate(
         appMenuTemplate(t, this.actions, {
           platform: process.platform,
           devTools: this.options.devTools,
+          updates: this.menuUpdates(),
         }),
       ),
     );
-    this.tray?.setContextMenu(Menu.buildFromTemplate(trayMenuTemplate(t, this.actions)));
+    this.tray?.setContextMenu(
+      Menu.buildFromTemplate(trayMenuTemplate(t, this.actions, this.menuUpdates())),
+    );
     this.tray?.setToolTip(this.t('app.name'));
   }
 
