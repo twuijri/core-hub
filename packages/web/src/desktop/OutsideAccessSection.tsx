@@ -1,5 +1,5 @@
 /**
- * «الوصول من خارج البيت» / "Reach from outside", inside This device (DECISIONS §92, proposed —
+ * «الوصول من خارج البيت» / "Reach from outside", inside This device (DECISIONS §95, proposed —
  * owner to confirm): a folded part shown in local mode to an admin.
  *
  * The hub on this computer listens on this computer only. To reach it from a phone away from

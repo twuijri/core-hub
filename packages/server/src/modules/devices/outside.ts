@@ -1,5 +1,5 @@
 /**
- * The way in from outside (`devices.getRelay` / `devices.setRelay`, DECISIONS §80, §92).
+ * The way in from outside (`devices.getRelay` / `devices.setRelay`, DECISIONS §80, §95).
  *
  * A hub the desktop app runs on a person's computer (local mode) listens on 127.0.0.1 only. For
  * their phone to reach it from outside the house, the person opens a way in on an account of
@@ -236,7 +236,7 @@ export async function changeRelay(
 /**
  * The address a phone pairing now should be given, or null: the way in's while it is open. A
  * hub the desktop app runs listens on its computer only, so this is the only address a phone
- * could use there (DECISIONS §92).
+ * could use there (DECISIONS §95).
  */
 export function relayPairingUrl(host: RelayHost | null | undefined): string | null {
   const state = host?.current();

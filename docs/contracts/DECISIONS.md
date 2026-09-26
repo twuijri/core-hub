@@ -2391,7 +2391,7 @@ The owner, 2026-09-25, on the rest of the 501 inventory:
   to work both ways — connected to a server, or local — and a desktop-local person without a
   server may later want their phone to reach it from outside. That is what the relay is for.
   Options when it is built: the person's own Cloudflare Tunnel, or Tailscale. Not a service run
-  for them. Not built now; the operations stay 501.
+  for them. Not built now; the operations stay 501. *Built on 2026-09-27: §95.*
 - **Presets** (`agents.listPresets`, `getPreset`, `deletePreset`, `activatePreset`) and **hub
   peers** (`devices.listPeers`, `requestPeer`, `updatePeer`, `deletePeer`, `createPeerInvite`):
   «خلها بعدين اخاف تفتحلنا ثغرات» — later; the owner is wary of the security surface they open
@@ -2891,3 +2891,53 @@ provider model needs); Microsoft Edge's read-aloud voices (an undocumented endpo
 presenting as the Edge browser, with no terms that grant a third-party server its use — Azure
 Speech offers the same neural voices with a key); a static voice list for a provider that has a
 list endpoint.
+
+## 95. The way in from outside: the person's own Cloudflare Tunnel or Tailscale, run by the desktop app
+
+The owner, 2026-09-26, on the relay parked in §80: «كل اللي قلت لك خلها بعدين… سوها». A person
+who runs the desktop app in local mode, with no server, wants their phone to reach that hub from
+outside the house. Proposed — owner to confirm:
+
+- **Where it runs.** Only a hub the desktop app started (local mode) can open a way in. The hub
+  runs nothing and keeps no secret: `devices.getRelay` / `devices.setRelay` ask the app over the
+  child's IPC channel (`apps/desktop/src/shared/hub-ipc.ts`), and the app does the work. Any other
+  hub answers `getRelay` with `available: false` and `setRelay` with `409 relay_unavailable`,
+  rather than `501`.
+- **Cloudflare Tunnel** (`route: cloudflare`). The person makes a tunnel in their own Cloudflare
+  dashboard (Zero Trust › Networks › Tunnels), gives it a public hostname whose service is
+  `http://localhost:<hub_port>`, and pastes its token. The app keeps the token sealed by the OS
+  keychain (`safeStorage`, as the device token of §89), never returns it (`token_set` and the
+  token's tunnel id only) and never logs it; the hub checks its shape (base64 of `{a, t, s}`)
+  and passes it through once. The app downloads `cloudflared` from Cloudflare's GitHub releases
+  on first use, at a pinned version (2026.9.3) whose SHA-256 is Cloudflare's published one for
+  that file — any other file is refused — keeps it in `<app data>/tools`, and runs
+  `cloudflared tunnel --no-autoupdate --metrics 127.0.0.1:<free port> run` with the token in
+  `TUNNEL_TOKEN` (never on the command line). `connected` comes from cloudflared's own `/ready`;
+  the routes the dashboard gives the tunnel come from its log (`hostnames`, with `matches: false`
+  for one that points anywhere but the hub's port). It restarts after a crash with a growing
+  pause, but not for a token Cloudflare refuses (`token_invalid`).
+- **Tailscale** (`route: tailscale`). When the computer is on a tailnet (an address in
+  100.64.0.0/10; the MagicDNS name from `tailscale status --json` when the program is where its
+  installers put it), the app listens on that address only, at the hub's port, and passes each
+  connection to the hub on the loopback. Never on 0.0.0.0 or the LAN.
+- **A stable port.** The hub of local mode asks for the port it used last
+  (`COREHUB_DESKTOP_PORT`), so a tunnel's service keeps pointing at it; another one when it is
+  taken, and the page then shows the route pointing elsewhere.
+- **Pairing.** While the way in is open, a pairing made on that hub is `connection: relay` and
+  its QR's `hub_url` is `relay_url` (`https://<hostname>`, or `http://<tailnet address>:<port>`),
+  whatever was asked: that hub listens on its own computer only, so no other address would reach
+  it. Asking for `relay` while it is closed answers `409 relay_not_connected`.
+- **Security.** The hub keeps its normal sign-in; the way in carries the hub's port and nothing
+  else. The page says, before anything is turned on, that the hub becomes reachable from the
+  internet through the person's own tunnel. Nothing starts until the person turns it on, and it
+  stops with the hub.
+
+The contract changes: `Relay` loses `hub_id` and the `official` route (no service is run for
+anyone, §80), and gains `available`, `hub_port`, `token_set`, `tunnel_id`, `hostname`,
+`hostnames`, `tailnet`, `error` (a closed list) and `error_detail`; `RelayUpdate` is the body of
+`setRelay` (`enabled`, `route`, write-only `token`, `forget_token`, `hostname`), which queues no
+job. Rejected: a relay service run for people (§80); `cloudflared` bundled in every installer (tens
+of MB for a feature few turn on, and a second program to keep current in every release); the
+token on `cloudflared`'s command line (other users of the computer can read it); `tailscale serve`
+(it needs HTTPS certificates turned on for the tailnet, and changes the person's Tailscale
+settings rather than only the app's own listener).

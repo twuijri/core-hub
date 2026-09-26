@@ -1,5 +1,5 @@
 /**
- * The way in from outside for the hub this app runs (local mode; DECISIONS §92, proposed — owner
+ * The way in from outside for the hub this app runs (local mode; DECISIONS §95, proposed — owner
  * to confirm). The hub asks through its IPC channel (`hub/entry.ts`); this answers and does the
  * work: keeps the settings in `desktop.json` with the tunnel token sealed by the OS keychain,
  * fetches and runs `cloudflared` (`cloudflared.ts`, `tunnel.ts`) or listens on the tailnet
@@ -19,6 +19,9 @@ import {
 import { CloudflaredError, ensureCloudflared, type EnsureOptions } from './cloudflared.js';
 import { Forwarder, detectTailnet, type TailnetFound } from './tailnet.js';
 import { Tunnel, type TunnelOptions } from './tunnel.js';
+
+/** How long `set` waits for the way in to open before it answers with what it has. */
+const SET_ANSWER_MS = 4_000;
 
 /** A change the app will not make, with the reason the hub answers `400` with. */
 export class RelayRefusal extends Error {
@@ -121,7 +124,12 @@ export class RelayManager {
     this.options.save(next);
     this.error = null;
     await this.refreshTailnet(true);
-    await this.apply();
+    // Answer within the hub's wait: the first Cloudflare start downloads cloudflared (tens of
+    // MB), and connecting goes on in the background — the page reads the state again.
+    await Promise.race([
+      this.apply(),
+      new Promise((resolve) => setTimeout(resolve, SET_ANSWER_MS).unref?.()),
+    ]);
     return this.snapshot();
   }
 

@@ -1,5 +1,5 @@
 /**
- * The Tailscale route (DECISIONS §92): when this computer is on a tailnet, the app listens on its
+ * The Tailscale route (DECISIONS §95): when this computer is on a tailnet, the app listens on its
  * tailnet address — that address only, never 0.0.0.0 or the LAN — and passes each connection to
  * the hub on the loopback. Only machines on the person's own tailnet can reach that address, and
  * the hub asks them to sign in like anyone else.

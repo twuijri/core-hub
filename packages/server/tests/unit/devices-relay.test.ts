@@ -1,5 +1,5 @@
 /**
- * The way in from outside (`devices.getRelay` / `devices.setRelay`, DECISIONS §92): a hub the
+ * The way in from outside (`devices.getRelay` / `devices.setRelay`, DECISIONS §95): a hub the
  * desktop app runs asks the app (its `RelayHost`); any other hub has none. The tunnel token
  * passes through once, checked, and is never answered back or logged; a phone paired while the
  * way in is open is given its address.

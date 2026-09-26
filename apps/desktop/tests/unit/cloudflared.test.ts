@@ -1,4 +1,4 @@
-// Fetching cloudflared (DECISIONS §92) from a fake release server: the pinned SHA-256 decides,
+// Fetching cloudflared (DECISIONS §95) from a fake release server: the pinned SHA-256 decides,
 // the macOS archive is unpacked, a checked copy is reused, and nothing half-written is left.
 import { createHash } from 'node:crypto';
 import {

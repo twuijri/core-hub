@@ -9,7 +9,7 @@
  *
  * Voice (B11) is a folded part: the microphone as the OS answered for the app, and a test of
  * dictation and reading aloud through the hub. In local mode an admin also gets «الوصول من خارج
- * البيت» / "Reach from outside" (DECISIONS §92): the way a phone reaches the hub on this
+ * البيت» / "Reach from outside" (DECISIONS §95): the way a phone reaches the hub on this
  * computer through the person's own Cloudflare Tunnel or Tailscale.
  */
 import { useEffect, useState } from 'react';

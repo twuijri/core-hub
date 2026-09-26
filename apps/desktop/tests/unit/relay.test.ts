@@ -1,4 +1,4 @@
-// The way in from outside (DECISIONS §92), the app's half: settings with the token sealed,
+// The way in from outside (DECISIONS §95), the app's half: settings with the token sealed,
 // cloudflared started and stopped with the hub, the Tailscale listener on the tailnet address
 // only, and the page's state — never with the token in it.
 import { createServer as createHttp, type Server } from 'node:http';

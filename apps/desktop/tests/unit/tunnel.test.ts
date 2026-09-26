@@ -1,4 +1,4 @@
-// `cloudflared` as the app's child (DECISIONS §92), against a stand-in that behaves like it: the
+// `cloudflared` as the app's child (DECISIONS §95), against a stand-in that behaves like it: the
 // token only in TUNNEL_TOKEN, connected from its readiness endpoint, the dashboard's routes read
 // from its log, a refused token not retried, a crash restarted, and stop that ends it.
 import { spawn, type SpawnOptions } from 'node:child_process';

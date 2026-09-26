@@ -1,5 +1,5 @@
 /**
- * `cloudflared` as the app's child (DECISIONS §92): started with the person's tunnel token in
+ * `cloudflared` as the app's child (DECISIONS §95): started with the person's tunnel token in
  * `TUNNEL_TOKEN` (never on the command line, never in a log), watched through its own readiness
  * endpoint on a loopback port (`/ready` answers 200 once the tunnel holds a connection to
  * Cloudflare), and read for the routes the dashboard gives the tunnel. It stops with the app,

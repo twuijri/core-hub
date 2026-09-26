@@ -1,5 +1,5 @@
 /**
- * The way in from outside for the hub this app runs (local mode; DECISIONS §92, proposed —
+ * The way in from outside for the hub this app runs (local mode; DECISIONS §95, proposed —
  * owner to confirm): what is pure about it, so it is tested without Electron or a network.
  *
  * Two routes, both on an account of the person's own:

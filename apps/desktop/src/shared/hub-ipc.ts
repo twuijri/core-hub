@@ -1,7 +1,7 @@
 /**
  * What the app and the hub it runs (local mode) say to each other over the child's IPC channel,
  * besides "listening" and "stop" (`main/local-hub.ts`, `hub/entry.ts`): the way in from outside
- * (DECISIONS §92). The hub asks (`relay`), the app answers (`relay-answer`) and also tells the
+ * (DECISIONS §95). The hub asks (`relay`), the app answers (`relay-answer`) and also tells the
  * hub when the state changes on its own (`relay-state`), so a pairing started a second later
  * already gets the tunnel's address.
  */

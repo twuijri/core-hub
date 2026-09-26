@@ -33,7 +33,7 @@ export interface HubState {
   logs: LogRing;
   /**
    * The desktop app that started this hub (local mode), which opens the way in from outside
-   * (`devices.getRelay`, DECISIONS §92); null for every other hub.
+   * (`devices.getRelay`, DECISIONS §95); null for every other hub.
    */
   relayHost?: RelayHost | null;
 }

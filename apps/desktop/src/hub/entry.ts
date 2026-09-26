@@ -21,7 +21,7 @@ function portFree(port: number): Promise<boolean> {
   });
 }
 
-// The way in from outside (DECISIONS §92) is the app's to open: the hub asks it over IPC.
+// The way in from outside (DECISIONS §95) is the app's to open: the hub asks it over IPC.
 const relayHost = process.send
   ? ipcRelayHost({
       send: (message) => process.send?.(message),

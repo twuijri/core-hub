@@ -1,6 +1,6 @@
 /**
  * Cloudflare's `cloudflared`, fetched the first time a person opens a Cloudflare way in
- * (DECISIONS §92): the release asset for this computer from Cloudflare's GitHub releases, at the
+ * (DECISIONS §95): the release asset for this computer from Cloudflare's GitHub releases, at the
  * version pinned in `shared/relay.ts`, refused unless its SHA-256 is the one Cloudflare published
  * for it. It lives in the app's data folder (`<userData>/tools/cloudflared-<version>/`), apart
  * from anything the person installed themselves, and is never updated by itself

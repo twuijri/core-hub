@@ -71,7 +71,7 @@ export interface DesktopConfig {
   };
   /**
    * The port the hub of local mode listened on last, asked for again at the next start so a
-   * way in pointed at it keeps working (DECISIONS §92).
+   * way in pointed at it keeps working (DECISIONS §95).
    */
   localHubPort: number | null;
   /** The way in from outside for that hub (`shared/relay.ts`); its token sealed. */

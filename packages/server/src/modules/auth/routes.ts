@@ -900,7 +900,7 @@ export function registerAuthRoutes(app: FastifyInstance, ctx: AuthContext): void
     const body = parse(PairingCreate, request.body ?? {});
     const user = me(request);
     // A hub the desktop app runs listens on its own computer only: while its way in from
-    // outside is open, that is the address every phone is given (DECISIONS §92).
+    // outside is open, that is the address every phone is given (DECISIONS §95).
     const relayUrl = relayPairingUrl(request.server.hub.relayHost);
     if (body.connection === 'relay' && !relayUrl) {
       throw new HubError('conflict', { details: { reason: 'relay_not_connected' } });

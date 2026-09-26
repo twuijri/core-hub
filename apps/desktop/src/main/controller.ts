@@ -114,7 +114,7 @@ export class DesktopController {
   private readonly channel: UpdateChannel = appChannel(app.getAppPath());
   /** Programs, the default folder, consent, the activity list and the hub's device connection. */
   private readonly computer: ThisComputerService;
-  /** The way in from outside for the local hub (DECISIONS §92). */
+  /** The way in from outside for the local hub (DECISIONS §95). */
   private readonly relay: RelayManager;
 
   constructor(

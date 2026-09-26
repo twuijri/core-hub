@@ -1369,7 +1369,7 @@ paths:
         (local mode) with its way in from outside open (`devices.getRelay`), it is the way in's
         `relay_url` and the pairing is `relay`, whatever was asked: that hub listens on its own
         computer only, so no other address would reach it. Asking for `relay` when no way in is
-        open answers `409` `relay_not_connected` (DECISIONS §92).
+        open answers `409` `relay_not_connected` (DECISIONS §95).
       x-scope: global
       x-rt-events: []
       requestBody:
@@ -13642,7 +13642,7 @@ paths:
         computer only. To let their phone reach it from outside the house, the person opens a way
         in on an account of their own: a Cloudflare Tunnel (the desktop app runs `cloudflared`
         with the tunnel's token) or their Tailscale network (the app listens on this computer's
-        tailnet address too). Nothing is run for them by anyone else (DECISIONS §80, §92).
+        tailnet address too). Nothing is run for them by anyone else (DECISIONS §80, §95).
         A hub on a server has no way in to open (`available: false`): phones reach it at its
         own address.
       x-scope: global
@@ -17232,7 +17232,7 @@ components:
     PairingConnection:
       type: string
       enum: [lan, relay]
-      description: '`lan` when the device reaches the hub directly; `relay` when it goes through the way in from outside of a hub the desktop app runs (`devices.getRelay`, DECISIONS §92).'
+      description: '`lan` when the device reaches the hub directly; `relay` when it goes through the way in from outside of a hub the desktop app runs (`devices.getRelay`, DECISIONS §95).'
     PairingCreate:
       type: object
       properties:
@@ -24077,7 +24077,7 @@ components:
       type: object
       description: |
         The way in from outside for a hub the desktop app runs on a person's computer
-        (DECISIONS §92). `relay_url` is the address a phone pairs with while it is open.
+        (DECISIONS §95). `relay_url` is the address a phone pairs with while it is open.
       required:
         [
           available,
