@@ -378,6 +378,52 @@
   font-family: var(--ch-font-mono);
   unicode-bidi: isolate;
 }
+.tool-group-names:empty {
+  display: none;
+}
+.tool-group-summary .tool-group-names {
+  display: flex;
+  gap: var(--ch-space-1);
+}
+.tool-chip {
+  padding: 0 var(--ch-space-1);
+  border-radius: var(--ch-radius-sm);
+  background: var(--ch-color-surface-2);
+  color: var(--ch-color-text-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+/* A live turn: a new step slides in under the others, the oldest one in view fades, and the
+   "+k earlier steps" count eases in when it changes (owner, 2026-09-26). */
+.tool-step {
+  animation: tool-step-in var(--ch-motion-normal) var(--ch-motion-ease);
+  transition: opacity var(--ch-motion-normal) var(--ch-motion-ease);
+}
+.tool-step[data-fading='true'] {
+  opacity: 0.55;
+}
+.tool-earlier-count {
+  animation: tool-count-in var(--ch-motion-normal) var(--ch-motion-ease);
+}
+@keyframes tool-step-in {
+  from {
+    opacity: 0;
+    translate: 0 0.375rem;
+  }
+}
+@keyframes tool-count-in {
+  from {
+    opacity: 0;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .tool-step,
+  .tool-earlier-count {
+    animation: none;
+    transition: none;
+  }
+}
 .tool-group[open] > .tool-group-summary {
   border-block-end: 1px solid var(--ch-color-border);
 }

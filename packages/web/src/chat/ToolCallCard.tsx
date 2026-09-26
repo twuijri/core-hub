@@ -5,10 +5,13 @@
  * bubble, and they take as little room as they can.
  *
  * - **While the run is alive**, the last four calls are shown as one-line rows, so what
- *   the agent is doing *now* is visible without the transcript turning into a log. The
- *   earlier ones are one click away, and the same click folds them back.
- * - **When the run ends**, the whole group folds into one line — how many, which tools,
- *   and whether any failed — and opens on a click.
+ *   the agent is doing *now* is visible without the transcript turning into a log. A call
+ *   still running and a call that failed stay in view whatever the window (owner,
+ *   2026-09-26). The earlier ones are one click away, and the same click folds them back;
+ *   a new step slides in and the oldest one in view fades.
+ * - **When the run ends**, the whole group folds into one line — how many steps, how long,
+ *   how many failed and the latest tools — and opens on a click. The rule itself is the pure
+ *   `toolActivity` (toolActivity.ts), which the iOS and Android apps repeat with a window of 2.
  *
  * Each call opens to what it was given and what it returned, when the agent sent either.
  * Hermes's run stream carries neither a result nor its arguments beyond a one-line preview
@@ -24,6 +27,8 @@ import { Button } from '../ui/Button.js';
 import { IconCheck, IconChevron, IconFolder, IconPanel, IconTool } from '../ui/icons.js';
 import { useOpenFile, useSessionFilesOptional } from '../files/context.js';
 import { filesOfToolCall } from '../files/kinds.js';
+import { pluralOf } from '../files/changes.js';
+import { durationParts, toolActivity, WEB_LIVE_WINDOW } from './toolActivity.js';
 
 export function formatDuration(ms: number): string {
   return ms < 1000 ? `${ms} ms` : `${(ms / 1000).toFixed(1)} s`;
@@ -37,8 +42,8 @@ const STATUS_TONE: Record<ToolCall['status'], BadgeTone> = {
   awaiting_approval: 'warning',
 };
 
-/** How many calls a live run shows before "earlier" folds the rest away. */
-export const LIVE_WINDOW = 4;
+/** How many calls a live run shows before "earlier" folds the rest away (toolActivity.ts). */
+export const LIVE_WINDOW = WEB_LIVE_WINDOW;
 
 /** The arguments worth showing: not the ones that only repeat the preview line. */
 function argumentsOf(call: ToolCall): string | null {
@@ -185,17 +190,33 @@ export function ToolCallBody({ call }: { call: ToolCall }) {
   );
 }
 
-export function ToolCalls({ calls, live }: { calls: readonly ToolCall[]; live: boolean }) {
+/**
+ * The folded row's time, "42s" or "1m 05s", in the UI language. The group sits in the
+ * message's fixed left-to-right frame, so every label in the UI language isolates itself
+ * (`dir="auto"`): «6 خطوات» reads right to left, the tool names stay left to right.
+ */
+function SummaryTime({ ms }: { ms: number }) {
   const { t } = useI18n();
+  const { minutes, seconds } = durationParts(ms);
+  return (
+    <span className="tool-time" dir="auto" data-testid="tool-group-time">
+      {minutes > 0
+        ? t('tool.activity.minutes', { minutes, seconds: String(seconds).padStart(2, '0') })
+        : t('tool.activity.seconds', { seconds })}
+    </span>
+  );
+}
+
+export function ToolCalls({ calls, live }: { calls: readonly ToolCall[]; live: boolean }) {
+  const { t, language } = useI18n();
   const [earlier, setEarlier] = useState(false);
   if (calls.length === 0) return null;
 
-  const busy = calls.some(
-    (call) => call.status === 'running' || call.status === 'awaiting_approval',
-  );
-  if (live || busy) {
-    const extra = Math.max(0, calls.length - LIVE_WINDOW);
-    const hidden = earlier ? 0 : extra;
+  const activity = toolActivity(calls, live);
+  const { summary } = activity;
+  if (!activity.folded) {
+    const extra = activity.hidden;
+    const shown = earlier ? calls : activity.visible;
     return (
       <section className="tool-group" data-testid="tool-group" data-live="true">
         {extra > 0 && (
@@ -209,36 +230,57 @@ export function ToolCalls({ calls, live }: { calls: readonly ToolCall[]; live: b
             data-testid="tool-group-earlier"
           >
             <IconChevron size={12} className="tool-group-caret" />
-            {earlier
-              ? t('tool.hide_earlier', { count: extra })
-              : t('tool.earlier', { count: extra })}
+            <span key={earlier ? 'open' : extra} className="tool-earlier-count" dir="auto">
+              {earlier
+                ? t('tool.activity.hide_earlier')
+                : t(`tool.activity.earlier.${pluralOf(language, extra)}`, { count: extra })}
+            </span>
           </button>
         )}
         <div className="tool-list">
-          {calls.slice(hidden).map((call) => (
-            <ToolRow key={call.id} call={call} />
+          {shown.map((call, index) => (
+            <div
+              key={call.id}
+              className="tool-step"
+              // The oldest step still in view fades while the newer ones arrive under it.
+              data-fading={!earlier && extra > 0 && index === 0 && call.status !== 'failed'}
+            >
+              <ToolRow call={call} />
+            </div>
           ))}
         </div>
       </section>
     );
   }
 
-  const names = [...new Set(calls.map((call) => call.name))];
-  const failed = calls.filter((call) => call.status === 'failed').length;
   return (
     <details className="tool-group" data-testid="tool-group" data-live="false">
       <summary className="tool-group-summary" data-testid="tool-group-summary">
         <IconChevron size={12} className="tool-group-caret" />
         <IconTool size={14} />
-        <span className="tool-group-count">
-          {calls.length === 1 ? t('tool.count_one') : t('tool.count', { count: calls.length })}
+        <span className="tool-group-count" dir="auto">
+          {t(`tool.activity.steps.${pluralOf(language, summary.count)}`, {
+            count: summary.count,
+          })}
         </span>
+        {summary.durationMs !== null && <SummaryTime ms={summary.durationMs} />}
+        {summary.failed > 0 && (
+          <Badge tone="danger">
+            <span dir="auto" data-testid="tool-group-failed">
+              {t(`tool.activity.failed.${pluralOf(language, summary.failed)}`, {
+                count: summary.failed,
+              })}
+            </span>
+          </Badge>
+        )}
         <span className="tool-group-names" dir="ltr">
-          {names.join(' · ')}
+          {summary.names.map((name) => (
+            <span key={name} className="tool-chip">
+              {name}
+            </span>
+          ))}
         </span>
-        {failed > 0 ? (
-          <Badge tone="danger">{t('tool.failed_count', { count: failed })}</Badge>
-        ) : (
+        {summary.failed === 0 && (
           <span className="tool-ok" aria-label={t('tool.status.succeeded')}>
             <IconCheck size={12} />
           </span>
