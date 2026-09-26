@@ -16,12 +16,13 @@ import { Button } from '../ui/Button.js';
 import { IconCheck, IconCopy, IconFork, IconReply } from '../ui/icons.js';
 import { SpeakButton } from '../voice/SpeakButton.js';
 import { textOf } from './transcript.js';
+import { intlLocale } from '../i18n/index.js';
 
 /** The clock time of a message, in the reading language. */
 export function messageTime(message: Message, language: string): string {
   const stamp = Date.parse(message.created_at);
   if (Number.isNaN(stamp)) return '';
-  return new Intl.DateTimeFormat(language === 'ar' ? 'ar' : 'en', {
+  return new Intl.DateTimeFormat(intlLocale(language), {
     hour: '2-digit',
     minute: '2-digit',
   }).format(stamp);

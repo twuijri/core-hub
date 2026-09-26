@@ -13,6 +13,7 @@ import { describeError } from '../auth/client.js';
 import { useI18n } from '../i18n/context.js';
 import type { Schemas } from '../types.js';
 import { Badge, Button, Card, CardHeader, Notice, Spinner } from '../ui/index.js';
+import { intlLocale } from '../i18n/index.js';
 
 type PendingWrite = Schemas['PendingWrite'];
 
@@ -77,7 +78,7 @@ export function PendingWritesCard({ agentId }: { agentId: string }) {
   const items = list.data?.items ?? [];
   const when = (at: string | null) =>
     at
-      ? new Intl.DateTimeFormat(language === 'ar' ? 'ar' : 'en', {
+      ? new Intl.DateTimeFormat(intlLocale(language), {
           dateStyle: 'medium',
           timeStyle: 'short',
         }).format(new Date(at))

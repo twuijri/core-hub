@@ -229,8 +229,8 @@
     <string name="devices_last_seen">آخر نشاط %1$s</string>
     <string name="devices_push_on">التنبيه يعمل</string>
     <string name="devices_push_off">بلا تنبيه</string>
-    <string name="usage_week">٧ أيام</string>
-    <string name="usage_month">٣٠ يومًا</string>
+    <string name="usage_week">7 أيام</string>
+    <string name="usage_month">30 يومًا</string>
     <string name="usage_all_profiles">كل البروفايلات</string>
     <string name="usage_tokens">الرموز</string>
     <string name="usage_runs">التشغيلات</string>

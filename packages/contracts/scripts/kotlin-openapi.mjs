@@ -16,6 +16,25 @@
 export const KOTLIN_JSON_ANCHOR = 'encodeDefaults = true';
 export const KOTLIN_JSON_OPTIONS = 'encodeDefaults = true\n            explicitNulls = false';
 
+/**
+ * The generated `ApiClient.kt` hands each multipart part's headers to OkHttp's `addPart`, and
+ * puts the part's declared type there (a file gets `"Content-Type"` set to any type). OkHttp refuses a
+ * part header named Content-Type (`Unexpected header: Content-Type`, every attachment upload from
+ * the Android app failed with it); the part's type belongs to its body, which the generator
+ * already sets. So the Content-Type part header is dropped before `addPart`.
+ */
+export const KOTLIN_PART_HEADERS_ANCHOR = 'val partHeaders = part.headers.toMutableMap() +';
+export const KOTLIN_PART_HEADERS =
+  'val partHeaders = part.headers.filterKeys { !it.equals("Content-Type", ignoreCase = true) } +';
+
+/** `ApiClient.kt` with {@link KOTLIN_PART_HEADERS}; throws when the generator's line moved. */
+export function withoutPartContentType(source) {
+  if (!source.includes(KOTLIN_PART_HEADERS_ANCHOR)) {
+    throw new Error(`ApiClient.kt no longer has "${KOTLIN_PART_HEADERS_ANCHOR}"`);
+  }
+  return source.replaceAll(KOTLIN_PART_HEADERS_ANCHOR, KOTLIN_PART_HEADERS);
+}
+
 const isNullType = (s) => !!s && typeof s === 'object' && s.type === 'null' && !s.$ref;
 
 /** True when the schema itself admits `null`. `components` resolves one level of `$ref`. */

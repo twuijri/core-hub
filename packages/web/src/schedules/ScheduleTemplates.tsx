@@ -15,6 +15,7 @@ import { describeError } from '../auth/client.js';
 import { useI18n } from '../i18n/context.js';
 import { Button, Menu, MenuItem, Skeleton } from '../ui/index.js';
 import { IconSchedules } from '../ui/icons.js';
+import { intlLocale } from '../i18n/index.js';
 
 export type TriggerKind = 'cron' | 'interval' | 'once';
 
@@ -134,14 +135,12 @@ export function NextRuns({ trigger, profile }: { trigger: Trigger; profile: stri
       minute: '2-digit',
     };
     try {
-      return new Intl.DateTimeFormat(language === 'ar' ? 'ar' : 'en', {
+      return new Intl.DateTimeFormat(intlLocale(language), {
         ...options,
         timeZone: zone,
       }).format(Date.parse(at));
     } catch {
-      return new Intl.DateTimeFormat(language === 'ar' ? 'ar' : 'en', options).format(
-        Date.parse(at),
-      );
+      return new Intl.DateTimeFormat(intlLocale(language), options).format(Date.parse(at));
     }
   };
 

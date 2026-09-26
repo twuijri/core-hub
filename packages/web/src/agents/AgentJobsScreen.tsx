@@ -29,6 +29,7 @@ import {
 } from '../ui/index.js';
 import { IconSchedules, IconTrash } from '../ui/icons.js';
 import { useAgentJobEvents, useAgentJobWrite, useAgentJobs, type AgentJob } from './plugins.js';
+import { intlLocale } from '../i18n/index.js';
 
 type Translate = (key: string, p?: Record<string, string | number>) => string;
 
@@ -60,7 +61,7 @@ export function AgentJobsScreen() {
   const items = jobs.data?.items ?? [];
   const when = (at: string | null) =>
     at
-      ? new Intl.DateTimeFormat(language === 'ar' ? 'ar' : 'en', {
+      ? new Intl.DateTimeFormat(intlLocale(language), {
           dateStyle: 'medium',
           timeStyle: 'short',
         }).format(Date.parse(at))

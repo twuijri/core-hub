@@ -149,7 +149,7 @@ export const HERMES_SETTING_OPTIONS: readonly OptionSpec[] = [
     },
     fallback: null,
     defaultText: {
-      ar: '٥٠٠ في محادثات كور هب، وبلا حد في قنوات المراسلة',
+      ar: '500 في محادثات كور هب، وبلا حد في قنوات المراسلة',
       en: "500 in Core Hub's conversations, no limit on messaging channels",
     },
     min: 0,
@@ -163,7 +163,7 @@ export const HERMES_SETTING_OPTIONS: readonly OptionSpec[] = [
     kind: 'integer',
     label: { ar: 'مهلة التشغيل (ثوانٍ)', en: 'Run time limit (seconds)' },
     help: {
-      ar: 'أقصى وقت لتشغيل واحد. عند ٨٠٪ منه يُطلب من الوكيل أن يختم عمله. فارغ أو صفر = بلا مهلة.',
+      ar: 'أقصى وقت لتشغيل واحد. عند 80% منه يُطلب من الوكيل أن يختم عمله. فارغ أو صفر = بلا مهلة.',
       en: 'The longest one run may take. At 80% of it the agent is told to wrap up. Empty or 0 = no limit.',
     },
     fallback: null,
@@ -237,7 +237,7 @@ export const HERMES_SETTING_OPTIONS: readonly OptionSpec[] = [
     kind: 'integer',
     label: { ar: 'حد ذاكرة الوكيل (حروف)', en: "Agent's memory limit (characters)" },
     help: {
-      ar: 'أقصى طول لملاحظات الوكيل الدائمة (MEMORY.md)، وتُحقن في كل رسالة. نحو ٨٠٠ رمز عند ٢٢٠٠.',
+      ar: 'أقصى طول لملاحظات الوكيل الدائمة (MEMORY.md)، وتُحقن في كل رسالة. نحو 800 رمز عند 2200.',
       en: "The longest the agent's standing notes (MEMORY.md) may grow; they go into every message. About 800 tokens at 2200.",
     },
     fallback: 2200,
@@ -252,7 +252,7 @@ export const HERMES_SETTING_OPTIONS: readonly OptionSpec[] = [
     kind: 'integer',
     label: { ar: 'حد ما يعرفه عنك (حروف)', en: 'Limit of what it knows about you (characters)' },
     help: {
-      ar: 'أقصى طول لما يحفظه الوكيل عن الشخص (USER.md). نحو ٥٠٠ رمز عند ١٣٧٥.',
+      ar: 'أقصى طول لما يحفظه الوكيل عن الشخص (USER.md). نحو 500 رمز عند 1375.',
       en: 'The longest what the agent keeps about the person (USER.md) may grow. About 500 tokens at 1375.',
     },
     fallback: 1375,

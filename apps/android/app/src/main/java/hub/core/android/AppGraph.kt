@@ -204,6 +204,13 @@ class AppGraph(
     /** Pictures and files another app shared, copied into the cache, waiting for the new chat's tray. */
     val sharedFiles = MutableStateFlow<List<hub.core.android.phone.Share.SharedFile>>(emptyList())
 
+    /** The files of messages, fetched once into the cache and opened from there (chat/HubFiles.kt). */
+    val files = hub.core.android.chat.FileDownloads(
+        hub.core.android.chat.HubFileFetcher(http.authed, java.io.File(appContext.cacheDir, "attachments")),
+        { store.current?.hub },
+        scope,
+    )
+
     private var apisFor: String? = null
     private var cachedApis: HubApis? = null
 
@@ -280,6 +287,8 @@ open class CoreHubApp : Application() {
 
     override fun onCreate() {
         super.onCreate()
+        // Latin digits in background work too (notifications, workers): DECISIONS §113.
+        Locale.setDefault(Digits.latin(Locale.getDefault()))
         graph = makeGraph()
     }
 

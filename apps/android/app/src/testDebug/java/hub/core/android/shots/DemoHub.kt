@@ -44,6 +44,12 @@ class DemoHub(private val extra: Map<String, String> = emptyMap()) {
         "$language tasks.getColumns" to """{"columns":$cols,"counts":{"total":${items.size},"by_status":$counts},"project_id":null}"""
     }.toMap()
 
+    /** A test's own answer for a request (bytes, a changed page), before the fixtures; null to fall through. */
+    @Volatile var raw: ((RecordedRequest) -> MockResponse?)? = null
+
+    /** The fixture's answer for a key (`"en sessions.listMessages <id>"`), for a test to change. */
+    fun answer(key: String): String? = answers[key]
+
     val chatId: String = Regex("""static let chatID = "(\w+)"""").find(source)!!.groupValues[1]
     val server = MockWebServer()
 
@@ -84,6 +90,7 @@ class DemoHub(private val extra: Map<String, String> = emptyMap()) {
     fun start(): DemoHub {
         server.dispatcher = object : Dispatcher() {
             override fun dispatch(request: RecordedRequest): MockResponse {
+                raw?.invoke(request)?.let { return it }
                 val path = request.requestUrl?.encodedPath.orEmpty().removePrefix(API_BASE)
                 val language = if (request.getHeader("Accept-Language")?.startsWith("ar") == true) "ar" else "en"
                 for (route in routes) {

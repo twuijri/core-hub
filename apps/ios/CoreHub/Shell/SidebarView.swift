@@ -1,5 +1,6 @@
-// The drawer: brand, the profile selector (proposed phone placement: here, not a top bar), the
-// rail in manifest order, the Chat | Rooms segments with the list below, and the footer.
+// The drawer: brand, the rail in manifest order, the Chat | Rooms segments with the list below,
+// and the footer — where the profile selector sits beside the account name and the connection dot
+// (owner, 2026-09-26; NAVIGATION.md §١).
 import CoreHubClient
 import SwiftUI
 
@@ -65,7 +66,6 @@ struct SidebarView: View {
                 }
                 .accessibilityLabel(l10n("shell.close_menu"))
             }
-            ProfileSelector()
         }
     }
 
@@ -109,7 +109,8 @@ struct SidebarView: View {
                     .foregroundStyle(Tone.text)
                     .lineLimit(1)
                 ConnectionDot()
-                Spacer()
+                ProfileSelector(compact: true)
+                Spacer(minLength: 0)
                 ForEach(NavigationMap.footer) { destination in
                     Button {
                         navigate(.settings)
@@ -146,8 +147,10 @@ struct SidebarView: View {
 }
 
 /// The profile selector: always one concrete profile, no «All» (profileScope.selector). It
-/// switches `X-Hub-Profile` and never moves the screen.
+/// switches `X-Hub-Profile` and never moves the screen. `compact` is the drawer footer's small
+/// chip beside the account name and the connection dot; the full row heads an agent's pages.
 struct ProfileSelector: View {
+    var compact = false
     @Environment(AppModel.self) private var app
     @Environment(\.l10n) private var l10n
 
@@ -165,26 +168,47 @@ struct ProfileSelector: View {
                 }
             }
         } label: {
-            HStack(spacing: Space.s2) {
-                LucideIcon(.layoutGrid, size: 16)
-                Text(app.profileName(app.currentProfile))
-                    .lineLimit(1)
-                Spacer(minLength: 0)
-                if app.enterableProfiles.count > 1 {
-                    LucideIcon(.chevronsUpDown, size: 14).foregroundStyle(Tone.textMuted)
-                }
-            }
-            .font(.system(size: FontSize.sizeSm, weight: .medium))
-            .foregroundStyle(Tone.text)
-            .padding(.horizontal, Space.s3)
-            .frame(height: Control.heightMd)
-            .background(Tone.surface, in: RoundedRectangle(cornerRadius: Radius.md, style: .continuous))
-            .overlay(RoundedRectangle(cornerRadius: Radius.md, style: .continuous).strokeBorder(Tone.border))
+            if compact { chip } else { row }
         }
         .disabled(app.enterableProfiles.count < 2)
         .accessibilityLabel(l10n("shell.profile_current", ["profile": app.profileName(app.currentProfile)]))
         .accessibilityHint(l10n("shell.profile_switch"))
         .accessibilityIdentifier("shell.profile")
+    }
+
+    private var row: some View {
+        HStack(spacing: Space.s2) {
+            LucideIcon(.layoutGrid, size: 16)
+            Text(app.profileName(app.currentProfile))
+                .lineLimit(1)
+            Spacer(minLength: 0)
+            if app.enterableProfiles.count > 1 {
+                LucideIcon(.chevronsUpDown, size: 14).foregroundStyle(Tone.textMuted)
+            }
+        }
+        .font(.system(size: FontSize.sizeSm, weight: .medium))
+        .foregroundStyle(Tone.text)
+        .padding(.horizontal, Space.s3)
+        .frame(height: Control.heightMd)
+        .background(Tone.surface, in: RoundedRectangle(cornerRadius: Radius.md, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: Radius.md, style: .continuous).strokeBorder(Tone.border))
+    }
+
+    private var chip: some View {
+        HStack(spacing: Space.s1) {
+            LucideIcon(.layoutGrid, size: 12)
+            Text(app.profileName(app.currentProfile))
+                .lineLimit(1)
+            if app.enterableProfiles.count > 1 {
+                LucideIcon(.chevronsUpDown, size: 11).foregroundStyle(Tone.textMuted)
+            }
+        }
+        .font(.system(size: FontSize.sizeXs, weight: .medium))
+        .foregroundStyle(Tone.text)
+        .padding(.horizontal, Space.s2)
+        .frame(height: Control.heightSm)
+        .background(Tone.surface2, in: Capsule())
+        .contentShape(Capsule())
     }
 }
 

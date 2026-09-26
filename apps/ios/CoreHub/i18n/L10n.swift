@@ -11,7 +11,10 @@ enum AppLanguage: String, CaseIterable, Identifiable, Codable {
     var id: String { rawValue }
     var isRTL: Bool { self == .ar }
     var layoutDirection: LayoutDirection { isRTL ? .rightToLeft : .leftToRight }
-    var locale: Locale { Locale(identifier: rawValue) }
+    /// The locale every number, date, size and percentage is formatted in: Latin digits (123) in
+    /// both languages, also in Arabic (owner, 2026-09-26, DECISIONS §113). Arabic words, plural
+    /// forms and RTL stay.
+    var locale: Locale { Locale(identifier: rawValue).latinDigits }
 
     /// The phone's own language when it is one of ours, else Arabic (Arabic first, DESIGN.md).
     static var preferred: AppLanguage {
@@ -20,6 +23,23 @@ enum AppLanguage: String, CaseIterable, Identifiable, Codable {
             if code.hasPrefix("ar") { return .ar }
         }
         return .ar
+    }
+}
+
+extension Locale {
+    /// This locale with the Latin numbering system (`@numbers=latn`); language and region stay.
+    var latinDigits: Locale {
+        var components = Locale.Components(locale: self)
+        components.numberingSystem = Locale.NumberingSystem("latn")
+        return Locale(components: components)
+    }
+}
+
+/// Byte counts («3.4 MB») in the phone's language with Latin digits. `ByteCountFormatter`'s class
+/// method follows the phone's digits, which are Arabic-Indic on many Arabic phones.
+enum ByteCount {
+    static func text(_ bytes: Int64, style: ByteCountFormatStyle.Style) -> String {
+        bytes.formatted(ByteCountFormatStyle(style: style, locale: Locale.current.latinDigits))
     }
 }
 

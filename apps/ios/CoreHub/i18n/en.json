@@ -151,7 +151,38 @@
     "arguments": "Arguments",
     "output": "Output",
     "truncated": "The output was cut short.",
-    "duration": "{seconds}s"
+    "duration": "{seconds}s",
+    "activity": {
+      "steps": {
+        "zero": "No steps",
+        "one": "1 step",
+        "two": "2 steps",
+        "few": "{count} steps",
+        "many": "{count} steps",
+        "other": "{count} steps"
+      },
+      "failed": {
+        "zero": "none failed",
+        "one": "1 failed",
+        "two": "2 failed",
+        "few": "{count} failed",
+        "many": "{count} failed",
+        "other": "{count} failed"
+      },
+      "earlier": {
+        "zero": "No earlier steps",
+        "one": "+1 earlier step",
+        "two": "+2 earlier steps",
+        "few": "+{count} earlier steps",
+        "many": "+{count} earlier steps",
+        "other": "+{count} earlier steps"
+      },
+      "hide_earlier": "Hide the earlier steps",
+      "show": "Shows the steps",
+      "hide": "Hides the steps",
+      "seconds": "{seconds}s",
+      "minutes": "{minutes}m {seconds}s"
+    }
   },
   "approval": {
     "title": "Waiting for your decision",
@@ -535,7 +566,13 @@
     "photo_quality": "Photos",
     "compressed": "Compressed",
     "original": "Original quality",
-    "open": "Open {name}"
+    "open": "Open {name}",
+    "fetching": "Fetching…",
+    "progress": "{percent}% · {done} of {total}",
+    "cancel": "Cancel the download",
+    "gone": "This file is no longer on the hub.",
+    "open_too_large": "This file is too large to open here.",
+    "link_failed": "This link could not be opened."
   },
   "pending": {
     "title": "Waiting for you",

@@ -45,9 +45,11 @@ object Lucide {
     val EllipsisVertical = R.drawable.lucide_ellipsis_vertical
     val ExternalLink = R.drawable.lucide_external_link
     val Eye = R.drawable.lucide_eye
+    val File = R.drawable.lucide_file
     val FileCog = R.drawable.lucide_file_cog
     val FileSearch = R.drawable.lucide_file_search
     val FileText = R.drawable.lucide_file_text
+    val Film = R.drawable.lucide_film
     val Folder = R.drawable.lucide_folder
     val Gauge = R.drawable.lucide_gauge
     val Globe = R.drawable.lucide_globe
@@ -74,6 +76,7 @@ object Lucide {
     val MessagesSquare = R.drawable.lucide_messages_square
     val Mic = R.drawable.lucide_mic
     val Moon = R.drawable.lucide_moon
+    val Music = R.drawable.lucide_music
     val OctagonX = R.drawable.lucide_octagon_x
     val Palette = R.drawable.lucide_palette
     val Pause = R.drawable.lucide_pause

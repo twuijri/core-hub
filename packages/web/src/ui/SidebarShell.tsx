@@ -9,31 +9,66 @@
  * `SidebarRow` renders whatever element the caller needs — a router `NavLink`, a button —
  * through `render`, so navigation stays the router's job and the paint stays here.
  */
-import type { ReactNode } from 'react';
+import { createContext, useContext, type ReactElement, type ReactNode } from 'react';
+import { Tooltip } from './Tooltip.js';
+
+/**
+ * Whether the sidebar is folded into its rail of icons (`shell/sidebarFold.ts`). The rows
+ * read it: folded, a row keeps its icon, its label stays its accessible name without taking
+ * room, and the label comes back as a tooltip on hover and keyboard focus.
+ */
+const FoldedContext = createContext(false);
+
+export function useSidebarFolded(): boolean {
+  return useContext(FoldedContext);
+}
 
 export function SidebarFrame({
   label,
   children,
   testId,
+  folded = false,
 }: {
   label: string;
   children: ReactNode;
   testId?: string;
+  /** The rail of icons; the width change animates (instant under reduced motion). */
+  folded?: boolean;
 }) {
   return (
-    <nav className="ch-sidebar glass" aria-label={label} data-testid={testId}>
-      {children}
+    <nav
+      className="ch-sidebar glass"
+      aria-label={label}
+      data-testid={testId}
+      data-folded={folded ? 'true' : undefined}
+    >
+      <FoldedContext.Provider value={folded}>{children}</FoldedContext.Provider>
     </nav>
   );
 }
 
-export function SidebarBrand({ mark, name }: { mark: ReactNode; name: ReactNode }) {
+export function SidebarBrand({
+  mark,
+  name,
+  action,
+}: {
+  mark: ReactNode;
+  name: ReactNode;
+  /** A control at the row's end — the fold toggle. Folded, it is all the row shows. */
+  action?: ReactNode;
+}) {
+  const folded = useContext(FoldedContext);
   return (
     <div className="ch-sidebar-brand">
-      <span className="ch-sidebar-mark" aria-hidden>
-        {mark}
-      </span>
-      <span className="ch-sidebar-name">{name}</span>
+      {!folded && (
+        <>
+          <span className="ch-sidebar-mark" aria-hidden>
+            {mark}
+          </span>
+          <span className="ch-sidebar-name">{name}</span>
+        </>
+      )}
+      {action && <span className="ch-sidebar-brand-action">{action}</span>}
     </div>
   );
 }
@@ -88,12 +123,23 @@ export function SidebarRow({
   /** Renders the row as whatever element it must be: a link, a button. */
   render(props: { className: string; children: ReactNode }): ReactNode;
 }) {
+  const folded = useContext(FoldedContext);
   const children = (
     <>
       {icon}
       <span className="ch-sidebar-row-label">{label}</span>
-      {trailing}
+      {trailing !== undefined && trailing !== null && trailing !== false && (
+        <span className="ch-sidebar-row-trailing">{trailing}</span>
+      )}
     </>
   );
-  return render({ className: `ch-sidebar-row ch-sidebar-row-${emphasis}`, children });
+  const row = render({ className: `ch-sidebar-row ch-sidebar-row-${emphasis}`, children });
+  // Folded, the label is out of sight: it comes back beside the rail, toward the page.
+  return folded ? (
+    <Tooltip label={label} side="inline-end">
+      {row as ReactElement}
+    </Tooltip>
+  ) : (
+    row
+  );
 }

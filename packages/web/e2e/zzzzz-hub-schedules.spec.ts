@@ -212,7 +212,7 @@ test("30. a schedule's run options: set when it is made, changed from its card, 
   await page.getByRole('option', { name: /Direct|مباشر/ }).click();
   const options = page.getByTestId('schedule-new-options');
   await expect(options).toBeVisible();
-  const missed = options.getByRole('checkbox', { name: /^تشغيل الموعد الفائت خلال ٢٤ ساعة/ });
+  const missed = options.getByRole('checkbox', { name: /^تشغيل الموعد الفائت خلال 24 ساعة/ });
   await expect(missed).not.toBeChecked();
   await expect(options.getByRole('radio', { name: /^انتظار انتهاء السابق/ })).toBeChecked();
 
@@ -229,7 +229,7 @@ test("30. a schedule's run options: set when it is made, changed from its card, 
   await card.getByTestId('schedule-options-toggle').click();
   const panel = card.getByTestId('schedule-options');
   await expect(
-    panel.getByRole('checkbox', { name: /^تشغيل الموعد الفائت خلال ٢٤ ساعة/ }),
+    panel.getByRole('checkbox', { name: /^تشغيل الموعد الفائت خلال 24 ساعة/ }),
   ).toBeChecked();
   await expect(panel.getByRole('radio', { name: /^إيقاف السابق وبدء الجديد/ })).toBeChecked();
 

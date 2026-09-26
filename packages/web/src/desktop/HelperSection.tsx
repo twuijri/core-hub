@@ -19,6 +19,7 @@ import { IconChevron } from '../ui/icons.js';
 import type { DesktopBridge, DesktopHelperState } from './bridge-types.js';
 import { DeviceLinkPanel } from './DeviceLinkPanel.js';
 import { ProgramsSection } from './ProgramsSection.js';
+import { intlLocale } from '../i18n/index.js';
 
 /** The name the helper takes among Hermes's MCP servers. */
 export const HELPER_MCP_NAME = 'this-computer';
@@ -129,7 +130,7 @@ export function HelperSection({ bridge, local }: { bridge: DesktopBridge; local:
   const apply = (next: Promise<DesktopHelperState>) => void next.then(setState);
   const copy = (key: string, text: string) =>
     void navigator.clipboard.writeText(text).then(() => setCopied(key));
-  const time = new Intl.DateTimeFormat(language === 'ar' ? 'ar' : 'en', {
+  const time = new Intl.DateTimeFormat(intlLocale(language), {
     hour: '2-digit',
     minute: '2-digit',
     second: '2-digit',

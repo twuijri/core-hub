@@ -99,6 +99,12 @@ class ScreenShots {
             val root = compose.onAllNodes(hasTestTag("shell.sidebar"), useUnmergedTree = true).fetchSemanticsNodes().first().boundsInRoot
             val firstRow = compose.onNodeWithTag("chat.row.${hub.chatId}", useUnmergedTree = true).fetchSemanticsNode().boundsInRoot
             assertTrue("the first chat row starts at ${firstRow.top} of ${root.height}", firstRow.top < root.height * 0.5f)
+            // The profile chip sits in the footer, on the account name's line beside the connection
+            // dot (owner, 2026-09-26, DECISIONS §113), not at the top of the drawer.
+            val chip = compose.onNodeWithTag("shell.profile", useUnmergedTree = true).fetchSemanticsNode().boundsInRoot
+            val dot = compose.onNodeWithTag("shell.connection", useUnmergedTree = true).fetchSemanticsNode().boundsInRoot
+            assertTrue("the profile chip at ${chip.top} of ${root.height} is in the footer", chip.top > root.height * 0.8f)
+            assertTrue("the profile chip ${chip} is on the connection dot's line ${dot}", chip.top < dot.center.y && dot.center.y < chip.bottom)
         }
         open("/new") { activity ->
             waitFor("screen.new_chat")

@@ -21,6 +21,7 @@ import type { Run, Schemas, Session } from '../types.js';
 import { Button } from '../ui/Button.js';
 import { Popover } from '../ui/Popover.js';
 import type { Compression } from './transcript.js';
+import { intlLocale } from '../i18n/index.js';
 
 export type ContextSource = 'reported' | 'agent_estimate' | 'estimate';
 
@@ -120,8 +121,7 @@ export function ContextRing({
     onOpenChange?.(next);
   };
   const [error, setError] = useState<string | null>(null);
-  const format = (value: number) =>
-    new Intl.NumberFormat(language === 'ar' ? 'ar' : 'en').format(value);
+  const format = (value: number) => new Intl.NumberFormat(intlLocale(language)).format(value);
   const percent = percentOf(use);
   const circumference = 2 * Math.PI * 7;
   const label = t(

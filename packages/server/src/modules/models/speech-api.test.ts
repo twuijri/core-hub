@@ -12,6 +12,8 @@
  */
 import { createServer, type IncomingMessage, type Server } from 'node:http';
 import type { AddressInfo } from 'node:net';
+import path from 'node:path';
+import Database from 'better-sqlite3';
 import { afterEach, describe, expect, it } from 'vitest';
 import { authed, signedInHub, type TestHub } from '../../../tests/unit/helpers.js';
 
@@ -149,14 +151,14 @@ describe('models.transcribe', () => {
       language: 'ar',
       duration_ms: 2400,
       provider_id: stt.id,
-      model: 'whisper-1',
+      model: 'gpt-transcribe',
     });
 
     expect(openai.seen).toHaveLength(1);
     const [call] = openai.seen;
     expect(call!.url).toBe('https://api.openai.com/v1/audio/transcriptions');
     expect(call!.authorization).toBe('Bearer sk-openai-voice');
-    expect(call!.model).toBe('whisper-1');
+    expect(call!.model).toBe('gpt-transcribe');
     // Whisper takes ISO-639-1; the browser's tag is cut to it.
     expect(call!.language).toBe('ar');
     // A browser calls it `blob`; the server tells the format by the extension.
@@ -182,6 +184,66 @@ describe('models.transcribe', () => {
       duration_ms: 1250,
     });
     expect(openai.seen[0]!.language).toBeNull();
+  });
+
+  it('starts a new OpenAI speech-to-text row on gpt-transcribe, not the retiring whisper-1', async () => {
+    const openai = scriptedOpenAi(() => ({ json: { text: 'hi' } }));
+    const hub = await hubWith(openai.fetchImpl);
+    const { stt } = await addOpenAi(hub);
+    const listed = await authed(hub, hub.token, { method: 'GET', url: '/api/v1/models/speech' });
+    const row = (
+      listed.json() as { stt: { providers: { id: string; settings: { model: string | null } }[] } }
+    ).stt.providers.find((item) => item.id === stt.id);
+    expect(row?.settings.model).toBe('gpt-transcribe');
+    await transcribe(hub, { audio: [WEBM, 'take.webm'] });
+    expect(openai.seen[0]!.model).toBe('gpt-transcribe');
+  });
+
+  it('never rewrites the model an existing speech-to-text row already holds', async () => {
+    const openai = scriptedOpenAi(() => ({ json: { text: 'hi' } }));
+    const hub = await hubWith(openai.fetchImpl);
+    const { stt } = await addOpenAi(hub);
+    // A row made by an older hub, when whisper-1 was the preset's default: written as it
+    // was stored then, straight into the database.
+    const sqlite = new Database(path.join(hub.dataDir, 'hub.sqlite'));
+    try {
+      sqlite
+        .prepare('UPDATE providers SET settings = ? WHERE id = ?')
+        .run(JSON.stringify({ model: 'whisper-1', language: null, voice: null }), stt.id);
+    } finally {
+      sqlite.close();
+    }
+    const modelOf = async () => {
+      const listed = await authed(hub, hub.token, { method: 'GET', url: '/api/v1/models/speech' });
+      return (
+        listed.json() as {
+          stt: { providers: { id: string; settings: { model: string | null } }[] };
+        }
+      ).stt.providers.find((item) => item.id === stt.id)?.settings.model;
+    };
+    expect(await modelOf()).toBe('whisper-1');
+    // Saving the key again and choosing the row again touch neither the row's model…
+    const provider = (
+      (await authed(hub, hub.token, { method: 'GET', url: '/api/v1/models/providers' })).json() as {
+        items: { id: string; slug: string }[];
+      }
+    ).items.find((item) => item.slug === 'openai')!;
+    const rekey = await authed(hub, hub.token, {
+      method: 'PATCH',
+      url: `/api/v1/models/providers/${provider.id}`,
+      payload: { api_key: 'sk-openai-voice-2' },
+    });
+    expect(rekey.statusCode, rekey.body).toBe(200);
+    const chosen = await authed(hub, hub.token, {
+      method: 'PATCH',
+      url: '/api/v1/models/speech',
+      payload: { stt_provider_id: stt.id },
+    });
+    expect(chosen.statusCode, chosen.body).toBe(200);
+    expect(await modelOf()).toBe('whisper-1');
+    // …nor what a transcription asks for.
+    await transcribe(hub, { audio: [WEBM, 'take.webm'] });
+    expect(openai.seen.at(-1)!.model).toBe('whisper-1');
   });
 
   it('says no speech-to-text provider is chosen, never an empty transcript', async () => {

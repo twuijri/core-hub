@@ -10,11 +10,12 @@
  * the Models screen, and inside the chat notice when a run failed for want of a
  * provider. One source, so the screen cannot disagree with the failure.
  */
-import { useState } from 'react';
+import { useId, useState } from 'react';
 import { canRestart, useRestartAgent } from '../agents/useRestartAgent.js';
 import { useAuth } from '../auth/context.js';
 import { useAgents } from '../hub/queries.js';
 import { useI18n } from '../i18n/context.js';
+import { IconChevron } from '../ui/icons.js';
 import { Badge, Button } from '../ui/index.js';
 import type { RuntimeCheck, RuntimeReport } from '../types.js';
 
@@ -45,16 +46,28 @@ export function failingChecks(report: RuntimeReport | undefined): RuntimeCheck[]
   return report ? sortChecks(report.checks).filter((check) => !check.ok) : [];
 }
 
+/**
+ * The checks with what failed on top, each half still in the order the steps happen in: the
+ * person who opened a failing card reads the problem first, not four ticks and then it.
+ */
+export function failingFirst(checks: readonly RuntimeCheck[] | undefined): RuntimeCheck[] {
+  const sorted = sortChecks(checks);
+  return [...sorted.filter((check) => !check.ok), ...sorted.filter((check) => check.ok)];
+}
+
 export function RuntimeChecks({
   report,
   only = 'all',
 }: {
   report: RuntimeReport;
-  /** `failing` is the chat notice: the person is already looking at a failure. */
+  /**
+   * `failing` is the chat notice: the person is already looking at a failure. `all` lists
+   * every check, what failed first.
+   */
   only?: 'all' | 'failing';
 }) {
   const { t } = useI18n();
-  const checks = only === 'failing' ? failingChecks(report) : sortChecks(report.checks);
+  const checks = only === 'failing' ? failingChecks(report) : failingFirst(report.checks);
   if (checks.length === 0) return null;
   return (
     <ul className="space-y-1 text-sm" data-testid="runtime-checks" data-ready={report.ready}>
@@ -84,17 +97,22 @@ export function RuntimeChecks({
 /**
  * The Runtime card on the Models screen.
  *
- * When every check passes there is nothing to read, so it is one line — «كل شيء يعمل» /
- * "Everything works" — with a toggle for whoever wants the list anyway (owner,
- * 2026-09-24). The moment a check fails it opens by itself and stays open: a failure is
- * the one thing this card exists to show, and it must not wait behind a click.
+ * When every check passes there is nothing to read, so it is one line — «وقت التشغيل جاهز ·
+ * الفحوص 5/5» / "Runtime ready · 5/5 checks" — and the whole line is the button that opens
+ * the list, for whoever wants it anyway (owner, 2026-09-24 and 2026-09-26). The moment a check
+ * fails it opens by itself, says how many passed, lists what failed first, and stays open: a
+ * failure is the one thing this card exists to show, and it must not wait behind a click.
  */
 export function RuntimeCard({ report }: { report: RuntimeReport }) {
   const { t } = useI18n();
   const checks = sortChecks(report.checks);
-  const allOk = checks.length > 0 && checks.every((check) => check.ok);
+  const total = checks.length;
+  const passed = checks.filter((check) => check.ok).length;
+  const allOk = total > 0 && passed === total;
   const [expanded, setExpanded] = useState(false);
   const open = !allOk || expanded;
+  const listId = useId();
+  const onlyRestart = checks.every((check) => check.ok || check.id === PENDING_RESTART);
   return (
     <section
       className="mb-4 rounded-md border border-line px-3 py-2"
@@ -102,34 +120,42 @@ export function RuntimeCard({ report }: { report: RuntimeReport }) {
       data-collapsed={open ? undefined : 'true'}
       aria-label={t('models.runtime.title')}
     >
-      <div className="flex items-center gap-2">
-        <h2 className="text-sm font-medium">{t('models.runtime.title')}</h2>
-        {allOk && (
-          <Badge tone="success" testId="runtime-all-ok">
-            {t('models.runtime.all_ok')}
-          </Badge>
-        )}
-        {allOk && (
-          <Button
-            className="ms-auto"
-            size="sm"
-            variant="ghost"
+      {allOk ? (
+        <h2 className="text-sm font-medium">
+          <button
+            type="button"
+            className="flex w-full items-center gap-2 text-start"
             aria-expanded={open}
+            aria-controls={listId}
             onClick={() => setExpanded((value) => !value)}
             data-testid="runtime-toggle"
           >
-            {t(open ? 'models.runtime.hide' : 'models.runtime.show')}
-          </Button>
-        )}
-      </div>
+            <Badge tone="success" dot>
+              <span data-testid="runtime-all-ok">
+                {t('models.runtime.ready', { passed, total })}
+              </span>
+            </Badge>
+            <IconChevron size={16} className={`ms-auto text-muted ${open ? 'rotate-180' : ''}`} />
+          </button>
+        </h2>
+      ) : (
+        <div className="flex items-center gap-2">
+          <h2 className="text-sm font-medium">{t('models.runtime.title')}</h2>
+          {total > 0 && (
+            <Badge tone={onlyRestart ? 'warning' : 'danger'} dot testId="runtime-count">
+              {t('models.runtime.passed', { passed, total })}
+            </Badge>
+          )}
+        </div>
+      )}
       {open && (
-        <>
+        <div id={listId}>
           <p className="mb-2 mt-1 text-xs text-muted">{t('models.runtime.hint')}</p>
           <RuntimeChecks report={report} />
           {report.checks.some((check) => check.id === PENDING_RESTART && !check.ok) && (
             <RestartNow />
           )}
-        </>
+        </div>
       )}
     </section>
   );

@@ -12,6 +12,7 @@ import { useI18n } from '../i18n/context.js';
 import { Badge, Card, Notice, Spinner, Table, type Column } from '../ui/index.js';
 import { Sparkline } from './Sparkline.js';
 import { usePageVisible } from './live.js';
+import { intlLocale } from '../i18n/index.js';
 
 interface HermesProcess {
   kind: 'tui_gateway' | 'dashboard' | 'gateway';
@@ -308,7 +309,7 @@ function ProfilesTable({ profiles, format }: { profiles: ProfileRow[]; format: F
 
 function useFormat(language: string) {
   const { t } = useI18n();
-  const locale = language === 'ar' ? 'ar' : 'en';
+  const locale = intlLocale(language);
   const number = (value: number) => new Intl.NumberFormat(locale).format(value);
   const decimal = (value: number) =>
     new Intl.NumberFormat(locale, { maximumFractionDigits: 2 }).format(value);

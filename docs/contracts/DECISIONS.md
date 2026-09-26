@@ -3514,3 +3514,83 @@ repository. Proposed, owner to confirm:
   list endpoint (§94). `.github/workflows/models-catalog-watch.yml` compares the file every Monday
   with CLI Proxy API's public catalogues and keeps one issue (label `models-catalog`) of ids seen
   there and not here, and ids here no source lists any more; it never edits the file or pushes.
+
+## 111. A turn's tool activity: a live window, then one folded row
+
+The owner, with an iPhone screenshot (2026-09-26): every tool the agent used was its own big card
+stacked above the answer (skill_view, vision_analyze, terminal, vision_analyze …) — noisy on the
+web, worse on the phone. He wants it like an activity view: while the agent works only the latest
+few steps, and when the turn ends one compact row that opens when the person wants to read them or
+see what failed; the answer stays the main thing on screen. No contract change: every client reads
+the `ToolCall`s it already has. Proposed, owner to confirm:
+
+- **The live window is 4 calls on the web and 2 on a phone** (iOS, Android). A call still running or
+  waiting for approval is always in view, and so is one that **failed**, until the turn ends — an
+  error never scrolls out of sight while the agent carries on. The rest are one «+k خطوات سابقة» /
+  "+k earlier steps" line that opens them and folds them back. A new step slides in and an old one
+  leaves with a fade; nothing moves under reduced motion on any platform.
+- **When the turn has ended** (the message is no longer streaming and no call runs or waits) every
+  call folds into **one row**: how many steps, how long, how many failed (in the danger colour, only
+  when some did) and the latest tools' names as small chips (three on the web, two on a phone). A
+  click or tap opens the full list with the same cards as before. What is open is per message and
+  never saved.
+- **"How long"** is the wall-clock time from the first call's start to the last call's end when
+  every call carries both; otherwise the calls' durations summed; otherwise nothing is shown.
+  Under a minute it reads «42 ث» / "42s", from a minute «1 د 05 ث» / "1m 05s", never below one
+  second.
+- The rule is one pure function per client — `toolActivity` (web), `ToolActivity` (Android and
+  iOS) — tested the same way on all three. The questions the agent asked (`clarify`) keep showing
+  as they do (web: `AnsweredQuestions`).
+
+## 112. The sidebar folds into a rail of icons; the Runtime card is one counted line; new speech-to-text rows start on gpt-transcribe
+
+The owner approved three parked web items on 2026-09-26: a ChatGPT-style sidebar that folds to
+icons, the Runtime checklist folded when there is nothing to read, and a successor for
+`whisper-1`, which OpenAI shuts down on 2027-02-26 (`gpt-transcribe` replaces it). Proposed, owner
+to confirm:
+
+- **The rail (web and desktop).** On a window at least 48rem wide the sidebar folds to a rail of
+  icons one large control wide, from a toggle in the brand row or `Ctrl+Shift+S` (`⌘⇧S` on a Mac —
+  ChatGPT's own shortcut for this; matched on the physical S key so an Arabic layout works). The
+  rail carries the same entries in the same order under the same keys — `rail`, then `chat` and
+  `rooms` as two icons that unfold the sidebar on their list, and inside Settings or an agent their
+  lists as icons — each row keeping its words as its accessible name and showing them as a tooltip
+  toward the page. The footer becomes one button (the person's initial and the connection dot)
+  whose menu holds Settings, the language, the theme, sign out and the version. The choice is this
+  browser's (`localStorage`, read in try/catch), not the account's. The width eases over the motion
+  token (instant under reduced motion), and in Arabic the rail is on the right. It adds no
+  destination and no entry; the phone drawer never folds. No contract change.
+- **The Runtime card.** When every check passes it is one line — «وقت التشغيل جاهز · الفحوص 4/4» /
+  "Runtime ready · 4/4 checks" — and the whole line is the button that opens the list. When any
+  fails it is open by itself, says how many passed («نجح 2 من 4 فحوص»), and lists the failing
+  checks first, each half in the order the steps happen in. The chat's failure notice still shows
+  only the failing checks.
+- **Speech-to-text default.** The `openai-stt` preset's model is `gpt-transcribe`. A preset's
+  settings are copied into a row once, when it is created, so only new rows take it: a row that
+  already holds `whisper-1`, or any model somebody chose, keeps it until a person changes it. The
+  OpenAI-compatible transcription adapter still asks for `whisper-1` when a row has no model at all,
+  which is what self-hosted Whisper servers answer to.
+
+## 113. Latin digits in every client, also in Arabic; the phone's profile chip sits in the drawer's footer
+
+Decided by the owner on 2026-09-26 (before the apps night), not proposed:
+
+- **Latin digits (123) everywhere.** Every client — web, desktop, iOS, Android, the CLI and the hub's
+  own messages — shows numbers, durations, sizes, dates and times, counts, percentages and version
+  numbers with Latin digits, in the Arabic UI too. Arabic words, plural forms and RTL stay («43 ث»,
+  «12 خطوة», «26 سبتمبر 2026»). Android was the odd one: it followed the Arabic locale's digits
+  («٤٣ ث» in the tool-activity row), while the web and iOS mostly showed Latin. It is done once per
+  client, on the locale used for formatting, not per screen: the web's `intlLocale` (`ar-u-nu-latn`
+  for every `Intl` formatter and `toLocale*String`, guarded by a test that reads the source), iOS's
+  `AppLanguage.locale` / `Locale.latinDigits` (`@numbers=latn`, and byte counts through
+  `ByteCountFormatStyle` with that locale instead of the phone's), Android's `Digits` (the
+  activity's configuration and the process default carry `-u-nu-latn`, so `stringResource`,
+  plurals, `String.format`, `Formatter` and `DateUtils` all agree — also when the app follows an
+  Arabic phone). The string catalogues hold no Arabic-Indic digits either; `pnpm i18n:check` fails
+  on one (the JSON catalogues and Android's `values-ar`). Content the person or the agent wrote is
+  shown as written.
+- **The phone's profile selector is a small chip in the drawer's footer**, beside the account name
+  and the connection dot (iOS and Android), opening the same picker; it left the top of the drawer.
+  Web and desktop keep it in the top bar. It stays what NAVIGATION.md rule 4 says: one concrete
+  profile, never «all», it switches `X-Hub-Profile` in place and never navigates. The header of an
+  agent's pages on iOS keeps its full-width selector, because those pages edit one profile.

@@ -5,7 +5,7 @@
  */
 import { describeError } from '../auth/client.js';
 import { useI18n } from '../i18n/context.js';
-import type { Translator } from '../i18n/index.js';
+import { intlLocale, type Translator } from '../i18n/index.js';
 import { Notice, Sheet, Spinner, Tooltip } from '../ui/index.js';
 import { IconFile, IconFolder } from '../ui/icons.js';
 import { useOpenFile, useSessionFilesContext } from './context.js';
@@ -111,7 +111,7 @@ export function FilesSheet({
                       {file.modified_at && (
                         <>
                           {' · '}
-                          {new Date(file.modified_at).toLocaleString(language, {
+                          {new Date(file.modified_at).toLocaleString(intlLocale(language), {
                             dateStyle: 'short',
                             timeStyle: 'short',
                           })}

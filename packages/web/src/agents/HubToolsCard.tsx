@@ -25,6 +25,7 @@ import {
   type HubToolCall,
   type HubToolGroup,
 } from './skills.js';
+import { intlLocale } from '../i18n/index.js';
 
 export function HubToolsCard({ agentId }: { agentId: string | undefined }) {
   const { t } = useI18n();
@@ -165,7 +166,7 @@ function GroupRow({
 
 function RecentCalls({ calls }: { calls: HubToolCall[] }) {
   const { t, language } = useI18n();
-  const when = new Intl.DateTimeFormat(language === 'ar' ? 'ar' : 'en', {
+  const when = new Intl.DateTimeFormat(intlLocale(language), {
     hour: '2-digit',
     minute: '2-digit',
     day: 'numeric',

@@ -75,7 +75,8 @@ this table:
 Shared controls: back `chevron-left`/`arrow-left` (mirrored in RTL), close `x`, more `ellipsis`,
 send `arrow-up`, stop a filled square, attach `paperclip` / `plus`, copy `copy`, restart
 `rotate-cw`, profile `layout-grid`, theme `sun` · `moon` · `sun-moon` (system), language `globe`,
-sign out `log-out`, share `share`.
+sign out `log-out`, share `share`, fold the sidebar / open it `panel-left-close` / `panel-left-open`
+(mirrored in RTL; web and desktop only — a phone has no rail).
 
 Every row of a navigation list carries its icon — the rail, the settings list, an agent's pages.
 
@@ -110,6 +111,9 @@ Every row of a navigation list carries its icon — the rail, the settings list,
 ## 5. Voice
 
 - Arabic first, English beside it, both complete; a workspace is «بروفايل» / "profile".
+- Digits are Latin (123) everywhere, also in the Arabic UI — numbers, durations, sizes, dates,
+  counts, percentages, versions; Arabic words, plurals and RTL stay (owner, 2026-09-26,
+  DECISIONS §113): web `intlLocale`, iOS `Locale.latinDigits`, Android `Digits`.
 - Sentence case in English ("Skill commands", not "skill commands" or "Skill Commands").
 - Name the agent: the composer says «راسل Hermes…» / "Message Hermes…"; a reply is signed with
   the agent's registry name, never the hub's placeholder «agent».
@@ -131,6 +135,7 @@ a squeezed desktop:
 | Inbox and background buttons always in the top bar | shown only when they hold something, with the count |
 | A row of chat controls in the top bar | the agent stays, the rest go under ⋯ |
 | "Back to chats" as the first row of the settings list | the back button in the navigation bar |
+| The profile chip at the top of every screen | a small chip in the drawer's footer, beside the account name and the connection dot |
 | Capabilities as chips | one quiet line of words |
 | Many actions on a row | one primary action; the rest in a menu or a sheet |
 | Hover tooltips | the words themselves, or a long-press menu |

@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- A turn's tool activity (owner, 2026-09-26): the live window and the folded row. -->
+<resources>
+    <string name="tool_activity_hide_earlier">إخفاء الخطوات السابقة</string>
+    <string name="tool_activity_show">إظهار الخطوات</string>
+    <string name="tool_activity_hide">إخفاء الخطوات</string>
+    <string name="tool_activity_seconds">%1$d ث</string>
+    <string name="tool_activity_minutes">%1$d د %2$02d ث</string>
+    <plurals name="tool_activity_steps">
+        <item quantity="zero">لا خطوات</item>
+        <item quantity="one">خطوة واحدة</item>
+        <item quantity="two">خطوتان</item>
+        <item quantity="few">%1$d خطوات</item>
+        <item quantity="many">%1$d خطوة</item>
+        <item quantity="other">%1$d خطوة</item>
+    </plurals>
+    <plurals name="tool_activity_failed">
+        <item quantity="zero">لم تفشل أي خطوة</item>
+        <item quantity="one">فشلت خطوة</item>
+        <item quantity="two">فشلت خطوتان</item>
+        <item quantity="few">فشلت %1$d خطوات</item>
+        <item quantity="many">فشلت %1$d خطوة</item>
+        <item quantity="other">فشلت %1$d خطوة</item>
+    </plurals>
+    <plurals name="tool_activity_earlier">
+        <item quantity="zero">لا خطوات سابقة</item>
+        <item quantity="one">+ خطوة سابقة</item>
+        <item quantity="two">+ خطوتان سابقتان</item>
+        <item quantity="few">+ %1$d خطوات سابقة</item>
+        <item quantity="many">+ %1$d خطوة سابقة</item>
+        <item quantity="other">+ %1$d خطوة سابقة</item>
+    </plurals>
+</resources>

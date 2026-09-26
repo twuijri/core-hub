@@ -6,6 +6,7 @@
 //
 // Photos go «Compressed» or at «Original quality», as in Telegram (owner, 2026-09-26: «خله خيارين
 // مثل التيليقرام مع ضغط ولا بدون»): the choice sits in the «+» menu and is remembered.
+import AVKit
 import CoreHubClient
 import Foundation
 import Observation
@@ -84,7 +85,7 @@ enum AttachmentRules {
 
     /// A readable size: «3.4 MB».
     static func size(_ bytes: Int) -> String {
-        ByteCountFormatter.string(fromByteCount: Int64(bytes), countStyle: .file)
+        ByteCount.text(Int64(bytes), style: .file)
     }
 }
 
@@ -465,33 +466,48 @@ struct CameraPicker: UIViewControllerRepresentable {
     }
 }
 
-/// The files a message carries, under its text (web: the message's attachment row, #154): a
-/// picture is drawn in place, anything else is its name. A tap opens either full screen in the
-/// system's viewer — zoom, and the share sheet to save or send it on. The bytes come with the
-/// bearer header (`sessions.downloadAttachment`), never a token in a URL.
+/// The files a message carries, under its text (owner, 2026-09-26: «كل ملف يفتح»). A picture is
+/// drawn in place and opens full screen in Quick Look (zoom, and the share sheet to save or send
+/// it); any other file is a row with its kind, name and size that opens it: in Quick Look (PDF,
+/// text, documents), in the player (audio, video, streamed from a one-hour ticket), or the share
+/// sheet for anything else. A download shows its progress and can be cancelled; a failure is one
+/// line with a retry. The bytes come with the bearer header (`sessions.downloadAttachment`), never
+/// a token in a URL.
 struct MessageAttachments: View {
     let content: [ContentBlock]
     /// The chat's profile, which the files belong to.
     var profile: String = ""
-    @Environment(AppModel.self) private var app
-    @Environment(\.l10n) private var l10n
-    @State private var open: URL?
-    @State private var opening: String?
+    @State private var opener = FileOpener()
 
     struct File: Identifiable, Equatable {
         let id: Int
         let attachmentID: String
         let name: String
         let isImage: Bool
+        var mime: String? = nil
+        var size: Int? = nil
+        /// Where the hub serves it (the block's `url`), which a link in the reply may name.
+        var url: String? = nil
+
+        var hubFile: HubFile { .attachment(id: attachmentID, name: name, mime: mime, size: size) }
     }
 
+    /// The message's files; a picture — sent as an image or as a file (a photo at original
+    /// quality) — is drawn, anything else is a row.
     static func files(_ content: [ContentBlock]) -> [File] {
         content.enumerated().compactMap { index, block in
             switch block {
-            case .typeImageBlock(let image): return File(id: index, attachmentID: image.attachmentId, name: image.name ?? "image", isImage: true)
-            case .typeFileBlock(let file): return File(id: index, attachmentID: file.attachmentId, name: file.name ?? "file", isImage: false)
-            case .typeAudioBlock(let audio): return File(id: index, attachmentID: audio.attachmentId, name: audio.name ?? "audio", isImage: false)
-            default: return nil
+            case .typeImageBlock(let image):
+                let name = image.name ?? "image"
+                let drawn = FileKinds.openAs(name, image.mime) == .picture || FileKinds.mime(of: name, image.mime) == "application/octet-stream"
+                return File(id: index, attachmentID: image.attachmentId, name: name, isImage: drawn, mime: image.mime, size: image.sizeBytes, url: image.url)
+            case .typeFileBlock(let file):
+                let name = file.name ?? "file"
+                return File(id: index, attachmentID: file.attachmentId, name: name, isImage: FileKinds.openAs(name, file.mime) == .picture, mime: file.mime, size: file.sizeBytes, url: file.url)
+            case .typeAudioBlock(let audio):
+                return File(id: index, attachmentID: audio.attachmentId, name: audio.name ?? "audio", isImage: false, mime: audio.mime, size: audio.sizeBytes, url: audio.url)
+            default:
+                return nil
             }
         }
     }
@@ -502,59 +518,164 @@ struct MessageAttachments: View {
             VStack(alignment: .leading, spacing: Space.s1) {
                 ForEach(files) { file in
                     if file.isImage {
-                        InlineImage(file: file, profile: profile, chip: chip(file)) { open = $0 }
+                        PictureAttachment(file: file.hubFile, profile: profile, opener: opener)
                     } else {
-                        Button { Task { await show(file) } } label: { chip(file) }
-                            .buttonStyle(.plain)
-                            .accessibilityLabel(l10n("attachments.open", ["name": file.name]))
+                        OpenableFileRow(file: file.hubFile, profile: profile, opener: opener)
                     }
                 }
             }
-            .quickLookPreview($open)
+            .fileOpener(opener)
             .accessibilityIdentifier("message.attachments")
         }
     }
+}
 
-    private func chip(_ file: File) -> some View {
-        HStack(spacing: Space.s1) {
-            if opening == file.attachmentID {
-                ProgressView().controlSize(.mini)
-            } else {
-                Image(lucide: file.isImage ? .image : .fileText)
-                    .resizable()
-                    .frame(width: 14, height: 14)
+/// A file opened from a message or a link, for the sheets that show it.
+struct OpenedFile: Identifiable {
+    let id = UUID()
+    let url: URL
+}
+
+/// Opens a file of the hub the way its kind opens, fetching it first: the same path for a
+/// message's file and for a reply's link to one (`MarkdownView` with `FileLinkOpener`).
+@MainActor
+@Observable
+final class FileOpener {
+    /// Shown in Quick Look.
+    var preview: URL?
+    /// Played from its ticket.
+    var playing: OpenedFile?
+    /// Handed to the share sheet.
+    var sharing: SharedFile?
+    /// Why the last link could not be opened, in one sentence.
+    var notice: String?
+    @ObservationIgnored private var pending: HubFile?
+
+    func open(_ file: HubFile, profile: String, app: AppModel) {
+        let downloads = FileDownloads.shared
+        if FileKinds.openAs(file) == .media, !downloads.state(file).isReady {
+            // Played from a one-hour ticket with byte ranges, so a long recording starts at once.
+            Task {
+                if let address = try? await downloads.streamAddress(file, profile: profile, app: app) {
+                    playing = OpenedFile(url: address)
+                } else {
+                    fetchThenOpen(file, profile: profile, app: app)
+                }
             }
-            Text(file.name)
-                .lineLimit(1)
-                .truncationMode(.middle)
+            return
         }
-        .font(.system(size: FontSize.sizeSm))
-        .foregroundStyle(Tone.textMuted)
+        fetchThenOpen(file, profile: profile, app: app)
     }
 
-    private func show(_ file: File) async {
-        opening = file.attachmentID
-        defer { opening = nil }
-        open = await AttachmentFiles.shared.file(file.attachmentID, name: file.name, profile: profile, app: app)
+    private func fetchThenOpen(_ file: HubFile, profile: String, app: AppModel) {
+        if case .ready(let url) = FileDownloads.shared.state(file) {
+            show(url, file)
+        } else {
+            pending = file
+            FileDownloads.shared.start(file, profile: profile, app: app)
+        }
+    }
+
+    /// Called as the downloads change: opens the file the person asked for once it is here.
+    func settle(_ states: [String: FileDownloads.State]) {
+        guard let want = pending else { return }
+        switch states[want.cacheKey] {
+        case .ready(let url):
+            pending = nil
+            show(url, want)
+        case .loading:
+            break
+        default:
+            pending = nil
+        }
+    }
+
+    private func show(_ url: URL, _ file: HubFile) {
+        switch FileKinds.openAs(file) {
+        case .picture, .viewer, .media:
+            // Quick Look draws pictures (zoom, share, save), documents and text, and plays sound
+            // and video; what it cannot show goes to the share sheet.
+            if QLPreviewController.canPreview(url as NSURL) { preview = url } else { sharing = SharedFile(url: url) }
+        case .share:
+            sharing = SharedFile(url: url)
+        }
     }
 }
 
-/// A picture on a message, drawn in place once its bytes are here; its name until then, or if
-/// they cannot be fetched. A tap opens it full screen.
-struct InlineImage<Chip: View>: View {
-    let file: MessageAttachments.File
-    let profile: String
-    let chip: Chip
-    let onOpen: (URL) -> Void
-    @Environment(AppModel.self) private var app
+extension FileDownloads.State {
+    var isReady: Bool {
+        if case .ready = self { return true }
+        return false
+    }
+}
+
+private struct FileOpenerSheets: ViewModifier {
+    @Bindable var opener: FileOpener
+
+    func body(content: Content) -> some View {
+        content
+            .quickLookPreview($opener.preview)
+            .fullScreenCover(item: $opener.playing) { item in MediaPlayerView(url: item.url) }
+            .sheet(item: $opener.sharing) { item in ActivitySheet(items: [item.url]) }
+            .onChange(of: FileDownloads.shared.states) { _, states in opener.settle(states) }
+    }
+}
+
+extension View {
+    /// Presents what `opener` opens: Quick Look, the player, the share sheet.
+    func fileOpener(_ opener: FileOpener) -> some View { modifier(FileOpenerSheets(opener: opener)) }
+}
+
+/// A sound or a video from its ticket, full screen, with a close button.
+struct MediaPlayerView: View {
+    let url: URL
+    @Environment(\.dismiss) private var dismiss
     @Environment(\.l10n) private var l10n
-    @State private var loaded: (url: URL, image: UIImage)?
+    @State private var player: AVPlayer?
 
     var body: some View {
+        ZStack(alignment: .topLeading) {
+            Color.black.ignoresSafeArea()
+            if let player { VideoPlayer(player: player).ignoresSafeArea() }
+            Button { dismiss() } label: {
+                LucideIcon(.x, size: 18)
+                    .foregroundStyle(.white)
+                    .frame(width: 44, height: 44)
+                    .background(.ultraThinMaterial, in: Circle())
+            }
+            .accessibilityLabel(l10n("common.close"))
+            .padding(Space.s4)
+        }
+        .environment(\.layoutDirection, .leftToRight)
+        .onAppear {
+            let player = AVPlayer(url: url)
+            self.player = player
+            player.play()
+        }
+        .onDisappear { player?.pause() }
+    }
+}
+
+/// A picture on a message: drawn once its bytes are here; a row with its progress until then, or
+/// when it cannot be drawn. A tap opens it full screen.
+struct PictureAttachment: View {
+    let file: HubFile
+    let profile: String
+    let opener: FileOpener
+    @Environment(AppModel.self) private var app
+    @Environment(\.l10n) private var l10n
+    @State private var picture: UIImage?
+    @State private var undrawable = false
+
+    /// Pictures up to this size are fetched as soon as they are shown; a larger one waits for a tap.
+    static let autoFetchBytes = 20 * 1024 * 1024
+
+    var body: some View {
+        let state = FileDownloads.shared.state(file)
         Group {
-            if let loaded {
-                Button { onOpen(loaded.url) } label: {
-                    Image(uiImage: loaded.image)
+            if let picture, case .ready = state {
+                Button { opener.open(file, profile: profile, app: app) } label: {
+                    Image(uiImage: picture)
                         .resizable()
                         .scaledToFit()
                         .frame(maxWidth: 260, maxHeight: 260, alignment: .leading)
@@ -564,58 +685,219 @@ struct InlineImage<Chip: View>: View {
                 .accessibilityLabel(l10n("attachments.open", ["name": file.name]))
                 .accessibilityIdentifier("message.image")
             } else {
-                chip
+                FileRowView(file: file, state: undrawable ? .idle : state) {
+                    opener.open(file, profile: profile, app: app)
+                }
             }
         }
-        .task(id: file.attachmentID) {
-            guard let url = await AttachmentFiles.shared.file(file.attachmentID, name: file.name, profile: profile, app: app) else { return }
-            // Decoded off the main thread: a photo from the camera is large.
-            let image = await Task.detached(priority: .userInitiated) { UIImage(contentsOfFile: url.path)?.preparingThumbnail(of: CGSize(width: 780, height: 780)) }.value
-            if let image { loaded = (url, image) }
+        .task(id: file.cacheKey) {
+            if (file.size ?? 0) <= Self.autoFetchBytes { FileDownloads.shared.start(file, profile: profile, app: app) }
+        }
+        .task(id: state.readyURL) {
+            guard let url = state.readyURL else { return }
+            // Decoded off the main thread, at most 780 px on its longer side, its shape kept.
+            let image = await Task.detached(priority: .userInitiated) { () -> UIImage? in
+                guard let full = UIImage(contentsOfFile: url.path) else { return nil }
+                return full.preparingThumbnail(of: AttachmentRules.fitted(full.size, maxSide: 780)) ?? full
+            }.value
+            if let image { picture = image } else { undrawable = true }
         }
     }
 }
 
-/// The files of messages, fetched once and kept in the app's caches under their own names (the
-/// system viewer tells a file's kind by its extension). The system empties the caches when it
-/// needs the space.
-@MainActor
-final class AttachmentFiles {
-    static let shared = AttachmentFiles()
-    private var inFlight: [String: Task<URL?, Never>] = [:]
+extension FileDownloads.State {
+    var readyURL: URL? {
+        if case .ready(let url) = self { return url }
+        return nil
+    }
+}
 
-    private var root: URL {
-        FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask)[0].appendingPathComponent("attachments", isDirectory: true)
+/// Any other file: a row that opens it.
+struct OpenableFileRow: View {
+    let file: HubFile
+    let profile: String
+    let opener: FileOpener
+    @Environment(AppModel.self) private var app
+
+    var body: some View {
+        let state = FileDownloads.shared.states[file.cacheKey] ?? .idle
+        FileRowView(file: file, state: state) { opener.open(file, profile: profile, app: app) }
+    }
+}
+
+/// One file as a row: its kind's icon, its name (the middle elided), and under it its size, how
+/// much has arrived, or why it failed, in one line. While it downloads the trailing button cancels
+/// it; after a failure it tries again.
+struct FileRowView: View {
+    let file: HubFile
+    let state: FileDownloads.State
+    let open: () -> Void
+    @Environment(\.l10n) private var l10n
+
+    private var icon: Lucide {
+        let type = FileKinds.mime(of: file.name, file.mime)
+        if type.hasPrefix("image/") { return .image }
+        if type.hasPrefix("audio/") { return .music }
+        if type.hasPrefix("video/") { return .film }
+        return FileKinds.openAs(file) == .viewer ? .fileText : .file
     }
 
-    /// Where a file is kept: a folder per attachment, the file under its own (safe) name.
-    nonisolated static func place(_ id: String, name: String, in root: URL) -> URL {
-        let safe = name.replacingOccurrences(of: "/", with: "_").replacingOccurrences(of: ":", with: "_")
-        return root.appendingPathComponent(id, isDirectory: true).appendingPathComponent(safe.isEmpty ? id : safe)
+    private var detail: String? {
+        switch state {
+        case .loading(let fraction):
+            if let fraction, let size = file.size {
+                return l10n("attachments.progress", [
+                    "percent": String(Int(fraction * 100)),
+                    "done": AttachmentRules.size(Int(Double(size) * fraction)),
+                    "total": AttachmentRules.size(size),
+                ])
+            }
+            return l10n("attachments.fetching")
+        case .failed(let failure):
+            if failure.status == 404 { return l10n("attachments.gone") }
+            if failure.status == 413 { return l10n("attachments.open_too_large") }
+            return failure.describe(l10n)
+        default:
+            return file.size.map { AttachmentRules.size($0) }
+        }
     }
 
-    func file(_ id: String, name: String, profile: String, app: AppModel) async -> URL? {
-        let target = Self.place(id, name: name, in: root)
-        if FileManager.default.fileExists(atPath: target.path) { return target }
-        if let running = inFlight[id] { return await running.value }
-        let task = Task<URL?, Never> {
-            let scope = profile.isEmpty ? app.currentProfile : profile
-            guard let downloaded = try? await app.api.call({
-                try await SessionsAPI.sessionsDownloadAttachment(xHubProfile: scope, attachmentId: id, apiConfiguration: $0)
-            }) else { return nil }
-            do {
-                try FileManager.default.createDirectory(at: target.deletingLastPathComponent(), withIntermediateDirectories: true)
-                try? FileManager.default.removeItem(at: target)
-                try FileManager.default.moveItem(at: downloaded, to: target)
-                return target
-            } catch {
-                return nil
+    private var failed: Bool {
+        if case .failed = state { return true }
+        return false
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: Space.s1) {
+            HStack(spacing: Space.s2) {
+                LucideIcon(icon, size: 18)
+                    .foregroundStyle(failed ? Tone.danger : Tone.textMuted)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(file.name)
+                        .font(.system(size: FontSize.sizeSm))
+                        .foregroundStyle(Tone.text)
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                    if let detail {
+                        Text(detail)
+                            .font(.system(size: FontSize.sizeXs))
+                            .foregroundStyle(failed ? Tone.danger : Tone.textMuted)
+                            .lineLimit(1)
+                            .accessibilityIdentifier(failed ? "message.file.error" : "message.file.detail")
+                    }
+                }
+                Spacer(minLength: Space.s1)
+                trailing
+            }
+            if case .loading(let fraction?) = state {
+                ProgressView(value: fraction)
+                    .tint(Tone.accent)
             }
         }
-        inFlight[id] = task
-        let url = await task.value
-        inFlight[id] = nil
-        return url
+        .padding(.leading, Space.s3)
+        .padding(.trailing, Space.s1)
+        .padding(.vertical, Space.s2)
+        .frame(minWidth: 200, maxWidth: 320, alignment: .leading)
+        .background(Tone.surface2, in: RoundedRectangle(cornerRadius: Radius.md, style: .continuous))
+        .contentShape(Rectangle())
+        .onTapGesture {
+            if case .loading = state { return }
+            open()
+        }
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel(l10n("attachments.open", ["name": file.name]))
+        .accessibilityAddTraits(.isButton)
+        .accessibilityIdentifier("message.file")
+    }
+
+    @ViewBuilder
+    private var trailing: some View {
+        switch state {
+        case .loading:
+            Button { FileDownloads.shared.cancel(file) } label: {
+                ZStack {
+                    ProgressView().controlSize(.small)
+                    LucideIcon(.x, size: 12).foregroundStyle(Tone.textMuted)
+                }
+                .frame(width: 32, height: 32)
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel(l10n("attachments.cancel"))
+            .accessibilityIdentifier("message.file.cancel")
+        case .failed:
+            Button(action: open) {
+                LucideIcon(.rotateCcw, size: 16)
+                    .foregroundStyle(Tone.textMuted)
+                    .frame(width: 32, height: 32)
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel(l10n("common.retry"))
+        default:
+            EmptyView()
+        }
+    }
+}
+
+/// Links in a reply that name one of the conversation's files open it as its row does (web:
+/// `Markdown.tsx`, decision §48); any other link opens as before. The conversation's file list is
+/// read only when a link needs it.
+struct FileLinkOpener: ViewModifier {
+    /// The reply's own files.
+    let own: [MessageAttachments.File]
+    let profile: String
+    /// The conversation, for links to its working folder's files; nil in a room.
+    let sessionID: String?
+    @Environment(AppModel.self) private var app
+    @Environment(\.l10n) private var l10n
+    @State private var opener = FileOpener()
+
+    func body(content: Content) -> some View {
+        content
+            .environment(\.openURL, OpenURLAction { url in handle(url) })
+            .fileOpener(opener)
+            .alert(opener.notice ?? "", isPresented: Binding(get: { opener.notice != nil }, set: { if !$0 { opener.notice = nil } })) {
+                Button(l10n("common.close")) { opener.notice = nil }
+            }
+    }
+
+    private func handle(_ url: URL) -> OpenURLAction.Result {
+        let href = url.absoluteString
+        let hub = app.credentials?.hubURL
+        if let file = FileLinks.resolve(href, hub: hub, own: own) {
+            opener.open(file, profile: profile, app: app)
+            return .handled
+        }
+        guard FileLinks.word(of: href, hub: hub) != nil, let sessionID else { return outside(url) }
+        let scope = profile.isEmpty ? app.currentProfile : profile
+        Task {
+            let list = try? await app.api.call { config in
+                try await SessionsAPI.sessionsListFiles(xHubProfile: scope, sessionId: sessionID, apiConfiguration: config)
+            }
+            if let file = FileLinks.resolve(href, hub: hub, own: own, files: list?.items, sessionID: sessionID) {
+                opener.open(file, profile: profile, app: app)
+            } else if url.scheme == nil || url.host == nil {
+                opener.notice = l10n("attachments.link_failed")
+            } else {
+                _ = await UIApplication.shared.open(url)
+            }
+        }
+        return .handled
+    }
+
+    /// A whole address opens in the system; a word the phone cannot open says so.
+    private func outside(_ url: URL) -> OpenURLAction.Result {
+        if url.scheme != nil { return .systemAction }
+        opener.notice = l10n("attachments.link_failed")
+        return .handled
+    }
+}
+
+/// The files of messages, kept in the app's caches under their own names (the system viewer
+/// tells a file's kind by its extension). The system empties the caches when it needs the space.
+enum AttachmentFiles {
+    /// Where a file is kept: a folder per attachment, the file under its own (safe) name.
+    static func place(_ id: String, name: String, in root: URL) -> URL {
+        root.appendingPathComponent(id, isDirectory: true).appendingPathComponent(HubFileFetcher.safeName(name, fallback: id))
     }
 }
 

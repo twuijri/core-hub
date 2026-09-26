@@ -3,6 +3,7 @@
  * for the folder itself — the contract's form (`WorkspaceFilePath`). The hub decides what
  * is allowed; these only build and split the strings the page shows and sends.
  */
+import { intlLocale } from '../i18n/index.js';
 
 /** `a/b` + `c` = `a/b/c`; the root joins to the bare name. */
 export function joinPath(folder: string, name: string): string {
@@ -46,7 +47,7 @@ export function formatBytes(bytes: number, language: string): string {
     value /= 1024;
     unit += 1;
   }
-  const number = new Intl.NumberFormat(language === 'ar' ? 'ar' : 'en', {
+  const number = new Intl.NumberFormat(intlLocale(language), {
     maximumFractionDigits: unit === 0 ? 0 : 1,
   }).format(value);
   // Isolated left to right, so «40 B» never reads «B 40» inside an Arabic sentence.

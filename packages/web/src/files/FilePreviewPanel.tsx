@@ -27,6 +27,7 @@ import { PREVIEW_SANDBOX, sandboxedPage, withPolicy } from './html.js';
 import { formatBytes, languageOf, previewable } from './kinds.js';
 import { useFileBytes, useSaveFile, type FileBytes } from './queries.js';
 import { MediaPlayer, useMediaStream, type MediaKind } from '../chat/InlineMedia.js';
+import { intlLocale } from '../i18n/index.js';
 
 // Office files need a ZIP reader; it is loaded the first time one is opened, not with the app.
 const OfficePreview = lazy(() => import('./OfficePreview.js'));
@@ -143,7 +144,7 @@ function FileView({ sessionId, file }: { sessionId: string; file: SessionFile })
   const [saveError, setSaveError] = useState<unknown>(null);
 
   const when = file.modified_at
-    ? new Date(file.modified_at).toLocaleString(language, {
+    ? new Date(file.modified_at).toLocaleString(intlLocale(language), {
         dateStyle: 'medium',
         timeStyle: 'short',
       })

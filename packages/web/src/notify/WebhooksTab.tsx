@@ -64,6 +64,7 @@ import {
   type WebhookDelivery,
   type WebhookWrite,
 } from './webhooks.js';
+import { intlLocale } from '../i18n/index.js';
 
 type Translate = (key: string, p?: Record<string, string | number>) => string;
 
@@ -288,7 +289,7 @@ function describeOutcome(
 }
 
 function formatWhen(iso: string, language: string): string {
-  return new Intl.DateTimeFormat(language === 'ar' ? 'ar' : 'en', {
+  return new Intl.DateTimeFormat(intlLocale(language), {
     hour: '2-digit',
     minute: '2-digit',
     day: 'numeric',

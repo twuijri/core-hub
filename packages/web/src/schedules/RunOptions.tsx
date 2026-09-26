@@ -2,7 +2,7 @@
  * A schedule's two run options (owner, 2026-09-24; DECISIONS §40), for the hub's own
  * schedules — Hermes decides both for its own jobs, so its schedules do not show them:
  *
- * - «شغّله لو فات وقته (خلال ٢٤ ساعة)», off by default: a time missed while the hub was
+ * - «شغّله لو فات وقته (خلال 24 ساعة)», off by default: a time missed while the hub was
  *   down runs once when it is back within 24 hours; off, it never runs late. Up to two
  *   minutes late is still on time.
  * - «إذا كان التشغيل السابق لسا شغّال»: skip, wait then run (the default, one waiting at

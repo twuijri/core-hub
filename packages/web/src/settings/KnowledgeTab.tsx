@@ -24,6 +24,7 @@ import {
 } from '../ui/index.js';
 import { IconKnowledge, IconSearch } from '../ui/icons.js';
 import { useKnowledge, type ItemKind, type KnowledgeItem } from './queries.js';
+import { intlLocale } from '../i18n/index.js';
 
 const KINDS: Array<ItemKind | 'all'> = ['all', 'journal', 'note', 'file'];
 
@@ -99,7 +100,7 @@ function Item({ item, language }: { item: KnowledgeItem; language: string }) {
           {item.title ?? t('knowledge.untitled')}
         </span>
         <time className="ms-auto text-xs text-muted" dateTime={when}>
-          {new Intl.DateTimeFormat(language === 'ar' ? 'ar' : 'en', {
+          {new Intl.DateTimeFormat(intlLocale(language), {
             day: 'numeric',
             month: 'short',
             year: 'numeric',

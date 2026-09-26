@@ -151,7 +151,38 @@
     "arguments": "المعطيات",
     "output": "المخرجات",
     "truncated": "قُطعت المخرجات.",
-    "duration": "{seconds} ث"
+    "duration": "{seconds} ث",
+    "activity": {
+      "steps": {
+        "zero": "لا خطوات",
+        "one": "خطوة واحدة",
+        "two": "خطوتان",
+        "few": "{count} خطوات",
+        "many": "{count} خطوة",
+        "other": "{count} خطوة"
+      },
+      "failed": {
+        "zero": "لم تفشل أي خطوة",
+        "one": "فشلت خطوة",
+        "two": "فشلت خطوتان",
+        "few": "فشلت {count} خطوات",
+        "many": "فشلت {count} خطوة",
+        "other": "فشلت {count} خطوة"
+      },
+      "earlier": {
+        "zero": "لا خطوات سابقة",
+        "one": "+ خطوة سابقة",
+        "two": "+ خطوتان سابقتان",
+        "few": "+ {count} خطوات سابقة",
+        "many": "+ {count} خطوة سابقة",
+        "other": "+ {count} خطوة سابقة"
+      },
+      "hide_earlier": "إخفاء الخطوات السابقة",
+      "show": "يُظهر الخطوات",
+      "hide": "يُخفي الخطوات",
+      "seconds": "{seconds} ث",
+      "minutes": "{minutes} د {seconds} ث"
+    }
   },
   "approval": {
     "title": "بانتظار قرارك",
@@ -194,7 +225,7 @@
     "change_password": "غيّر كلمة المرور",
     "current_password": "كلمة المرور الحالية",
     "display_name": "الاسم الظاهر",
-    "new_password": "كلمة المرور الجديدة (٨ أحرف أو أكثر)",
+    "new_password": "كلمة المرور الجديدة (8 أحرف أو أكثر)",
     "password": "كلمة المرور",
     "password_changed": "تغيّرت كلمة المرور.",
     "role": "الدور",
@@ -288,7 +319,7 @@
     "notifications_allowed": "مسموحة",
     "notifications_denied": "غير مسموحة — غيّرها من إعدادات الآيفون",
     "notifications_ask": "اسمح بالإشعارات",
-    "background_checks": "ابحث عن الإشعارات والتطبيق مغلق (قرابة كل ١٥ دقيقة، حين يسمح iOS)",
+    "background_checks": "ابحث عن الإشعارات والتطبيق مغلق (قرابة كل 15 دقيقة، حين يسمح iOS)",
     "voice_source": "الصوت",
     "voice_hub": "كور هب",
     "voice_phone": "الجوال",
@@ -322,7 +353,7 @@
     "link_target": "افتح الروابط في",
     "show_reasoning": "اعرض التفكير",
     "show_tool_calls": "اعرض استدعاءات الأدوات",
-    "text_scale": "حجم النص {percent}٪"
+    "text_scale": "حجم النص {percent}%"
   },
   "knowledge": {
     "kind_journal": "يوميات",
@@ -509,7 +540,7 @@
     "cores": "{value} · {count} أنوية",
     "memory": "الذاكرة",
     "of": "{used} من {total}",
-    "load": "الحِمل (١ · ٥ · ١٥ دقيقة)",
+    "load": "الحِمل (1 · 5 · 15 دقيقة)",
     "no_proc": "لا يوجد ‎/proc‎ على هذا الجهاز، لذا تظهر عمليات Hermes بلا أرقامها.",
     "hub": "عملية المركز",
     "rss": "الذاكرة (RSS)",
@@ -535,7 +566,13 @@
     "photo_quality": "الصور",
     "compressed": "مضغوطة",
     "original": "بالجودة الأصلية",
-    "open": "افتح {name}"
+    "open": "افتح {name}",
+    "fetching": "جارٍ الجلب…",
+    "progress": "{percent}% · {done} من {total}",
+    "cancel": "ألغِ التنزيل",
+    "gone": "هذا الملف لم يعد في المركز.",
+    "open_too_large": "هذا الملف أكبر من أن يُفتح هنا.",
+    "link_failed": "تعذّر فتح هذا الرابط."
   },
   "pending": {
     "title": "بانتظارك",
@@ -760,8 +797,8 @@
     "push_sent": "أُرسل، ويصل خلال لحظات."
   },
   "usage_page": {
-    "week": "٧ أيام",
-    "month": "٣٠ يومًا",
+    "week": "7 أيام",
+    "month": "30 يومًا",
     "all_profiles": "كل البروفايلات",
     "tokens": "الرموز",
     "runs": "التشغيلات",

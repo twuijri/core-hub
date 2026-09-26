@@ -31,6 +31,7 @@ import {
   type TrajectoryStep,
 } from './trajectory.js';
 import { useDownloadTrajectory, useTrajectory } from './useTrajectory.js';
+import { intlLocale } from '../i18n/index.js';
 
 /** How often running bars grow while the tab is open. */
 const TICK_MS = 500;
@@ -545,7 +546,7 @@ function Metrics({
   units: { ms: string; s: string; min: string };
 }) {
   const { t, language } = useI18n();
-  const number = new Intl.NumberFormat(language === 'ar' ? 'ar' : 'en', {
+  const number = new Intl.NumberFormat(intlLocale(language), {
     maximumFractionDigits: 1,
   });
   // Only what the hub has: a metric with no data behind it is left out, never shown as 0.

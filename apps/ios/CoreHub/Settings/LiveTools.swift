@@ -202,7 +202,7 @@ enum ToolsFormat {
 
     static func bytes(_ value: Int?) -> String {
         guard let value else { return "—" }
-        return ByteCountFormatter.string(fromByteCount: Int64(value), countStyle: .memory)
+        return ByteCount.text(Int64(value), style: .memory)
     }
 
     static func duration(_ seconds: Int?, language: AppLanguage) -> String {

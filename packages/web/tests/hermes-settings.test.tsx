@@ -111,7 +111,7 @@ function sections(values: Record<string, unknown> = {}) {
           hint: null,
           help: t('صفر = بلا حد.', '0 = no limit.'),
           default: null,
-          default_text: t('٥٠٠ في محادثات كور هب', "500 in Core Hub's conversations"),
+          default_text: t('500 في محادثات كور هب', "500 in Core Hub's conversations"),
         },
         {
           key: 'reasoning_effort',
@@ -423,7 +423,7 @@ describe("Hermes's Settings page", () => {
     mount(`/agents/${HERMES}/settings`, fetchImpl, 'ar');
     const agent = await screen.findByTestId('settings-section-agent');
     expect(agent.textContent).toContain('أقصى عدد للدورات في التشغيل');
-    expect(agent.textContent).toContain('الافتراضي في هرمز: ٥٠٠ في محادثات كور هب');
+    expect(agent.textContent).toContain('الافتراضي في هرمز: 500 في محادثات كور هب');
     expect(screen.getByTestId('settings-section-approvals').textContent).toContain(
       'الموافقة على الأوامر الخطرة',
     );
