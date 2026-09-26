@@ -5,14 +5,16 @@
 أول تشغيل لرفع صور المتجر ونصوصه (`ios-screenshots.yml` برفع مفعّل، ٢٠٢٦-٠٩-٢٦، بإذن المالك: «ارفع ما عندي مشكلة») فشل:
 `invalid option: --skip_submission`. هذا الخيار ليس من خيارات `fastlane deliver`؛ عدم الإرسال للمراجعة يضمنه `--submit_for_review false`.
 
+التشغيل الثاني فشل أيضًا: deliver توقف يسأل «No deliver configuration found… setup deliver?» لأنه لا يوجد Deliverfile، وهو في CI غير تفاعلي.
+
 ## القرار والموافقات
-حذف الخيار من `ios-screenshots.yml` و`ios-store-metadata.yml`، وتصحيح `docs/store/apple/README.md`. لا يتغير السلوك: لا يُرسل شيء للمراجعة.
+حذف الخيار من `ios-screenshots.yml` و`ios-store-metadata.yml`، وتصحيح `docs/store/apple/README.md`. وإضافة `apps/ios/fastlane/Deliverfile` صغير (معرّف التطبيق، والمنصة، و`submit_for_review(false)`)، وتشغيل deliver من `apps/ios`. لا يتغير السلوك: لا يُرسل شيء للمراجعة.
 
 ## العقد (ما تغيّر في packages/contracts، أو «لا شيء»)
 لا شيء.
 
 ## الملفات والتأثير
-`.github/workflows/ios-screenshots.yml`، `.github/workflows/ios-store-metadata.yml`، `docs/store/apple/README.md`.
+`.github/workflows/ios-screenshots.yml`، `.github/workflows/ios-store-metadata.yml`، `docs/store/apple/README.md`، `apps/ios/fastlane/Deliverfile`.
 
 ## الفحوص (الأوامر ونواتجها الفعلية)
 ```

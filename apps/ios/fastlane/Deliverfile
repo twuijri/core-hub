@@ -1,0 +1,6 @@
+# fastlane deliver reads this file; without one it stops to ask whether to set deliver up, which
+# fails on CI. Everything is passed on the command line by ios-screenshots.yml and
+# ios-store-metadata.yml (run from apps/ios); nothing here submits for review.
+app_identifier("com.twuijri.corehub")
+platform("ios")
+submit_for_review(false)
