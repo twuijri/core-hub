@@ -60,6 +60,7 @@ import {
   useWorkspaceFolder,
   type WorkspaceFileEntry,
 } from './queries.js';
+import { intlLocale } from '../i18n/index.js';
 
 /** The page's own address for a folder. */
 export function filesHref(path: string): string {
@@ -301,7 +302,7 @@ export function FilesTool() {
       cell: (entry) =>
         entry.modified_at ? (
           <time dateTime={entry.modified_at}>
-            {new Intl.DateTimeFormat(language === 'ar' ? 'ar' : 'en', {
+            {new Intl.DateTimeFormat(intlLocale(language), {
               dateStyle: 'medium',
               timeStyle: 'short',
             }).format(new Date(entry.modified_at))}

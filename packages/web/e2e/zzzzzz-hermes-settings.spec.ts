@@ -43,7 +43,7 @@ test("45. Hermes's settings: max turns and the proxy saved to Hermes's files and
   // ---- Hermes's sections, each field with its help and Hermes's default.
   const agent = page.getByTestId('settings-section-agent');
   await expect(agent).toContainText('أقصى عدد للدورات في التشغيل');
-  await expect(agent).toContainText('الافتراضي في هرمز: ٥٠٠ في محادثات كور هب');
+  await expect(agent).toContainText('الافتراضي في هرمز: 500 في محادثات كور هب');
   await expect(page.getByTestId('settings-section-memory')).toContainText(
     'الافتراضي في هرمز: 2200',
   );

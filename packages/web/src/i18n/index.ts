@@ -45,6 +45,16 @@ export function isLanguage(value: unknown): value is Language {
   return value === 'ar' || value === 'en';
 }
 
+/**
+ * The locale every number, date, time, size and percentage is formatted in: Latin digits (123)
+ * in both languages, also in the Arabic UI — Arabic words, plural forms and RTL stay (owner,
+ * 2026-09-26, DECISIONS §113). Never pass the bare UI language to `Intl` or `toLocale*String`:
+ * some engines give `ar` Arabic-Indic digits (tests/latin-digits.test.ts guards the call sites).
+ */
+export function intlLocale(language: string): string {
+  return language === 'ar' ? 'ar-u-nu-latn' : 'en';
+}
+
 /** UI direction follows the UI language; content direction is decided per string (dir="auto"). */
 export function directionOf(language: Language): 'rtl' | 'ltr' {
   return language === 'ar' ? 'rtl' : 'ltr';

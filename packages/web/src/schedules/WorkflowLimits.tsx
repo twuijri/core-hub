@@ -19,6 +19,7 @@ import { useAuth } from '../auth/context.js';
 import { describeError } from '../auth/client.js';
 import { useI18n } from '../i18n/context.js';
 import { Badge, Button, Dialog, Field, Input, Notice, Skeleton } from '../ui/index.js';
+import { intlLocale } from '../i18n/index.js';
 
 export interface Money {
   amount: string;
@@ -41,7 +42,7 @@ export const NO_LIMITS: Limits = {
 
 type Translate = (key: string, p?: Record<string, string | number>) => string;
 
-/** `5400` → "1 h 30 min" / «١ س ٣٠ د», in the person's language. */
+/** `5400` → "1 h 30 min" / «1 س 30 د», in the person's language. */
 export function formatSeconds(seconds: number, t: Translate): string {
   const hours = Math.floor(seconds / 3600);
   const minutes = Math.floor((seconds % 3600) / 60);
@@ -56,7 +57,7 @@ export function formatSeconds(seconds: number, t: Translate): string {
 /** `{amount: "2.500000"}` → "$2.50" (more places only for an amount under a cent). */
 export function formatMoney(money: Money, language: string): string {
   const value = Number(money.amount);
-  return new Intl.NumberFormat(language === 'ar' ? 'ar' : 'en', {
+  return new Intl.NumberFormat(intlLocale(language), {
     style: 'currency',
     currency: money.currency,
     minimumFractionDigits: 2,

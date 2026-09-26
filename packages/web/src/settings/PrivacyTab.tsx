@@ -34,6 +34,7 @@ import {
   type Column,
 } from '../ui/index.js';
 import { IconShield } from '../ui/icons.js';
+import { intlLocale } from '../i18n/index.js';
 
 export interface AppToken {
   id: string;
@@ -78,7 +79,7 @@ export function PrivacyTab() {
 
   const when = (iso: string | null, none: string) =>
     iso
-      ? new Intl.DateTimeFormat(language === 'ar' ? 'ar' : 'en', {
+      ? new Intl.DateTimeFormat(intlLocale(language), {
           day: 'numeric',
           month: 'short',
           year: 'numeric',

@@ -11,6 +11,7 @@ import { useAuth } from '../../auth/context.js';
 import { ALL_PROFILES } from '../../shell/profiles.js';
 import type { Schemas } from '../../types.js';
 import type { ChartBar, ChartSeries, ChartTone } from '../../ui/index.js';
+import { intlLocale } from '../../i18n/index.js';
 
 export type UsageReport = Schemas['UsageReport'];
 export type SkillUsageReport = Schemas['SkillUsageReport'];
@@ -77,7 +78,7 @@ export interface Formats {
 }
 
 export function formatsFor(language: 'ar' | 'en'): Formats {
-  const locale = language === 'ar' ? 'ar' : 'en';
+  const locale = intlLocale(language);
   const number = new Intl.NumberFormat(locale);
   const compact = new Intl.NumberFormat(locale, { notation: 'compact', maximumFractionDigits: 1 });
   const percent = new Intl.NumberFormat(locale, { style: 'percent', maximumFractionDigits: 1 });

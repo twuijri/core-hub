@@ -38,6 +38,7 @@ import {
   useUpdateSettings,
   type Release,
 } from './queries.js';
+import { intlLocale } from '../i18n/index.js';
 
 export function UpdatesTab() {
   const { t } = useI18n();
@@ -150,7 +151,7 @@ function Shelf() {
   const { ask, dialog } = useConfirm();
   const rows = releases.data?.items ?? [];
   const mb = (bytes: number) =>
-    `${new Intl.NumberFormat(language === 'ar' ? 'ar' : 'en').format(Math.round(bytes / 1_048_576))} MB`;
+    `${new Intl.NumberFormat(intlLocale(language)).format(Math.round(bytes / 1_048_576))} MB`;
 
   return (
     <section className="flex flex-col gap-3" aria-labelledby="updates-shelf">

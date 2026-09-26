@@ -287,6 +287,8 @@ open class CoreHubApp : Application() {
 
     override fun onCreate() {
         super.onCreate()
+        // Latin digits in background work too (notifications, workers): DECISIONS §113.
+        Locale.setDefault(Digits.latin(Locale.getDefault()))
         graph = makeGraph()
     }
 

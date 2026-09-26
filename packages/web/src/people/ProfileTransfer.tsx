@@ -36,13 +36,14 @@ import {
   type Workspace,
 } from './queries.js';
 import type { Job } from '../types.js';
+import { intlLocale } from '../i18n/index.js';
 
 /** The contract's `ProfileSlug`, checked here so the field says so before the hub does. */
 const SLUG = /^[a-z0-9][a-z0-9-]{0,38}[a-z0-9]$/;
 
 function useSize(): (bytes: number) => string {
   const { language } = useI18n();
-  const number = new Intl.NumberFormat(language === 'ar' ? 'ar' : 'en', {
+  const number = new Intl.NumberFormat(intlLocale(language), {
     maximumFractionDigits: 1,
   });
   return (bytes) =>

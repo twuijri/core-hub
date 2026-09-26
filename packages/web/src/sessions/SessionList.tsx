@@ -38,7 +38,7 @@ import { useDeleteSession, useProfiles, useUpdateSession } from '../hub/queries.
 import { useAuth } from '../auth/context.js';
 import { describeError } from '../auth/client.js';
 import { useI18n } from '../i18n/context.js';
-import type { Translator } from '../i18n/index.js';
+import { intlLocale, type Translator } from '../i18n/index.js';
 import { routeOf } from '../navigation/manifest.js';
 import { chatHref } from '../chat/anchor.js';
 import { ProfileBadge } from '../shell/ProfileBadge.js';
@@ -1226,7 +1226,7 @@ function ChannelRow({
             to={channelHref(conversation.id, inLink(conversation.profile))}
             onClick={() => onOpen?.()}
             className="session-link"
-            title={Number.isNaN(when.getTime()) ? undefined : when.toLocaleString(language)}
+            title={Number.isNaN(when.getTime()) ? undefined : when.toLocaleString(intlLocale(language))}
           >
             <span className="session-title-row">
               <span className="min-w-0 truncate" dir="auto">

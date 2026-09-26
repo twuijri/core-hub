@@ -68,6 +68,7 @@ import { describeError } from '../auth/client.js';
 import { useAuth } from '../auth/context.js';
 import { useAgents } from '../hub/queries.js';
 import { useI18n } from '../i18n/context.js';
+import { intlLocale } from '../i18n/index.js';
 import { AppShell } from '../shell/AppShell.js';
 import {
   Badge,
@@ -1652,7 +1653,7 @@ function PairDialog({
   platform: string;
   onClose: () => void;
 }) {
-  const { t } = useI18n();
+  const { t, language } = useI18n();
   const { profile } = useAuth();
   const queryClient = useQueryClient();
   const jobs = useJobs();
@@ -1767,7 +1768,7 @@ function PairDialog({
           {!done && state.expires_at && (
             <p className="text-xs text-muted">
               {t('channels.login.expires', {
-                time: new Date(state.expires_at).toLocaleTimeString(),
+                time: new Date(state.expires_at).toLocaleTimeString(intlLocale(language)),
               })}
             </p>
           )}

@@ -18,7 +18,6 @@ import androidx.lifecycle.lifecycleScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import android.content.res.Configuration
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -68,24 +67,18 @@ import hub.core.android.ui.screens.TopBar
 import hub.core.android.ui.screens.term
 import hub.core.android.ui.theme.CoreHubTheme
 import hub.core.android.ui.theme.LocalTokens
-import java.util.Locale
 
 class MainActivity : ComponentActivity() {
     private var pendingPairing by mutableStateOf<PairingRequest?>(null)
     private var pendingPath by mutableStateOf<String?>(null)
 
-    /** The in-app language (the footer's language chip) wins over the phone's. */
+    /**
+     * The in-app language (the footer's language chip) wins over the phone's, and digits are
+     * Latin in both (DECISIONS §113) — also when the app follows an Arabic phone.
+     */
     override fun attachBaseContext(base: Context) {
         val language = (base.applicationContext as? CoreHubApp)?.graph?.prefs?.language
-        if (language == null) {
-            super.attachBaseContext(base)
-            return
-        }
-        val locale = Locale.forLanguageTag(language.tag)
-        val config = Configuration(base.resources.configuration)
-        config.setLocale(locale)
-        config.setLayoutDirection(locale)
-        super.attachBaseContext(base.createConfigurationContext(config))
+        super.attachBaseContext(Digits.wrap(base, language))
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {

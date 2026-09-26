@@ -4,6 +4,7 @@
  * the rules are tested on their own (tests/device-card.test.tsx).
  */
 import type { components } from '@corehub/contracts';
+import { intlLocale } from '../i18n/index.js';
 
 type Device = components['schemas']['Device'];
 type PushProvider = components['schemas']['PushProvider'];
@@ -18,11 +19,11 @@ const UNITS: ReadonlyArray<[Intl.RelativeTimeFormatUnit, number]> = [
 ];
 
 /**
- * "5 minutes ago" / «قبل ٥ دقائق»: the largest whole unit, and "now" under a minute. A time a
+ * "5 minutes ago" / «قبل 5 دقائق»: the largest whole unit, and "now" under a minute. A time a
  * little in the future (a clock ahead of the hub's) reads as now, not as "in 3 seconds".
  */
 export function relativeTime(iso: string, now: number, language: string): string {
-  const format = new Intl.RelativeTimeFormat(language === 'ar' ? 'ar' : 'en', { numeric: 'auto' });
+  const format = new Intl.RelativeTimeFormat(intlLocale(language), { numeric: 'auto' });
   const seconds = Math.max(0, Math.round((now - Date.parse(iso)) / 1000));
   for (const [unit, size] of UNITS) {
     if (seconds >= size) return format.format(-Math.floor(seconds / size), unit);
@@ -32,14 +33,14 @@ export function relativeTime(iso: string, now: number, language: string): string
 
 /** The exact time, for the tooltip beside a relative one. */
 export function exactTime(iso: string, language: string): string {
-  return new Intl.DateTimeFormat(language === 'ar' ? 'ar' : 'en', {
+  return new Intl.DateTimeFormat(intlLocale(language), {
     dateStyle: 'full',
     timeStyle: 'short',
   }).format(new Date(iso));
 }
 
 export function shortDate(iso: string, language: string): string {
-  return new Intl.DateTimeFormat(language === 'ar' ? 'ar' : 'en', { dateStyle: 'medium' }).format(
+  return new Intl.DateTimeFormat(intlLocale(language), { dateStyle: 'medium' }).format(
     new Date(iso),
   );
 }

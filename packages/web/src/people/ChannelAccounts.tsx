@@ -18,6 +18,7 @@ import { useI18n } from '../i18n/context.js';
 import { Button, Card, CardHeader, EmptyState, Notice, Table, useConfirm } from '../ui/index.js';
 import { IconTrash } from '../ui/icons.js';
 import type { HubUser } from './queries.js';
+import { intlLocale } from '../i18n/index.js';
 
 export interface ChannelIdentity {
   id: string;
@@ -55,7 +56,7 @@ function useMyIdentities(poll: boolean) {
 
 function day(iso: string | null, language: string): string {
   if (!iso) return '—';
-  return new Date(iso).toLocaleString(language === 'ar' ? 'ar' : 'en', {
+  return new Date(iso).toLocaleString(intlLocale(language), {
     dateStyle: 'medium',
     timeStyle: 'short',
   });

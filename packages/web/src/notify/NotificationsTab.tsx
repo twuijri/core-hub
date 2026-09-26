@@ -40,6 +40,7 @@ import {
   type NoticeKind,
   type NotifyPreferences,
 } from './queries.js';
+import { intlLocale } from '../i18n/index.js';
 
 export function NotificationsTab() {
   const { t } = useI18n();
@@ -171,7 +172,7 @@ function NoticeRowItem({ notice, language }: { notice: NoticeRow; language: stri
           )}
         </span>
         <time className="notice-time" dateTime={notice.created_at}>
-          {new Intl.DateTimeFormat(language === 'ar' ? 'ar' : 'en', {
+          {new Intl.DateTimeFormat(intlLocale(language), {
             hour: '2-digit',
             minute: '2-digit',
             day: 'numeric',

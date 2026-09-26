@@ -28,6 +28,7 @@ import {
   type Money,
   type StoppedBy,
 } from './WorkflowLimits.js';
+import { intlLocale } from '../i18n/index.js';
 
 interface ScheduleRunRow {
   id: string;
@@ -90,7 +91,7 @@ function useWhen() {
   const { language } = useI18n();
   return (at: string | null) =>
     at
-      ? new Intl.DateTimeFormat(language === 'ar' ? 'ar' : 'en', {
+      ? new Intl.DateTimeFormat(intlLocale(language), {
           dateStyle: 'medium',
           timeStyle: 'short',
         }).format(Date.parse(at))

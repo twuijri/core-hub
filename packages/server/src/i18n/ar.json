@@ -71,7 +71,7 @@
     "profile_export_done": "الأرشيف جاهز للتنزيل.",
     "profile_export_refused": "رفض هرمز تصدير البروفايل:",
     "profile_export_unexpected": "أرشيف هرمز لا يحوي مجلد البروفايل نفسه، فلن يُسلَّم.",
-    "profile_export_too_large": "أرشيف البروفايل أكبر مما يحفظه المركز (١ غيغابايت).",
+    "profile_export_too_large": "أرشيف البروفايل أكبر مما يحفظه المركز (1 غيغابايت).",
     "profile_import_checking": "التحقق من أن الملف أرشيف بروفايل…",
     "profile_import_hermes": "هرمز ينشئ البروفايل…",
     "profile_import_adding": "إضافة البروفايل…",
@@ -83,7 +83,7 @@
     "profile_archive_not_gzip": "الملف ليس أرشيف ⁦.tar.gz⁩.",
     "profile_archive_not_tar": "الملف مضغوط لكنه ليس أرشيف ⁦tar⁩.",
     "profile_archive_truncated": "الأرشيف مقطوع؛ ارفعه من جديد.",
-    "profile_archive_too_large": "الأرشيف يتفكك إلى أكبر مما يقبله المركز (٤ غيغابايت)."
+    "profile_archive_too_large": "الأرشيف يتفكك إلى أكبر مما يقبله المركز (4 غيغابايت)."
   },
   "sessions": {
     "run_interrupted": "أوقفه المستخدم.",
@@ -97,7 +97,7 @@
     "approval_choice_deny": "رفض",
     "produced_refused": "{files} — تجاوزت حدّ المرفقات حجمًا أو عددًا، وهي باقية في مجلد الدور.",
     "category_name_taken": "في هذا البروفايل تصنيف بهذا الاسم.",
-    "category_limit": "في هذا البروفايل ١٠٠ تصنيف، وهو الحد؛ احذف واحدًا أولًا.",
+    "category_limit": "في هذا البروفايل 100 تصنيف، وهو الحد؛ احذف واحدًا أولًا.",
     "continue": {
       "agent": "الوكيل",
       "facts": "{count} رسالة، من {from} إلى {to} بتوقيت UTC · البروفايل {profile}",

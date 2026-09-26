@@ -7,6 +7,7 @@
 /** `a/b` + `c` = `a/b/c`; the root joins to the bare name. */
 export function joinPath(folder: string, name: string): string {
   return folder === '' ? name : `${folder}/${name}`;
+import { intlLocale } from '../i18n/index.js';
 }
 
 /** The folder a path is in; `''` for anything at the top. */
@@ -46,7 +47,7 @@ export function formatBytes(bytes: number, language: string): string {
     value /= 1024;
     unit += 1;
   }
-  const number = new Intl.NumberFormat(language === 'ar' ? 'ar' : 'en', {
+  const number = new Intl.NumberFormat(intlLocale(language), {
     maximumFractionDigits: unit === 0 ? 0 : 1,
   }).format(value);
   // Isolated left to right, so «40 B» never reads «B 40» inside an Arabic sentence.

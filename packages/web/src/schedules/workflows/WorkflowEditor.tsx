@@ -61,6 +61,7 @@ import {
   validateDraft,
   type WorkflowRunRow,
 } from './queries.js';
+import { intlLocale } from '../../i18n/index.js';
 
 const CHECK_DELAY_MS = 350;
 
@@ -232,7 +233,7 @@ export default function WorkflowEditor({
   const mode = runId ? 'runs' : 'edit';
   const when = (at: string | null) =>
     at
-      ? new Intl.DateTimeFormat(language === 'ar' ? 'ar' : 'en', {
+      ? new Intl.DateTimeFormat(intlLocale(language), {
           dateStyle: 'medium',
           timeStyle: 'short',
         }).format(Date.parse(at))

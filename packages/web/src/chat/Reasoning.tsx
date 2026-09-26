@@ -2,7 +2,7 @@
  * What the thinking leaves behind.
  *
  * While the run is alive the reasoning is the status line above the composer
- * (`RunStatus.tsx`). When it ends, it collapses to one quiet sentence — «فكّر لمدة ١٢
+ * (`RunStatus.tsx`). When it ends, it collapses to one quiet sentence — «فكّر لمدة 12
  * ثانية» / "Thought for 12s" — with the text itself behind a disclosure, closed. It is
  * history: it must not be able to be mistaken for the reply.
  *

@@ -1,6 +1,6 @@
 /**
  * A schedule's two run options on the Schedules page (owner, 2026-09-24): «تشغيل الموعد
- * الفائت خلال ٢٤ ساعة», off by default, and «إذا كان التشغيل السابق لا يزال جاريًا»,
+ * الفائت خلال 24 ساعة», off by default, and «إذا كان التشغيل السابق لا يزال جاريًا»,
  * «انتظار انتهاء السابق» by default — set when a schedule is made, changed from its card, and not offered
  * for Hermes, whose scheduler decides both. A time waiting for the previous run says so in
  * the history.

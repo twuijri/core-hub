@@ -12,7 +12,7 @@
  */
 import { useState } from 'react';
 import { useI18n } from '../i18n/context.js';
-import type { Translator } from '../i18n/index.js';
+import { intlLocale, type Translator } from '../i18n/index.js';
 import { termKey } from '../navigation/manifest.js';
 import { AppShell } from '../shell/AppShell.js';
 import {
@@ -84,7 +84,7 @@ export function LinkedHubsScreen() {
 }
 
 function InviteCard() {
-  const { t } = useI18n();
+  const { t, language } = useI18n();
   const create = useCreatePeerInvite();
   const [invite, setInvite] = useState<PeerInvite | null>(null);
   return (
@@ -115,7 +115,7 @@ function InviteCard() {
             </div>
             <p className="text-xs text-muted">
               {t('linked_hubs.invite_expires', {
-                time: new Date(invite.expires_at).toLocaleTimeString(),
+                time: new Date(invite.expires_at).toLocaleTimeString(intlLocale(language)),
               })}
             </p>
             <Fingerprint value={invite.fingerprint} label={t('linked_hubs.own_fingerprint')} />
@@ -413,7 +413,7 @@ function eventText(t: Translator, kind: string): string {
 }
 
 function PeerLog({ peer }: { peer: Peer }) {
-  const { t } = useI18n();
+  const { t, language } = useI18n();
   const events = usePeerEvents(peer.id, true);
   if (events.isPending) return <Spinner label={t('common.loading')} />;
   if (events.isError) return <Notice tone="danger">{describePeerError(events.error, t)}</Notice>;
@@ -421,7 +421,7 @@ function PeerLog({ peer }: { peer: Peer }) {
     <ul className="flex flex-col gap-1 text-xs" data-testid="peer-log">
       {events.data.map((event) => (
         <li key={event.id} data-testid="peer-log-line" data-ok={String(event.ok)}>
-          <span className="text-muted">{new Date(event.created_at).toLocaleString()}</span>{' '}
+          <span className="text-muted">{new Date(event.created_at).toLocaleString(intlLocale(language))}</span>{' '}
           {eventText(t, event.kind)}
           {event.detail && (
             <span className="text-muted" dir="auto">

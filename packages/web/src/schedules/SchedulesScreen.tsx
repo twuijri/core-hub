@@ -61,6 +61,7 @@ import {
 import { agentMark } from '../ui/brand/marks.js';
 import { IconSchedules, IconTrash } from '../ui/icons.js';
 import { Tooltip } from '../ui/Tooltip.js';
+import { intlLocale } from '../i18n/index.js';
 
 // The canvas is loaded only when a workflow is opened.
 const WorkflowEditor = lazy(() => import('./workflows/WorkflowEditor.js'));
@@ -379,7 +380,7 @@ export function SchedulesScreen() {
 
   const when = (at: string | null) =>
     at
-      ? new Intl.DateTimeFormat(language === 'ar' ? 'ar' : 'en', {
+      ? new Intl.DateTimeFormat(intlLocale(language), {
           dateStyle: 'medium',
           timeStyle: 'short',
         }).format(Date.parse(at))

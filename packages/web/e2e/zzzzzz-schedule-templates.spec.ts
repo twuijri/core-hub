@@ -1,7 +1,7 @@
 /**
  * Common schedules and the next runs, against the real hub (DECISIONS §53).
  *
- * A person picks «أيام العمل الساعة ٩:٠٠» from «جداول شائعة»: the form's time becomes
+ * A person picks «أيام العمل الساعة 9:00» from «جداول شائعة»: the form's time becomes
  * `0 9 * * 1-5`, and the next three times shown are the hub's own calculation
  * (`schedules.previewTrigger`) in the schedule's timezone — each a weekday at 09:00 there.
  * The schedule saved from it runs next at the first of those times: the preview and the
@@ -47,7 +47,7 @@ test('a common schedule fills the time, and the next runs are the hub’s', asyn
   await expect(page).toHaveURL(/\/schedules$/);
 
   await page.getByTestId('schedule-templates').click();
-  await page.getByRole('menuitem', { name: 'أيام العمل الساعة ٩:٠٠' }).click();
+  await page.getByRole('menuitem', { name: 'أيام العمل الساعة 9:00' }).click();
   await expect(page.getByTestId('schedule-value')).toHaveValue('0 9 * * 1-5');
 
   const preview = page.getByTestId('schedule-next-runs');
@@ -89,7 +89,7 @@ test('a common schedule fills the time, and the next runs are the hub’s', asyn
 
   // "Every 15 minutes" is an interval; a time the hub cannot read is refused before saving.
   await page.getByTestId('schedule-templates').click();
-  await page.getByRole('menuitem', { name: 'كل ١٥ دقيقة' }).click();
+  await page.getByRole('menuitem', { name: 'كل 15 دقيقة' }).click();
   await expect(page.getByTestId('schedule-value')).toHaveValue('15');
   await expect(preview).toHaveAttribute('data-trigger', 'interval 15');
   await expect(preview).toHaveAttribute('data-state', 'ready');

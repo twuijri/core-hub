@@ -39,6 +39,7 @@ import { IconEdit, IconPlus, IconTrash } from '../ui/icons.js';
 import { entriesOf, fits, isList, joinEntries, lengthOf, listOf, toneOf } from './memoryEntries.js';
 import { useMemory, useSaveMemory, type MemoryItem } from './skills.js';
 import { describeToolError } from './toolErrors.js';
+import { intlLocale } from '../i18n/index.js';
 
 export function AgentMemoryScreen() {
   const { t } = useI18n();
@@ -200,7 +201,7 @@ function Document({
   );
 }
 
-/** «١٬٢٣٤ من ٢٬٢٠٠ حرف»: the list against its budget, as a line and a thin bar. */
+/** «1,234 من 2,200 حرف»: the list against its budget, as a line and a thin bar. */
 function BudgetMeter({
   count,
   limit,
@@ -212,7 +213,7 @@ function BudgetMeter({
 }) {
   const { t, language } = useI18n();
   const format = (value: number) =>
-    new Intl.NumberFormat(language === 'ar' ? 'ar' : 'en').format(value);
+    new Intl.NumberFormat(intlLocale(language)).format(value);
   const tone = toneOf(count, limit);
   return (
     <div

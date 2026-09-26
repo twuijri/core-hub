@@ -12,6 +12,7 @@ import { useI18n } from '../i18n/context.js';
 import { Button, Notice, Switch, buttonClass } from '../ui/index.js';
 import type { DesktopBridge } from './bridge-types.js';
 import { useDesktopUpdates } from './updates.js';
+import { intlLocale } from '../i18n/index.js';
 
 export function UpdatesSection({ bridge, version }: { bridge: DesktopBridge; version: string }) {
   const { t, language } = useI18n();
@@ -43,7 +44,7 @@ export function UpdatesSection({ bridge, version }: { bridge: DesktopBridge; ver
   const pending = state.pending ?? null;
   const busy = checking || state.checking === true;
   const when = last
-    ? new Intl.DateTimeFormat(language === 'ar' ? 'ar' : 'en', {
+    ? new Intl.DateTimeFormat(intlLocale(language), {
         dateStyle: 'medium',
         timeStyle: 'short',
       }).format(new Date(last.checkedAt))
