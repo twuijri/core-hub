@@ -2,7 +2,14 @@ import { readdirSync, readFileSync, statSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
-import { ConfigError, ENV_KEYS, loadConfig, pickEnv } from '../../src/app/config.js';
+import {
+  ConfigError,
+  DEFAULT_MODELS_CATALOG_URL,
+  ENV_KEYS,
+  loadConfig,
+  parseModelsCatalogUrl,
+  pickEnv,
+} from '../../src/app/config.js';
 
 const srcDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..', 'src');
 
@@ -37,6 +44,7 @@ describe('config', () => {
       'COREHUB_WEB_TERMINAL',
       'COREHUB_WEB_TERMINAL_IDLE_MINUTES',
       'COREHUB_TRUST_PROXY',
+      'COREHUB_MODELS_CATALOG_URL',
     ]);
     const picked = pickEnv({
       DATA_DIR: '/x',
@@ -140,5 +148,19 @@ describe('config', () => {
       .filter((file) => /process\.env/.test(readFileSync(file, 'utf8')))
       .map((file) => path.relative(srcDir, file));
     expect(offenders).toEqual([]);
+  });
+
+  it('reads the shared models catalogue from the repository unless told otherwise (§110)', () => {
+    expect(loadConfig({ DATA_DIR: '/tmp/x' }).modelsCatalogUrl).toBe(DEFAULT_MODELS_CATALOG_URL);
+    expect(DEFAULT_MODELS_CATALOG_URL).toBe(
+      'https://raw.githubusercontent.com/twuijri/core-hub/main/catalog/models.json',
+    );
+    expect(parseModelsCatalogUrl('off')).toBeNull();
+    expect(parseModelsCatalogUrl('https://example.test/models.json')).toBe(
+      'https://example.test/models.json',
+    );
+    expect(() => parseModelsCatalogUrl('http://example.test/models.json')).toThrow(
+      /COREHUB_MODELS_CATALOG_URL/,
+    );
   });
 });

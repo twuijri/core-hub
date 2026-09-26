@@ -69,20 +69,59 @@ export function isImageOnlyModel(
 export type ImageProtocol = 'gemini' | 'compatible' | 'chat' | 'codex';
 
 /**
- * Images through the ChatGPT subscription (decision §84). The Codex backend lists no image
+ * Images through the ChatGPT subscription (decisions §84, §110). The Codex backend lists no image
  * model; it draws when a chat model it serves is handed the `image_generation` tool with an
- * image model named in it. The hub offers that as one model of the signed-in provider, named
- * after the image model the tool is asked for and labelled by the clients as the subscription's
- * — the one model the hub adds to a provider's list, because there is no other way to choose it.
+ * image model named in it. The hub offers each image model the tool takes as a model of the
+ * signed-in provider, labelled by the clients as the subscription's — the only models the hub
+ * adds to a provider's list, because there is no other way to choose them.
  */
 export const CODEX_IMAGES = {
   /** Hermes's provider id of the ChatGPT / Codex subscription. */
   hermesProvider: 'openai-codex',
-  /** The image model the tool is asked for (`COREHUB_IMAGE_MODEL`). */
+  /** The image model chosen when none is named (`COREHUB_IMAGE_MODEL`). */
   model: 'gpt-image-2',
+  /**
+   * Every image model the tool is known to take, newest first (§110): the GPT Image 2.5 family
+   * OpenAI added in September 2026, then `gpt-image-2` and `gpt-image-1.5`. The backend has no
+   * list to ask, so this one is kept by hand — here as the fallback, and in the shared catalogue
+   * `catalog/models.json` every hub reads without an update (see {@link codexImageModels}).
+   */
+  models: [
+    'gpt-image-2.5',
+    'gpt-image-2.5-flare',
+    'gpt-image-2.5-sunburst',
+    'gpt-image-2',
+    'gpt-image-1.5',
+  ],
   /** The chat model that carries the tool call (fixed in `image_api.py`). */
   host: 'gpt-5.5',
 } as const;
+
+/** A name the image tool could take: `gpt-image-…` or `chatgpt-image-…`, nothing else. */
+const CODEX_IMAGE_NAME = /^(?:gpt-image|chatgpt-image)-[a-z0-9][a-z0-9._-]{0,63}$/i;
+
+/** Whether a model key is a name the subscription's image tool could be handed. */
+export function isCodexImageName(modelKey: string): boolean {
+  return CODEX_IMAGE_NAME.test(modelKey);
+}
+
+/**
+ * The subscription's image models, newest first: the shared catalogue's list when the hub could
+ * read it (`remote`), else {@link CODEX_IMAGES.models}; plus any names the hub's environment adds
+ * in `COREHUB_CODEX_IMAGE_MODELS` (comma-separated, put first). Names that are not image-model
+ * names are ignored.
+ */
+export function codexImageModels(
+  env: NodeJS.ProcessEnv,
+  remote?: readonly string[] | null,
+): string[] {
+  const extra = (env[`${derived.envPrefix}CODEX_IMAGE_MODELS`] ?? '')
+    .split(',')
+    .map((name) => name.trim())
+    .filter(isCodexImageName);
+  const base = remote && remote.length > 0 ? remote : CODEX_IMAGES.models;
+  return [...new Set([...extra, ...base.filter(isCodexImageName)])];
+}
 
 /**
  * The shape a provider protocol and a model are spoken to in, or null when the hub cannot
@@ -94,9 +133,11 @@ export function imageProtocolOf(
   modelKey: string,
   hermesProvider?: string | null,
 ): ImageProtocol | null {
-  // The subscription draws through its own backend, and only with the one model it offers.
+  // The subscription draws through its own backend, and only with the image models it offers.
   if (hermesProvider === CODEX_IMAGES.hermesProvider) {
-    return modelKey === CODEX_IMAGES.model ? 'codex' : null;
+    // Which names are offered is the list's business (codexImageModels); a model already on the
+    // provider is drawn with as long as it is an image-tool name.
+    return isCodexImageName(modelKey) ? 'codex' : null;
   }
   if (providerProtocol === 'google') return 'gemini';
   if (providerProtocol !== 'openai') return null;

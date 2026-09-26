@@ -3472,3 +3472,45 @@ self-installing the `.deb` (electron-updater would run `pkexec dpkg`, a root pas
 an update the person did not ask for); a check in the Store build (the Store delivers its updates; a
 second path would fight it); our own feed or server (GitHub already serves the release files,
 without a token); checking once a day as before (a fix could wait a day to be seen).
+
+## 110. A shared models catalogue every hub reads, every GPT Image model, and the newest Codex CLI
+
+The owner, testing hub 1.1.2 (2026-09-26): the chat models of his ChatGPT subscription now match
+CLI Proxy API's, but CLI Proxy API offers five image models and the hub one; "there, the moment
+ChatGPT added models they showed up; here not"; and many people do not pull a new image for
+months, so a list built into the image goes stale — models missing, or gone and failing. He wants
+one file in our repository that every hub reads, for every provider, not only ChatGPT's images.
+Observed in CLI Proxy API (MIT, router-for-me/CLIProxyAPI, read only): the Codex backend lists no
+image model, and CLI Proxy API keeps `gpt-image-1.5`, `gpt-image-2`, `gpt-image-2.5`,
+`gpt-image-2.5-flare`, `gpt-image-2.5-sunburst` in its code and hands the chosen one to the same
+`image_generation` tool §84 uses; its catalogues are refreshed at run time from its own
+repository. Proposed, owner to confirm:
+
+- **`catalog/models.json`, read by every hub** from
+  `https://raw.githubusercontent.com/twuijri/core-hub/main/catalog/models.json` at most every twelve
+  hours when a list is asked for (waiting at most five seconds), no token, no new image. It holds,
+  per provider (Hermes provider id for a signed-in provider, preset slug for a key provider):
+  `models`, `image_models` and `client_version`. It is data only: names must look like model ids,
+  image names like `gpt-image-…`, versions like X.Y.Z; the rest is ignored; a file that does not
+  parse is as if absent. `COREHUB_MODELS_CATALOG_URL` points a hub at its own copy (`https://`
+  only) or turns the reads off.
+- **Which list wins**: a list the provider answers for the account always does (§83). The
+  catalogue's `models` are offered only when the provider cannot be asked — instead of the list
+  built into Hermes's image, which ages with it — still marked `fallback` with the reason.
+- **Every image model the subscription's tool takes is offered** (amends §84's "one model"): the
+  catalogue's `image_models` for `openai-codex`, else the built-in five, newest first, each with
+  `image_output`; `COREHUB_CODEX_IMAGE_MODELS` adds names. A removed name disappears from every hub
+  on its next refresh. Drawing accepts any `gpt-image-…` model already on the provider.
+- **The subscription's list is asked as the newest Codex CLI** (amends §83): the latest `rust-v*`
+  release of github.com/openai/codex (public API) read at most every twelve hours, or the
+  catalogue's `client_version`, whichever is higher, never below `CODEX_CLIENT_VERSION`;
+  `COREHUB_CODEX_CLIENT_VERSION` still pins it.
+- The catalogue changes by pull request like any file; a test checks it parses.
+- **A weekly watcher, and every provider filled** (added 2026-09-26, proposed — owner to confirm):
+  the file holds a list per provider that has a fixed public one, read from the provider's own
+  models and deprecations pages (change record `2026-09-26-twuijri-models-catalog-providers`); a
+  test fails CI on a key a hub never looks up or an id a hub would drop. A speech preset's list is
+  of its own kind, and replaces the documented list built into the image for a provider with no
+  list endpoint (§94). `.github/workflows/models-catalog-watch.yml` compares the file every Monday
+  with CLI Proxy API's public catalogues and keeps one issue (label `models-catalog`) of ids seen
+  there and not here, and ids here no source lists any more; it never edits the file or pushes.

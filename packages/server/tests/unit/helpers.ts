@@ -60,7 +60,13 @@ export interface TestHubOptions extends Omit<BuildOptions, 'config'> {
 
 export async function testHub(env: EnvSource = {}, options: TestHubOptions = {}): Promise<TestHub> {
   const dataDir = mkdtempSync(path.join(tmpdir(), 'corehub-test-'));
-  const config = loadConfig({ DATA_DIR: dataDir, PORT: '0', ...env });
+  // The shared models catalogue lives on GitHub; the suite never reads it (§110).
+  const config = loadConfig({
+    DATA_DIR: dataDir,
+    PORT: '0',
+    COREHUB_MODELS_CATALOG_URL: 'off',
+    ...env,
+  });
   const { agents: agentOverrides, models: modelOverrides, ...build } = options;
   // The suite must say the same thing on every machine: a PATH with nothing on it, and a
   // Hermes gateway probe that always fails, so a Hermes running on the developer's own

@@ -29,6 +29,7 @@ import type {
   ChatFailureReason,
   ChatMessage,
   DiscoveredModel,
+  ListModelsResult,
   ProviderContext,
   SpeechFormat,
   SynthesizeResult,
@@ -52,8 +53,10 @@ import { isMask } from './crypto.js';
 import { parseEnv } from './dotenv.js';
 import { AUXILIARY_TASKS, isAuxiliaryKey, roleForAdapter } from './defaults.js';
 import { writeHermesImagePlugin } from './hermes-image-plugin.js';
+import type { ModelsCatalog } from './models-catalog.js';
 import {
   CODEX_IMAGES,
+  codexImageModels,
   IMAGE_ENV_NAMES,
   imageEnvOf,
   imageProtocolOf,
@@ -191,6 +194,14 @@ export interface ModelsServiceOptions {
   hermes: HermesTarget;
   /** Injected in every test; the suite never reaches the network. */
   fetchImpl?: typeof fetch;
+  /**
+   * The shared models catalogue (decision §110), or null when it cannot be read or is off:
+   * the ChatGPT subscription's image models, and the lists offered for a provider that cannot
+   * be asked for its own.
+   */
+  catalog?: () => Promise<ModelsCatalog | null>;
+  /** The hub's environment, for `COREHUB_CODEX_IMAGE_MODELS` (§110). */
+  hostEnv?: () => NodeJS.ProcessEnv;
   /**
    * How long to wait after the last write before recycling the runtime, and how long to
    * wait between polls while a run is in flight. A test sets it to 0 to stay synchronous.
@@ -1342,7 +1353,9 @@ export class ModelsService {
         const result =
           current.authKind === 'oauth'
             ? await this.signedInModels(scope, current)
-            : await adapter.listModels(this.contextOf(scope, current));
+            : await this.keyProviderModels(entry?.slug ?? null, current.kind, () =>
+                adapter.listModels(this.contextOf(scope, current)),
+              );
         const finishedAt = this.now();
         if (!result.supported) {
           this.db
@@ -1670,9 +1683,41 @@ export class ModelsService {
   }
 
   /**
+   * A key provider's own list (its adapter asks the provider). When the provider cannot be
+   * asked — or has no list endpoint and the adapter answered the documented list built into
+   * the image (§94) — the shared catalogue's list for its preset (decision §110) is offered
+   * instead, marked `fallback` with the reason, rather than no list or an ageing one. A speech
+   * row's preset (`openai-stt`, `elevenlabs-stt` …) lists its own kind of models.
+   */
+  private async keyProviderModels(
+    slug: string | null,
+    rowKind: 'llm' | 'stt' | 'tts',
+    ask: () => Promise<ListModelsResult>,
+  ): Promise<ListModelsResult> {
+    const asked = await ask();
+    const documented = asked.supported && asked.source === 'fallback';
+    if ((asked.supported && !documented) || !slug) return asked;
+    const catalog = await (this.options.catalog?.() ?? Promise.resolve(null));
+    const shared = catalog?.providers[slug]?.models ?? [];
+    if (shared.length === 0) return asked;
+    return {
+      supported: true,
+      models: shared.map((key) => ({
+        key,
+        label: key,
+        kind: rowKind === 'llm' ? ('chat' as const) : rowKind,
+      })),
+      source: 'fallback',
+      reason: asked.supported
+        ? 'the provider has no model list endpoint; this is the Core Hub models catalogue'
+        : asked.reason,
+    };
+  }
+
+  /**
    * The models of a provider signed in through Hermes (decision §83): the provider's own list
    * for the account, else Hermes's, marked `fallback`. The ChatGPT subscription also offers its
-   * one way to draw (§84), `gpt-image-2` through the chat model, for the Images role.
+   * way to draw (§84, §110), each image model its tool takes, for the Images role.
    */
   private async signedInModels(
     scope: WorkspaceScope,
@@ -1692,7 +1737,13 @@ export class ModelsService {
       return { supported: false, reason: 'Hermes is not supervised by this hub' };
     }
     try {
-      const listed = await runtime.models(entry.hermesProvider, this.signInProfileOf(scope, row));
+      const asked = await runtime.models(entry.hermesProvider, this.signInProfileOf(scope, row));
+      const catalog = await (this.options.catalog?.() ?? Promise.resolve(null));
+      // The account could not be asked: the shared catalogue's list (§110), kept current by the
+      // Core Hub team, before the one built into Hermes's image, which ages with it.
+      const shared = catalog?.providers[entry.hermesProvider]?.models ?? [];
+      const listed =
+        asked.source === 'fallback' && shared.length > 0 ? { ...asked, models: shared } : asked;
       if (listed.models.length === 0) {
         return {
           supported: false,
@@ -1704,16 +1755,20 @@ export class ModelsService {
         label: key,
         kind: 'chat' as const,
       }));
-      if (
-        entry.hermesProvider === CODEX_IMAGES.hermesProvider &&
-        !listed.models.includes(CODEX_IMAGES.model)
-      ) {
-        models.push({
-          key: CODEX_IMAGES.model,
-          label: `${CODEX_IMAGES.model} via ChatGPT (through ${CODEX_IMAGES.host})`,
-          kind: 'chat',
-          capabilities: ['image_output'],
-        });
+      if (entry.hermesProvider === CODEX_IMAGES.hermesProvider) {
+        const images = codexImageModels(
+          this.options.hostEnv?.() ?? {},
+          catalog?.providers[CODEX_IMAGES.hermesProvider]?.imageModels,
+        );
+        for (const image of images) {
+          if (listed.models.includes(image)) continue;
+          models.push({
+            key: image,
+            label: `${image} via ChatGPT (through ${CODEX_IMAGES.host})`,
+            kind: 'chat',
+            capabilities: ['image_output'],
+          });
+        }
       }
       return { supported: true, models, source: listed.source, reason: listed.reason };
     } catch (error) {

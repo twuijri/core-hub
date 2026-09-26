@@ -18,9 +18,10 @@ Protocols (COREHUB_IMAGE_PROVIDER):
               :generateContent.
   openai      `compatible` at api.openai.com.
   codex       A ChatGPT subscription signed in through Hermes: the Codex backend's
-              /responses with its `image_generation` tool (gpt-image-2), carried by a chat
-              model the subscription serves. No key is written: the token is Hermes's, asked
-              for at the moment of drawing (and refreshed by Hermes), never printed or stored.
+              /responses with its `image_generation` tool (gpt-image-2.5, gpt-image-2 …),
+              carried by a chat model the subscription serves. No key is written: the
+              token is Hermes's, asked for at the moment of drawing (and refreshed by
+              Hermes), never printed or stored.
 
 Environment, written by Core Hub (names only are ever printed, never values):
   COREHUB_IMAGE_PROVIDER   compatible | chat | gemini | openai | codex
