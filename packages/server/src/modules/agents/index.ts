@@ -68,7 +68,11 @@ import { namedHermesProfiles } from './hermes-profiles.js';
 import { RunLeases } from './hub-tools/leases.js';
 import { HUB_SERVER_NAME } from './hub-tools/block.js';
 import { registerHubToolRoutes } from './hub-tools/routes.js';
-import { HubToolsService, type HubToolsNotify } from './hub-tools/service.js';
+import {
+  HubToolsService,
+  type HubToolsHandOver,
+  type HubToolsNotify,
+} from './hub-tools/service.js';
 import { telegramGetMe } from './telegram-api.js';
 import { TELEGRAM_OPTIONS } from './telegram-settings.js';
 import {
@@ -484,6 +488,17 @@ export function migrateMemoryOfEveryProfile(
 }
 
 let hubToolsNotifyFactory: ((app: FastifyInstance) => HubToolsNotify) | null = null;
+let hubToolsHandOverFactory: ((app: FastifyInstance) => HubToolsHandOver | null) | null = null;
+
+/**
+ * `devices.fetch_file` puts what a device sent on the run's reply (§86); `sessions` owns the
+ * reply, so the composition root lends it here.
+ */
+export function registerHubToolsHandOver(
+  factory: (app: FastifyInstance) => HubToolsHandOver | null,
+): void {
+  hubToolsHandOverFactory = factory;
+}
 
 /**
  * `notifications.notify`, the one hub tool with no REST operation to go through: a notice
@@ -725,6 +740,7 @@ function contextOf(app: FastifyInstance): AgentsContext {
         .list({ id: workspaceId, slug: '', name: '', isDefault: false }, { kind: 'hermes' })
         .find((agent) => agent.slug === 'hermes')?.id ?? null,
     notify: () => hubToolsNotifyFactory?.(app) ?? null,
+    handOver: () => hubToolsHandOverFactory?.(app) ?? null,
     timezone: () => runtime.timezone(),
     refreshRuntime: () => runtime.refreshTui(),
     homeOf: (workspace) => {

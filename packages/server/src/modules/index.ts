@@ -50,6 +50,7 @@ import {
   hermesRuntimeFor,
   installedSkillNames,
   registerAgentAttachments,
+  registerHubToolsHandOver,
   registerHubToolsNotify,
   seedSkillLibraryOf,
 } from './agents/index.js';
@@ -65,6 +66,7 @@ import {
   sessionBackgroundFor,
   seatSessionsFor,
   sessionRunsFor,
+  sessionHandOverFor,
   sessionTurnsFor,
   workflowApprovalsFor,
   type ChannelSource,
@@ -209,6 +211,8 @@ registerAgentAttachments((app) => ({
  * `notifications.notify`, a tool of the hub's own (contract decision §67): `agents` serves
  * the tool, `notify` owns the inbox. A notice to the run's owner, in the run's profile.
  */
+registerHubToolsHandOver((app) => sessionHandOverFor(app));
+
 registerHubToolsNotify((app) => {
   const notifier = createNotifier(requireSqlite(app.hub.database), () => app.hub.io);
   return (input) =>

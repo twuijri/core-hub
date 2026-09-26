@@ -59,7 +59,16 @@ export interface WebSession {
 }
 
 export type PairResult =
-  { ok: true; session: WebSession; hub: string } | { ok: false; message: string };
+  | {
+      ok: true;
+      session: WebSession;
+      hub: string;
+      /** The device row the hub made (or updated) for this computer. */
+      deviceId: string;
+      /** The person's profiles, for catching up on requests (ADR 0025). */
+      profiles: string[];
+    }
+  | { ok: false; message: string };
 
 export async function claimPairing(
   pairing: PairingRequest,
@@ -90,6 +99,8 @@ export async function claimPairing(
     return {
       ok: true,
       hub: pairing.hub,
+      deviceId: data.device.id,
+      profiles: user.profiles ?? [],
       session: {
         profile: user.default_profile ?? user.profiles?.[0] ?? 'default',
         token: data.app_token,

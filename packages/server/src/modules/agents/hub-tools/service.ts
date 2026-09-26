@@ -62,6 +62,13 @@ export interface HubToolsPatch {
   groups?: Array<{ id: HubToolGroup; enabled?: boolean; allow_writes?: boolean }>;
 }
 
+/** A file a device sent, put on the reply of the run that asked for it (§86). */
+export type HubToolsHandOver = (
+  workspaceId: string,
+  runId: string,
+  attachment: { id: string; kind: string },
+) => boolean;
+
 /** Where a notice from `notifications.notify` goes; lent by `notify` through the root. */
 export type HubToolsNotify = (input: {
   workspaceId: string;
@@ -80,6 +87,8 @@ export interface HubToolsDeps {
   /** The Hermes agent's registry id (a new schedule runs it unless told otherwise). */
   hermesAgentId(workspaceId: string): string | null;
   notify(): HubToolsNotify | null;
+  /** Puts an attachment on the reply a live run is writing (`sessions`, through the root). */
+  handOver?(): HubToolsHandOver | null;
   timezone(): string;
   /** Hermes reads its MCP servers when a conversation's gateway starts: start a new one. */
   refreshRuntime(): void;
@@ -114,6 +123,13 @@ function newKey(): string {
 
 /** Switched on for the first time: every group reads, none writes (§67, proposed). */
 const DEFAULT_GROUP: HubToolGroupState = { enabled: true, allowWrites: false };
+/**
+ * The person's own computers are a step further than the hub's data: that group waits for an
+ * admin to switch it on, even where the tools already were (§86, proposed).
+ */
+const DEFAULT_OFF: ReadonlySet<HubToolGroup> = new Set(['devices']);
+const defaultGroup = (id: HubToolGroup): HubToolGroupState =>
+  DEFAULT_OFF.has(id) ? { enabled: false, allowWrites: false } : DEFAULT_GROUP;
 
 export class HubToolsService {
   private readonly base: string;
@@ -135,7 +151,7 @@ export class HubToolsService {
 
   private groupsOf(stored: Record<string, HubToolGroupState> | undefined) {
     return Object.fromEntries(
-      HUB_TOOL_GROUPS.map((id) => [id, { ...DEFAULT_GROUP, ...(stored?.[id] ?? {}) }]),
+      HUB_TOOL_GROUPS.map((id) => [id, { ...defaultGroup(id), ...(stored?.[id] ?? {}) }]),
     ) as Record<HubToolGroup, HubToolGroupState>;
   }
 
@@ -493,6 +509,11 @@ export class HubToolsService {
         });
       },
       timezone: this.deps.timezone(),
+      sessionId: lease.sessionId,
+      handOver: (attachment) =>
+        lease.kind === 'run'
+          ? (this.deps.handOver?.()?.(workspace.id, lease.runId, attachment) ?? false)
+          : false,
     };
     try {
       const result = await tool.run(context, args);

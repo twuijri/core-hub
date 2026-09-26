@@ -11,6 +11,26 @@ export interface HelperFolder {
   write: boolean;
 }
 
+/** A tool as a program described it, kept so the hub can list it without starting the program. */
+export interface ProgramToolSnapshot {
+  name: string;
+  description: string;
+  input_schema: Record<string, unknown>;
+}
+
+/** The person's choices for one program on this computer (ADR 0025). */
+export interface ProgramSettings {
+  /** The profiles (slugs) whose agents may use it; empty: it is off, the default. */
+  profiles: string[];
+  /** Values for its settings, each sealed by the OS keychain where there is one (`sealText`). */
+  values: Record<string, string>;
+  /** Its tools as it last listed them; null until it ran once. */
+  tools: ProgramToolSnapshot[] | null;
+}
+
+export const PROGRAM_LIMIT = 50;
+const PROFILE_SLUG = /^[a-z0-9][a-z0-9-]{0,62}$/;
+
 export interface HelperConfig {
   /** Off until the person turns it on (ADR 0009: optional, off by default). */
   enabled: boolean;
@@ -21,6 +41,10 @@ export interface HelperConfig {
   token: string;
   /** Kept so the address given to Hermes stays valid across launches. */
   port: number | null;
+  /** Programs on this computer, by id: each off until the person picks its profiles. */
+  programs: Record<string, ProgramSettings>;
+  /** The folder the app made for Core Hub's own files (`~/Core Hub`), while it is shared. */
+  defaultFolder: string | null;
 }
 
 export const FOLDER_LIMIT = 20;
@@ -33,7 +57,15 @@ export function randomToken(): string {
 }
 
 export function defaultHelper(makeToken: () => string): HelperConfig {
-  return { enabled: false, folders: [], allowOpen: false, token: makeToken(), port: null };
+  return {
+    enabled: false,
+    folders: [],
+    allowOpen: false,
+    token: makeToken(),
+    port: null,
+    programs: {},
+    defaultFolder: null,
+  };
 }
 
 export function parseHelper(raw: unknown, makeToken: () => string): HelperConfig {
@@ -54,6 +86,10 @@ export function parseHelper(raw: unknown, makeToken: () => string): HelperConfig
         .slice(0, FOLDER_LIMIT)
     : [];
   const port = r.port;
+  const defaultFolder =
+    typeof r.defaultFolder === 'string' && folders.some((f) => f.path === r.defaultFolder)
+      ? r.defaultFolder
+      : null;
   return {
     enabled: r.enabled === true,
     folders,
@@ -63,7 +99,60 @@ export function parseHelper(raw: unknown, makeToken: () => string): HelperConfig
       typeof port === 'number' && Number.isInteger(port) && port >= 1024 && port <= 65_535
         ? port
         : null,
+    programs: parsePrograms(r.programs),
+    defaultFolder,
   };
+}
+
+function parsePrograms(raw: unknown): Record<string, ProgramSettings> {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return {};
+  const out: Record<string, ProgramSettings> = {};
+  for (const [id, value] of Object.entries(raw as Record<string, unknown>).slice(0, PROGRAM_LIMIT)) {
+    if (!/^[a-z0-9][a-z0-9_-]{0,47}$/.test(id) || !value || typeof value !== 'object') continue;
+    const v = value as Record<string, unknown>;
+    const profiles = Array.isArray(v.profiles)
+      ? [...new Set(v.profiles.filter((p): p is string => typeof p === 'string' && PROFILE_SLUG.test(p)))]
+      : [];
+    const values: Record<string, string> = {};
+    if (v.values && typeof v.values === 'object' && !Array.isArray(v.values)) {
+      for (const [key, sealed] of Object.entries(v.values as Record<string, unknown>)) {
+        if (typeof sealed === 'string' && key.length <= 128) values[key] = sealed;
+      }
+    }
+    const tools = Array.isArray(v.tools)
+      ? v.tools
+          .filter(
+            (t): t is { name: string; description?: unknown; input_schema?: unknown } =>
+              !!t && typeof t === 'object' && typeof (t as { name?: unknown }).name === 'string',
+          )
+          .slice(0, 200)
+          .map((t) => ({
+            name: t.name.slice(0, 128),
+            description: typeof t.description === 'string' ? t.description.slice(0, 2000) : '',
+            input_schema:
+              t.input_schema && typeof t.input_schema === 'object' && !Array.isArray(t.input_schema)
+                ? (t.input_schema as Record<string, unknown>)
+                : { type: 'object' },
+          }))
+      : null;
+    out[id] = { profiles, values, tools };
+  }
+  return out;
+}
+
+/** Where the app makes its own folder: `~/Core Hub` (Windows: `%USERPROFILE%\Core Hub`). */
+export function defaultFolderPath(home: string, name: string, api: typeof path = path): string {
+  return api.join(home, name);
+}
+
+/**
+ * The helper was switched on with nothing shared: share the app's own folder, writable, as the
+ * place for Core Hub's files (owner, 2026-09-26; ADR 0022 as amended). Anything shared already
+ * is left as it is.
+ */
+export function withDefaultFolder(config: HelperConfig, folder: string): HelperConfig {
+  if (config.folders.length > 0) return config;
+  return { ...config, folders: [{ path: folder, write: true }], defaultFolder: folder };
 }
 
 export type Resolved =

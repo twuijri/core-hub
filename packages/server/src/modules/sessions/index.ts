@@ -125,6 +125,9 @@ export function createSessionsModule(options: SessionsModuleOptions = {}): HubMo
       registerSessionRoutes(app, { service, scopes, channels });
       sessionsRealtimeFor(app.hub.io)?.authorizeFollowWith(followCheck(app, scopes));
       turns.set(app, (scope, input) => serviceFor(app, app.log).oneTurn(scope, input));
+      handOvers.set(app, (workspace, runId, attachment) =>
+        serviceFor(app, app.log).engine.handOver(workspace, runId, attachment),
+      );
       runs.set(app, {
         start: (scope, input) => serviceFor(app, app.log).startTurn(scope, input),
         async cancel(scope, sessionId, runId) {
@@ -250,6 +253,20 @@ const runs = new WeakMap<FastifyInstance, SessionRuns>();
 /** `null` when this app composes no sessions module. */
 export function sessionRunsFor(app: FastifyInstance): SessionRuns | null {
   return runs.get(app) ?? null;
+}
+
+/**
+ * Put an attachment on the reply a live run is writing (§86: a file one of the person's
+ * devices sent for the run). `null` when this app composes no sessions module.
+ */
+export type RunHandOver = (
+  workspace: string,
+  runId: string,
+  attachment: { id: string; kind: string },
+) => boolean;
+const handOvers = new WeakMap<FastifyInstance, RunHandOver>();
+export function sessionHandOverFor(app: FastifyInstance): RunHandOver | null {
+  return handOvers.get(app) ?? null;
 }
 
 const backgrounds = new WeakMap<FastifyInstance, BackgroundSource>();

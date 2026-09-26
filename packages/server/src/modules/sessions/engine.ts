@@ -96,6 +96,8 @@ interface ActiveRun {
   outputs: OutputWatcher | null;
   /** The working folder as the run started it (decision §49); `null` without one. */
   changes: ChangeTracker | null;
+  /** Attachments a tool put on the reply while the run was live (a device's file, §86). */
+  handedOver: Array<{ id: string; kind: string }>;
 }
 
 export interface EngineDeps {
@@ -365,6 +367,7 @@ export class RunEngine {
       state: initialRunState(shell.id),
       outputs: exchange ? new OutputWatcher(exchange.files.outputDir).start() : null,
       changes,
+      handedOver: [],
     };
     this.active.set(runRow.id, active);
 
@@ -521,19 +524,34 @@ export class RunEngine {
    * the reply, so the person can download it. What the caps refused is named in the
    * message rather than dropped in silence.
    */
+  /**
+   * An attachment of the run's profile goes on the reply this run is writing (a file one of
+   * the person's devices sent for it, §86). False when no such run is live here.
+   */
+  handOver(workspace: string, runId: string, attachment: { id: string; kind: string }): boolean {
+    const run = this.active.get(runId);
+    if (!run || run.scope.workspace !== workspace) return false;
+    if (!run.handedOver.some((known) => known.id === attachment.id)) run.handedOver.push(attachment);
+    return true;
+  }
+
   private async collectProduced(
     run: ActiveRun,
   ): Promise<{ parts: MessagePart[]; ids: string[]; refused: ProducedRefusal[] }> {
+    const handed = run.handedOver.map((attachment) => ({
+      part: partOf(attachment),
+      id: attachment.id,
+    }));
     const empty = {
-      parts: [] as MessagePart[],
-      ids: [] as string[],
+      parts: handed.map((h) => h.part),
+      ids: handed.map((h) => h.id),
       refused: [] as ProducedRefusal[],
     };
     if (!run.outputs) return empty;
     const collected = run.outputs.collect();
     if (collected.files.length === 0 && collected.refused.length === 0) return empty;
-    const parts: MessagePart[] = [];
-    const ids: string[] = [];
+    const parts: MessagePart[] = [...empty.parts];
+    const ids: string[] = [...empty.ids];
     for (const file of collected.files) {
       try {
         const attachment = await this.deps.ports.attachments.capture(
@@ -541,13 +559,7 @@ export class RunEngine {
           file,
           run.state.messageId,
         );
-        parts.push(
-          attachment.kind === 'image'
-            ? { type: 'image', attachmentId: attachment.id }
-            : attachment.kind === 'audio'
-              ? { type: 'audio', attachmentId: attachment.id }
-              : { type: 'file', attachmentId: attachment.id },
-        );
+        parts.push(partOf(attachment));
         ids.push(attachment.id);
       } catch (error) {
         this.deps.log.warn(
@@ -1247,4 +1259,13 @@ export async function* withTimeout(
     if (result.done) return;
     yield result.value;
   }
+}
+
+/** How an attachment sits in a message: a picture and a sound are drawn, anything else named. */
+function partOf(attachment: { id: string; kind: string }): MessagePart {
+  return attachment.kind === 'image'
+    ? { type: 'image', attachmentId: attachment.id }
+    : attachment.kind === 'audio'
+      ? { type: 'audio', attachmentId: attachment.id }
+      : { type: 'file', attachmentId: attachment.id };
 }

@@ -37,10 +37,17 @@ import { loadOpenApiDocument } from '@corehub/contracts';
 import { createContractIndex } from '../../lib/contract.js';
 import { clampLimit, decodeCursor, encodeCursor } from '../../lib/pagination.js';
 import { requireSqlite } from '../../lib/db.js';
-import { HubError } from '../../lib/errors.js';
+import { HubError, notFound } from '../../lib/errors.js';
 import { defineModule } from '../../lib/module.js';
 import { defineRoute } from '../../lib/route.js';
-import { requireRole, requireUser, requireWorkspace } from '../auth/index.js';
+import {
+  canEnter,
+  findUser,
+  requireRole,
+  requireUser,
+  requireWorkspace,
+} from '../auth/index.js';
+import { StreamTickets } from './streams.js';
 import { MAX_UPLOAD_BYTES } from './limits.js';
 import { sanitiseFilename } from './media.js';
 import { KnowledgeItems, type ItemKind } from './items.js';
@@ -379,6 +386,56 @@ export const knowledgeModule = defineModule({
           request.headers.range,
         );
         return reply.status(handle.status).headers(handle.headers).send(handle.stream);
+      },
+    });
+
+    // A media element cannot send the bearer: it plays from a one-attachment ticket (§87).
+    const tickets = new StreamTickets();
+    defineRoute(app, deps, {
+      operationId: 'sessions.createAttachmentStream',
+      status: 201,
+      handler: (request, { params }) => {
+        const scope = scopeOf(request);
+        const row = knowledge().require(scope, String(params.attachment_id));
+        const { ticket, expiresAt } = tickets.issue({
+          attachmentId: row.id,
+          workspace: scope.workspace,
+          profile: scope.profile,
+          userId: scope.userId,
+        });
+        return {
+          url: `/api/v1/attachment-streams/${ticket}`,
+          expires_at: new Date(expiresAt).toISOString().replace(/\.\d{3}Z$/, 'Z'),
+        };
+      },
+    });
+
+    defineRoute(app, deps, {
+      operationId: 'sessions.streamAttachment',
+      handler: (request, { params }, reply: FastifyReply) => {
+        const found = tickets.read(String(params.ticket));
+        const gone = notFound({ resource: 'attachment_stream' });
+        if (!found) throw gone;
+        // Whoever asked for it must still be able to read it.
+        const db = requireSqlite(app.hub.database);
+        const person = findUser(db, found.userId);
+        if (
+          !person ||
+          person.status !== 'active' ||
+          !canEnter(db, { id: person.id, role: person.role }, found.workspace)
+        ) {
+          throw gone;
+        }
+        const handle = knowledge().download(
+          { workspace: found.workspace, profile: found.profile, userId: found.userId },
+          found.attachmentId,
+          request.headers.range,
+        );
+        // The ticket is in the path: never let a proxy or the browser keep it.
+        return reply
+          .status(handle.status)
+          .headers({ ...handle.headers, 'cache-control': 'private, no-store' })
+          .send(handle.stream);
       },
     });
 
