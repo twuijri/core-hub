@@ -152,6 +152,38 @@ export const devicesModule = createDevicesModule({
   userLanguage: (app, userId) =>
     findUser(requireSqlite(app.hub.database), userId)?.locale === 'en' ? 'en' : 'ar',
   sessionLive: (db, tokenId, now) => tokenLive(db, tokenId, now),
+  // Linked hubs (ADR 0026): every agent of every profile for the share list, and the peer
+  // guest's one question — the runner's tool-free one-shot, never a run with tools.
+  peerAgents: {
+    list(app, language) {
+      const db = requireSqlite(app.hub.database);
+      const service = agentsServiceFor(app);
+      return listWorkspacesFor(db, { id: '', role: 'owner' }).flatMap((row) =>
+        service
+          .list({ id: row.id, slug: row.slug, name: row.name, isDefault: row.isDefault }, { language })
+          .map((agent) => ({
+            workspaceId: row.id,
+            profile: row.slug,
+            agentId: agent.id,
+            name: agent.name,
+          })),
+      );
+    },
+    async ask(app, input) {
+      const runner = agentRunner(app);
+      if (!runner.ask) return null;
+      return runner.ask({
+        workspace: input.workspaceId,
+        agentId: input.agentId,
+        sessionId: `peer-guest-${input.agentId}`,
+        prompt: input.prompt,
+        model: null,
+        provider: null,
+        timeoutMs: input.timeoutMs,
+        maxTokens: input.maxTokens,
+      });
+    },
+  },
 });
 
 /** A notice that passed the person's push switch and quiet hours goes to their devices. */

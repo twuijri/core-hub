@@ -218,6 +218,13 @@
       "when": 1790384929148,
       "tag": "0030_task_stuck",
       "breakpoints": true
+    },
+    {
+      "idx": 31,
+      "version": "6",
+      "when": 1790391764380,
+      "tag": "0031_presets_peers",
+      "breakpoints": true
     }
   ]
 }

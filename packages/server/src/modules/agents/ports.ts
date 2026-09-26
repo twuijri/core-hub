@@ -331,6 +331,8 @@ export interface RunnerAskRequest {
   model: string | null;
   provider: string | null;
   timeoutMs: number;
+  /** The answer's length cap; a title's is the default (`ASK_MAX_TOKENS`). */
+  maxTokens?: number;
 }
 
 /**

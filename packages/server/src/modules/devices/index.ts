@@ -13,7 +13,7 @@
 import { and, asc, eq, gt, inArray, isNull, ne, or } from 'drizzle-orm';
 import type { FastifyInstance, FastifyRequest } from 'fastify';
 import type { Server as SocketServer } from 'socket.io';
-import { loadOpenApiDocument } from '@corehub/contracts';
+import { loadOpenApiDocument, serverBasePath } from '@corehub/contracts';
 import { createContractIndex } from '../../lib/contract.js';
 import { requireSqlite, type ModuleDb } from '../../lib/db.js';
 import { HubError, conflict, notFound } from '../../lib/errors.js';
@@ -43,6 +43,7 @@ import type { Language } from '../../i18n/index.js';
 import type { PushMessage, PushProvider } from './senders.js';
 import type { RelayProof } from './relay.js';
 import { changeRelay, readRelay, type RelayChange } from './outside.js';
+import { registerPeerRoutes, type PeerAgentsPort } from './peers.js';
 import {
   devices,
   type DeviceHelperReport,
@@ -111,6 +112,8 @@ export interface DevicesPorts {
    * not expired, its person active (auth)? A push registration lives only as long as it.
    */
   sessionLive(db: ModuleDb, tokenId: string, now: number): boolean;
+  /** Linked hubs (ADR 0026): the agents a peer may be shown, and asking one without tools. */
+  peerAgents: PeerAgentsPort;
 }
 
 /** Test seams: fakes for the push services, and permission to call 127.0.0.1. */
@@ -125,6 +128,12 @@ export interface DevicesOverrides {
   now?: () => number;
   /** How long `getRelay` / `setRelay` wait for the desktop app (`outside.ts`). */
   relayHostTimeoutMs?: number;
+  /** The `fetch` linked-hub calls go through: the two-hub test routes them in process. */
+  peerFetch?: typeof fetch;
+  /** The peer guest's answer, in place of the agent's (the two-hub test has no model). */
+  peerAsk?: (input: { workspaceId: string; agentId: string; prompt: string }) => Promise<
+    string | null
+  >;
 }
 let overrides: DevicesOverrides = {};
 export function overrideDevices(next: DevicesOverrides): void {
@@ -1043,6 +1052,29 @@ export function createDevicesModule(lent: DevicesPorts): HubModule {
             body as { enabled?: boolean; private_push?: boolean },
           ),
       });
+
+      // ---------------------------------------------------------------- linked hubs (ADR 0026)
+
+      registerPeerRoutes(
+        app,
+        deps,
+        {
+          db: (hub) => requireSqlite(hub.hub.database),
+          sealer: (hub) => lent.sealer(hub),
+          agents: {
+            list: (hub, language) => lent.peerAgents.list(hub, language),
+            ask: (hub, input) =>
+              overrides.peerAsk ? overrides.peerAsk(input) : lent.peerAgents.ask(hub, input),
+          },
+          now,
+          fetch: () => overrides.peerFetch ?? fetch,
+          base: serverBasePath(document),
+        },
+        (request) => {
+          const principal = principalOf(request);
+          return { id: principal.user.id, username: principal.user.username };
+        },
+      );
 
       // ---------------------------------------------------------------- way in from outside
 
