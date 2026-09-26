@@ -1020,7 +1020,7 @@ function SessionRow({
             className="session-link"
           >
             <span className="session-title-row">
-              {agent?.known && <AgentFace identity={agent} size="xs" testId="session-agent" />}
+              {agent?.known && <AgentFace identity={agent} size="xs" testId="session-row-agent" />}
               {session.pinned && <IconPin size={12} label={t('sessions.pinned')} />}
               {session.status !== 'idle' && (
                 <Badge tone="accent" dot testId="session-live">
