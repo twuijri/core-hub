@@ -86,7 +86,7 @@ $ pnpm --filter @corehub/web typecheck       (بلا أخطاء)
 
 $ vitest run --project unit src/modules/agents/presets.test.ts
  Test Files  1 passed (1)
-      Tests  4 passed (4)
+      Tests  5 passed (5)
 
 $ vitest run --project unit src/modules/devices/peers.test.ts
  Test Files  1 passed (1)

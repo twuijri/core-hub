@@ -94,6 +94,27 @@ export function withoutSecrets(
 
 const enc = encodeURIComponent;
 
+/** The chat model, its fallbacks and the agent's own model, as in effect now. */
+async function readModel(
+  call: PresetCall,
+  agentBody: Record<string, unknown>,
+): Promise<AgentPresetModelBody | null> {
+  const defaults = await call('GET', '/models/defaults');
+  if (defaults.status !== 200 || !isObject(defaults.body)) return null;
+  const body = defaults.body;
+  const inherited = Array.isArray(body.inherited) && body.inherited.includes('default');
+  return {
+    // An inherited chat model is saved as "inherit", not as the default profile's choice.
+    default: inherited ? null : modelRef(body.default),
+    fallbacks: inherited
+      ? []
+      : (Array.isArray(body.fallbacks) ? body.fallbacks : [])
+          .map(modelRef)
+          .filter((ref): ref is ModelRef => ref !== null),
+    agent: modelRef(agentBody.default_model),
+  };
+}
+
 /** Reads the agent's settings as they are now. A part the agent does not have is `null`. */
 export async function capturePreset(
   call: PresetCall,
@@ -103,22 +124,7 @@ export async function capturePreset(
   if (agent.status === 404) throw notFound({ resource: 'agent', id: agentId });
   const agentBody = isObject(agent.body) ? agent.body : {};
 
-  let model: AgentPresetModelBody | null = null;
-  const defaults = await call('GET', '/models/defaults');
-  if (defaults.status === 200 && isObject(defaults.body)) {
-    const body = defaults.body;
-    const inherited = Array.isArray(body.inherited) && body.inherited.includes('default');
-    model = {
-      // An inherited chat model is saved as "inherit", not as the default profile's choice.
-      default: inherited ? null : modelRef(body.default),
-      fallbacks: inherited
-        ? []
-        : (Array.isArray(body.fallbacks) ? body.fallbacks : [])
-            .map(modelRef)
-            .filter((ref): ref is ModelRef => ref !== null),
-      agent: modelRef(agentBody.default_model),
-    };
-  }
+  const model = await readModel(call, agentBody);
 
   let skills: Record<string, boolean> | null = null;
   if (agentBody.kind === 'hermes') {
@@ -192,14 +198,25 @@ export async function applyPreset(
   if (content.model) {
     const before = result.skipped.length;
     const { default: chat, fallbacks, agent } = content.model;
-    const defaults = await call(
-      'PUT',
-      '/models/defaults',
-      chat ? { default: chat, fallbacks } : { default: null },
-    );
-    if (!ok(defaults.status)) skip('model', 'default', codeOf(defaults));
-    const patched = await call('PATCH', `/agents/${enc(agentId)}`, { default_model: agent });
-    if (!ok(patched.status)) skip('model', 'agent', codeOf(patched));
+    // Read what is in effect now, and write only what differs.
+    const current = await call('GET', `/agents/${enc(agentId)}`);
+    const now = isObject(current.body) ? await readModel(call, current.body) : null;
+    if (
+      !now ||
+      !same(now.default, chat) ||
+      !same(chat ? now.fallbacks : [], chat ? fallbacks : [])
+    ) {
+      const defaults = await call(
+        'PUT',
+        '/models/defaults',
+        chat ? { default: chat, fallbacks } : { default: null },
+      );
+      if (!ok(defaults.status)) skip('model', 'default', codeOf(defaults));
+    }
+    if (!now || !same(now.agent, agent)) {
+      const patched = await call('PATCH', `/agents/${enc(agentId)}`, { default_model: agent });
+      if (!ok(patched.status)) skip('model', 'agent', codeOf(patched));
+    }
     if (result.skipped.length === before) result.applied.push('model');
   }
 

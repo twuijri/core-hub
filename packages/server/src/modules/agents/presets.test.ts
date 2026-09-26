@@ -9,7 +9,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { loadOpenApiDocument } from '@corehub/contracts';
 import { authed, signedInHub, type TestHub } from '../../../tests/unit/helpers.js';
 import { ajvFor } from '../../../tests/contract/schema.js';
-import { carriesSecret, withoutSecrets } from './presets.js';
+import { applyPreset, carriesSecret, withoutSecrets, type PresetCall } from './presets.js';
 
 type Hub = TestHub & { token: string };
 let hub: Hub | null = null;
@@ -71,6 +71,49 @@ describe('the secret gate', () => {
         { key: 'agent', fields: [{ key: 'max_turns', kind: 'integer', value: null }] },
       ]),
     ).toEqual({ network: { no_proxy: 'localhost' }, agent: { max_turns: null } });
+  });
+});
+
+describe('applying', () => {
+  it('writes nothing when the agent already matches, and never a secret from an old preset', async () => {
+    const writes: Array<{ method: string; path: string; body: unknown }> = [];
+    const model = { provider_id: '01J8QK3ZR2W7M5N4P6T8V9X0PV', model: 'm1' };
+    const call: PresetCall = async (method, path, body) => {
+      if (method !== 'GET') {
+        writes.push({ method, path, body });
+        return { status: 200, body: { restart_job_id: null } };
+      }
+      if (path === '/models/defaults') {
+        return { status: 200, body: { default: model, fallbacks: [], inherited: [] } };
+      }
+      if (path === '/agents/A')
+        return { status: 200, body: { kind: 'hermes', default_model: null } };
+      if (path === '/agents/A/settings') {
+        return {
+          status: 200,
+          body: {
+            sections: [
+              {
+                key: 'network',
+                fields: [
+                  { key: 'https_proxy', kind: 'text', value: null },
+                  { key: 'no_proxy', kind: 'text', value: 'localhost' },
+                ],
+              },
+            ],
+          },
+        };
+      }
+      return { status: 404, body: { code: 'not_found' } };
+    };
+    const outcome = await applyPreset(call, 'A', {
+      model: { default: model, fallbacks: [], agent: null },
+      skills: null,
+      mcp_servers: null,
+      settings: { network: { https_proxy: SECRET_PROXY, no_proxy: 'localhost' } },
+    });
+    expect(writes).toEqual([]);
+    expect(outcome.applied).toEqual(['model', 'settings']);
   });
 });
 
