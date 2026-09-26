@@ -51,7 +51,12 @@ describe.skipIf(!doc)('contract: speech', () => {
   async function call(
     operationId: string,
     expectedStatus: number,
-    init: { body?: unknown; bytes?: boolean; as?: HubClient } = {},
+    init: {
+      body?: unknown;
+      bytes?: boolean;
+      as?: HubClient;
+      query?: Record<string, string>;
+    } = {},
   ): Promise<{ data: unknown; headers: Headers | null }> {
     const op = ops.get(operationId);
     if (!op) throw new Error(`unknown operation ${operationId}`);
@@ -61,6 +66,7 @@ describe.skipIf(!doc)('contract: speech', () => {
     try {
       const res = await (init.as ?? client).raw(op.method as ClientMethod, op.path, {
         ...(init.body !== undefined ? { body: init.body } : {}),
+        ...(init.query ? { query: init.query } : {}),
         ...(init.bytes ? { responseKind: 'bytes' as const } : {}),
       });
       status = res.status;
@@ -152,5 +158,37 @@ describe.skipIf(!doc)('contract: speech', () => {
     });
     expect(new Uint8Array(spoken.data as ArrayBuffer)).toEqual(new Uint8Array([0x49, 0x44, 0x33]));
     expect(spoken.headers?.get('x-speech-provider')).toBe('openai-tts');
+  });
+
+  it('voices: the documented list, labelled, narrowed by model; a preview names its model (§87)', async () => {
+    const { data: speech } = await call('models.getSpeech', 200);
+    const tts = (
+      speech as { tts: { providers: { id: string; slug: string }[] } }
+    ).tts.providers.find((row) => row.slug === 'openai-tts')!;
+    const { data } = await call('models.listVoices', 200, {
+      query: { provider_id: tts.id, model: 'tts-1' },
+    });
+    const listed = data as { source: string; items: { id: string }[] };
+    expect(listed.source).toBe('documented');
+    expect(listed.items.map((voice) => voice.id)).toContain('alloy');
+    expect(listed.items.map((voice) => voice.id)).not.toContain('marin');
+    await call('models.listVoices', 400, { query: { provider_id: 'not-a-ulid' } });
+
+    const preview = await call('models.synthesize', 200, {
+      body: { text: 'Hello', provider_id: tts.id, model: 'tts-1', voice: 'nova' },
+      bytes: true,
+    });
+    expect(preview.headers?.get('x-speech-provider')).toBe('openai-tts');
+  });
+
+  it('presets: an address example and the key a family already holds (§87)', async () => {
+    const { data } = await call('models.listProviderPresets', 200);
+    const items = (
+      data as { items: { id: string; base_url_example?: string | null; key_on_file?: string[] }[] }
+    ).items;
+    expect(items.find((item) => item.id === 'azure-stt')?.base_url_example).toContain('<region>');
+    // OpenAI was added for every profile above: its speech rows could be added keyless.
+    expect(items.find((item) => item.id === 'openai-tts')?.key_on_file).toEqual(['all']);
+    expect(items.find((item) => item.id === 'deepgram-stt')?.key_on_file).toEqual([]);
   });
 });

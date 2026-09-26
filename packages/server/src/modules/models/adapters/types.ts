@@ -71,22 +71,45 @@ export interface DiscoveredModel {
 }
 
 export type ListModelsResult =
-  { supported: true; models: DiscoveredModel[] } | { supported: false; reason: string };
+  | {
+      supported: true;
+      models: DiscoveredModel[];
+      /**
+       * `fallback` when the list is not the provider's answer (decision §83) — for a speech
+       * provider with no model endpoint, its documented list (§87), with `reason` saying so.
+       */
+      source?: 'provider' | 'fallback';
+      reason?: string;
+    }
+  | { supported: false; reason: string };
 
 export interface DiscoveredVoice {
   id: string;
   name: string;
   language: string | null;
   gender: 'female' | 'male' | 'neutral' | null;
+  /** The provider's own short words about the voice (accent, style), when it gives any. */
+  description?: string | null;
+  /** The models this voice speaks with; absent is every model of the provider. */
+  models?: readonly string[] | null;
 }
 
+/**
+ * Where a voice list came from (DECISIONS §87): the provider's own endpoint, or — for a
+ * provider that has none — its public documentation (`speech/documented.ts`).
+ */
+export type VoiceSource = 'provider' | 'documented';
+
 export type ListVoicesResult =
-  { supported: true; voices: DiscoveredVoice[] } | { supported: false; reason: string };
+  | { supported: true; voices: DiscoveredVoice[]; source?: VoiceSource }
+  | { supported: false; reason: string };
 
 export interface SynthesizeRequest {
   text: string;
   language: string | null;
   voice: string | null;
+  /** Overrides the row's model for this request (the Models page's preview). */
+  model?: string | null;
 }
 
 export type SynthesizeResult =

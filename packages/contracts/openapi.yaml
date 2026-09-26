@@ -12671,6 +12671,14 @@ paths:
       operationId: models.listVoices
       tags: [models]
       summary: Voices a TTS provider offers (may be empty for providers that take free-form voice ids)
+      description: >-
+        The provider's own list whenever it has an endpoint for one (`source: provider`: ElevenLabs,
+        Deepgram, Azure). A provider with no such endpoint answers the list its public
+        documentation gives (`source: documented`: Groq, OpenAI), kept in one data file of the hub
+        and labelled as such by clients. `source: none` is a provider with neither: the voice is
+        typed by hand. `model` narrows the list to the voices that model speaks with (Groq's
+        English and Arabic models have different voices; Deepgram's `aura-2` and `aura`). A
+        person may always type a voice id the list does not show (DECISIONS §87).
       parameters:
         - $ref: '#/components/parameters/Profile'
         - name: provider_id
@@ -12678,6 +12686,13 @@ paths:
           required: true
           schema:
             $ref: '#/components/schemas/Ulid'
+        - name: model
+          in: query
+          required: false
+          description: Only the voices this model speaks with. Omitted, every voice of the provider.
+          schema:
+            type: string
+            maxLength: 200
       x-rt-events: []
       responses:
         '200':
@@ -12686,18 +12701,23 @@ paths:
             application/json:
               schema:
                 type: object
-                required: [items]
+                required: [items, source]
                 properties:
                   items:
                     type: array
                     items:
                       $ref: '#/components/schemas/Voice'
+                  source:
+                    $ref: '#/components/schemas/VoiceListSource'
               example:
+                source: documented
                 items:
-                  - id: Rachel
-                    name: Rachel
-                    language: en-US
+                  - id: noura
+                    name: Noura
+                    language: ar-SA
                     gender: female
+                    description: Saudi dialect
+                    models: [canopylabs/orpheus-arabic-saudi]
         '400':
           $ref: '#/components/responses/BadRequest'
         '401':
@@ -12777,7 +12797,11 @@ paths:
       operationId: models.synthesize
       tags: [models]
       summary: Synthesize speech with the active TTS provider
-      description: Returns audio bytes; `X-Speech-Provider` says which provider actually spoke. Text over 2 000 characters is `413`.
+      description: >-
+        Returns audio bytes; `X-Speech-Provider` says which provider actually spoke. Text over
+        2 000 characters is `413`. A provider that takes less per request (Groq's Orpheus: 200
+        characters) is sent the text in parts split at sentence, then word, boundaries under its
+        limit, and the parts' audio comes back joined in order as one file (DECISIONS §87).
       parameters:
         - $ref: '#/components/parameters/Profile'
       requestBody:
@@ -22687,6 +22711,20 @@ components:
             adding it, `models.startProviderSignIn` shows a code and a link (decision §55).
             Only the providers whose sign-in the agent runtime can complete on the hub's behalf
             say `true`; `key` is then `optional` and a client does not ask for one.
+        base_url_example:
+          type: [string, 'null']
+          description: >-
+            An example of the address to type when `base_url` is null — the shape, never a
+            value the hub would use (Azure Speech: `https://<region>.api.cognitive.microsoft.com`).
+        key_on_file:
+          type: array
+          items:
+            type: string
+            enum: [all, profile]
+          description: >-
+            The scopes (`ProviderCreate.scope`) in which a provider of the same credential
+            family already holds a key. Added there, this provider uses that key and none need
+            be typed: Groq added for chat also speaks (DECISIONS §87).
     ProviderHost:
       type: object
       required: [containerized, loopback_alias]
@@ -23079,9 +23117,24 @@ components:
           type: string
         language:
           type: [string, 'null']
+          description: BCP-47 tag (`ar-SA`, `en-US`) or a bare language (`ar`), as the provider names it.
         gender:
           type: [string, 'null']
           enum: [female, male, neutral, null]
+        description:
+          type: [string, 'null']
+          description: The provider's own short words about the voice (accent, style), when it gives any.
+        models:
+          type: [array, 'null']
+          items:
+            type: string
+          description: The models this voice speaks with; null or absent is every model of the provider.
+    VoiceListSource:
+      type: string
+      enum: [provider, documented, none]
+      description: >-
+        Where a voice list came from: the provider's own endpoint, the provider's public
+        documentation (it has no list endpoint), or nowhere (type the voice id).
     Transcription:
       type: object
       required: [text, language, duration_ms, provider_id, model]
@@ -23110,6 +23163,12 @@ components:
         voice:
           type: [string, 'null']
           description: Overrides the provider's default voice for this request.
+        model:
+          type: [string, 'null']
+          maxLength: 200
+          description: >-
+            Overrides the provider's model for this request — how the Models page previews a
+            model and voice before saving them.
         provider_id:
           oneOf:
             - $ref: '#/components/schemas/Ulid'

@@ -108,6 +108,24 @@ export interface PropagationState {
    * absent leaves `config.yaml`'s image keys alone.
    */
   hermesImage?: boolean;
+  /**
+   * The profile's speech-to-text and text-to-speech choices in Hermes's words (DECISIONS §87),
+   * for Hermes's own voice tools (a voice note on a channel, a spoken reply). Null for a side
+   * whose provider Hermes has no backend for, or that has no choice: that side of Hermes's
+   * `config.yaml` is then left as it is. Absent leaves both alone.
+   */
+  hermesSpeech?: { stt: HermesSpeechChoice | null; tts: HermesSpeechChoice | null };
+}
+
+/**
+ * One side of Hermes's voice, as its `config.yaml` says it: `<side>.provider`, and the keys of
+ * the provider's block (`stt.groq.model`, `tts.elevenlabs.voice_id`, …). A null value removes
+ * the key, so a language taken away is Hermes detecting it again.
+ */
+export interface HermesSpeechChoice {
+  provider: string;
+  section: string;
+  values: Record<string, string | null>;
 }
 
 // --------------------------------------------------------------- process agents
@@ -255,11 +273,14 @@ export function writeHermesProviders(
   routes: readonly HermesProviderRoute[],
   fallbacks: readonly HermesModelChoice[] | null = null,
   image: boolean | null = null,
+  speech: PropagationState['hermesSpeech'] | null = null,
 ): HermesWriteResult {
   return editHermesConfig(home, (document, result) => {
     applyProviders(document, routes, result);
     applyFallbacks(document, fallbacks, result);
     applyImage(document, image, result);
+    applySpeech(document, 'stt', speech?.stt ?? null, result);
+    applySpeech(document, 'tts', speech?.tts ?? null, result);
   });
 }
 
@@ -285,6 +306,8 @@ export function writeHermesConfiguration(home: string, state: PropagationState):
     applyModel(document, state.hermesModel, result);
     applyFallbacks(document, state.hermesFallbacks ?? null, result);
     applyImage(document, state.hermesImage ?? null, result);
+    applySpeech(document, 'stt', state.hermesSpeech?.stt ?? null, result);
+    applySpeech(document, 'tts', state.hermesSpeech?.tts ?? null, result);
   });
   return { env, config, dirty: env.dirty || config.dirty };
 }
@@ -301,6 +324,8 @@ export function writeHermesRoute(home: string, state: PropagationState): HermesW
     applyModel(document, state.hermesModel, result);
     applyFallbacks(document, state.hermesFallbacks ?? null, result);
     applyImage(document, state.hermesImage ?? null, result);
+    applySpeech(document, 'stt', state.hermesSpeech?.stt ?? null, result);
+    applySpeech(document, 'tts', state.hermesSpeech?.tts ?? null, result);
   });
 }
 
@@ -461,6 +486,54 @@ function applyImage(
     const after = document.get('plugins');
     if (YAML.isMap(after) && after.items.length === 0) document.delete('plugins');
     result.removed.push('plugins.enabled');
+  }
+}
+
+/**
+ * One side of Hermes's voice (DECISIONS §87): `<side>.provider` and the keys of that provider's
+ * block, written one key at a time so everything else under `stt:` / `tts:` — `stt.enabled`
+ * from the channel settings, another provider's block somebody wrote — survives. Read from
+ * Hermes's MIT source (`tools/transcription_tools.py` §_get_provider, `tools/tts_tool.py`
+ * §_get_provider). `null` leaves the side alone.
+ */
+function applySpeech(
+  document: YAML.Document,
+  side: 'stt' | 'tts',
+  choice: HermesSpeechChoice | null,
+  result: HermesWriteResult,
+): void {
+  if (!choice) return;
+  const block = document.get(side);
+  if (block !== undefined && block !== null && !YAML.isMap(block)) {
+    throw new Error(`config.yaml: \`${side}\` is not a mapping; refusing to rewrite it`);
+  }
+  if (!YAML.isMap(block)) document.set(side, new YAML.YAMLMap());
+  if (document.getIn([side, 'provider']) !== choice.provider) {
+    document.setIn([side, 'provider'], choice.provider);
+    result.changed.push(`${side}.provider`);
+  }
+  const section = document.getIn([side, choice.section]);
+  if (section !== undefined && section !== null && !YAML.isMap(section)) {
+    throw new Error(
+      `config.yaml: \`${side}.${choice.section}\` is not a mapping; refusing to rewrite it`,
+    );
+  }
+  for (const [key, value] of Object.entries(choice.values)) {
+    const path = [side, choice.section, key];
+    if (value === null) {
+      if (document.hasIn(path)) {
+        document.deleteIn(path);
+        result.removed.push(path.join('.'));
+      }
+      continue;
+    }
+    if (document.getIn(path) !== value) {
+      if (!YAML.isMap(document.getIn([side, choice.section]))) {
+        document.setIn([side, choice.section], new YAML.YAMLMap());
+      }
+      document.setIn(path, value);
+      result.changed.push(path.join('.'));
+    }
   }
 }
 
