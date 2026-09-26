@@ -47,9 +47,9 @@ function checkMsix(dir, version) {
   has('<Resource Language="en-US" />', 'English');
   has('<Resource Language="ar" />', 'Arabic');
   has('<uap:Protocol Name="corehub">', 'the corehub:// protocol');
-  has('Executable="app\\corehub.exe"', 'app\\corehub.exe as the executable');
+  has('Executable="app\\Core Hub.exe"', 'app\\Core Hub.exe as the executable');
   has('<rescap:Capability Name="runFullTrust"/>', 'runFullTrust');
-  expect(existsSync(path.join(dir, 'app', 'corehub.exe')), 'app\\corehub.exe is missing');
+  expect(existsSync(path.join(dir, 'app', 'Core Hub.exe')), 'app\\Core Hub.exe is missing');
   expect(
     existsSync(path.join(dir, 'app', 'resources', 'hub', 'dist', 'app', 'hub.mjs')),
     'the embedded hub is missing',

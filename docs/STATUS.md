@@ -255,8 +255,12 @@ its approval.
   release** (`publish-release.yml`): the `.exe`, `.msix`, notarised dmg, AppImage, `.deb` and the
   signed Android APK, marked latest — not yet run on a real tag. The Store upload is by hand
   (docs/RELEASING.md). Since 2026-09-26 the macOS app is **`Core Hub.app`** in a DMG window
-  "Core Hub X.Y.Z" (1.1.1 was `corehub.app`); the Windows and Linux binaries stay `corehub`, and
-  the data folder stays `<app data>/Core Hub`, pinned by name. Not yet: voice (the page says so).
+  "Core Hub X.Y.Z" (1.1.1 was `corehub.app`), Windows installs **`Core Hub.exe`** in a `Core Hub`
+  folder (an upgrade from 1.1.1's `corehub\corehub.exe` moves there and re-points `corehub://`,
+  and the app re-points a person's own shortcuts to the old .exe), and Linux runs
+  `/opt/Core Hub/core-hub` (the `.deb` package, `corehub.desktop` and the window class stay
+  `corehub`); the data folder stays `<app data>/Core Hub`, pinned by name. Not yet: voice (the
+  page says so).
   Tests:
   unit tests of the main process logic, the loopback proxy, Hermes detection per platform, the
   installer runner, the hub supervisor, the helper (folder rule with links, tools, the MCP

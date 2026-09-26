@@ -69,8 +69,8 @@ try {
       $health = $null
     }
   }
-  $running = @(Get-Process -Name corehub -ErrorAction SilentlyContinue)
-  Write-Output "corehub processes: $($running.Count)"
+  $running = @(Get-Process -Name 'Core Hub' -ErrorAction SilentlyContinue)
+  Write-Output "Core Hub processes: $($running.Count)"
   if (-not $health) {
     Get-ChildItem -Recurse -ErrorAction SilentlyContinue $real, $packageRoot | Select-Object FullName | Format-Table -AutoSize | Out-String -Width 300 | Write-Output
     throw "the MSIX app's local hub did not answer on http://127.0.0.1:$port/api/v1/health"
@@ -88,7 +88,7 @@ try {
   $where = if ($inPrivate) { "the package's own folder (``$($inPrivate[0].FullName.Replace($env:LOCALAPPDATA, '%LOCALAPPDATA%'))``)" } else { 'the real `%APPDATA%\Core Hub\local-hub`' }
   $summary += "| Hub data | $where |"
 } finally {
-  Get-Process -Name corehub -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
+  Get-Process -Name 'Core Hub' -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
   Start-Sleep -Seconds 2
   Get-AppxPackage -Name $identity | Remove-AppxPackage -ErrorAction SilentlyContinue
   Get-ChildItem 'Cert:\LocalMachine\TrustedPeople', 'Cert:\CurrentUser\My' |
