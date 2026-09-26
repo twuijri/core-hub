@@ -99,6 +99,15 @@ PLAYWRIGHT_CHANNEL=chrome pnpm --filter @corehub/web exec playwright test e2e/sm
   ✓  1 [chromium] › e2e/smoke.spec.ts:211:3 › web smoke journeys › 6. the agent row gives up labels before options, then overflows into More (1.6s)
   1 passed (11.8s)
 ```
+CI على #165 بعد الإصلاح (الالتزام `05f39fed`، `gh run list --branch night/2026-09-27`):
+```
+05f39fed  CI                  completed  success
+05f39fed  Android             completed  success
+05f39fed  iOS                 completed  success
+05f39fed  Desktop installers  completed  success
+05f39fed  Change record       completed  success
+05f39fed  iOS store listing   completed  success
+```
 
 ## المخاطر والرجوع
 - ملف Grok Build بلا مجموع رسمي: المجموع المثبّت من تنزيلنا للملف الرسمي؛ إن غيّر xAI الملف تحت الرقم نفسه يفشل
