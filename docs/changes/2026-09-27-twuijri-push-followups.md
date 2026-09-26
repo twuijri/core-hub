@@ -131,6 +131,17 @@ iOS 36223120990 (f65e90ea) — success: ** TEST SUCCEEDED ** Executed 167 tests,
    … وحالات DeviceProofTests الخمس، وPushTests testTheRegistrationCarriesTheRelayProofEachTime
    وtestASignOutByTheHubForgetsTheTokenAndDropsTheAPNsRegistration: passed
 ```
-- يُدمج في `night/2026-09-27` (#165)؛ نتيجة CI هناك تُضاف هنا.
+- دُمج في `night/2026-09-27` (#165) عند `04d82e7f`. CI على #165 عند `04d82e7f`: **كل الفحوص ناجحة**:
+```
+Lint, typecheck, contracts, client tests, build            pass
+Server unit tests (shard 1/3, 2/3, 3/3)                    pass
+Web smoke journeys (Playwright against the real hub)       pass   8m56s
+Android build, unit tests, lint                            pass   7m9s
+Build and test on the iOS simulator                        pass   5m31s
+Generate the Swift client (CoreHubClient)                  pass
+db:generate + db:migrate / Docker / Desktop smoke / Installers (3)   pass
+PR adds or updates a change record / graphify-out          pass
+Upload the listing to App Store Connect                    skipping
+```
 - لم يُجرَّب على هاتف ولا متصفح حقيقي مع مزوّد دفع حقيقي، ولم يُنشر المرحّل.
 - للمالك: تأكيد §107 (خاصة: إعادة الاشتراك لصاحب التفعيل وحده، وإلغاء تسجيل APNs عند خروج يفرضه المركز).
