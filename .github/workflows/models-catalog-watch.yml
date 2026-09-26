@@ -1,0 +1,70 @@
+name: Models catalogue watch
+
+# Once a week, compare catalog/models.json with public model lists (CLI Proxy API's catalogues)
+# and keep one open issue that lists ids seen elsewhere and ids of ours no source lists any more
+# (DECISIONS §110, catalog/README.md). It never writes the catalogue and never pushes: a person
+# checks each id against the provider's own documentation and changes the file by pull request.
+# No secrets: every source is public.
+
+on:
+  schedule:
+    - cron: '23 5 * * 1'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+concurrency:
+  group: models-catalog-watch
+  cancel-in-progress: false
+
+jobs:
+  watch:
+    name: Compare the models catalogue with public lists
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+      - name: Compare
+        run: >-
+          node scripts/models-catalog-watch.mjs
+          --body "$RUNNER_TEMP/body.md"
+          --summary "$RUNNER_TEMP/summary.json"
+      - name: Show the report
+        if: always()
+        run: |
+          if [ -f "$RUNNER_TEMP/body.md" ]; then cat "$RUNNER_TEMP/body.md" >> "$GITHUB_STEP_SUMMARY"; fi
+      - name: Open, update or close the one issue
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          TITLE: 'Models catalogue watch: ids to review'
+        run: |
+          set -euo pipefail
+          differences="$(jq -r '.differences' "$RUNNER_TEMP/summary.json")"
+          label=models-catalog
+          if ! gh label list --limit 200 --json name --jq '.[].name' | grep -qx "$label"; then
+            gh label create "$label" --color 1d76db \
+              --description 'Weekly models catalogue watch (catalog/models.json)' || label=enhancement
+          fi
+          number="$(gh issue list --state open --limit 200 --json number,title \
+            | jq -r --arg title "$TITLE" 'map(select(.title == $title)) | sort_by(.number) | .[0].number // empty')"
+          if [ "$differences" = "true" ]; then
+            if [ -n "$number" ]; then
+              gh issue edit "$number" --body-file "$RUNNER_TEMP/body.md"
+              echo "Updated issue #$number"
+            else
+              gh issue create --title "$TITLE" --label "$label" --body-file "$RUNNER_TEMP/body.md"
+            fi
+          elif [ -n "$number" ]; then
+            gh issue comment "$number" --body "No differences on $(date -u +%F); closing. The next weekly run reopens a new issue if something changes."
+            gh issue close "$number"
+          else
+            echo 'No differences, no open issue.'
+          fi

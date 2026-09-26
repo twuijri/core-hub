@@ -47,7 +47,7 @@ jobs:
         run: pnpm version:check
       - run: pnpm i18n:check
       - run: pnpm nav:check
-      - name: Release script tests (apps/ios/scripts, against fake APIs)
+      - name: Script tests (apps/ios/scripts and scripts/, against fake APIs)
         run: pnpm scripts:test
       - run: pnpm contracts:lint
       - run: pnpm contracts:generate

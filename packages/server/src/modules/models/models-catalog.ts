@@ -36,8 +36,8 @@ export interface ModelsCatalog {
 export const MODELS_CATALOG_TTL_MS = 12 * 60 * 60 * 1000;
 
 /** A model id as providers write them: `claude-opus-4-7`, `models/gemini-3-pro`, `org/name:tag`. */
-const MODEL_ID = /^[A-Za-z0-9][A-Za-z0-9._:/@+-]{0,127}$/;
-const PROVIDER_KEY = /^[a-z0-9][a-z0-9._-]{0,63}$/;
+export const MODEL_ID = /^[A-Za-z0-9][A-Za-z0-9._:/@+-]{0,127}$/;
+export const PROVIDER_KEY = /^[a-z0-9][a-z0-9._-]{0,63}$/;
 
 const names = (value: unknown, accept: (name: string) => boolean): string[] =>
   Array.isArray(value)

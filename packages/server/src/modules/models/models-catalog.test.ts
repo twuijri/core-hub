@@ -148,4 +148,43 @@ describe('the shared catalogue for a key provider (decision §110)', () => {
       await hub.close();
     }
   });
+
+  it('a speech preset with no list endpoint takes the catalogue’s list, as its own kind', async () => {
+    // Scribe has no model endpoint; the catalogue's list replaces the one built into the image.
+    const fetchImpl = (() =>
+      Promise.resolve(
+        new Response('{"detail":{"message":"unavailable"}}', { status: 503 }),
+      )) as unknown as typeof fetch;
+    const catalog = () =>
+      Promise.resolve<ModelsCatalog>({
+        providers: {
+          'elevenlabs-stt': {
+            models: ['scribe_v2', 'scribe_v1'],
+            imageModels: [],
+            clientVersion: null,
+          },
+        },
+      });
+    const hub = await signedInHub({}, { models: { fetchImpl, catalog } });
+    try {
+      const created = await authed(hub, hub.token, {
+        method: 'POST',
+        url: '/api/v1/models/providers',
+        payload: { preset: 'elevenlabs-stt', label: '', kind: 'stt', api_key: 'xi-key' },
+      });
+      expect(created.statusCode).toBe(201);
+      const { id } = created.json() as { id: string };
+      await drainJobs(hub.app);
+      const listed = (
+        await authed(hub, hub.token, { method: 'GET', url: '/api/v1/models/providers' })
+      ).json() as {
+        items: { id: string; catalogue: { source: string | null }; models: { model: string }[] }[];
+      };
+      const row = listed.items.find((item) => item.id === id)!;
+      expect(row.models.map((model) => model.model).sort()).toEqual(['scribe_v1', 'scribe_v2']);
+      expect(row.catalogue.source).toBe('fallback');
+    } finally {
+      await hub.close();
+    }
+  });
 });

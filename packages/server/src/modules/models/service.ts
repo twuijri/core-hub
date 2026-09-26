@@ -29,6 +29,7 @@ import type {
   ChatFailureReason,
   ChatMessage,
   DiscoveredModel,
+  ListModelsResult,
   ProviderContext,
   SpeechFormat,
   SynthesizeResult,
@@ -1352,7 +1353,7 @@ export class ModelsService {
         const result =
           current.authKind === 'oauth'
             ? await this.signedInModels(scope, current)
-            : await this.keyProviderModels(entry?.slug ?? null, () =>
+            : await this.keyProviderModels(entry?.slug ?? null, current.kind, () =>
                 adapter.listModels(this.contextOf(scope, current)),
               );
         const finishedAt = this.now();
@@ -1683,33 +1684,33 @@ export class ModelsService {
 
   /**
    * A key provider's own list (its adapter asks the provider). When the provider cannot be
-   * asked, the shared catalogue's list for its preset (decision §110) is offered instead,
-   * marked `fallback` with the provider's reason, rather than no list at all.
+   * asked — or has no list endpoint and the adapter answered the documented list built into
+   * the image (§94) — the shared catalogue's list for its preset (decision §110) is offered
+   * instead, marked `fallback` with the reason, rather than no list or an ageing one. A speech
+   * row's preset (`openai-stt`, `elevenlabs-stt` …) lists its own kind of models.
    */
   private async keyProviderModels(
     slug: string | null,
-    ask: () => Promise<
-      { supported: true; models: DiscoveredModel[] } | { supported: false; reason: string }
-    >,
-  ): Promise<
-    | {
-        supported: true;
-        models: DiscoveredModel[];
-        source?: 'provider' | 'fallback';
-        reason?: string | null;
-      }
-    | { supported: false; reason: string }
-  > {
+    rowKind: 'llm' | 'stt' | 'tts',
+    ask: () => Promise<ListModelsResult>,
+  ): Promise<ListModelsResult> {
     const asked = await ask();
-    if (asked.supported || !slug) return asked;
+    const documented = asked.supported && asked.source === 'fallback';
+    if ((asked.supported && !documented) || !slug) return asked;
     const catalog = await (this.options.catalog?.() ?? Promise.resolve(null));
     const shared = catalog?.providers[slug]?.models ?? [];
     if (shared.length === 0) return asked;
     return {
       supported: true,
-      models: shared.map((key) => ({ key, label: key, kind: 'chat' as const })),
+      models: shared.map((key) => ({
+        key,
+        label: key,
+        kind: rowKind === 'llm' ? ('chat' as const) : rowKind,
+      })),
       source: 'fallback',
-      reason: asked.reason,
+      reason: asked.supported
+        ? 'the provider has no model list endpoint; this is the Core Hub models catalogue'
+        : asked.reason,
     };
   }
 
