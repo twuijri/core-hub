@@ -60,10 +60,20 @@ export type StoredHandoff = { to_seat_id: string; chain_id: string; depth: numbe
 /** The contract's `Avatar` as a seat keeps it. */
 export type StoredAvatar = { kind: 'image' | 'generated'; url: string | null; seed: string | null };
 
+/**
+ * A stored block, in the contract's `ContentBlock` shape so it is served as written: a file
+ * carries its attachment's name, type, size and address as they were when it was posted.
+ */
 export type RoomMessagePart =
   | { type: 'text'; text: string }
-  | { type: 'image'; attachmentId: string }
-  | { type: 'file'; attachmentId: string };
+  | {
+      type: 'image' | 'file';
+      attachment_id: string;
+      name?: string;
+      mime?: string;
+      size_bytes?: number;
+      url?: string;
+    };
 
 export const rooms = sqliteTable(
   'rooms',

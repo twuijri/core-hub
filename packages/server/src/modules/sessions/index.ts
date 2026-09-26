@@ -32,6 +32,7 @@ import type {
   AgentInfo,
   AgentRunner,
   AttachmentsPort,
+  RoomOfSeat,
   SessionsNotifier,
   SessionsPorts,
   WorkflowGate,
@@ -71,6 +72,7 @@ export function createSessionsModule(options: SessionsModuleOptions = {}): HubMo
     notifier: resolvePort(options.notifier ?? noNotifier, app),
     agentTimeoutMs: options.agentTimeoutMs ?? 10 * 60_000,
     gate: () => workflowGateFactory?.(app) ?? null,
+    roomOfSeat: () => roomOfSeatFactory?.(app) ?? null,
   });
   const scopesFor = (app: FastifyInstance): ScopeResolver =>
     resolvePort(options.scopes ?? derivedScopeResolver, app);
@@ -163,6 +165,8 @@ export function createSessionsModule(options: SessionsModuleOptions = {}): HubMo
           }
         },
         runs: (scope, runIds) => serviceFor(app, app.log).runsById(scope, runIds),
+        pending: (scope, sessionIds) =>
+          serviceFor(app, app.log).pendingApprovalsOf(scope, sessionIds),
         list: (scope, sessionIds, filter) =>
           serviceFor(app, app.log).runsOfSessions(
             scope,
@@ -296,7 +300,13 @@ export interface SeatSessions {
   ): Promise<string>;
   start(
     scope: EngineScope,
-    input: { sessionId: string; seatId: string; prompt: string },
+    input: {
+      sessionId: string;
+      seatId: string;
+      prompt: string;
+      /** Files people posted in the room since the seat's last turn (contract decision §96). */
+      files?: ReadonlyArray<{ type: 'image' | 'file'; attachment_id: string }>;
+    },
   ): Promise<TurnHandle>;
   /** A seat's model, provider or effort changed: its session follows. */
   configure(
@@ -313,6 +323,8 @@ export interface SeatSessions {
   cancel(scope: EngineScope, sessionId: string, runId: string): Promise<void>;
   /** The contract's `Run` for each id that exists. */
   runs(scope: EngineScope, runIds: readonly string[]): Record<string, unknown>[];
+  /** The approvals and questions waiting in these sessions, oldest first. */
+  pending(scope: EngineScope, sessionIds: readonly string[]): Record<string, unknown>[];
   list(
     scope: EngineScope,
     sessionIds: readonly string[],
@@ -375,6 +387,19 @@ export function registerWorkflowGate(
   return previous;
 }
 
+/**
+ * Which room a seat sits in (`Approval.room_id`), joined to `rooms` by the composition root —
+ * registered once for the process like the workflow gate.
+ */
+let roomOfSeatFactory: ((app: FastifyInstance) => RoomOfSeat | null) | null = null;
+export function registerRoomOfSeat(
+  factory: ((app: FastifyInstance) => RoomOfSeat | null) | null,
+): ((app: FastifyInstance) => RoomOfSeat | null) | null {
+  const previous = roomOfSeatFactory;
+  roomOfSeatFactory = factory;
+  return previous;
+}
+
 /** The module the app composes (`src/modules/index.ts`). */
 export const sessionsModule = createSessionsModule();
 
@@ -419,6 +444,7 @@ export type {
   AttachmentsPort,
   AttachmentSummary,
   MaterialisedAttachment,
+  RoomOfSeat,
   WorkflowGate,
 } from './ports.js';
 export {

@@ -150,7 +150,13 @@ export class Conductor implements RoomLive {
     const port = this.port();
     const store = this.store();
     const prompt = this.promptFor(room, seat, trigger.seq);
-    const handle = await port.start(scope, { sessionId: seat.sessionId, seatId: seat.id, prompt });
+    const files = this.filesFor(room, seat, trigger.seq);
+    const handle = await port.start(scope, {
+      sessionId: seat.sessionId,
+      seatId: seat.id,
+      prompt,
+      ...(files.length > 0 ? { files } : {}),
+    });
     // What the seat has now been shown; the next turn starts after it.
     store.updateSeat(room.id, seat.id, { seenSeq: Math.max(seat.seenSeq, trigger.seq) });
     const reply = store.appendMessage({
@@ -199,6 +205,29 @@ export class Conductor implements RoomLive {
     };
   }
 
+  /**
+   * The files people posted since the seat's last turn (contract decision §96): they go with
+   * the turn as a chat's files go with its run, so the agent can open them.
+   */
+  private filesFor(
+    room: RoomRow,
+    seat: SeatRow,
+    uptoSeq: number,
+  ): Array<{ type: 'image' | 'file'; attachment_id: string }> {
+    const from = Math.max(seat.seenSeq, room.contextFromSeq);
+    const seen = new Set<string>();
+    const files: Array<{ type: 'image' | 'file'; attachment_id: string }> = [];
+    for (const row of this.store().messagesAfter(room.id, from)) {
+      if (row.seq > uptoSeq || row.authorKind !== 'user') continue;
+      for (const part of filePartsOf(row)) {
+        if (seen.has(part.attachment_id)) continue;
+        seen.add(part.attachment_id);
+        files.push({ type: part.type, attachment_id: part.attachment_id });
+      }
+    }
+    return files;
+  }
+
   private promptFor(room: RoomRow, seat: SeatRow, uptoSeq: number): string {
     const store = this.store();
     const seats = store.seats(room.id);
@@ -211,7 +240,7 @@ export class Conductor implements RoomLive {
         authorKind: row.authorKind,
         authorName: row.authorName ?? '',
         seatId: row.seatId ?? null,
-        content: row.content,
+        content: withFileNames(row.content, filePartsOf(row)),
         status: row.status,
       }));
     const asContext = (row: SeatRow): ContextSeat => ({
@@ -630,4 +659,28 @@ export class Conductor implements RoomLive {
     store.stopActiveChains();
     return settled;
   }
+}
+
+/** A stored message's file blocks (contract decision §96). */
+function filePartsOf(
+  row: RoomMessageRow,
+): Array<{ type: 'image' | 'file'; attachment_id: string; name?: string }> {
+  const parts = Array.isArray(row.parts) ? (row.parts as Array<Record<string, unknown>>) : [];
+  return parts
+    .filter(
+      (part) =>
+        (part.type === 'image' || part.type === 'file') && typeof part.attachment_id === 'string',
+    )
+    .map((part) => ({
+      type: part.type as 'image' | 'file',
+      attachment_id: String(part.attachment_id),
+      ...(typeof part.name === 'string' ? { name: part.name } : {}),
+    }));
+}
+
+/** A message's words as a seat reads them, with the names of the files it came with. */
+function withFileNames(text: string, files: ReadonlyArray<{ name?: string }>): string {
+  if (files.length === 0) return text;
+  const names = files.map((file) => file.name ?? 'file').join(', ');
+  return text ? `${text}\n(attached: ${names})` : `(attached: ${names})`;
 }
