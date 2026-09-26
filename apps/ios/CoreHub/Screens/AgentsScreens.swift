@@ -259,9 +259,10 @@ struct AgentPage: View {
             case .agentMcp: AgentMcpPage(agent: agent)
             case .agentMemory: AgentMemoryPage(agent: agent)
             case .agentJobs: AgentJobsPage(agent: agent)
-            case .agentChannels: AgentChannelsPage(agent: agent)
+            case .agentChannels: AgentChannelsLinkPage(agent: agent)
             case .agentPlugins: AgentPluginsPage(agent: agent)
-            case .agentSettings: AgentSettingsPage(agent: agent)
+            case .agentConfigFiles: AgentConfigFilesPage(agent: agent)
+            case .agentSettings: AgentSettingsEditPage(agent: agent)
             default: PlaceholderScreen(destination: destination)
             }
         }

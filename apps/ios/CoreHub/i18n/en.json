@@ -246,7 +246,24 @@
     "status_online": "Online",
     "status_offline": "Offline",
     "status_error": "Error",
-    "status_unknown": "Unknown"
+    "status_unknown": "Unknown",
+    "linked": "Linked",
+    "none": "No platform is linked yet.",
+    "link": "Link a platform",
+    "link_do": "Link",
+    "unlink": "Unlink",
+    "unlink_confirm": "Unlink {platform} from this profile?",
+    "waiting": "Waiting for approval",
+    "nobody_waiting": "Nobody is waiting.",
+    "approved": "Approved",
+    "revoke": "Revoke",
+    "qr_short": "Linked by scanning a code",
+    "qr_body": "{platform} links by scanning a code with the phone that has the account. This phone cannot scan its own screen: open the page on the web on another screen (a computer or a tablet) and scan it there.",
+    "open_web": "Open on the web",
+    "bot_token": "Bot token",
+    "allowed": "Allowed users, separated by commas (optional)",
+    "pairs_note": "Anyone else who writes gets a code; you approve them here.",
+    "docs": "How to get these"
   },
   "device": {
     "connection": "Hub connection",
@@ -600,5 +617,29 @@
     "archived": "{count} in the archive",
     "stuck": "Seems stuck",
     "waiting_on": "Waits for {count}"
+  },
+  "agent_settings": {
+    "value_bad": "Not a value this setting takes.",
+    "empty_is_default": "Leave it empty to go back to the agent's own default."
+  },
+  "presets": {
+    "title": "Presets",
+    "none": "No presets yet. Save the current settings to switch back to them later.",
+    "last": "Last used {time}",
+    "activate": "Use",
+    "applied": "Applied.",
+    "skipped": "Applied; {count} part(s) no longer exist and were skipped.",
+    "delete": "Delete",
+    "delete_confirm": "Delete the preset «{name}»?",
+    "save_current": "Save the current settings",
+    "name": "A name for it"
+  },
+  "config": {
+    "shared": "These files are shared by every profile of this hub.",
+    "new_file": "The file does not exist yet; saving creates it.",
+    "changed": "The file changed elsewhere since you opened it. Reload it, then make your change again.",
+    "reload": "Reload",
+    "saved": "Saved.",
+    "revert": "Revert"
   }
 }
