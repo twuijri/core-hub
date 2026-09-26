@@ -71,7 +71,7 @@ describe('pairing', () => {
           app_token: 'hub_at_abc',
           token_id: '01J8QK3ZR2W7M5N4P6T8V9X0AK',
           expires_at: '2026-12-20T11:16:00Z',
-          device: {},
+          device: { id: '01J8QK3ZR2W7M5N4P6T8V9X0DV' },
           user: {
             id: 'U1',
             username: 'tariq',
@@ -103,6 +103,9 @@ describe('pairing', () => {
     expect(result).toEqual({
       ok: true,
       hub: 'https://hub.example',
+      // The app keeps the device and the person's profiles to answer the hub itself (ADR 0025).
+      deviceId: '01J8QK3ZR2W7M5N4P6T8V9X0DV',
+      profiles: ['default', 'work'],
       session: {
         profile: 'work',
         token: 'hub_at_abc',

@@ -89,6 +89,20 @@ export type DeviceCapability = {
   consentAt: number | null;
 };
 
+/** The contract's `DeviceHelper`, stored as the device sent it (snake_case, as on the wire). */
+export type DeviceHelperReport = {
+  folders: Array<{ path: string; write: boolean; default?: boolean }>;
+  allow_open: boolean;
+  programs: Array<{
+    id: string;
+    name: string;
+    source: string;
+    profiles: string[];
+    tools: Array<{ name: string; description: string; input_schema: Record<string, unknown> }>;
+  }>;
+  reported_at: string;
+};
+
 export const devices = sqliteTable(
   'devices',
   {
@@ -127,6 +141,16 @@ export const devices = sqliteTable(
     /** When a person named the device: registering or pairing it again keeps that name. */
     renamedAt: timestampMs('renamed_at'),
     capabilities: json<DeviceCapability[]>('capabilities').notNull().default(EMPTY_ARRAY),
+    /**
+     * The profiles (slugs) whose agents may ask this device (DECISIONS §89); null: every
+     * profile of the device's person, the default.
+     */
+    profiles: json<string[]>('profiles'),
+    /**
+     * What a computer's local helper offers agents, as the desktop app last reported it (the
+     * contract's `DeviceHelper`, ADR 0025): shared folders, opening, programs and their tools.
+     */
+    helper: json<DeviceHelperReport>('helper'),
     status: text('status', { enum: DEVICE_STATUSES }).notNull().default('paired'),
     /** The device token issued at pairing (auth module). */
     appTokenId: ulid('app_token_id'),

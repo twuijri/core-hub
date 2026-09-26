@@ -26,6 +26,7 @@ import { MessageActions } from './MessageActions.js';
 import { useOpenFile, useSessionFilesOptional } from '../files/context.js';
 import { lastReplyOfRuns } from '../files/changes.js';
 import { RunChangesCard } from '../files/RunChangesCard.js';
+import { InlineMedia, isPlayable } from './InlineMedia.js';
 import { Markdown } from './Markdown.js';
 import { Reasoning } from './Reasoning.js';
 import { AnsweredQuestions } from './AnsweredQuestions.js';
@@ -180,6 +181,36 @@ function Attachments({ message }: { message: Message }) {
                 fallback={<Badge>{label}</Badge>}
                 onOpen={file && open ? () => open(file.key) : null}
               />
+            </li>
+          );
+        }
+        const mime = 'mime' in block ? (block.mime ?? file?.mime) : file?.mime;
+        const playable = 'attachment_id' in block && block.attachment_id ? isPlayable(mime) : null;
+        const chip =
+          file && open ? (
+            <button
+              type="button"
+              className="msg-attachment-open"
+              aria-label={t('files.open', { name: file.name })}
+              onClick={() => open(file.key)}
+              data-testid="attachment-open"
+            >
+              <Badge>{label}</Badge>
+            </button>
+          ) : (
+            <Badge>{label}</Badge>
+          );
+        if (playable && 'attachment_id' in block && block.attachment_id) {
+          // A video (a render a program made, say) plays in the reply; its name stays under it.
+          return (
+            <li key={i} className="msg-attachment-media">
+              <InlineMedia
+                attachmentId={block.attachment_id}
+                name={block.name ?? file?.name ?? playable}
+                kind={playable}
+                fallback={null}
+              />
+              {chip}
             </li>
           );
         }

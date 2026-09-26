@@ -1,6 +1,7 @@
-// The name a person sees is "Core Hub" on every platform (1.1.1 shipped a lowercase `corehub.app`
-// in a `corehub 1.1.1-arm64` DMG window), while the files an update or the data rely on keep their
-// names: the Windows and Linux binaries, the release assets and the data folder.
+// The name a person sees is "Core Hub" on every platform (1.1.1 shipped `corehub.app` in a
+// `corehub 1.1.1-arm64` DMG window, `corehub.exe` in a `corehub` folder, `/opt/Core Hub/corehub`),
+// while what an update or the data rely on keeps its name: the ids, the protocol, the Linux desktop
+// entry and window class, the .deb package, the release assets and the data folder.
 import { createRequire } from 'node:module';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
@@ -25,7 +26,7 @@ interface AppInfoLike {
 
 const require = createRequire(import.meta.url);
 const config = require('../../electron-builder.config.cjs') as BuilderConfig;
-const pkg = require('../../package.json') as Options & { productName: string };
+const pkg = require('../../package.json') as Options & { productName: string; desktopName: string };
 
 // electron-builder's own naming code, so the test follows the packager rather than a copy of it.
 const builderRequire = createRequire(require.resolve('electron-builder/package.json'));
@@ -36,6 +37,16 @@ const { DmgTarget } = builderRequire('dmg-builder') as {
   DmgTarget: { prototype: { computeVolumeName(arch: number, custom?: string): string } };
 };
 const { Arch } = builderRequire('builder-util') as { Arch: { arm64: number } };
+const { getWindowsInstallationDirName } = builderRequire(
+  'app-builder-lib/out/targets/targetUtil',
+) as {
+  getWindowsInstallationDirName(appInfo: AppInfoLike, tryProductName: boolean): string;
+};
+const { LinuxTargetHelper } = builderRequire('app-builder-lib/out/targets/LinuxTargetHelper') as {
+  LinuxTargetHelper: new (packager: unknown) => {
+    computeDesktopEntry(options: Options, exec?: string | null, extra?: Options): Promise<string>;
+  };
+};
 
 const appInfo = (platform: 'mac' | 'win' | 'linux', cfg: BuilderConfig = config) =>
   new AppInfo(
@@ -74,10 +85,32 @@ describe('the app name a person sees', () => {
     expect(dmgWindow(old)).toBe('corehub 1.1.1-arm64');
   });
 
-  it('keeps the Windows and Linux binaries named corehub', () => {
-    expect(appInfo('win').productFilename).toBe('corehub');
-    expect(appInfo('linux').productFilename).toBe('corehub');
-    expect(config.linux.executableName).toBe('corehub');
+  it('installs Core Hub.exe in a Core Hub folder on Windows', () => {
+    expect(config.win).not.toHaveProperty('executableName');
+    expect(`${appInfo('win').productFilename}.exe`).toBe('Core Hub.exe');
+    // oneClick: false, so electron-builder names the folder after the product when it can.
+    expect(getWindowsInstallationDirName(appInfo('win'), true)).toBe('Core Hub');
+    expect((config.nsis as Options).include).toBe('scripts/installer.nsh');
+  });
+
+  it('gives Linux a Core Hub menu entry, /opt/Core Hub and a core-hub command', async () => {
+    const packager = {
+      appInfo: appInfo('linux'),
+      executableName: config.linux.executableName,
+      info: { metadata: pkg },
+      config,
+      platformSpecificBuildOptions: config.linux,
+      fileAssociations: [],
+    };
+    const entry = await new LinuxTargetHelper(packager).computeDesktopEntry(config.linux, null, {});
+    expect(entry).toContain('\nName=Core Hub\n');
+    // The folder has a space, so Exec is quoted; the command itself has none.
+    expect(entry).toContain('\nExec="/opt/Core Hub/core-hub" %U\n');
+    // The window class Electron takes from package.json desktopName, and the entry's match for it.
+    expect(pkg.desktopName).toBe('corehub.desktop');
+    expect(entry).toContain('\nStartupWMClass=corehub\n');
+    expect(entry).toContain('x-scheme-handler/corehub;');
+    // Debian package names allow no capitals or spaces.
     expect(config.deb.packageName).toBe('corehub');
   });
 

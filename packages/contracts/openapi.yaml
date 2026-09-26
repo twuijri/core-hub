@@ -4103,6 +4103,9 @@ paths:
         Where the hub cannot read them — it does not supervise Hermes, a profile has no Hermes
         profile, or Hermes did not answer — the answer is still `200`: `items` holds what could
         be read and `unavailable` says, per profile, why the rest is missing.
+
+        A conversation the caller hid (`sessions.hideChannelConversation`) is left out unless
+        `hidden=include` is asked (contract decision §88).
       parameters:
         - $ref: '#/components/parameters/Profile'
         - name: profiles
@@ -4118,6 +4121,14 @@ paths:
           schema:
             type: string
             pattern: '^[a-z][a-z0-9_]{0,31}$'
+        - name: hidden
+          in: query
+          description: >-
+            `include` lists the conversations the caller hid too, each with `hidden: true`
+            (contract decision §88). Without it they are left out.
+          schema:
+            type: string
+            enum: [include]
       x-rt-events: []
       responses:
         '200':
@@ -4160,6 +4171,85 @@ paths:
           $ref: '#/components/responses/Unauthorized'
         '404':
           $ref: '#/components/responses/NotFound'
+  /channel-conversations/{conversation_id}:
+    delete:
+      operationId: sessions.deleteChannelConversation
+      tags: [sessions]
+      summary: Delete a channel conversation from Hermes (admin, permanent)
+      description: |
+        Removes the conversation from Hermes's own session store, in the Hermes profile the
+        profile in `X-Hub-Profile` is (contract decision §88): its messages go with it and it
+        cannot be brought back. It is what `hermes sessions delete` does, asked through Hermes's
+        internal server (ADR 0015). Clients ask for a confirmation that says it is permanent.
+
+        Only a conversation from a messaging channel is deleted here, and only by its exact id:
+        the hub reads it first and answers `404` (`resource: channel_conversation`) for anything
+        else, including the hub's own chats, which Hermes keeps too. `503 service_unavailable`
+        when Hermes cannot be asked (`details.reason: hermes_api_unavailable`, or
+        `hermes_not_managed` where the hub does not supervise Hermes). Every person's "hidden"
+        mark on it goes too.
+      x-roles: [owner, admin]
+      parameters:
+        - $ref: '#/components/parameters/Profile'
+        - name: conversation_id
+          in: path
+          required: true
+          description: Hermes's own session id.
+          schema:
+            type: string
+            pattern: '^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$'
+      x-rt-events: []
+      responses:
+        '204':
+          description: Deleted from Hermes.
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
+  /channel-conversations/{conversation_id}/hidden:
+    parameters:
+      - $ref: '#/components/parameters/Profile'
+      - name: conversation_id
+        in: path
+        required: true
+        description: Hermes's own session id.
+        schema:
+          type: string
+          pattern: '^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$'
+    put:
+      operationId: sessions.hideChannelConversation
+      tags: [sessions]
+      summary: Hide a channel conversation from the caller's list
+      description: |
+        The caller's own list stops showing the conversation (contract decision §88). Only the
+        hub remembers it — per person, per profile — and Hermes, the channel and everyone
+        else's list are untouched. Hiding one that is already hidden, or one the hub cannot read
+        right now, is allowed; the conversation itself is not looked up.
+      x-rt-events: []
+      responses:
+        '204':
+          description: Hidden.
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+    delete:
+      operationId: sessions.unhideChannelConversation
+      tags: [sessions]
+      summary: Show a hidden channel conversation again
+      description: The reverse of `sessions.hideChannelConversation`; one not hidden is fine.
+      x-rt-events: []
+      responses:
+        '204':
+          description: Shown again.
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
   /channel-conversations/{conversation_id}/messages:
     get:
       operationId: sessions.listChannelMessages
@@ -4477,6 +4567,74 @@ paths:
                 format: binary
         '401':
           $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /attachments/{attachment_id}/stream:
+    parameters:
+      - $ref: '#/components/parameters/Profile'
+      - $ref: '#/components/parameters/AttachmentId'
+    post:
+      operationId: sessions.createAttachmentStream
+      tags: [sessions]
+      summary: A short-lived address a media element can play the bytes from
+      description: >-
+        A `<video>` or `<audio>` element sends no header, so it cannot carry the bearer that
+        `sessions.downloadAttachment` wants. This gives a one-attachment, read-only ticket in the
+        path instead (DECISIONS §90): valid for one hour, for this attachment only, and it stops
+        when the person who asked may no longer read it. It is not the bearer token and grants
+        nothing else. Supports `Range` like the download.
+      x-rt-events: []
+      responses:
+        '201':
+          description: The address.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AttachmentStream'
+              example:
+                url: /api/v1/attachment-streams/7c1b0e5f2a9d4c3b8e6f1a2b3c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9a0b1c2d
+                expires_at: '2026-09-26T11:14:50Z'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /attachment-streams/{ticket}:
+    parameters:
+      - name: ticket
+        in: path
+        required: true
+        schema:
+          type: string
+          pattern: '^[0-9a-f]{64}$'
+        example: 7c1b0e5f2a9d4c3b8e6f1a2b3c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9a0b1c2d
+    get:
+      operationId: sessions.streamAttachment
+      tags: [sessions]
+      summary: Stream the bytes a ticket names (supports `Range`)
+      description: No bearer; the ticket from `sessions.createAttachmentStream` is the permission. An unknown, expired or withdrawn ticket is `404`.
+      security: []
+      parameters:
+        - name: Range
+          in: header
+          required: false
+          schema:
+            type: string
+      x-rt-events: []
+      responses:
+        '200':
+          description: The whole file.
+          content:
+            '*/*':
+              schema:
+                type: string
+                format: binary
+        '206':
+          description: The requested byte range.
+          content:
+            '*/*':
+              schema:
+                type: string
+                format: binary
         '404':
           $ref: '#/components/responses/NotFound'
   /attachment-uploads:
@@ -13283,16 +13441,21 @@ paths:
     post:
       operationId: devices.createRequest
       tags: [devices]
-      summary: Ask a device for a capability (used by adapters and integrations with the `device` scope)
+      summary: Ask a device for a capability (used by adapters, integrations with the `device` scope, and the hub's `devices` tools)
       description: >-
         A job (`device_request`) that ends when the device answers: `succeeded` when it fulfils,
         `failed` when it declines, fails or lets `timeout_ms` pass (the request is then `expired`
         with `timeout`), `cancelled` when the job is cancelled (so is the request). The job
         carries only `{request_id, status}`: what the device sends stays in the request, which
         only its person and the device read. Only the device's own person may ask it — their web
-        session, or a token of theirs with the `device` scope (else `403`); anyone else's device,
-        an admin's included, is `404`. A device that lacks the capability, or switched it off, is
-        answered `denied` with `unavailable` by the hub at once, without being asked.
+        session, a token of theirs with the `device` scope, or the run token of one of their
+        agent runs for `files` and `apps` only (DECISIONS §89; the request then carries the
+        run's id) — else `403`; anyone else's device, an admin's included, is `404`. A device
+        whose `profiles` leave out the profile asked in is `403` with `details.reason =
+        device_not_in_profile`. A device that lacks the capability, or switched it off, is
+        answered `denied` with `unavailable` by the hub at once, without being asked; a `files`,
+        `apps` or `screen` request to a device with no live `/rt/devices` socket is `failed` with
+        `unavailable` ("the device is offline") at once, since nothing would answer it.
       parameters:
         - $ref: '#/components/parameters/Profile'
       requestBody:
@@ -17796,6 +17959,12 @@ components:
           $ref: '#/components/schemas/Timestamp'
         last_message_at:
           $ref: '#/components/schemas/Timestamp'
+        hidden:
+          type: boolean
+          description: >-
+            The caller hid it from their list (`sessions.hideChannelConversation`, contract
+            decision §88). Only a list asked with `hidden=include` carries hidden ones; absent
+            means `false`.
     ChannelMessagePreview:
       type: object
       required: [role, text]
@@ -19111,6 +19280,15 @@ components:
             sha256:
               type: string
               pattern: '^[0-9a-f]{64}$'
+    AttachmentStream:
+      type: object
+      required: [url, expires_at]
+      properties:
+        url:
+          type: string
+          description: A path on this hub; put it in a media element's `src` as it is.
+        expires_at:
+          $ref: '#/components/schemas/Timestamp'
     UploadStart:
       type: object
       required: [name, mime, size_bytes]
@@ -19742,7 +19920,7 @@ components:
     HubToolGroupId:
       type: string
       description: A group of the hub's own tools (contract decision §67).
-      enum: [tasks, schedules, conversations, notifications, workflows, files]
+      enum: [tasks, schedules, conversations, notifications, workflows, files, devices]
     HubTool:
       type: object
       required: [name, access]
@@ -22528,6 +22706,15 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/ModelCapability'
+        image_only:
+          type: boolean
+          description: >-
+            The model answers with images only (contract decision §87) — an Images-API model
+            such as `gpt-image-*`, DALL·E, Imagen or FLUX, or the ChatGPT subscription's image
+            model. It is offered as the profile's image model and never as a chat model: clients
+            leave it out of every chat-model picker (the composer, the defaults, the fallback
+            chain). A model that draws and also chats (`gemini-*-image`) is not image-only.
+            Absent from an older hub, which means `false`.
         pricing:
           oneOf:
             - $ref: '#/components/schemas/ModelPricing'
@@ -23370,10 +23557,102 @@ components:
           description: What the device last said stops push on it; null when it never said (an older app, a browser).
         this_device:
           type: boolean
+        profiles:
+          type: [array, 'null']
+          items:
+            $ref: '#/components/schemas/ProfileSlug'
+          description: |
+            The profiles whose agents may ask this device for something (DECISIONS §89). `null`, the
+            default, is every profile of the device's person; a list narrows it. Absent from a hub
+            older than the field.
+        helper:
+          oneOf:
+            - $ref: '#/components/schemas/DeviceHelper'
+            - type: 'null'
+          description: What a computer's local helper offers the hub's agents, as the desktop app last reported it; `null` when it never did (a phone, a browser, a helper that is off).
         created_at:
           $ref: '#/components/schemas/Timestamp'
         updated_at:
           $ref: '#/components/schemas/Timestamp'
+    DeviceHelper:
+      type: object
+      description: |
+        A computer's local helper as the hub's agents may use it (ADR 0025): the folders the person
+        shared, whether opening files and links is allowed, and the programs switched on with the
+        profiles each one serves and its tools. Reported by the desktop app itself
+        (`devices.update`), again whenever it changes.
+      required: [folders, allow_open, programs, reported_at]
+      properties:
+        folders:
+          type: array
+          maxItems: 20
+          items:
+            $ref: '#/components/schemas/DeviceHelperFolder'
+        allow_open:
+          type: boolean
+        programs:
+          type: array
+          maxItems: 50
+          items:
+            $ref: '#/components/schemas/DeviceProgram'
+        reported_at:
+          $ref: '#/components/schemas/Timestamp'
+    DeviceHelperFolder:
+      type: object
+      required: [path, write]
+      properties:
+        path:
+          type: string
+          maxLength: 1024
+          description: Absolute, on the computer.
+        write:
+          type: boolean
+          description: Shared as writable; read only otherwise.
+        default:
+          type: boolean
+          description: The folder the app made for Core Hub's own files (`~/Core Hub`); program output goes there unless the person says otherwise.
+    DeviceProgram:
+      type: object
+      description: |
+        A program on the computer the person switched on for some profiles: an MCP server another
+        assistant registered (Claude Desktop and its extensions, Claude Code, Codex, Cursor,
+        Windsurf), started by the desktop app as its own child and reached only through it.
+      required: [id, name, source, profiles, tools]
+      properties:
+        id:
+          type: string
+          pattern: '^[a-z0-9][a-z0-9_-]{0,47}$'
+          description: The app's stable id for it, used in `apps` requests.
+        name:
+          type: string
+          maxLength: 120
+        source:
+          type: string
+          enum: [claude_desktop, claude_desktop_extension, claude_code, codex, cursor, windsurf]
+        profiles:
+          type: array
+          minItems: 1
+          items:
+            $ref: '#/components/schemas/ProfileSlug'
+          description: The profiles whose agents may use it.
+        tools:
+          type: array
+          maxItems: 200
+          items:
+            $ref: '#/components/schemas/DeviceProgramTool'
+    DeviceProgramTool:
+      type: object
+      required: [name, description, input_schema]
+      properties:
+        name:
+          type: string
+          maxLength: 128
+        description:
+          type: string
+          maxLength: 2000
+        input_schema:
+          type: object
+          additionalProperties: true
     PushProvider:
       type: string
       enum: [webpush, fcm, apns]
@@ -23565,6 +23844,17 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/DeviceCapability'
+        profiles:
+          type: [array, 'null']
+          maxItems: 100
+          items:
+            $ref: '#/components/schemas/ProfileSlug'
+          description: The device's person only (anyone else, the device itself included, `403`). `null` gives it back to every profile of theirs.
+        helper:
+          oneOf:
+            - $ref: '#/components/schemas/DeviceHelper'
+            - type: 'null'
+          description: The device itself only (its own token; anyone else `403`). `reported_at` is set by the hub.
     DeviceRequestStatus:
       type: string
       enum: [pending, fulfilled, denied, failed, expired, cancelled]
@@ -23606,7 +23896,14 @@ components:
               description: Shown to the person in the consent sheet.
             params:
               type: object
-              description: 'Capability-specific: `location` takes `accuracy: coarse | precise`.'
+              description: |
+                Capability-specific. `location` takes `accuracy: coarse | precise`. `files` (a
+                computer's helper, ADR 0022/0025) takes `{tool, arguments}` where `tool` is one of
+                `list_allowed_folders`, `list_directory`, `read_text_file`, `write_text_file`,
+                `open_path`, `open_url` or `send_file` (the device uploads the file with the
+                resumable upload in this profile). `apps` takes `{op: call, program, tool,
+                arguments}` (one tool call of a program the device shares) or `{op: status,
+                call_id}` (how a long call stands).
               additionalProperties: true
             status:
               $ref: '#/components/schemas/DeviceRequestStatus'
@@ -23614,7 +23911,13 @@ components:
               $ref: '#/components/schemas/Timestamp'
             result:
               type: [object, 'null']
-              description: 'Capability-specific: `location` returns `latitude, longitude, accuracy_m, captured_at`.'
+              description: |
+                Capability-specific. `location` returns `latitude, longitude, accuracy_m,
+                captured_at`. `files` returns the tool's MCP result `{content, is_error}`, and
+                `send_file` `{attachment_id, name, mime, size_bytes, kind}`. `apps` returns
+                `{state: done, content, is_error}`, or `{state: running, call_id, progress}` when
+                the call is still going after the device's soft deadline (the program keeps
+                running; ask again with `op: status`).
               additionalProperties: true
             error:
               oneOf:
@@ -23651,7 +23954,10 @@ components:
           type: integer
           minimum: 1000
           maximum: 300000
-          default: 30000
+          description: |
+            How long the device has to answer. Absent, it depends on the capability (DECISIONS
+            §89): `files` 60 s and `apps` 120 s (the person may be asked first), everything else
+            30 s.
     DeviceRequestResponse:
       type: object
       required: [status]

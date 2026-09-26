@@ -99,7 +99,16 @@
     "log": "Installer output"
   },
   "helper": {
-    "pick_folder": "Choose a folder to share with the local helper"
+    "pick_folder": "Choose a folder to share with the local helper",
+    "consent": {
+      "title": "Program access",
+      "question": "Let an agent use {program} on this computer?",
+      "detail_hub": "An agent on the hub {hub} (profile {profile}) wants to use {program} ({tool}). The program runs with your account's rights. Every call is listed in Settings → This device.",
+      "detail_local": "An agent on the hub on this computer (profile {profile}) wants to use {program} ({tool}). The program runs with your account's rights. Every call is listed in Settings → This device.",
+      "allow_session": "Allow for this session",
+      "allow_once": "Allow once",
+      "deny": "Deny"
+    }
   },
   "updates": {
     "available_title": "Core Hub {version} is available",

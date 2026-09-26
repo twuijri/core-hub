@@ -11,7 +11,7 @@
 import { useMemo } from 'react';
 import { useAgentSettings, useSaveAgentSetting } from '../hub/queries.js';
 import { useI18n } from '../i18n/context.js';
-import { useCatalogue } from '../models/queries.js';
+import { chatModels, useCatalogue } from '../models/queries.js';
 import { modelOption } from '../models/useModelPicker.js';
 import type { SettingsSection } from '../types.js';
 import type { ComboboxOption } from '../ui/Combobox.js';
@@ -91,8 +91,8 @@ export function useComposerModels(): ComboboxOption[] {
   const catalogue = useCatalogue();
   return useMemo(
     () =>
-      (catalogue.data ?? [])
-        .filter((model) => model.visible && !model.disabled && model.kind === 'chat')
+      chatModels(catalogue.data ?? [])
+        .filter((model) => model.visible && !model.disabled)
         // `key` is `<provider>/<model>`, which is what a session stores.
         .map((model) => modelOption(model, model.key)),
     [catalogue.data],

@@ -18,6 +18,7 @@ import {
   dialog,
   ipcMain,
   nativeImage,
+  safeStorage,
   screen,
   shell,
   type IpcMainEvent,
@@ -59,6 +60,8 @@ import { findHermes, installHermes, thisMachine, type HermesFound } from './herm
 import { claimPairing, probeHub, type WebSession } from './hub.js';
 import { LocalHubError, startLocalHub, type LocalHub } from './local-hub.js';
 import { startHelper, toolsFor, type HelperServer } from './helper.js';
+import { ThisComputerService } from './this-computer.js';
+import type { ConsentAnswer, ConsentQuestion } from './consent.js';
 import { RELEASES_PAGE, appChannel, checkForUpdate, type UpdateCheck } from './updates.js';
 import { STORE_PAGE, checkIsDue, checksGitHub, type UpdateChannel } from '../shared/updates.js';
 import { appMenuTemplate, trayMenuTemplate, type MenuActions } from './menu.js';
@@ -96,12 +99,44 @@ export class DesktopController {
   private updateTimer: NodeJS.Timeout | null = null;
   /** `store` in the Microsoft Store build: the Store updates it, the app never checks GitHub. */
   private readonly channel: UpdateChannel = appChannel(app.getAppPath());
+  /** Programs, the default folder, consent, the activity list and the hub's device connection. */
+  private readonly computer: ThisComputerService;
 
   constructor(
     private readonly paths: ControllerPaths,
     private readonly options: { devTools: boolean; tray: boolean },
   ) {
     this.config = new ConfigStore(app.getPath('userData'));
+    const testHome = process.env.COREHUB_DESKTOP_HOME
+      ? path.resolve(process.env.COREHUB_DESKTOP_HOME)
+      : null;
+    this.computer = new ThisComputerService({
+      config: this.config,
+      seal: (text) => sealText(text),
+      unseal: (text) => unsealText(text),
+      askConsent: (question) => this.askConsent(question),
+      env: {
+        openPath: (file) => shell.openPath(file),
+        openUrl: (url) => shell.openExternal(url),
+      },
+      version: app.getVersion(),
+      productName: PRODUCT.name,
+      // Tests give the app a home of their own, so `~/Core Hub` and the other assistants'
+      // files are never the machine's real ones.
+      ...(testHome
+        ? {
+            home: testHome,
+            discovery: { home: testHome, platform: process.platform, env: process.env },
+          }
+        : {}),
+      computer: () => ({
+        deviceKey: this.config.get().deviceKey,
+        name: os.hostname() || PRODUCT.name,
+        platform: process.platform,
+        appVersion: app.getVersion(),
+        model: `${os.type()} ${os.release()}`.slice(0, 80),
+      }),
+    });
   }
 
   // ---------------------------------------------------------------- lifecycle
@@ -117,6 +152,11 @@ export class DesktopController {
     }
     this.registerIpc();
     this.buildMenus();
+    try {
+      this.computer.rescan();
+    } catch {
+      // A file another assistant wrote badly never stops the app; the page can rescan.
+    }
     if (this.config.get().helper.enabled) await this.syncHelper();
     // The daily look for a newer release, a little after start so it never slows the launch.
     // Tests turn it off: they must not ask GitHub anything. A Store build never looks.
@@ -157,6 +197,7 @@ export class DesktopController {
     await Promise.all([
       this.stopLocal(),
       helper?.close(),
+      this.computer.stop(),
       Promise.race([this.proxy?.close(), new Promise((resolve) => setTimeout(resolve, 1_000))]),
     ]);
   }
@@ -268,6 +309,8 @@ export class DesktopController {
     const proxy = this.requireProxy();
     proxy.setTarget(hub);
     this.openAppWindow(`persist:hub-${partitionKey(hub)}`);
+    // This computer answers that hub from here on, window or not (ADR 0025).
+    void this.computer.useHub(hub);
     // Local mode's hub has no one to serve now.
     void this.stopLocal();
   }
@@ -301,6 +344,8 @@ export class DesktopController {
     }
     this.requireProxy().setTarget(this.localHub.origin);
     this.config.update((c) => ({ ...c, mode: 'local' }));
+    // The hub on this computer reaches the helper on the loopback; no device connection.
+    void this.computer.useHub(null);
     this.openAppWindow('persist:local');
     return { ok: true };
   }
@@ -458,6 +503,8 @@ export class DesktopController {
           },
           version: app.getVersion(),
           preferredPort: this.config.get().helper.port,
+          programs: this.computer.programs,
+          onActivity: (entry) => this.computer.record(entry),
         });
         this.helperError = null;
         const port = this.helper.port;
@@ -481,9 +528,45 @@ export class DesktopController {
       folders: helper.folders.map((f) => ({ ...f })),
       allowOpen: helper.allowOpen,
       tools: toolsFor(helper).map(({ name, description }) => ({ name, description })),
-      activity: this.helper?.activity() ?? [],
+      activity: this.computer.activity(),
       error: helper.enabled ? this.helperError : null,
+      defaultFolder: helper.defaultFolder,
     };
+  }
+
+  /** The native question before an agent uses a program (ADR 0025), once per session. */
+  private async askConsent(question: ConsentQuestion): Promise<ConsentAnswer> {
+    const t = (key: string, params?: Record<string, string>) => this.t(key, params);
+    const params = {
+      program: isolate(question.programName),
+      tool: isolate(question.tool),
+      hub: isolate(question.hub ?? ''),
+      profile: isolate(question.profile ?? '—'),
+    };
+    if (process.platform === 'darwin') app.focus({ steal: true });
+    const buttons = [
+      t('helper.consent.allow_session'),
+      t('helper.consent.allow_once'),
+      t('helper.consent.deny'),
+    ];
+    const options = {
+      type: 'question' as const,
+      title: t('helper.consent.title'),
+      buttons,
+      defaultId: 2,
+      cancelId: 2,
+      noLink: true,
+      message: t('helper.consent.question', params),
+      detail: t(
+        question.via === 'hub' ? 'helper.consent.detail_hub' : 'helper.consent.detail_local',
+        params,
+      ),
+    };
+    const window = this.appWindow && this.appWindow.isVisible() ? this.appWindow : null;
+    const answer = window
+      ? await dialog.showMessageBox(window, options)
+      : await dialog.showMessageBox(options);
+    return answer.response === 0 ? 'session' : answer.response === 1 ? 'once' : 'deny';
   }
 
   private registerHelperIpc(): void {
@@ -494,11 +577,15 @@ export class DesktopController {
       ipcMain.handle(channel, async (event, ...args: unknown[]) => {
         if (!this.fromApp(event)) return null;
         await run(...(args as A));
+        // A hub on a server hears what the helper offers now.
+        this.computer.helperChanged();
         return this.helperState();
       });
     guarded(CHANNELS.helperGet, () => {});
     guarded(CHANNELS.helperEnable, async (value: unknown) => {
       this.updateHelper((h) => ({ ...h, enabled: value === true }));
+      // On with nothing shared: `~/Core Hub`, writable (owner, 2026-09-26; ADR 0022 amended).
+      if (value === true) this.computer.ensureDefaultFolder();
       await this.syncHelper();
     });
     guarded(CHANNELS.helperAddFolder, async () => {
@@ -519,7 +606,11 @@ export class DesktopController {
       );
     });
     guarded(CHANNELS.helperRemoveFolder, (folder: unknown) =>
-      this.updateHelper((h) => ({ ...h, folders: h.folders.filter((f) => f.path !== folder) })),
+      this.updateHelper((h) => ({
+        ...h,
+        folders: h.folders.filter((f) => f.path !== folder),
+        defaultFolder: h.defaultFolder === folder ? null : h.defaultFolder,
+      })),
     );
     guarded(CHANNELS.helperFolderWrite, (folder: unknown, write: unknown) =>
       this.updateHelper((h) => ({
@@ -532,6 +623,40 @@ export class DesktopController {
     );
     guarded(CHANNELS.helperNewToken, () =>
       this.updateHelper((h) => ({ ...h, token: randomToken() })),
+    );
+  }
+
+  private registerProgramsIpc(): void {
+    const programs = <A extends unknown[]>(
+      channel: string,
+      run: (...args: A) => void | Promise<unknown>,
+    ) =>
+      ipcMain.handle(channel, async (event, ...args: unknown[]) => {
+        if (!this.fromApp(event)) return null;
+        await run(...(args as A));
+        return this.computer.programsState();
+      });
+    programs(CHANNELS.programsGet, () => {});
+    programs(CHANNELS.programsRescan, () => this.computer.rescan());
+    programs(CHANNELS.programsSetProfiles, (id: unknown, profiles: unknown) =>
+      this.computer.setProfiles(
+        String(id),
+        Array.isArray(profiles) ? profiles.map((p) => String(p)) : [],
+      ),
+    );
+    programs(CHANNELS.programsSetField, (id: unknown, key: unknown, value: unknown) =>
+      this.computer.setField(String(id), String(key), typeof value === 'string' ? value : null),
+    );
+    programs(CHANNELS.programsCheckResolve, () => this.computer.checkResolve());
+    ipcMain.handle(CHANNELS.deviceGet, (event) =>
+      this.fromApp(event) ? this.computer.deviceState() : null,
+    );
+    ipcMain.handle(CHANNELS.deviceLink, async (event, pairingId: unknown, code: unknown) => {
+      if (!this.fromApp(event)) return null;
+      return this.computer.linkWithPairing(String(pairingId), String(code));
+    });
+    ipcMain.handle(CHANNELS.deviceForget, async (event) =>
+      this.fromApp(event) ? this.computer.forgetLink() : null,
     );
   }
 
@@ -686,6 +811,7 @@ export class DesktopController {
 
   private registerIpc(): void {
     this.registerHelperIpc();
+    this.registerProgramsIpc();
     this.registerUpdatesIpc();
     ipcMain.handle(CHANNELS.state, (event) => (this.fromApp(event) ? this.state() : null));
     ipcMain.handle(CHANNELS.takeSession, (event) => {
@@ -836,8 +962,27 @@ export class DesktopController {
         error: { key: 'errors.pair_failed', params: { message: result.message } },
       };
     this.pendingSession = result.session;
+    // The main process keeps the device token too, to answer the hub on its own (ADR 0025).
+    await this.computer.keepLink(result);
     this.config.update((c) => withRemote(c, result.hub));
     this.openRemote(result.hub);
     return { ok: true };
   }
+}
+
+/**
+ * A secret for the settings file, sealed by the OS keychain (Keychain, DPAPI, libsecret) where
+ * the OS offers one; a Linux without a keyring keeps it as it is, as other apps there do.
+ */
+function sealText(text: string): string {
+  if (safeStorage.isEncryptionAvailable())
+    return `v1:${safeStorage.encryptString(text).toString('base64')}`;
+  return `plain:${text}`;
+}
+
+function unsealText(sealed: string): string {
+  if (sealed.startsWith('v1:'))
+    return safeStorage.decryptString(Buffer.from(sealed.slice(3), 'base64'));
+  if (sealed.startsWith('plain:')) return sealed.slice(6);
+  return sealed;
 }

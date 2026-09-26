@@ -1155,10 +1155,15 @@
   color: var(--ch-color-text-faint);
   background: var(--ch-color-bg-raised);
 }
-/* The header of the group being scrolled through, held above its rows. */
+/* The header of the group being scrolled through, laid over the top of the list once its own
+   row has scrolled away — never beside it, so a header is never read twice. */
+.ch-combo-body {
+  position: relative;
+}
 .ch-combo-sticky {
-  position: sticky;
+  position: absolute;
   inset-block-start: 0;
+  inset-inline: 0;
   z-index: 1;
   block-size: 26px;
   border-block-end: 1px solid var(--ch-color-border);
@@ -1186,4 +1191,77 @@
   border-block-start: 1px solid var(--ch-color-border);
   font-size: var(--ch-font-size-xs);
   color: var(--ch-color-text-faint);
+}
+
+/* ------------------------------------------- the fallback chain (Models → Defaults)
+   Reordered by dragging its grip (owner, 2026-09-26); the place number follows the row. */
+.fallback-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--ch-space-1);
+  max-inline-size: 36rem;
+}
+.fallback-row {
+  display: flex;
+  align-items: center;
+  gap: var(--ch-space-2);
+  padding: var(--ch-space-1) var(--ch-space-2);
+  border: 1px solid var(--ch-color-border);
+  border-radius: var(--ch-radius-md);
+  background: var(--ch-color-bg-raised);
+}
+.fallback-row-dragging {
+  position: relative;
+  z-index: 1;
+  box-shadow: var(--ch-shadow-sm);
+  opacity: 0.9;
+}
+.fallback-grip {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  inline-size: 1.5rem;
+  block-size: 1.75rem;
+  border-radius: var(--ch-radius-sm);
+  color: var(--ch-color-text-faint);
+  cursor: grab;
+  touch-action: none;
+}
+.fallback-grip:hover:not(:disabled) {
+  color: var(--ch-color-text);
+  background: var(--ch-color-surface-2);
+}
+.fallback-grip:active {
+  cursor: grabbing;
+}
+.fallback-grip:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+.fallback-place {
+  min-inline-size: 1.25rem;
+  font-size: var(--ch-font-size-xs);
+  font-variant-numeric: tabular-nums;
+  color: var(--ch-color-text-muted);
+  text-align: center;
+}
+
+/* ------------------------------------ channel conversations a person hid (§87) */
+.session-row[data-hidden='true'] .session-link {
+  opacity: 0.6;
+}
+.session-hidden-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--ch-space-1);
+  align-self: flex-start;
+  margin-block-start: var(--ch-space-2);
+  padding: var(--ch-space-1) var(--ch-space-2);
+  border-radius: var(--ch-radius-sm);
+  font-size: var(--ch-font-size-xs);
+  color: var(--ch-color-text-muted);
+}
+.session-hidden-toggle:hover {
+  background: var(--ch-color-surface-2);
+  color: var(--ch-color-text);
 }

@@ -2672,3 +2672,115 @@ Rejected: `reply_prefix` in the platform's `config.yaml` — the adapter hands i
 while the environment variable is also set, so it adds nothing; faking "no header" with a
 zero-width prefix (Hermes's own code notes WhatsApp renders those as stray characters) or a
 blank-line prefix.
+
+## 87. A model that only draws is never offered as a chat model
+
+The owner, testing hub 1.1.1 (2026-09-26): the ChatGPT subscription's `gpt-image-2`, OpenAI's
+`gpt-image-1` and the like appeared in the chat model pickers, and choosing one as a chat model
+failed the turn. Proposed, owner to confirm:
+
+- **`Model.image_only`** (optional boolean; absent from an older hub means `false`). The hub says
+  it for the families that answer only with pictures — the Images-API ones it already speaks to
+  through `/images/generations` (`gpt-image-*`, DALL·E, Imagen, FLUX, Stable Diffusion, Seedream,
+  Recraft, Ideogram …), the subscription's image model among them. A model that draws **and**
+  chats (`gemini-*-image`, `gpt-5-image`) keeps `image_output` and is not image-only.
+- **Clients leave image-only models out of every chat-model picker**: the composer, the chat and
+  auxiliary defaults, the fallback chain, a provider card's default and a workflow step. They stay
+  on the Images tab (§72), which lists `image_output` models as before.
+- The hub does not refuse an image-only model that a profile already chose as a chat model: a
+  refusal would break a saved setting without a way to see why. Hiding it is enough to stop new
+  mistakes.
+
+Rejected: a new `ModelKind` value (`image`), which widens an enum the native clients decode and
+changes what every existing row of the catalogue is; a capability "text output", whose absence
+would have made every older row image-only.
+
+## 88. A channel conversation is hidden per person, and deleted from Hermes by an admin
+
+The owner could neither hide nor delete a Telegram conversation in the chats list: they are
+Hermes's and read-only (§61), and he had to run `hermes sessions delete` inside the container.
+Proposed, owner to confirm:
+
+- **Hide** (`sessions.hideChannelConversation`, `PUT /channel-conversations/{id}/hidden`, and
+  `sessions.unhideChannelConversation`, its `DELETE`): the caller's own list stops showing it.
+  The hub keeps the mark — per person and per profile, keyed by Hermes's session id — and
+  touches nothing else: other people's lists, Hermes and the channel stay as they were.
+  `sessions.listChannelConversations` leaves hidden ones out unless `hidden=include`, which lists
+  them marked `hidden: true`, so a client can offer "Show hidden chats" and "Show again".
+- **Delete from Hermes** (`sessions.deleteChannelConversation`,
+  `DELETE /channel-conversations/{id}`, owners and admins): what `hermes sessions delete` does,
+  asked through Hermes's internal server (ADR 0015). What Hermes does, observed in its MIT source
+  at `v2026.9.14` (`hermes_cli/web_routers/sessions.py`, `hermes_state_sessions.py`) and said in
+  our words: `DELETE /api/sessions/{id}?profile=<p>` removes the session row and its messages,
+  deletes the delegate children with it and keeps branch children by clearing their parent, and
+  answers `{"ok": true}` — or `{"ok": true, "already_absent": true}` when there is nothing to
+  delete. It resolves an id it does not know as the one session that id is a prefix of. So the
+  hub first reads the row by the exact id (`GET /api/sessions/{id}`) and deletes only a
+  conversation from a messaging channel whose id is exactly the one asked for; anything else —
+  the hub's own chats, which Hermes keeps too, or a prefix — is `404`. The hub drops what it had
+  read of that profile, forgets every person's hidden mark on it, and writes an audit line
+  (`sessions.channel_conversation_deleted`). It is permanent; clients ask first and say so.
+
+Rejected: deleting through the `hermes` CLI from the hub process (the dashboard is already how
+the hub reads these, and it answers per profile); hiding for everyone (that is a different
+person's list); a soft delete in Hermes (Hermes has archive, but an archived conversation is
+still in its store, which is not what the owner asked for).
+
+## 89. An agent's run may ask its person's own computer for files and programs; a computer says what its helper offers
+
+A hub on a server could not reach the person's computer: a run token had no way to make a device
+request, and nothing described what the computer's helper offered (ADR 0025, the owner's scope of
+2026-09-26). Proposed — owner to confirm where the owner did not name it:
+
+- **`Device.helper`** — the folders the person shared (the app's own `~/Core Hub` marked
+  `default`), whether opening is allowed, and the programs switched on with the profiles each one
+  serves and its tools (`DeviceHelper`, `DeviceProgram`, `DeviceProgramTool`). Only the device
+  itself reports it (`devices.update` with its own token; anyone else `403 not_this_device`); the
+  hub stamps `reported_at`. `null` while the helper is off.
+- **`Device.profiles`** — the profiles whose agents may ask the device; `null`, the default, is
+  every profile of its person. Only that person, from a sign-in of theirs, changes it (the device's
+  own token, a run token or an admin: `403 not_the_devices_person`). A request made in a profile
+  it leaves out is `403` with `details.reason = device_not_in_profile`.
+- **A run token may create `files` and `apps` requests** to its own person's device, and nothing
+  else (`location` and the rest still need the `device` scope); the request carries the run's id.
+  This is how the hub's `devices` tools ask (§67's group, built here).
+- **`files`** params `{tool, arguments}` (the helper's tools and `send_file`, which uploads into
+  the request's profile with the resumable upload); result `{content, is_error}` or
+  `{attachment_id, name, mime, size_bytes, kind}`. **`apps`** params `{op: call, program, tool,
+  arguments}` or `{op: status, call_id}`; result `{state: done, content, is_error}` or
+  `{state: running, call_id, progress}` — anything else is `400 not_a_program_result`.
+- **Waits per capability** when the asker gives none: `files` 60 s, `apps` 120 s, everything
+  else 30 s. **Offline at once**: a `files`, `apps` or `screen` request to a device with no live
+  `/rt/devices` socket is `failed` with `unavailable` and says the device is offline, instead of a
+  wait nobody would answer (a phone's capabilities keep §74's catch-up).
+- **The `devices` group of the hub's tools is off until an admin switches it on**, even in a
+  profile whose tools were on; its reads are `list`, `list_folder`, `read_file`, `fetch_file`,
+  `run_status`; its writes `write_file`, `open`, `run`.
+- **What a device sends for the chat goes on the reply** of the run that asked
+  (`devices.fetch_file`); the file is an attachment of the profile like any other.
+
+Migration `0029` adds `devices.profiles` and `devices.helper`.
+
+Rejected: per-program tools in the hub's tool list (Hermes lists a profile's tools before a run
+names a person); a raw pipe per program through the hub (no per-call consent, logging or timeout,
+and it would not fit §74's one-answer request).
+
+## 90. A video plays from a one-attachment stream ticket
+
+A reply can now carry a video (a render from the person's computer). The web fetched every file
+with the bearer header into a blob, so a 40 MB video played only once all of it had arrived; a
+media element cannot send the header, and the contract keeps the bearer out of URLs. Proposed —
+owner to confirm:
+
+- `sessions.createAttachmentStream` (`POST /attachments/{id}/stream`) gives a path with a random
+  64-hex ticket (`/api/v1/attachment-streams/<ticket>`), valid for one hour, for that attachment
+  only; `sessions.streamAttachment` serves it with `Range` like the download, without a bearer,
+  `Cache-Control: private, no-store`.
+- The ticket is not the bearer and grants nothing else. It is checked on every read: the person
+  who asked must still be active and able to enter the profile. Tickets live in memory; a restart
+  forgets them and the page asks again.
+- The web plays a `video/*` or `audio/*` file of a message in place from it; the name stays under
+  it and opens the preview as before.
+
+Rejected: the bearer in the URL (it would reach logs and history); a service worker that adds the
+header (one more moving part, absent on first load, and the push worker is optional).
