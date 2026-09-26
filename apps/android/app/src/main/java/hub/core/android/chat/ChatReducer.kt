@@ -26,9 +26,16 @@ data class ChatAttachment(
     /** The hub's id for its bytes (`sessions.downloadAttachment`); null for a block without a file. */
     val attachmentId: String? = null,
     val mime: String? = null,
+    val sizeBytes: Long? = null,
 ) {
-    /** A picture is drawn in the message; anything else is its name (web: #154). */
-    val isImage: Boolean get() = kind == ContentBlock.Type.IMAGE && attachmentId != null
+    /**
+     * A picture is drawn in the message, whether it came as an image or as a file (a photo sent at
+     * original quality); anything else is a row that opens it.
+     */
+    val isImage: Boolean get() = attachmentId != null && (
+        FileKinds.openAs(name.orEmpty(), mime) == FileOpen.PICTURE ||
+            (kind == ContentBlock.Type.IMAGE && FileKinds.mimeOf(name.orEmpty(), mime) == "application/octet-stream")
+        )
 }
 
 /** One message as the transcript draws it. The text is the concatenation of its text blocks. */
@@ -61,7 +68,7 @@ data class ChatMessage(
             reasoningMs = message.reasoning?.durationMs,
             toolCalls = message.toolCalls,
             attachments = message.content.filter { it.type != ContentBlock.Type.TEXT && it.type != ContentBlock.Type.LOCATION }
-                .map { ChatAttachment(it.type, it.name, it.url, it.attachmentId, it.mime) },
+                .map { ChatAttachment(it.type, it.name, it.url, it.attachmentId, it.mime, it.sizeBytes) },
             runId = message.runId,
             streaming = message.status == hub.core.client.model.MessageStatus.STREAMING,
             authorId = message.author.id,
