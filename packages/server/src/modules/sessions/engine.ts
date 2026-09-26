@@ -58,11 +58,7 @@ import type {
 } from './ports.js';
 import { SessionNamer } from './naming.js';
 import { OutputWatcher, ensureRunFolders, type ProducedRefusal } from './run-files.js';
-import {
-  startChangeTracking,
-  type ChangeTracker,
-  type RunChangesRecord,
-} from './run-changes.js';
+import { startChangeTracking, type ChangeTracker, type RunChangesRecord } from './run-changes.js';
 
 /** How long one live look at a run's folder answers every asker (decision §102). */
 const LIVE_CHANGES_MS = 2_000;
@@ -203,7 +199,10 @@ export class RunEngine {
       peek = {
         at: now,
         record: tracker.finish().catch((error: unknown) => {
-          this.deps.log.warn({ err: error, runId }, 'sessions: a live look at the run folder failed');
+          this.deps.log.warn(
+            { err: error, runId },
+            'sessions: a live look at the run folder failed',
+          );
           return null;
         }),
       };

@@ -18627,7 +18627,7 @@ components:
           minimum: 1
         estimated:
           type: boolean
-          description: '`true` when `used_tokens` is the agent''s rough count rather than the provider''s report.'
+          description: "`true` when `used_tokens` is the agent's rough count rather than the provider's report."
         categories:
           type: array
           maxItems: 32

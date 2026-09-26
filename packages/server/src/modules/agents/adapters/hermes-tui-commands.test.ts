@@ -332,13 +332,22 @@ describe('the window by category (decision §102)', () => {
 
   it('reads an agent not built yet as no categories, and junk as nothing', () => {
     expect(
-      contextBreakdownOf({ categories: [], context_max: 0, context_used: 0, context_estimated: true }),
+      contextBreakdownOf({
+        categories: [],
+        context_max: 0,
+        context_used: 0,
+        context_estimated: true,
+      }),
     ).toEqual({ usedTokens: 0, windowTokens: null, estimated: true, categories: [] });
     expect(contextBreakdownOf({ categories: 'no' })).toBeNull();
     expect(
       contextBreakdownOf({
         context_used: 10,
-        categories: [{ id: '', tokens: 3 }, { id: 'skills', tokens: 0 }, { id: 'mcp', tokens: 7 }],
+        categories: [
+          { id: '', tokens: 3 },
+          { id: 'skills', tokens: 0 },
+          { id: 'mcp', tokens: 7 },
+        ],
       })?.categories,
     ).toEqual([{ id: 'mcp', label: 'mcp', tokens: 7 }]);
   });

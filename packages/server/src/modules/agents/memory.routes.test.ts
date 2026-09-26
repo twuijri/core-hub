@@ -103,7 +103,10 @@ describe('the Memory page, where Hermes reads', () => {
     writeFileSync(path.join(root, 'config.yaml'), 'memory:\n  user_char_limit: 500\n');
     mkdirSync(path.join(root, 'memories'), { recursive: true });
     // Hermes's separator with stray spaces and an empty entry: listed as Hermes reads it.
-    writeFileSync(path.join(root, 'memories', 'USER.md'), ' Prefers short answers. \n§\n\n§\nيحب القهوة.');
+    writeFileSync(
+      path.join(root, 'memories', 'USER.md'),
+      ' Prefers short answers. \n§\n\n§\nيحب القهوة.',
+    );
     const items = await memoryOf(h, agent, 'default');
     expect(items.user).toMatchObject({
       entries: ['Prefers short answers.', 'يحب القهوة.'],
