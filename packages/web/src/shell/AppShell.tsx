@@ -8,6 +8,7 @@ import { IconArrowStart } from '../ui/icons.js';
 import { Sheet } from '../ui/index.js';
 import { PaneProvider } from './pane.js';
 import { Sidebar } from './Sidebar.js';
+import { useSidebarFold } from './sidebarFold.js';
 import { SplitPane } from './SplitPane.js';
 import { TopBar } from './TopBar.js';
 import { TopBarSlotProvider } from './topBarSlot.js';
@@ -25,6 +26,8 @@ export function AppShell({ title, children }: { title: string; children: ReactNo
   // The place in the top bar a page puts its own controls in (`topBarSlot.tsx`).
   const [slot, setSlot] = useState<HTMLElement | null>(null);
   const location = useLocation();
+  // Beside the page the sidebar can fold into a rail of icons; the phone drawer never does.
+  const fold = useSidebarFold();
   useEffect(() => setMenuOpen(false), [location.pathname]);
   useEffect(() => {
     document.title = `${title} · ${t('app.name')}`;
@@ -37,7 +40,7 @@ export function AppShell({ title, children }: { title: string; children: ReactNo
             (`ChromeScope`, ADR 0016): the list and the selector never follow an opened item. */}
         <div className="hidden shrink-0 md:block">
           <ChromeScope>
-            <Sidebar />
+            <Sidebar folded={fold.folded} onToggleFold={fold.toggle} />
           </ChromeScope>
         </div>
         {/* On a phone the same sidebar arrives as a drawer. It is the kit's `Sheet` — one

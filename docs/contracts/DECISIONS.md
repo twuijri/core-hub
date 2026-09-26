@@ -3514,3 +3514,32 @@ repository. Proposed, owner to confirm:
   list endpoint (§94). `.github/workflows/models-catalog-watch.yml` compares the file every Monday
   with CLI Proxy API's public catalogues and keeps one issue (label `models-catalog`) of ids seen
   there and not here, and ids here no source lists any more; it never edits the file or pushes.
+
+## 112. The sidebar folds into a rail of icons; the Runtime card is one counted line; new speech-to-text rows start on gpt-transcribe
+
+The owner approved three parked web items on 2026-09-26: a ChatGPT-style sidebar that folds to
+icons, the Runtime checklist folded when there is nothing to read, and a successor for
+`whisper-1`, which OpenAI shuts down on 2027-02-26 (`gpt-transcribe` replaces it). Proposed, owner
+to confirm:
+
+- **The rail (web and desktop).** On a window at least 48rem wide the sidebar folds to a rail of
+  icons one large control wide, from a toggle in the brand row or `Ctrl+Shift+S` (`⌘⇧S` on a Mac —
+  ChatGPT's own shortcut for this; matched on the physical S key so an Arabic layout works). The
+  rail carries the same entries in the same order under the same keys — `rail`, then `chat` and
+  `rooms` as two icons that unfold the sidebar on their list, and inside Settings or an agent their
+  lists as icons — each row keeping its words as its accessible name and showing them as a tooltip
+  toward the page. The footer becomes one button (the person's initial and the connection dot)
+  whose menu holds Settings, the language, the theme, sign out and the version. The choice is this
+  browser's (`localStorage`, read in try/catch), not the account's. The width eases over the motion
+  token (instant under reduced motion), and in Arabic the rail is on the right. It adds no
+  destination and no entry; the phone drawer never folds. No contract change.
+- **The Runtime card.** When every check passes it is one line — «وقت التشغيل جاهز · الفحوص 4/4» /
+  "Runtime ready · 4/4 checks" — and the whole line is the button that opens the list. When any
+  fails it is open by itself, says how many passed («نجح 2 من 4 فحوص»), and lists the failing
+  checks first, each half in the order the steps happen in. The chat's failure notice still shows
+  only the failing checks.
+- **Speech-to-text default.** The `openai-stt` preset's model is `gpt-transcribe`. A preset's
+  settings are copied into a row once, when it is created, so only new rows take it: a row that
+  already holds `whisper-1`, or any model somebody chose, keeps it until a person changes it. The
+  OpenAI-compatible transcription adapter still asks for `whisper-1` when a row has no model at all,
+  which is what self-hosted Whisper servers answer to.

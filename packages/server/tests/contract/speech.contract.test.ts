@@ -145,7 +145,7 @@ describe.skipIf(!doc)('contract: speech', () => {
       language: 'ar',
       duration_ms: 1800,
       provider_id: stt.id,
-      model: 'whisper-1',
+      model: 'gpt-transcribe',
     });
 
     transcript = '';
