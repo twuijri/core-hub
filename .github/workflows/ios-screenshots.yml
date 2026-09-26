@@ -227,6 +227,7 @@ jobs:
         run: |
           set -euo pipefail
           version=${VERSION:-$(node -p "require('./package.json').version")}
+          node apps/ios/scripts/asc-review-detail.mjs com.twuijri.corehub "$version"
           cd apps/ios
           fastlane deliver \
             --api_key_path "$ASC_API_KEY_JSON" \
