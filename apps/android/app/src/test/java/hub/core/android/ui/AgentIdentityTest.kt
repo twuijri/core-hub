@@ -25,7 +25,7 @@ class AgentIdentityTest {
         )
 
     private val hermes = agent("01J8QK3ZR2W7M5N4P6T8V9X0A1", "hermes", "Hermes")
-    private val mine = agent("01J8QK3ZR2W7M5N4P6T8V9X0A2", "private-bot", "مساعدي", """{"kind":"image","url":"/api/v1/agents/x/avatar","seed":null}""")
+    private val mine = agent("01J8QK3ZR2W7M5N4P6T8V9X0A2", "private-bot", "مساعدي", """{"kind":"image","url":null,"seed":null}""")
 
     @Test fun `a chat reply's placeholder name becomes the agent's own`() {
         val who = AgentIdentity.of(hermes.id, "agent", listOf(hermes, mine), "Agent")
