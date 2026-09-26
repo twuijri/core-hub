@@ -51,7 +51,7 @@ function runTailscaleStatus(): Promise<string | null> {
 export async function detectTailnet(options: DetectOptions = {}): Promise<TailnetFound | null> {
   const address = tailnetAddress((options.interfaces ?? os.networkInterfaces)());
   if (!address) return null;
-  let dnsName: string | null = null;
+  let dnsName: string | null;
   try {
     const status = await (options.status ?? runTailscaleStatus)();
     dnsName = status ? tailscaleDnsName(status) : null;
