@@ -52,7 +52,7 @@ test('30. Logs: filter by source and search the lines the hub keeps', async ({ p
   await page.goto('/settings/logs');
   const lines = page.getByTestId('logs-lines');
   await expect(lines.getByText('perf-e2e: the hub is listening')).toBeVisible();
-  await expect(lines.getByText('Hermes · work').first()).toBeVisible();
+  await expect(lines.getByText('هرمز · work').first()).toBeVisible();
 
   await page.getByTestId('logs-search').fill('PERF-E2E: whatsapp');
   await expect(lines.getByText('perf-e2e: ERROR whatsapp bridge exited')).toBeVisible();
