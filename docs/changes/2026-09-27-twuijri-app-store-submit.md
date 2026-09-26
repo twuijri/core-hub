@@ -75,6 +75,10 @@ HTTP 404: Not Found (https://api.github.com/repos/twuijri/core-hub/actions/workf
 طريقة التسجيل البديلة (فرع مؤقت بمشغّل `push` يتخطّى الوظيفة) رُفضت بصلاحيات الجلسة، فلم تُجرَّب. يُشغَّل بعد دمج #165 في
 `main` (أو بإذن المالك لتلك الطريقة) بالمدخلات `version=1.1.1` و`build=110` و`submit=false`.
 
+CI على #165 (التشغيل 36210610471، رأس يحتوي f74b7e8b): خطوة «Release script tests (apps/ios/scripts, against fake APIs)»
+نجحت (`ℹ pass 26`، `ℹ fail 0`)، و«Change record» و«iOS store listing» نجحا. فشل واحد ليس من هذه المهمة: `status.test.ts`
+(«the contract grew or shrank: update docs/STATUS.md: expected 329 to be 337») من عمليات عقد أضافتها مهام أخرى.
+
 ## المخاطر والرجوع
 - التشغيل الحقيقي يغيّر حالة التطبيق في App Store Connect (البناء، التصنيف، السعر، التوفر، الحقوق، طريقة النشر)؛ كلها
   قابلة للتعديل يدويًا بعد ذلك. لا إرسال للمراجعة بدون `submit`.
