@@ -55,7 +55,7 @@ Lifecycle in `README.md` §task.
 | room_id | ulid? → rooms.room | where progress is posted |
 | attempt_count | int | agent runs started for this task |
 | archived_at | ms? | |
-| stuck_at | ms? | the stuck-task watchdog's marker while `running`: when the run last showed activity (DECISIONS §92); cleared by activity or any move |
+| stuck_at | ms? | the stuck-task watchdog's marker while `running`: when the run last showed activity (DECISIONS §93); cleared by activity or any move |
 
 Indexes: unique (project_id, number); `tasks_workspace_status_idx` on
 (workspace, archived_at, status, sort_key) for the columns; (project_id,
@@ -88,7 +88,7 @@ Indexes: (task_id, created_at).
 Indexes: unique pair; `depends_on_task_id`. Cycle detection is a service
 rule (walk before insert), not a constraint. A dependency is done when its task is
 `done`, or `archived` with `completed_at` (the weekly archive); a task with
-`auto_start` does not start on its own until every dependency is done (DECISIONS §92).
+`auto_start` does not start on its own until every dependency is done (DECISIONS §93).
 
 ## worktree (scoped)
 

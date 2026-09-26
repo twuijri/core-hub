@@ -17,7 +17,7 @@
 6. **B22**: قالب طلب دمج ثنائي اللغة وقوالب بلاغات بسيطة، الإنجليزية أولًا للمساهمين.
 
 ## القرار والموافقات
-القرار §92 في `docs/contracts/DECISIONS.md` — **مقترح، للمالك أن يؤكد**:
+القرار §93 في `docs/contracts/DECISIONS.md` — **مقترح، للمالك أن يؤكد**:
 
 - **البدء التلقائي ينتظر**: لا تبدأ المهمة وحدها ما دام في `depends_on` شيء لم ينتهِ، وتبدأ وحدها حين يصل آخرها إلى
   «تمّت» (النقل إلى `done` يُعيد الفحص كما يفعل النقل إلى «جاهزة»). «منتهية» = `done`، أو `archived` بعد `done`
@@ -35,10 +35,10 @@
   و`counts.total` يعدّ الأعمدة التي أُرسلت مهامها فقط. الويب يطلب الأرشيف حين يُضغط «عرض المؤرشفة».
 
 ديون الوثائق:
-- `## 26` الثاني («Changing a conversation's agent is a fork…»، من #23) صار **§91** ونُقل إلى آخر الملف، وتحت
+- `## 26` الثاني («Changing a conversation's agent is a fork…»، من #23) صار **§92** ونُقل إلى آخر الملف، وتحت
   مكانه القديم سطر يشير إليه. حُدّثت إشاراته: سطر sessions في STATUS، و`2026-09-22-twuijri-chips-fork-titles.md`،
   و`2026-09-26-twuijri-title-no-tools.md`. الإشارات «§26» في الكود لتسمية الجلسات والتفريع لم أغيّرها (خارج
-  المهمة، وملفات يعمل فيها غيري)؛ السطر المشير يقول إنها تعني §91.
+  المهمة، وملفات يعمل فيها غيري)؛ السطر المشير يقول إنها تعني §92.
 - قرار المزوّدين هو **§27** («A provider row is something you added; the catalogue is a separate list of presets»):
   صُحّح في `docs/domain/models.md` (موضعان) و`2026-09-22-twuijri-provider-picker.md` (ثلاثة مواضع)، وفي
   `DECISIONS.md` §63 («like a custom chat endpoint (§26)» ← §27). بقيت تعليقات في `packages/server/src/modules/models/`
@@ -74,13 +74,13 @@ B22: `.github/pull_request_template.md` (المشكلة، القرار، الد�
   `queries.ts`، `board.ts`، `i18n/ar.json` و`en.json`.
 - الاختبارات: `tests/unit/tasks-in-order.test.ts` (جديد)، `tests/unit/webhook-events.test.ts`، `tests/unit/config.test.ts`،
   `src/modules/auth/tokens.test.ts`، والويب `tests/task-board-visuals.test.tsx`.
-- الوثائق: `DECISIONS.md` (§91 منقول، §92 جديد، §63)، `STATUS.md`، `DEPLOY.md`، `docs/domain/tasks.md` و`models.md`،
+- الوثائق: `DECISIONS.md` (§92 منقول، §93 جديد، §63)، `STATUS.md`، `DEPLOY.md`، `docs/domain/tasks.md` و`models.md`،
   وسجلات chips-fork-titles وtitle-no-tools وprovider-picker، وسجل واتساب (cherry-pick). `.github/` (B22).
 - بطاقات هرمز لا تتغيّر: المراقب والبدء التلقائي للمهام التي يملكها الهب فقط.
 
 ## الفحوص (الأوامر ونواتجها الفعلية)
-كلها عبر `mj-run`، بعد دمج `origin/night/2026-09-27` في الفرع (أخذ §87–§90 والهجرتين 0028 و0029، فصارت
-هجرتي `0030` بـ `drizzle-kit generate --name task_stuck` وقراراتي §91 و§92):
+كلها عبر `mj-run`، بعد دمج `origin/night/2026-09-27` في الفرع (أخذ §87–§91 والهجرتين 0028 و0029، فصارت
+هجرتي `0030` بـ `drizzle-kit generate --name task_stuck` وقراراتي §92 و§93):
 ```
 $ pnpm lint
 All matched files use Prettier code style!
@@ -146,6 +146,6 @@ CI على طلب الليلة #165: يُضاف بعد الدفع.
 - الرجوع: استرجاع دمج الفرع؛ الهجرة تضيف عمودًا قابلًا للفراغ فقط.
 
 ## التسليم والخطوة التالية
-يُدمج في `night/2026-09-27` (طلب الليلة #165)، بلا طلب دمج خاص. للمالك أن يؤكد §92: انتظار الاعتماديات (والبدء
+يُدمج في `night/2026-09-27` (طلب الليلة #165)، بلا طلب دمج خاص. للمالك أن يؤكد §93: انتظار الاعتماديات (والبدء
 اليدوي بتحذير)، والمراقب وافتراضه ٣٠ دقيقة ومتغيّر البيئة بدل إعداد في الواجهة، وأن العلامة لا تنقل المهمة. بقي خارج
-المهمة: تعليقات «§26» في الكود (تسمية الجلسات/التفريع = §91، والمزوّدين في `modules/models` = §27).
+المهمة: تعليقات «§26» في الكود (تسمية الجلسات/التفريع = §92، والمزوّدين في `modules/models` = §27).

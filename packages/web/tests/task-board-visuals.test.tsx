@@ -80,7 +80,7 @@ function hub(board: Task[], archived: Task[] = []) {
         headers: { 'Content-Type': 'application/json' },
       }),
     );
-  // As the hub answers (DECISIONS §92): without `include_archived` the archive is counted,
+  // As the hub answers (DECISIONS §93): without `include_archived` the archive is counted,
   // not sent.
   const columns = (withArchive: boolean) =>
     TASK_STATUSES.map((status) => {

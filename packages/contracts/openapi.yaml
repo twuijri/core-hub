@@ -9349,7 +9349,7 @@ paths:
             `true`: the `archived` column carries its tasks. Without it the `archived` column
             still says how many there are (`count`, and `counts.by_status.archived`) but its
             `tasks` is empty, so a client asks for the archive only when a person opens it
-            (contract decision §92). `counts.total` counts only the columns whose tasks are
+            (contract decision §93). `counts.total` counts only the columns whose tasks are
             included.
           schema:
             type: boolean
@@ -12941,7 +12941,10 @@ paths:
       operationId: models.synthesize
       tags: [models]
       summary: Synthesize speech with the active TTS provider
-      description: Returns audio bytes; `X-Speech-Provider` says which provider actually spoke. Text over 2 000 characters is `413`.
+      description: >-
+        Returns audio bytes; `X-Speech-Provider` says which provider actually spoke. Text over
+        2 000 characters is `413`. `format` asks for audio the client can play (iOS cannot play
+        Ogg); the `Content-Type` says what came.
       parameters:
         - $ref: '#/components/parameters/Profile'
       requestBody:
@@ -12974,6 +12977,10 @@ paths:
                 type: string
                 format: binary
             audio/ogg:
+              schema:
+                type: string
+                format: binary
+            audio/aac:
               schema:
                 type: string
                 format: binary
@@ -21562,7 +21569,7 @@ components:
                 archive); archived without having been done does not. A task with `auto_start`
                 does not start on its own while this is not empty, and starts itself when the last
                 of them reaches `done`. A person's "assign and start" is not held back by it —
-                clients warn first. Always sent by the hub (contract decision §92).
+                clients warn first. Always sent by the hub (contract decision §93).
               items:
                 $ref: '#/components/schemas/TaskDependencyState'
             stuck_since:
@@ -21571,7 +21578,7 @@ components:
                 call or step) since this moment for longer than `COREHUB_TASK_STUCK_MINUTES` — the
                 stuck-task watchdog, which also sends the task's owner a notice once. Cleared
                 when the run shows activity again or the task leaves `running`. `null` otherwise;
-                always sent by the hub (contract decision §92).
+                always sent by the hub (contract decision §93).
               oneOf:
                 - $ref: '#/components/schemas/Timestamp'
                 - type: 'null'
@@ -23344,6 +23351,20 @@ components:
           oneOf:
             - $ref: '#/components/schemas/Ulid'
             - type: 'null'
+        format:
+          oneOf:
+            - $ref: '#/components/schemas/SpeechFormat'
+            - type: 'null'
+          description: >-
+            The audio the client can play (DECISIONS §91). The hub asks the provider for it
+            where the provider lets it choose, else the provider's own format comes back; the
+            response `Content-Type` always says which. Omitted or null: the provider's default.
+    SpeechFormat:
+      type: string
+      description: >-
+        An audio format a client asks speech in: `mp3`, `aac` (in an MP4/M4A container, what
+        iOS and Android play natively), `wav`, or `ogg` (Ogg Opus).
+      enum: [mp3, aac, wav, ogg]
     # ---------------------------------------------------------------- devices
     DevicePlatform:
       type: string

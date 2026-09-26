@@ -222,7 +222,6 @@
     "voice": "Voice",
     "voice_input": "Microphone in the composer",
     "dictation_language": "Dictation language",
-    "dictation_app": "Same as the app",
     "spoken_replies": "Read replies aloud",
     "notifications": "Notifications",
     "push_active": "Push is on: the hub sends each notice straight to this phone, even while Core Hub is closed.",
@@ -367,7 +366,16 @@
     "denied": "Core Hub may not use the microphone or speech recognition. Allow them in the iPhone Settings.",
     "unavailable": "Dictation is not available in this language on this phone.",
     "transcribing": "Turning your words into text…",
-    "no_speech": "Nothing was heard. Try again a little closer to the microphone."
+    "no_speech": "Nothing was heard. Try again a little closer to the microphone.",
+    "cancel": "Cancel dictation",
+    "send": "Send",
+    "language": "Dictation language",
+    "language_auto": "Auto",
+    "language_auto_hint": "Listens in the language of the keyboard you are typing with; without one, in the language of the conversation, then your phone's.",
+    "language_more": "More languages…",
+    "language_suggested": "Your keyboards and popular languages",
+    "language_all": "All languages",
+    "language_hint": "Touch and hold to choose the language."
   },
   "tools": {
     "refresh": "Refresh"
@@ -425,6 +433,7 @@
     "too_large": "This file is over {size}, the largest the hub takes.",
     "photo_quality": "Photos",
     "compressed": "Compressed",
-    "original": "Original quality"
+    "original": "Original quality",
+    "open": "Open {name}"
   }
 }

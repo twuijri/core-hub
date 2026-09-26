@@ -73,7 +73,8 @@ struct ChatScreen: View {
                         MessageRow(
                             message: message,
                             startsTurn: Turns.startsTurn(visible, at: index),
-                            run: message.runId.flatMap { model.state.runs[$0] }
+                            run: message.runId.flatMap { model.state.runs[$0] },
+                            profile: model.profile
                         )
                         .id(message.id)
                     }
@@ -136,7 +137,8 @@ struct ChatScreen: View {
                 },
                 onStop: { Task { await model.stopRun() } },
                 attachments: tray,
-                profile: model.profile
+                profile: model.profile,
+                recentText: model.state.messages.suffix(8).map(\.text)
             )
         }
         .padding(.horizontal, Space.s3)
@@ -173,6 +175,8 @@ struct MessageRow: View {
     let message: Message
     let startsTurn: Bool
     let run: Run?
+    /// The chat's profile: the one its files are fetched from.
+    var profile: String = ""
     @Environment(\.l10n) private var l10n
     @Environment(\.layoutDirection) private var uiDirection
 
@@ -213,7 +217,7 @@ struct MessageRow: View {
             Spacer(minLength: Space.s12)
             VStack(alignment: .trailing, spacing: Space.s1) {
                 if !message.text.isEmpty { personText }
-                MessageAttachments(content: message.content)
+                MessageAttachments(content: message.content, profile: profile)
             }
         }
         .accessibilityIdentifier("message.user")
@@ -244,7 +248,7 @@ struct MessageRow: View {
             if !message.text.isEmpty {
                 MarkdownView(text: message.text)
             }
-            MessageAttachments(content: message.content)
+            MessageAttachments(content: message.content, profile: profile)
             switch message.status {
             case .failed:
                 NoticeView(text: l10n("chat.failed", ["message": run?.error?.error ?? "—"]), tone: .danger)

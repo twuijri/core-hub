@@ -125,7 +125,7 @@ export function AssignDialog({ task, onClose }: { task: Task | null; onClose(): 
           )}
         </Field>
         {/* Starting by hand is not held back by what the task depends on — the person is
-            told first, in the words of what is not done (DECISIONS §92). */}
+            told first, in the words of what is not done (DECISIONS §93). */}
         {waitingOn.length > 0 && (
           <Notice tone="warning" testId="task-assign-waiting">
             {t('tasks.assign.waiting', {

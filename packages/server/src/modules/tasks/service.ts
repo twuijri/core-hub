@@ -279,7 +279,7 @@ export class TasksService {
 
   /**
    * How many tasks are in the archive of these workspaces, narrowed like `columnAcross` —
-   * what the board says behind Done without sending the archive itself (DECISIONS §92).
+   * what the board says behind Done without sending the archive itself (DECISIONS §93).
    */
   archivedCount(
     workspaces: readonly string[],
@@ -986,7 +986,7 @@ export class TasksService {
 
   /**
    * The dependencies of a task that are not done yet, oldest first — what a
-   * card says it waits for, and what keeps `auto_start` from starting it (DECISIONS §92).
+   * card says it waits for, and what keeps `auto_start` from starting it (DECISIONS §93).
    * `done` is done; `archived` is done only when it was done first (the weekly archive
    * keeps `completed_at`, a task archived by hand has none).
    */
@@ -1367,7 +1367,7 @@ export class TasksService {
         )
         .orderBy(asc(tasks.position), asc(tasks.id))
         .all()
-        // A task that depends on others waits for all of them to be done (DECISIONS §92);
+        // A task that depends on others waits for all of them to be done (DECISIONS §93);
         // the move of the last one to `done` looks again.
         .filter((row) => this.waitingOn(row.id).length === 0)
     );
@@ -1376,7 +1376,7 @@ export class TasksService {
   // ------------------------------------------------------------- watchdog
 
   /**
-   * Set or clear the stuck marker (DECISIONS §92). Not an edit: `updated_at` stays, and no
+   * Set or clear the stuck marker (DECISIONS §93). Not an edit: `updated_at` stays, and no
    * transition is written — the task has not moved, its run has gone quiet.
    */
   markStuck(id: string, since: Date | null): TaskRow | undefined {

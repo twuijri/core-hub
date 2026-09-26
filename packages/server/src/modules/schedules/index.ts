@@ -217,7 +217,7 @@ export function firerFor(app: FastifyInstance): ScheduleRuns {
 
 /**
  * Work another module runs on the scheduler's clock, lent by the composition root (the tasks
- * watchdog, DECISIONS §92): the hub keeps one clock rather than one timer per module.
+ * watchdog, DECISIONS §93): the hub keeps one clock rather than one timer per module.
  */
 type AlongsideFactory = (app: FastifyInstance) => ((now: Date) => unknown) | null;
 const alongsideFactories: AlongsideFactory[] = [];

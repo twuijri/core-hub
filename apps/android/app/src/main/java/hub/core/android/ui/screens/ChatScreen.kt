@@ -39,7 +39,9 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import hub.core.android.R
 import hub.core.android.chat.Turns
 import hub.core.android.graph
-import hub.core.android.phone.VoiceButton
+import hub.core.android.phone.DictationStrip
+import hub.core.android.phone.MicButton
+import hub.core.android.phone.rememberDictation
 import hub.core.android.chat.AttachmentTray
 import hub.core.android.ui.components.ApprovalCard
 import hub.core.android.ui.components.AttachButton
@@ -139,7 +141,7 @@ fun ChatScreen(
                     item(key = "older") {
                         if (ui.loadingOlder) Text(stringResource(R.string.chat_loading_older), color = LocalTokens.current.textMuted)
                     }
-                    items(turns, key = { it.messages.first().id }) { turn -> TurnView(turn, youLabel) }
+                    items(turns, key = { it.messages.first().id }) { turn -> TurnView(turn, youLabel, profile) }
                 }
             }
         }
@@ -159,21 +161,32 @@ fun ChatScreen(
         AttachmentChips(files, onRemove = vm.tray::remove)
         val uploading = files.any { it.state == AttachmentTray.State.Uploading }
         val ready = files.any { it.state is AttachmentTray.State.Ready }
+        val send = {
+            val text = draft
+            draft = ""
+            vm.send(text, onCreated)
+        }
+        // The words appear in the draft while they are spoken; with Auto and no keyboard to go
+        // by, the conversation's own language is the one listened in.
+        val dictation = rememberDictation(
+            profile = profile,
+            recent = remember(chat.messages) { chat.messages.takeLast(8).map { it.text } },
+            draft = { draft },
+            onDraft = { draft = it },
+            onSend = send,
+        )
+        DictationStrip(dictation)
         Composer(
             text = draft,
             onText = { draft = it },
             placeholder = if (agentName != null) stringResource(R.string.chat_placeholder_agent, agentName) else stringResource(R.string.chat_placeholder),
             running = chat.running,
             sending = ui.sending || uploading || (sessionId == null && ui.agentId == null),
-            onSend = {
-                val text = draft
-                draft = ""
-                vm.send(text, onCreated)
-            },
+            onSend = { if (dictation.active) dictation.send() else send() },
             onStop = vm::stop,
             extra = {
                 AttachButton(vm.tray)
-                VoiceButton(profile) { spoken -> draft = if (draft.isBlank()) spoken else "$draft $spoken" }
+                MicButton(dictation)
             },
             hasAttachments = ready,
         )

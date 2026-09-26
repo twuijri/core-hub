@@ -63,6 +63,7 @@ import {
   type ProviderProbeInput,
   type SpeechPatchInput,
 } from './service.js';
+import type { SpeechFormat } from './adapters/types.js';
 
 export { ModelsService } from './service.js';
 export type {
@@ -756,12 +757,14 @@ export const modelsModule = defineModule({
           language?: string | null;
           voice?: string | null;
           provider_id?: string | null;
+          format?: SpeechFormat | null;
         };
         const spoken = await service.synthesize(scope, actor.userId, {
           text: input.text,
           language: input.language ?? null,
           voice: input.voice ?? null,
           providerId: input.provider_id ?? null,
+          format: input.format ?? null,
         });
         return reply
           .header('X-Speech-Provider', spoken.provider)

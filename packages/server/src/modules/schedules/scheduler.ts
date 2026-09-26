@@ -52,7 +52,7 @@ export interface SchedulerDeps {
   tickMs?: number;
   /**
    * Other work that runs on this clock, after the schedules of each look (the tasks
-   * watchdog, DECISIONS §92). Each is given the look's `now`; one that fails is logged and
+   * watchdog, DECISIONS §93). Each is given the look's `now`; one that fails is logged and
    * never stops the schedules or the others.
    */
   alongside?: () => ReadonlyArray<(now: Date) => unknown>;

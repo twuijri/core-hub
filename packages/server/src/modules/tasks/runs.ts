@@ -163,7 +163,7 @@ export class TaskRuns {
   /**
    * When each followed run last showed activity (ms since the epoch): set when it starts and
    * on every event of its session that names it (`noteActivity`). What the stuck-task
-   * watchdog reads (DECISIONS §92). In memory on purpose: a restart ends every run and
+   * watchdog reads (DECISIONS §93). In memory on purpose: a restart ends every run and
    * settles its task, so nothing here has to outlive the process.
    */
   private readonly activity = new Map<string, number>();

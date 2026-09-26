@@ -183,7 +183,6 @@
     <string name="voice_input_hint">الميكروفون في خانة الكتابة، بمميّز الكلام في هذا الجوال.</string>
     <string name="voice_unavailable">لا مميّز كلام في هذا الجوال.</string>
     <string name="voice_language">لغة الإملاء</string>
-    <string name="voice_language_app">كلغة التطبيق (%1$s)</string>
     <string name="voice_spoken">الردود المنطوقة</string>
     <string name="voice_spoken_hint">اقرأ الرد المكتمل بصوت عالٍ ما دامت محادثته على الشاشة.</string>
     <string name="notices_push_active">الإشعارات الفورية تعمل: المركز يرسل كل إشعار إلى هذا الجوال مباشرة، حتى والتطبيق مغلق.</string>
@@ -271,4 +270,17 @@
     <string name="attach_photo_quality">الصور</string>
     <string name="attach_compressed">مضغوطة</string>
     <string name="attach_original">بالجودة الأصلية</string>
+    <string name="voice_cancel">إلغاء الإملاء</string>
+    <string name="voice_send">إرسال</string>
+    <string name="voice_stop">إيقاف الإملاء</string>
+    <string name="voice_language_auto">تلقائي</string>
+    <string name="voice_language_auto_hint">يسمع بلغة لوحة المفاتيح التي تكتب بها؛ وإن لم تكن، فبلغة المحادثة، ثم لغة جوالك.</string>
+    <string name="voice_language_more">لغات أخرى…</string>
+    <string name="voice_language_suggested">لوحات مفاتيحك واللغات الشائعة</string>
+    <string name="voice_language_all">كل اللغات</string>
+    <string name="voice_language_hint">اختيار لغة الإملاء</string>
+    <string name="voice_language_search">ابحث عن لغة</string>
+    <string name="attach_open">افتح %1$s</string>
+    <string name="attach_open_failed">تعذّر فتح هذا الملف.</string>
+    <string name="attach_share">مشاركة</string>
 </resources>

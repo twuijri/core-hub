@@ -31,6 +31,7 @@ import type {
   DiscoveredModel,
   DiscoveredVoice,
   ProviderContext,
+  SpeechFormat,
   SynthesizeResult,
   TranscribeResult,
 } from './adapters/types.js';
@@ -2017,6 +2018,8 @@ export class ModelsService {
       language: string | null;
       voice: string | null;
       providerId?: string | null;
+      /** The audio the client can play (`SpeechRequest.format`); the provider's own when null. */
+      format?: SpeechFormat | null;
     },
   ): Promise<{ audio: Uint8Array; contentType: string; provider: string }> {
     const row = this.activeSpeechRow(scope, ownerId, 'tts', request.providerId ?? null);
@@ -2025,6 +2028,7 @@ export class ModelsService {
       text: request.text,
       language: request.language,
       voice: request.voice,
+      format: request.format ?? null,
     });
     if (!result.supported) {
       throw new HubError('agent_unavailable', {

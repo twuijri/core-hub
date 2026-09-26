@@ -90,7 +90,7 @@ const envSchema = z.object({
     .default(2),
   /**
    * Tasks: after how many minutes without any activity from its run a running task is marked
-   * stuck and its owner told (DECISIONS §92; the default of 30 is proposed — owner to
+   * stuck and its owner told (DECISIONS §93; the default of 30 is proposed — owner to
    * confirm). `0` switches the watchdog off.
    */
   COREHUB_TASK_STUCK_MINUTES: z.coerce

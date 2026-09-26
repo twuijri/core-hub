@@ -1,6 +1,7 @@
 package hub.core.android.phone
 
 import android.speech.SpeechRecognizer
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -105,17 +106,24 @@ fun ThisDevicePage(shell: ShellViewModel) {
             ) { on -> graph.device.update { it.copy(voiceInput = on) } }
         }
         item {
-            Column(Modifier.padding(horizontal = 4.dp)) {
+            // Auto by default: the keyboard in use picks the language; any other can be chosen.
+            var choosing by remember { mutableStateOf(false) }
+            Column(
+                Modifier.fillMaxWidth().clickable { choosing = true }.padding(horizontal = 4.dp, vertical = 8.dp).testTag("device.dictation_language"),
+            ) {
                 Text(stringResource(R.string.voice_language), style = MaterialTheme.typography.labelLarge)
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    listOf(
-                        Dictation.APP to stringResource(R.string.voice_language_app, if (graph.prefs.effectiveLanguage == AppLanguage.AR) "العربية" else "English"),
-                        Dictation.AR to "العربية",
-                        Dictation.EN to "English",
-                    ).forEach { (d, label) ->
-                        FilterChip(selected = choices.dictation == d, onClick = { graph.device.update { it.copy(dictation = d) } }, label = { Text(label) })
-                    }
-                }
+                Text(
+                    if (choices.dictation == DictationLanguage.AUTO) stringResource(R.string.voice_language_auto)
+                    else DictationLanguage.name(choices.dictation, graph.prefs.effectiveLanguage.tag),
+                    style = MaterialTheme.typography.bodyMedium,
+                )
+            }
+            if (choosing) {
+                DictationLanguageDialog(
+                    choice = choices.dictation,
+                    onChoose = { tag -> graph.device.update { it.copy(dictation = tag) }; choosing = false },
+                    onDismiss = { choosing = false },
+                )
             }
         }
         item {
