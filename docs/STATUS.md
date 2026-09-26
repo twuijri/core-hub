@@ -473,6 +473,18 @@ its approval.
   (Android no longer opens the system's dialog). **A reply's pictures draw in the message** (fetched
   with the bearer header), a tap opens them full screen; other files open in the phone's viewer or
   share sheet. The phones ask the hub for MP3 speech (`SpeechRequest.format`, DECISIONS §91).
+  Since 2026-09-26 (`docs/changes/2026-09-26-twuijri-mobile-open-files.md`, iOS and Android)
+  **every file of a chat opens**: a picture — in the person's message or the agent's reply, sent as
+  an image or as a file — draws in the message and opens full screen (Android: pinch or double-tap
+  zoom, save to Pictures, open in another app, share; iOS: Quick Look with zoom and share/save);
+  PDF, text and office documents open in the system's viewer (Android `ACTION_VIEW` through the
+  app's FileProvider, iOS Quick Look); audio and video play in the system player from the
+  contract's one-hour stream ticket (`createAttachmentStream` / `createFileStream`); anything else
+  goes to the share sheet. Each file is a row with its kind, size, a progress bar and cancel while
+  it downloads, and one line with a retry when it fails (it used to stay a dead name). A link in a
+  reply that names one of its files, or a file of the conversation's folder (web decision §48),
+  opens the same way. Android is proven by JVM tests against a stand-in hub and Robolectric
+  screenshots; iOS by unit tests on the CI simulator; **neither yet tried on a real phone**.
   Since 2026-09-27 (`docs/changes/2026-09-27-twuijri-phone-rooms-sessions.md`, iOS and Android):
   **rooms open on the phone** — the Rooms segment lists the selector's profile's rooms (agents and
   people counted) with **New room** (a name and the agents to seat, the first is the lead) and
