@@ -70,7 +70,7 @@ this table:
 | about | `info` | agent_memory | `brain` |
 | global_agent | `globe` | agent_jobs | `rotate-ccw-clock` |
 | agent_channels | `radio` | agent_settings | `sliders-horizontal` |
-| agent_config_files | `file-cog` | | |
+| agent_config_files | `file-cog` | linked_hubs | `network` |
 
 Shared controls: back `chevron-left`/`arrow-left` (mirrored in RTL), close `x`, more `ellipsis`,
 send `arrow-up`, stop a filled square, attach `paperclip` / `plus`, copy `copy`, restart
