@@ -5,6 +5,9 @@ import {
   plainBooleans,
   prepareForKotlin,
   wideByteCounts,
+  KOTLIN_PART_HEADERS,
+  KOTLIN_PART_HEADERS_ANCHOR,
+  withoutPartContentType,
 } from '../scripts/kotlin-openapi.mjs';
 // @ts-expect-error — a plain ESM script without types
 import { loadDocument } from '../scripts/lib.mjs';
@@ -179,5 +182,23 @@ describe('prepareForKotlin', () => {
       for (const [name, prop] of Object.entries(schema.properties ?? {}))
         if (schema.required?.includes(name))
           expect(admitsNull(prop, prepared.components.schemas), name).toBe(false);
+  });
+});
+
+describe('the multipart part headers of the generated ApiClient.kt', () => {
+  const generated = [
+    '    val partHeaders = part.headers.toMutableMap() +',
+    '        ("Content-Disposition" to "form-data; name=\\"$name\\"")',
+  ].join('\n');
+
+  it('drops a part’s own Content-Type header, which OkHttp refuses', () => {
+    const patched = withoutPartContentType(`${generated}\n${generated}`);
+    expect(patched).not.toContain(KOTLIN_PART_HEADERS_ANCHOR);
+    expect(patched.split(KOTLIN_PART_HEADERS).length - 1).toBe(2);
+    expect(patched).toContain('Content-Disposition');
+  });
+
+  it('fails loudly when the generator’s line moved', () => {
+    expect(() => withoutPartContentType('something else')).toThrow(/ApiClient\.kt/);
   });
 });
