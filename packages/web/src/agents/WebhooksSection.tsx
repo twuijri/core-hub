@@ -3,7 +3,7 @@
  * name, a prompt and a secret; an outside service — GitHub, a form, a script — POSTs to the route's
  * address signed with the secret, and the agent runs with the prompt, the posted values filled in.
  *
- * The address is this hub's own (`/api/v1/hermes-webhooks/<profile>/<route>`): the hub passes what
+ * The address is this hub's own (`agents.receiveWebhook`): the hub passes what
  * it receives there to the profile's listener. So the page says plainly that the hub's address must
  * be reachable from the internet for an outside service — louder when the page itself was opened on
  * a private or local address. The address and the secret each have a copy button; the secret is

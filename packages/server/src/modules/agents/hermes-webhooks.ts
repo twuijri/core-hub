@@ -395,7 +395,7 @@ export async function postToListener(
     throw new WebhookError('listener_down');
   }
   const text = await response.text().catch(() => '');
-  let parsed: unknown = null;
+  let parsed: unknown;
   try {
     parsed = text ? JSON.parse(text) : null;
   } catch {

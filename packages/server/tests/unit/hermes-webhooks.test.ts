@@ -151,8 +151,11 @@ describe('Hermes incoming webhooks (§96)', () => {
     });
     const config = readFileSync(path.join(home, 'config.yaml'), 'utf8');
     expect(config).toContain('# the owner keeps notes here');
-    const webhook = (parse(config) as { platforms: { webhook: Record<string, any> } }).platforms
-      .webhook;
+    const webhook = (
+      parse(config) as {
+        platforms: { webhook: { enabled: boolean; extra: { host: string; port: number } } };
+      }
+    ).platforms.webhook;
     expect(webhook.enabled).toBe(true);
     expect(webhook.extra.host).toBe('127.0.0.1');
 

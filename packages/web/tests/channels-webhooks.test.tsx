@@ -63,6 +63,9 @@ function memoryStorage(): Storage {
 
 const HERMES = '01J8QK3ZR2W7M5N4P6T8V9X0AG';
 const SECRET = 'Zq3xV9b4mN0pR7sT2wY5aC8dF1gH6jK9LmN3pQ5rS7';
+const PROFILE = 'default';
+/** A route's address on the hub (`agents.receiveWebhook`). */
+const door = (name: string) => `/api/v1/hermes-webhooks/${PROFILE}/${name}`;
 
 const AGENT = {
   id: HERMES,
@@ -100,7 +103,7 @@ const ISSUES: Route = {
   events: ['issues'],
   deliver: 'log',
   secret: SECRET,
-  path: '/api/v1/hermes-webhooks/default/github-issues',
+  path: door('github-issues'),
   static: false,
   created_at: '2026-09-27T01:20:00Z',
 };
@@ -112,7 +115,7 @@ const FROM_CONFIG: Route = {
   events: [],
   deliver: 'log',
   secret: null,
-  path: '/api/v1/hermes-webhooks/default/from-config',
+  path: door('from-config'),
   static: true,
   created_at: null,
 };
@@ -158,7 +161,7 @@ function hub(routes: Route[]) {
         ...ISSUES,
         ...body,
         secret: SECRET,
-        path: `/api/v1/hermes-webhooks/default/${String(body.name)}`,
+        path: door(String(body.name)),
       };
       routes.push(made);
       return json(made, 201);
@@ -224,7 +227,7 @@ describe('the rules the section draws from', () => {
 
   it('builds the full address and reads events', () => {
     expect(webhookUrl('https://hub.example.com/', ISSUES as never)).toBe(
-      'https://hub.example.com/api/v1/hermes-webhooks/default/github-issues',
+      `https://hub.example.com${door('github-issues')}`,
     );
     expect(eventsOf('issues, push  issues،pull_request')).toEqual([
       'issues',
@@ -243,7 +246,7 @@ describe('«ويب هوك» on the Channels page', () => {
     const row = await screen.findByTestId('webhook-github-issues');
     const origin = window.location.origin;
     expect(within(row).getByTestId('webhook-url-github-issues').textContent).toBe(
-      `${origin}/api/v1/hermes-webhooks/default/github-issues`,
+      `${origin}${door('github-issues')}`,
     );
     expect(within(row).getByTestId('webhook-prompt-github-issues').textContent).toBe(
       'A new issue: {issue.title}',
@@ -255,7 +258,7 @@ describe('«ويب هوك» on the Channels page', () => {
     fireEvent.click(within(row).getByTestId('webhook-copy-url-github-issues'));
     fireEvent.click(within(row).getByTestId('webhook-copy-secret-github-issues'));
     expect(writeText).toHaveBeenCalledWith(
-      `${origin}/api/v1/hermes-webhooks/default/github-issues`,
+      `${origin}${door('github-issues')}`,
     );
     expect(writeText).toHaveBeenCalledWith(SECRET);
     // A route from config.yaml: listed, marked, not deletable here.
