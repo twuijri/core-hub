@@ -17,6 +17,7 @@
 
 - رفع قائمة App Store: حذف خيار `--skip_submission` غير الصالح — `night/2026-09-27` — `docs/changes/2026-09-27-twuijri-deliver-option.md`
 - برامج هذا الجهاز: المركز على الخادم يصل إلى الحاسوب (اتصال صادر من التطبيق)، مجلد `~/Core Hub`، برامج MCP المكتشفة على ماك وويندوز ولينكس مع الموافقة وجاهزية DaVinci، والفيديو في المحادثة (ADR 0025، §89، §90) — `feat/device-programs` — `docs/changes/2026-09-27-twuijri-device-programs.md`
+- مزوّدو الصوت: Groq (أصوات Orpheus الإنجليزية والسعودية)، ElevenLabs Scribe، Deepgram، Azure Speech؛ الأصوات من المزوّد أو وثائقه، كل اللغات، المعاينة قبل الحفظ، تقسيم النص الطويل، واختيار الصوت في هرمز (§91) — `feat/voice-providers` — `docs/changes/2026-09-27-twuijri-voice-providers.md`
 
 ## الملفات والتأثير
 هذا الملف فقط (فهرس). ملفات كل مهمة في سجلها.

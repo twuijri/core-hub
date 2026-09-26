@@ -370,7 +370,7 @@ export function useUpdateSpeech() {
   });
 }
 
-/** One voice as `models.listVoices` answers it (DECISIONS §87). */
+/** One voice as `models.listVoices` answers it (DECISIONS §91). */
 export interface SpeechVoice {
   id: string;
   name: string;

@@ -1,5 +1,5 @@
 /**
- * The languages a person can pick for speech (DECISIONS §87): Core Hub is for everyone, so
+ * The languages a person can pick for speech (DECISIONS §91): Core Hub is for everyone, so
  * "Arabic" means "Arabic too" — every language a provider speaks is offered, the popular ones
  * first, the rest behind "All languages", and a code can always be typed by hand.
  *

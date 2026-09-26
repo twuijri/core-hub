@@ -362,7 +362,7 @@ function signInView(record: SignInRecord): ContractProviderSignIn {
   };
 }
 
-/** One voice of `models.listVoices` (DECISIONS §87). */
+/** One voice of `models.listVoices` (DECISIONS §91). */
 export interface ContractVoice {
   id: string;
   name: string;
@@ -385,11 +385,11 @@ export interface ContractProviderPreset {
   repeatable: boolean;
   keys_url: string | null;
   sign_in: boolean;
-  /** An example of the address to type when there is nothing to prefill (DECISIONS §87). */
+  /** An example of the address to type when there is nothing to prefill (DECISIONS §91). */
   base_url_example: string | null;
   /**
    * The scopes (`all`, `profile`) in which a provider of the same credential family already
-   * holds a key: adding this one there needs none — the key is shared (ADR 0010, §87).
+   * holds a key: adding this one there needs none — the key is shared (ADR 0010, §91).
    */
   key_on_file: ('all' | 'profile')[];
 }
@@ -862,7 +862,7 @@ export class ModelsService {
     // Who it is for (decision §37): every profile (the default), or only this one.
     const owner = this.ownerFor(scope, (input.scope ?? 'all') === 'all');
     // A family that already holds a key in this scope lends it: Groq added for chat also
-    // speaks and transcribes without the key being pasted again (ADR 0010, §87).
+    // speaks and transcribes without the key being pasted again (ADR 0010, §91).
     const keyOnFile =
       preset && !preset.repeatable && !apiKey ? this.familyKeyOf(owner, preset.family) : null;
     if (preset?.keyRequirement === 'required' && !apiKey && !keyOnFile) {
@@ -2047,14 +2047,14 @@ export class ModelsService {
       this.db.update(providers).set(rowChanges).where(eq(providers.id, row.id)).run();
     }
     // The choice, the model, the voice and the language reach Hermes's own voice tools too,
-    // where Hermes has a backend for the provider (DECISIONS §87); a key reaches every agent.
+    // where Hermes has a backend for the provider (DECISIONS §91); a key reaches every agent.
     void keyChanged;
     this.propagate(scope, actor);
     return this.getSpeech(scope, actor.userId);
   }
 
   /**
-   * `models.listVoices` (DECISIONS §87): the provider's own list when it has an endpoint, its
+   * `models.listVoices` (DECISIONS §91): the provider's own list when it has an endpoint, its
    * documented list when it has none (`source` says which), narrowed to one model's voices
    * when `model` is given. "No voice list" is an allowed answer, not an error: those
    * providers take a voice id typed by hand.
@@ -2102,7 +2102,7 @@ export class ModelsService {
     const adapter = providerAdapter(entry?.protocol ?? 'openai');
     const context = this.contextOf(scope, row);
     // A provider that takes less per request than the text is given it in parts, split at
-    // sentence and word boundaries, and the parts' audio is joined in order (DECISIONS §87).
+    // sentence and word boundaries, and the parts' audio is joined in order (DECISIONS §91).
     const parts = splitForSpeech(request.text, entry?.speech?.maxInputChars ?? Infinity);
     const spoken: AudioPart[] = [];
     for (const part of parts.length > 0 ? parts : [request.text]) {
@@ -2770,7 +2770,7 @@ export class ModelsService {
   }
 
   /**
-   * One side of a profile's speech choice in Hermes's words (DECISIONS §87): the provider it
+   * One side of a profile's speech choice in Hermes's words (DECISIONS §91): the provider it
    * chose (its own, else the default profile's), when Hermes's voice tools have a backend for
    * it (`hermesSpeech` on its catalogue entry), with the row's model, voice and language. Null
    * — Hermes's voice left as it is — for no choice, a provider switched off, or one Hermes

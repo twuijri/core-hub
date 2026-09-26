@@ -1,5 +1,5 @@
 /**
- * The speech providers of DECISIONS §87, each against a fake of its own HTTP surface on a
+ * The speech providers of DECISIONS §91, each against a fake of its own HTTP surface on a
  * loopback port, reached with the real `fetch`: the hub's requests leave for the providers'
  * real addresses (`https://api.groq.com/…`, `https://westeurope.tts.speech.microsoft.com/…`)
  * and are only redirected to the fake at the last moment, so the paths, headers and bodies
@@ -364,7 +364,7 @@ const ARABIC_REPLY =
   'وهذه جملة ثالثة تضمن أن النص أطول من مئتي حرف بكثير حتى نرى ثلاثة أجزاء على الأقل؟ نعم! ' +
   'وجملة رابعة أخيرة، فيها فواصل كثيرة، وكلمات تكفي لأن يمتدّ النص إلى ما بعد أربعمئة حرف بقليل.';
 
-describe('Groq speech (§87)', () => {
+describe('Groq speech (§91)', () => {
   it('adds with the chat key, lists its own models per tab and its documented voices per model', async () => {
     const fake = await fakeProviders();
     const hub = await hubWith(fake.fetchImpl);
@@ -493,7 +493,7 @@ describe('Groq speech (§87)', () => {
   });
 });
 
-describe('OpenAI voices (§87)', () => {
+describe('OpenAI voices (§91)', () => {
   it('answers the documented voices, narrowed to the model that speaks them', async () => {
     const fake = await fakeProviders();
     const hub = await hubWith(fake.fetchImpl);
@@ -508,7 +508,7 @@ describe('OpenAI voices (§87)', () => {
   });
 });
 
-describe('ElevenLabs (§87)', () => {
+describe('ElevenLabs (§91)', () => {
   it("pages through the account's voices, lists its TTS models, and transcribes with Scribe", async () => {
     const fake = await fakeProviders();
     const hub = await hubWith(fake.fetchImpl);
@@ -556,7 +556,7 @@ describe('ElevenLabs (§87)', () => {
   });
 });
 
-describe('Deepgram (§87)', () => {
+describe('Deepgram (§91)', () => {
   it('lists models and Aura voices from its own list, speaks and transcribes', async () => {
     const fake = await fakeProviders();
     const hub = await hubWith(fake.fetchImpl);
@@ -606,7 +606,7 @@ describe('Deepgram (§87)', () => {
   });
 });
 
-describe('Azure Speech (§87)', () => {
+describe('Azure Speech (§91)', () => {
   it("asks the region's voice list, speaks SSML and transcribes with a locale", async () => {
     const fake = await fakeProviders();
     const hub = await hubWith(fake.fetchImpl);
@@ -675,7 +675,7 @@ describe('Azure Speech (§87)', () => {
   });
 });
 
-describe('one key per family, and Hermes hears the choice (§87)', () => {
+describe('one key per family, and Hermes hears the choice (§91)', () => {
   it('adds a speech row of a family that holds a key without asking for it again', async () => {
     const fake = await fakeProviders();
     const hub = await hubWith(fake.fetchImpl);

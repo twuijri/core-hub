@@ -2784,3 +2784,48 @@ owner to confirm:
 
 Rejected: the bearer in the URL (it would reach logs and history); a service worker that adds the
 header (one more moving part, absent on first load, and the push worker is optional).
+
+## 91. Speech providers: voices from the provider or its documentation, every language, long text in parts
+
+The owner asked for Groq's voices (its Saudi Arabic voice among them, chosen by the person) and
+the well-known speech services, each added in a click, with a voice picker and a preview; and,
+as for everything in Core Hub, every language — "Arabic" means "Arabic too". Proposed — owner to
+confirm:
+
+- **Presets.** Groq speaks and transcribes with its chat key (`groq-stt`: Whisper over OpenAI's
+  shape; `groq-tts`: Orpheus, English and Arabic-Saudi, WAV only, 200 characters a request, no
+  default model or voice — the person picks). ElevenLabs gains Scribe (`elevenlabs-stt`).
+  Deepgram (`deepgram-stt`, `deepgram-tts`: Nova and Aura) and Azure Speech (`azure-tts`,
+  `azure-stt`, with a resource key; the address is the region's endpoint, asked for with
+  `ProviderPreset.base_url_example`) are new families. Adding one row of a family adds its
+  siblings, and a family that already holds a key in the chosen scope lends it
+  (`ProviderPreset.key_on_file`): no key is pasted twice.
+- **Voices** (`models.listVoices`): the provider's own list when it has an endpoint
+  (`source: provider` — ElevenLabs `/v2/voices` page by page, Deepgram's `/v1/models`, Azure's
+  region voice list); its public documentation when it has none (`source: documented` — Groq,
+  OpenAI), kept in one editable file of the hub (`modules/models/speech/documented.ts`) with the
+  page and the day it was checked; `source: none` otherwise. `model` narrows the list to that
+  model's voices (`Voice.models`); `Voice.description` carries the provider's words (accent).
+- **Models** of a speech row are its provider's own list filtered to the row's kind; a provider
+  with no model endpoint (Scribe) answers its documented list with `catalogue.source: fallback`.
+- **Preview**: `SpeechRequest.model` joins `voice` and `provider_id`, so the page speaks the model
+  and voice on screen before they are saved.
+- **Long text**: a provider whose request limit is below the text (Groq 200, Deepgram 2 000,
+  OpenAI 4 096, ElevenLabs 5 000) is sent it in parts cut at sentence, then clause, then word
+  boundaries, and the parts' audio comes back as one file (WAV samples joined under one header;
+  MP3 frames concatenated).
+- **Every language**: the web offers "Detect automatically", the popular languages, then every
+  language (names from the browser in the interface language), and any id — model, voice,
+  language code — can be typed by hand.
+- **Hermes** hears the choice where it has a backend: `stt.provider` `groq` / `openai` /
+  `elevenlabs` and `tts.provider` `openai` / `elevenlabs`, with the row's model, voice and
+  language in that provider's block, written key by key. For Groq TTS (Hermes's OpenAI-shaped TTS
+  asks for MP3 or Opus, which Groq refuses), Deepgram and Azure, Hermes's own voice is left as it
+  is; the web and the phones speak through the hub's endpoints.
+
+Rejected: Google Cloud Text-to-Speech and Speech-to-Text (their authentication pages name
+Application Default Credentials and service accounts, not an API key, which the hub's one-key
+provider model needs); Microsoft Edge's read-aloud voices (an undocumented endpoint reached by
+presenting as the Edge browser, with no terms that grant a third-party server its use — Azure
+Speech offers the same neural voices with a key); a static voice list for a provider that has a
+list endpoint.

@@ -1,5 +1,5 @@
 /**
- * The pickers of the speech tabs (DECISIONS §87). Every one of them is the same pair: a
+ * The pickers of the speech tabs (DECISIONS §91). Every one of them is the same pair: a
  * searchable list of what the provider offers, and the id field it fills — which a person
  * may also type into, for a model, a voice or a language code the list does not show.
  *

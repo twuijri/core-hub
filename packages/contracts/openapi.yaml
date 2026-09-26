@@ -12836,7 +12836,7 @@ paths:
         and labelled as such by clients. `source: none` is a provider with neither: the voice is
         typed by hand. `model` narrows the list to the voices that model speaks with (Groq's
         English and Arabic models have different voices; Deepgram's `aura-2` and `aura`). A
-        person may always type a voice id the list does not show (DECISIONS §87).
+        person may always type a voice id the list does not show (DECISIONS §91).
       parameters:
         - $ref: '#/components/parameters/Profile'
         - name: provider_id
@@ -12959,7 +12959,7 @@ paths:
         Returns audio bytes; `X-Speech-Provider` says which provider actually spoke. Text over
         2 000 characters is `413`. A provider that takes less per request (Groq's Orpheus: 200
         characters) is sent the text in parts split at sentence, then word, boundaries under its
-        limit, and the parts' audio comes back joined in order as one file (DECISIONS §87).
+        limit, and the parts' audio comes back joined in order as one file (DECISIONS §91).
       parameters:
         - $ref: '#/components/parameters/Profile'
       requestBody:
@@ -22911,7 +22911,7 @@ components:
           description: >-
             The scopes (`ProviderCreate.scope`) in which a provider of the same credential
             family already holds a key. Added there, this provider uses that key and none need
-            be typed: Groq added for chat also speaks (DECISIONS §87).
+            be typed: Groq added for chat also speaks (DECISIONS §91).
     ProviderHost:
       type: object
       required: [containerized, loopback_alias]

@@ -160,6 +160,17 @@ One row per workspace: `stt_provider_id`, `tts_provider_id` (both → provider,
 set null). The contract's `SpeechSide.ready` is "an active provider, enabled,
 with a key"; `reason` is an i18n key, never a sentence in one language.
 
+**Speech providers** (decision §91). Groq (`groq-stt`, `groq-tts`), OpenAI, ElevenLabs
+(`elevenlabs`, `elevenlabs-stt`), Deepgram (`deepgram-stt`, `deepgram-tts`) and Azure Speech
+(`azure-tts`, `azure-stt`) are presets; each family is one key. A speech row's catalogue keeps the
+models of its own kind. Voices are the provider's own list, or — for a provider with no list
+endpoint (Groq, OpenAI) — the documented list in `modules/models/speech/documented.ts`, the one
+place to add a voice by hand. A catalogue entry's `speech.maxInputChars` is the provider's
+request limit: longer text is split (`speech/split.ts`) and the audio joined (`speech/audio.ts`).
+Its `hermesSpeech` says how Hermes's own voice tools name the provider; the chosen row's model,
+voice and language are written into Hermes's `config.yaml` (`stt.<provider>.*`,
+`tts.<provider>.*`) only for those.
+
 ## Queries the clients need
 
 - Model picker: enabled, visible chat models of enabled providers in the

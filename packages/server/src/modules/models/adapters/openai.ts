@@ -277,7 +277,7 @@ export const openAiAdapter: ProviderAdapter = {
 
   listVoices(ctx: ProviderContext): Promise<ListVoicesResult> {
     // OpenAI's voices are a fixed set named in its documentation, not an endpoint: the
-    // documented list is answered and labelled as such (decision §87). Somebody's own
+    // documented list is answered and labelled as such (decision §91). Somebody's own
     // OpenAI-compatible speech server has neither, and its voice is typed by hand.
     return Promise.resolve(
       documentedVoices(ctx.slug) ?? {
