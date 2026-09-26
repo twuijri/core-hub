@@ -80,11 +80,14 @@ class AppPrefs(private val prefs: SharedPreferences) {
     }
 }
 
-/** Everything long-lived the screens share, made once per process. */
-class AppGraph(context: Context) {
+/**
+ * Everything long-lived the screens share, made once per process. [sealer] guards the stored
+ * tokens: the Android Keystore in the app; the JVM screenshot tests hand in their own.
+ */
+class AppGraph(context: Context, sealer: hub.core.android.data.Sealer = KeystoreSealer()) {
     val prefs = AppPrefs(context.getSharedPreferences("corehub.prefs", Context.MODE_PRIVATE))
     val store = SessionStore(
-        SecureStore(context.getSharedPreferences("corehub.secure", Context.MODE_PRIVATE), KeystoreSealer()),
+        SecureStore(context.getSharedPreferences("corehub.secure", Context.MODE_PRIVATE), sealer),
     )
     private val _signedOut = MutableSharedFlow<String?>(extraBufferCapacity = 4)
 
@@ -218,14 +221,17 @@ class AppGraph(context: Context) {
     }
 }
 
-class CoreHubApp : Application() {
+open class CoreHubApp : Application() {
     lateinit var graph: AppGraph
         private set
 
     override fun onCreate() {
         super.onCreate()
-        graph = AppGraph(this)
+        graph = makeGraph()
     }
+
+    /** The graph of this process; the screenshot tests' application builds it without the Keystore. */
+    protected open fun makeGraph(): AppGraph = AppGraph(this)
 }
 
 val Context.graph: AppGraph get() = (applicationContext as CoreHubApp).graph

@@ -4,6 +4,7 @@
 //   node scripts/icons/lucide-mobile.mjs                  # write every icon listed in lucide-mobile.json
 //   node scripts/icons/lucide-mobile.mjs camera image     # add these names to the list, then write
 //   node scripts/icons/lucide-mobile.mjs --check          # exit 1 when a committed file differs
+//   node scripts/icons/lucide-mobile.mjs --android menu   # add names the Android app alone carries
 //
 // The list of names lives in scripts/icons/lucide-mobile.json, so the apps carry only the icons
 // they use. The shapes come from the pinned `lucide-static` package (its icon-nodes.json), never
@@ -13,7 +14,10 @@
 //   (the `Lucide` folder is a namespace, so the app asks for `Image("Lucide/<name>")`), plus
 //   `CoreHub/Generated/Lucide.swift`, an enum of the names so a typo does not compile
 //   (`Image(lucide: .camera)`).
-// - Android: `res/drawable/lucide_<name>.xml`, a vector drawable the app tints (`Icon(painterResource(…))`).
+// - Android: `res/drawable/lucide_<name>.xml`, a vector drawable the app tints, plus
+//   `ui/kit/Lucide.kt`, an object of the drawables by name (`LucideIcon(Lucide.Mic, …)`).
+//   `icons` go to both apps; `android` lists the ones only the Android app carries so far
+//   (its redesign, docs/changes/2026-09-27-twuijri-android-redesign.md), until iOS adopts them.
 //
 // Every element (circle, rect, line, polyline, polygon, ellipse, path) becomes path data, because
 // an Android vector draws paths only; the SVG for iOS uses the same paths, so both platforms draw
@@ -27,6 +31,7 @@ const repo = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..')
 const require = createRequire(import.meta.url);
 const args = process.argv.slice(2);
 const check = args.includes('--check');
+const androidOnly = args.includes('--android');
 const added = args.filter((a) => !a.startsWith('--'));
 
 const listFile = path.join(repo, 'scripts/icons/lucide-mobile.json');
@@ -35,14 +40,21 @@ const version = JSON.parse(readFileSync(path.join(pkgDir, 'package.json'), 'utf8
 const nodes = JSON.parse(readFileSync(path.join(pkgDir, 'icon-nodes.json'), 'utf8'));
 
 const list = JSON.parse(readFileSync(listFile, 'utf8'));
+list.android ??= [];
 for (const name of added) {
   if (!nodes[name]) throw new Error(`lucide-static ${version} has no icon named "${name}"`);
-  if (!list.icons.includes(name)) list.icons.push(name);
+  const target = androidOnly ? list.android : list.icons;
+  if (!list.icons.includes(name) && !target.includes(name)) target.push(name);
 }
+// A name both apps carry is not listed again as Android's own.
+list.android = list.android.filter((name) => !list.icons.includes(name));
 list.icons.sort();
-for (const name of list.icons) {
+list.android.sort();
+for (const name of [...list.icons, ...list.android]) {
   if (!nodes[name]) throw new Error(`lucide-static ${version} has no icon named "${name}"`);
 }
+/** Every icon the Android app carries: the shared ones and its own. */
+const androidIcons = [...list.icons, ...list.android].sort();
 
 // ------------------------------------------------------------------ outlines
 
@@ -161,6 +173,10 @@ for (const name of list.icons) {
       },
     }),
   );
+}
+/** Icons that point along the reading direction: Android flips them in a right-to-left layout. */
+const MIRRORED = new Set(['arrow-left', 'arrow-right', 'chevron-left', 'chevron-right', 'log-out', 'log-in']);
+for (const name of androidIcons) {
   const vectorParts = parts(name)
     .map(
       (p) =>
@@ -179,7 +195,8 @@ for (const name of list.icons) {
       `<!-- lucide ${name} · ${header} -->\n` +
       `<vector xmlns:android="http://schemas.android.com/apk/res/android"\n` +
       `    android:width="24dp" android:height="24dp"\n` +
-      `    android:viewportWidth="24" android:viewportHeight="24">\n` +
+      `    android:viewportWidth="24" android:viewportHeight="24"` +
+      (MIRRORED.has(name) ? `\n    android:autoMirrored="true">\n` : `>\n`) +
       vectorParts +
       `</vector>\n`,
   );
@@ -200,6 +217,19 @@ put(
     `}\n`,
 );
 
+/** `file-text` → `FileText`, for the Kotlin object. */
+const kotlinCase = (name) => name.replace(/(^|-)([a-z0-9])/g, (_, __, c) => c.toUpperCase());
+put(
+  'apps/android/app/src/main/java/hub/core/android/ui/kit/Lucide.kt',
+  `// ${header}\n` +
+    `package hub.core.android.ui.kit\n\n` +
+    `import hub.core.android.R\n\n` +
+    `/** The Lucide icons the app carries (scripts/icons/lucide-mobile.json), as drawable ids. */\n` +
+    `object Lucide {\n` +
+    androidIcons.map((n) => `    val ${kotlinCase(n)} = R.drawable.${androidName(n)}\n`).join('') +
+    `}\n`,
+);
+
 // ------------------------------------------------------------------ write, prune or compare
 
 /** Files this script owns that no longer belong to a listed icon. */
@@ -213,7 +243,7 @@ function stale() {
       }
     }
   }
-  const wanted = new Set(list.icons.map((n) => `${androidName(n)}.xml`));
+  const wanted = new Set(androidIcons.map((n) => `${androidName(n)}.xml`));
   for (const entry of readdirSync(path.join(repo, res))) {
     if (entry.startsWith('lucide_') && !wanted.has(entry)) found.push(`${res}/${entry}`);
   }
@@ -249,5 +279,5 @@ if (check) {
   if (added.length) writeFileSync(listFile, json(list));
 }
 console.log(
-  `lucide: ${list.icons.length} icon(s) from lucide-static ${version} ${check ? 'up to date' : 'written'}`,
+  `lucide: ${list.icons.length} shared + ${list.android.length} Android icon(s) from lucide-static ${version} ${check ? 'up to date' : 'written'}`,
 );
