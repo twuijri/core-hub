@@ -1,0 +1,101 @@
+name: Bug report / بلاغ خطأ
+description: Something in Core Hub does not work as it should. / شيء في كور هب لا يعمل كما ينبغي.
+title: 'bug: '
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting. English first, please; Arabic is welcome below it. Remove tokens, keys, passwords and private hostnames from anything you paste.
+        شكرًا على البلاغ. الإنجليزية أولًا، والعربية مرحَّب بها تحتها. احذف الرموز والمفاتيح وكلمات المرور وأسماء خوادمك الخاصة من أي شيء تلصقه.
+  - type: input
+    id: version
+    attributes:
+      label: Core Hub version / الإصدار
+      description: Settings → About, the download page, or the image tag (for example 1.1.2). / من الإعدادات ← حول، أو صفحة التحميل، أو وسم الصورة.
+      placeholder: '1.1.2'
+    validations:
+      required: true
+  - type: dropdown
+    id: client
+    attributes:
+      label: Where it happens / أين يحدث
+      multiple: true
+      options:
+        - Web / الويب
+        - Windows app / تطبيق ويندوز
+        - macOS app / تطبيق ماك
+        - Linux app / تطبيق لينكس
+        - iPhone / iPad app / تطبيق الآيفون والآيباد
+        - Android app / تطبيق أندرويد
+        - CLI / سطر الأوامر
+        - Download page / صفحة التحميل
+    validations:
+      required: true
+  - type: dropdown
+    id: runtime
+    attributes:
+      label: How the hub runs / طريقة تشغيل المركز
+      options:
+        - Docker image / صورة Docker
+        - Desktop app (built-in hub) / تطبيق سطح المكتب (المركز المدمج)
+        - From source / من المصدر
+        - Not sure / لست متأكدًا
+    validations:
+      required: true
+  - type: input
+    id: system
+    attributes:
+      label: Device and system / الجهاز والنظام
+      placeholder: 'Windows 11 · Chrome 140 · iPhone 16 iOS 26 · Ubuntu 24.04 …'
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened / ما الذي حدث
+      description: Include the exact error text if there is one. / انسخ نص الخطأ كما هو إن وُجد.
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: What you expected / ما الذي توقعته
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce / خطوات إعادة الحدوث
+      value: |
+        1.
+        2.
+        3.
+    validations:
+      required: true
+  - type: dropdown
+    id: frequency
+    attributes:
+      label: How often / كم مرة يحدث
+      options:
+        - Every time / كل مرة
+        - Sometimes / أحيانًا
+        - Once / مرة واحدة
+  - type: textarea
+    id: idea
+    attributes:
+      label: Your idea for a fix (optional) / فكرتك للحل (اختياري)
+      description: If you already have a fix or a cause in mind, tell us; it often saves a lot of time. / إذا كان في بالك حل أو سبب، اذكره؛ كثيرًا ما يختصر الطريق.
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs or screenshots / السجلات أو الصور
+      description: Settings → Logs can download the hub's lines. Drag images here. / الإعدادات ← السجلات تنزّل أسطر المركز. اسحب الصور هنا.
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Before sending / قبل الإرسال
+      options:
+        - label: I searched the open and closed issues and this is not a duplicate. / بحثت في البلاغات المفتوحة والمغلقة وهذا ليس مكررًا.
+          required: true
+        - label: I removed keys, tokens, passwords and private hostnames. / حذفت المفاتيح والرموز وكلمات المرور وأسماء الخوادم الخاصة.
+          required: true
+        - label: I would like to send a pull request for this. / أرغب في إرسال طلب دمج لهذا.

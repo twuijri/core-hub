@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Merged over the main manifest only in a build without self-update (a Google Play build,
+     `-Pcorehub.selfUpdate=false`, app/build.gradle.kts): Play updates the app, so it never
+     hands an APK to the installer and does not ask for the permission to. -->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
+    <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" tools:node="remove" />
+</manifest>

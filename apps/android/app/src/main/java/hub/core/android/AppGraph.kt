@@ -86,7 +86,12 @@ class AppPrefs(private val prefs: SharedPreferences) {
  * Everything long-lived the screens share, made once per process. [sealer] guards the stored
  * tokens: the Android Keystore in the app; the JVM screenshot tests hand in their own.
  */
-class AppGraph(context: Context, sealer: hub.core.android.data.Sealer = KeystoreSealer()) {
+class AppGraph(
+    context: Context,
+    sealer: hub.core.android.data.Sealer = KeystoreSealer(),
+    /** Where self-update asks for the latest release: GitHub; the screenshot tests hand in their own. */
+    releaseSource: hub.core.android.phone.ReleaseSource? = null,
+) {
     val prefs = AppPrefs(context.getSharedPreferences("corehub.prefs", Context.MODE_PRIVATE))
     val store = SessionStore(
         SecureStore(context.getSharedPreferences("corehub.secure", Context.MODE_PRIVATE), sealer),
@@ -148,6 +153,27 @@ class AppGraph(context: Context, sealer: hub.core.android.data.Sealer = Keystore
 
     /** True while a screen of the app is visible. */
     fun inForeground(): Boolean = ProcessLifecycleOwner.get().lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED)
+
+    /**
+     * Self-update from the public repository's GitHub releases (SelfUpdate.kt): off in a build for
+     * Google Play (`BuildConfig.SELF_UPDATE`). Its own HTTP client: nothing of the hub's goes to GitHub.
+     */
+    private val github = okhttp3.OkHttpClient.Builder()
+        .connectTimeout(15, java.util.concurrent.TimeUnit.SECONDS)
+        .readTimeout(60, java.util.concurrent.TimeUnit.SECONDS)
+        .build()
+    val updates = hub.core.android.phone.SelfUpdate(
+        appContext,
+        hub.core.android.phone.UpdateChecker(
+            enabled = BuildConfig.SELF_UPDATE,
+            current = BuildConfig.VERSION_NAME,
+            store = hub.core.android.phone.PrefsUpdateStore(context.getSharedPreferences("corehub.updates", Context.MODE_PRIVATE)),
+            source = releaseSource ?: hub.core.android.phone.GitHubReleases(github, BuildConfig.VERSION_NAME),
+        ),
+        hub.core.android.phone.ApkDownloader(github),
+        scope,
+        ::inForeground,
+    )
 
     init {
         notifier.ensureChannel()
