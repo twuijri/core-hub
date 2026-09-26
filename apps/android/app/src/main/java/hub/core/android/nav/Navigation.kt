@@ -50,7 +50,7 @@ object Screens {
 
     /** An agent's pages, in order; each shows only when the adapter declares its capability. */
     val agentLevel = listOf(
-        "agent_skills", "agent_mcp", "agent_memory", "agent_jobs", "agent_channels", "agent_plugins", "agent_settings",
+        "agent_skills", "agent_mcp", "agent_memory", "agent_jobs", "agent_channels", "agent_plugins", "agent_config_files", "agent_settings",
     )
 
     /** The drawer's primary rows (the manifest's `rail`), segments and footer. */
@@ -72,7 +72,7 @@ object Screens {
     /** The capability an agent page needs (`agent_settings` is shown for every installed agent). */
     val capabilityOf = mapOf(
         "agent_skills" to "skills", "agent_mcp" to "mcp", "agent_memory" to "memory", "agent_jobs" to "jobs",
-        "agent_channels" to "channels", "agent_plugins" to "plugins", "agent_settings" to "settings",
+        "agent_channels" to "channels", "agent_plugins" to "plugins", "agent_config_files" to "config_files", "agent_settings" to "settings",
     )
 
     /**
