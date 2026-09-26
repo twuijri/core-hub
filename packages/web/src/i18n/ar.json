@@ -282,7 +282,8 @@
     "older_failed": "تعذّر تحميل الرسائل الأقدم.",
     "answered_by": "أجاب {model}",
     "fallback_note": "فشل {failed}، فأجاب {model}",
-    "fallback_reason": "السبب: {reason}"
+    "fallback_reason": "السبب: {reason}",
+    "bar_more": "المزيد"
   },
   "composer": {
     "label": "محرّر الرسالة",
@@ -964,7 +965,8 @@
     "new": "مجلد جديد",
     "new_placeholder": "اسم مجلد جديد",
     "create": "إنشاء",
-    "locked": "المجلد يثبت بعد أول تشغيل."
+    "locked": "المجلد يثبت بعد أول تشغيل.",
+    "button": "المجلد: {name}"
   },
   "combobox": {
     "search": "ابحث…",
