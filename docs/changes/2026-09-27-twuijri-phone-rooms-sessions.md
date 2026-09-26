@@ -9,6 +9,10 @@
   الغرفة وطلبات موافقتها في قائمة الجوال لما ينتظر الشخص.
 - **المحادثات**: وضع تحديد في قائمة المحادثات (أرشفة، إلغاء أرشفة، حذف)، وتصدير المحادثة إلى
   نافذة المشاركة باستعمال تصدير المركز.
+- **هوية الوكيل** (أُضيفت أثناء العمل، من تجربة المالك على جواله): رأس الرد في المحادثات يقول «agent» بلا
+  أيقونة. السبب: المركز يكتب اسم مؤلف رسالة الوكيل `agent` دائمًا ومعه معرّفه فقط، والتطبيقان يعرضان
+  الاسم كما هو. المطلوب اسم الوكيل الحقيقي ووجهه (صورته من `agents.getAvatar` §76، أو شعار الكتالوج
+  لهرمز وClaude Code وCodex…) في ردود المحادثة ومقاعد الغرف وقائمة المحادثات ومنتقي الوكيل.
 - **ما كان ناقصًا في المركز لهذا** (اكتُشف أثناء العمل، فبُدئ بالعقد):
   1. رسالة الغرفة كانت نصًا فقط (`400 text_only`)، فلا يمكن إرسال صورة أو ملف من محرّر الغرفة.
   2. `Approval.room_id` كان دائمًا `null`، و`RoomDetail.pending_approvals` دائمًا فارغة، فلا يعرف الجوال
@@ -50,6 +54,16 @@
 - **التنقل**: `surfaceRoutes.ios/android.rooms` صار `/rooms/:roomId?` (كالويب)، فـ`corehub://open/rooms/<id>`
   يفتح الغرفة في بروفايلها (`?profile=`). الغرفة جذر مثل المحادثة في مكدس أندرويد. اختبارا التكافؤ صارا
   يتحققان من فتح الغرفة (كان أندرويد يستثني `rooms`).
+- **هوية الوكيل**: الاسم من سجل الوكلاء (`agents.list` لبروفايل المحادثة، يُقرأ مرة ويُحفظ ما دام
+  التطبيق يعمل) لا من `author.name` حين يكون `agent`؛ في الغرفة يبقى اسم المقعد ويلبس وجه وكيله. الوجه:
+  صورة الوكيل إن كانت له (`avatar.kind: image`، تُجلب مرة بالعميل المولَّد وتُخبأ)، وإلا شعاره من الكتالوج
+  بالـ`slug`، وإلا حرفه الأول. **الشعارات** مصدرها واحد: `packages/web/src/ui/brand/marks.tsx` (مسارات
+  الويب وخريطة `MARKS`)، يكتبها `scripts/icons/agent-marks-mobile.mjs` (`pnpm icons:agents`، و`--check`)
+  إلى `Assets.xcassets/AgentMarks` وقائمة `AgentMarks.swift` في iOS، و`drawable/agent_mark_*.xml` و
+  `AgentMarks.kt` في أندرويد، بقالب لون واحد يتبع السمة كما في الويب؛ ويُعاد كتابة أعلام الأقواس في
+  المسارات بفواصل (`a.5.5 0 0 1 …`) لأن بعض قارئي المتجهات لا يفهمون الشكل المضغوط، والشكل لا يتغير.
+  الإشعار في `THIRD-PARTY-NOTICES.md` صار يذكر التطبيقين. **الويب** يعرض «agent» أيضًا (نفس السبب)؛ لم
+  يُمسّ هنا (خارج النطاق) — يُصلَح بالطريقة نفسها أو في المركز.
 - **إعادة الاستعمال لا النسخ**: `Composer` و`AttachButton`/`AttachmentTray` و`rememberDictation`/
   `DictationStrip`/`MicButton` و`MessageFiles`/`MessageAttachments` و`ApprovalCard`/`QuestionCard`
   كما هي؛ `TurnView` (أندرويد) و`MessageRow` (iOS) أخذا معاملًا اختياريًا «هل هي لي» فقط.
@@ -75,6 +89,12 @@
   `Sessions/SessionList.swift` (التحديد)، `Chat/ChatModel.swift` و`ChatScreen.swift` (التصدير و`mine`)،
   حذف `RoomsList` القديم من `TasksSchedules.swift`، `i18n/{ar,en}.json`، واختبار `RoomsTests.swift` (جديد)
   و`NavigationParityTests.swift`.
+- الهوية: `ui/components/AgentIdentity.kt` و`AgentMarks.kt` (مولَّد) و`res/drawable/agent_mark_*.xml` (مولَّدة)
+  و`AppGraph.kt` (`agents`) و`ChatScreen.kt`/`RoomScreen.kt`/`RoomsPanel.kt`/`Shell.kt` واختبار
+  `ui/AgentIdentityTest.kt` في أندرويد؛ `Shell/AgentIdentity.swift` و`Generated/AgentMarks.swift` و
+  `Assets.xcassets/AgentMarks` و`AppModel.swift` (`agentDirectory`) و`ChatScreen.swift`/`RoomScreen.swift`/
+  `RoomsList.swift`/`NewChatScreen.swift`/`SessionList.swift` واختبار `AgentIdentityTests.swift` في iOS؛
+  `scripts/icons/agent-marks-mobile.mjs` و`package.json` (`icons:agents`) و`THIRD-PARTY-NOTICES.md`.
 - `docs/clients/navigation.json` (مسار الغرف للجوالين)، `docs/contracts/DECISIONS.md` (§99)، `docs/STATUS.md`.
 
 ## الفحوص (الأوامر ونواتجها الفعلية)
@@ -103,6 +123,8 @@ CI على الفرع (`workflow_dispatch`): يُملأ أدناه.
 
 ## المخاطر والرجوع
 - لم يُجرَّب على جوالَي المالك ولا على مركزه؛ الاختبارات وحدات ونماذج عرض، لا واجهات حقيقية.
+- واجهات أندرويد لهذه الميزات دنيا عمدًا: المالك طلب إعادة تصميم أندرويد كاملة بوكيل آخر يبني عليها
+  (نماذج العرض والبيانات والنداءات هنا هي الأساس).
 - الويب لا يرفق ملفات في الغرفة بعد (المركز يقبلها الآن)؛ ولا يفتح عنصر الغرفة من شريط الانتظار (a17).
 - iOS: الجرس يظهر في كل صفحة تحت الدرج (منها المهام والجدولة)؛ أندرويد في المحادثة والمسودة والغرفة فقط.
 - الرجوع: استرجاع دمج الفرع؛ لا ترحيل قاعدة بيانات (عمود `attachment_ids` موجود من قبل).
