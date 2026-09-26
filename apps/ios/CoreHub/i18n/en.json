@@ -171,7 +171,9 @@
     "back_to_chats": "Back to chats",
     "management": "Management",
     "tools": "Tools",
-    "global_note": "This page is the whole hub's, not one profile's."
+    "global_note": "This page is the whole hub's, not one profile's.",
+    "on_the_web": "On the web",
+    "on_the_web_hint": "Opens in the browser: it needs a computer's screen."
   },
   "permissions": {
     "camera": "Core Hub uses the camera to scan the pairing code your hub shows on the web, and to take photos you attach to a message.",

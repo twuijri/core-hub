@@ -21,6 +21,31 @@ struct SettingsScreen: View {
                 Section(l10n("settings.tools")) {
                     rows(NavigationMap.settingsTools)
                 }
+                // What needs a computer's screen stays on the web, one tap away (not destinations here).
+                let web = WebOnlyPages.rows(role: app.credentials?.role ?? "member")
+                if !web.isEmpty, let hub = app.credentials?.hubURL {
+                    Section {
+                        ForEach(web, id: \.term) { page in
+                            Link(destination: hub.appendingPathComponent(String(page.path.dropFirst()))) {
+                                HStack {
+                                    Label {
+                                        VStack(alignment: .leading, spacing: 2) {
+                                            Text(l10n("nav.\(page.term)")).foregroundStyle(Tone.text)
+                                            Text(l10n("settings.on_the_web_hint")).font(.system(size: FontSize.sizeXs)).foregroundStyle(Tone.textMuted)
+                                        }
+                                    } icon: {
+                                        LucideIcon(page.term == "terminal" ? .terminal : .globe, size: 18).foregroundStyle(Tone.textMuted)
+                                    }
+                                    Spacer()
+                                    LucideIcon(.externalLink, size: 14).foregroundStyle(Tone.textFaint)
+                                }
+                            }
+                            .accessibilityIdentifier("settings.web.\(page.term)")
+                        }
+                    } header: {
+                        Text(l10n("settings.on_the_web"))
+                    }
+                }
             }
             .navigationTitle(l10n("nav.settings"))
             // The way back to the chats sits where every phone puts "back": the navigation bar,
@@ -203,6 +228,27 @@ struct PushStatusSection: View {
         // Back from the iPhone's Settings: read the permission again.
         .onChange(of: scenePhase) { _, phase in
             if phase == .active { Task { await PushCenter.shared.foreground(app: app) } }
+        }
+    }
+}
+
+/// The web pages the phone does not draw (navigation.json `surfaces: [web]` / `[web, desktop]`) that an
+/// owner or admin may still want from here: they open in the browser.
+enum WebOnlyPages {
+    struct Page: Equatable {
+        let term: String
+        /// The page's path on the web (`surfaceRoutes.web`).
+        let path: String
+    }
+
+    static let linkedHubs = Page(term: "linked_hubs", path: "/settings/linked-hubs")
+    static let terminal = Page(term: "terminal", path: "/settings/terminal")
+
+    static func rows(role: String) -> [Page] {
+        switch role {
+        case "owner": return [linkedHubs, terminal]
+        case "admin": return [linkedHubs]
+        default: return []
         }
     }
 }

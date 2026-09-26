@@ -131,6 +131,40 @@ fun SettingsScreen(isAdmin: Boolean, onOpen: (Route) -> Unit, onBackToChats: () 
                 }
             }
         }
+        // What only a computer's screen does (a shell on the hub's host, linking hubs) stays on the
+        // web: said here, one tap away, rather than missing (not destinations of the phone).
+        if (isAdmin) item(key = "web-only") { OnTheWebRows() }
+    }
+}
+
+/** The web-only pages an admin may still want from the phone: they open in the browser. */
+@Composable
+private fun OnTheWebRows() {
+    val context = LocalContext.current
+    val t = LocalTokens.current
+    val session = context.graph.store.current ?: return
+    val rows = WebOnly.rows(session.user.role)
+    if (rows.isEmpty()) return
+    GroupedList(title = stringResource(R.string.settings_on_the_web)) {
+        rows.forEach { destination ->
+            Item(
+                term(destination), icon = if (destination == "terminal") Lucide.Terminal else Lucide.Globe, iconTint = t.textMuted,
+                subtitle = stringResource(R.string.settings_on_the_web_hint), tag = "settings.web.$destination",
+                trailing = { hub.core.android.ui.kit.LucideIcon(Lucide.ExternalLink, null, size = 16.dp, tint = t.textFaint) },
+                onClick = {
+                    AppPaths.webUrl(session.hub, destination)?.let { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(it))) }
+                },
+            )
+        }
+    }
+}
+
+/** Which web-only pages a role sees (navigation.json: the terminal is the owner's, linked hubs an admin's). */
+object WebOnly {
+    fun rows(role: String): List<String> = when (role) {
+        "owner" -> listOf("linked_hubs", "terminal")
+        "admin" -> listOf("linked_hubs")
+        else -> emptyList()
     }
 }
 

@@ -74,4 +74,16 @@ final class ModelsAdminTests: XCTestCase {
         XCTAssertFalse(AdminLogic.timeOK("25:00"))
         XCTAssertEqual(AdminLogic.tokens(12_300), "12.3K")
     }
+
+    func testWhatNeedsAComputersScreenIsOneTapAwayOnTheWebForTheRolesThatMayUseIt() throws {
+        XCTAssertEqual(WebOnlyPages.rows(role: "owner").map(\.term), ["linked_hubs", "terminal"])
+        XCTAssertEqual(WebOnlyPages.rows(role: "admin").map(\.term), ["linked_hubs"])
+        XCTAssertTrue(WebOnlyPages.rows(role: "member").isEmpty)
+        // The paths are the manifest's own web routes.
+        let object = try JSONSerialization.jsonObject(with: Fixture.repositoryFile("navigation", "json")) as! [String: Any]
+        let web = (object["surfaceRoutes"] as! [String: Any])["web"] as! [String: Any]
+        for page in WebOnlyPages.rows(role: "owner") {
+            XCTAssertEqual(web[page.term] as? String, page.path, page.term)
+        }
+    }
 }

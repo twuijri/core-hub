@@ -252,4 +252,6 @@
     <string name="locate_choice_always">Always</string>
     <string name="locate_choice_never">Never</string>
     <string name="locate_hint">When an agent needs to know where you are, this phone asks you first, answers every time, or never does.</string>
+    <string name="settings_on_the_web">On the web</string>
+    <string name="settings_on_the_web_hint">Opens in the browser: it needs a computer\'s screen.</string>
 </resources>

@@ -336,7 +336,11 @@ interface PhoneView {
  * that can tell (declares `location`, switched on, may be asked in this profile), connected
  * first, then the one seen most recently.
  */
-export function phoneToLocate(devices: PhoneView[], profile: string, wanted?: string): PhoneView | null {
+export function phoneToLocate(
+  devices: PhoneView[],
+  profile: string,
+  wanted?: string,
+): PhoneView | null {
   const able = devices.filter(
     (d) =>
       (d.capabilities ?? []).some((c) => c.kind === 'location' && c.enabled) &&
@@ -344,7 +348,9 @@ export function phoneToLocate(devices: PhoneView[], profile: string, wanted?: st
   );
   if (wanted) return able.find((d) => d.id === wanted) ?? null;
   const seen = (d: PhoneView) => (d.last_seen_at ? Date.parse(d.last_seen_at) : 0);
-  return [...able].sort((a, b) => Number(b.online) - Number(a.online) || seen(b) - seen(a))[0] ?? null;
+  return (
+    [...able].sort((a, b) => Number(b.online) - Number(a.online) || seen(b) - seen(a))[0] ?? null
+  );
 }
 
 const DEVICE_ID = {
@@ -545,13 +551,18 @@ function deviceTools(): HubToolDefinition[] {
           },
           device_id: {
             type: 'string',
-            description: 'A phone to ask by its id; without it, the phone that can tell and was seen last.',
+            description:
+              'A phone to ask by its id; without it, the phone that can tell and was seen last.',
           },
         },
       },
       async run(ctx, a) {
         const body = await ctx.call('GET', '/devices', { query: { limit: 50 } });
-        const phone = phoneToLocate(items(body) as PhoneView[], ctx.profile, str(a, 'device_id') ?? undefined);
+        const phone = phoneToLocate(
+          items(body) as PhoneView[],
+          ctx.profile,
+          str(a, 'device_id') ?? undefined,
+        );
         if (!phone) {
           throw new ToolRefusal(
             'device_capability_off',

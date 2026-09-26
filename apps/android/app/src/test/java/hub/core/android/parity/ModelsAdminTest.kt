@@ -108,6 +108,14 @@ class ModelsAdminTest {
         assertEquals(33, AdminRules.percent(1, 3))
     }
 
+    @Test fun `what needs a computer's screen is one tap away on the web, for the roles that may use it`() {
+        assertEquals(listOf("linked_hubs", "terminal"), hub.core.android.ui.screens.WebOnly.rows("owner"))
+        assertEquals(listOf("linked_hubs"), hub.core.android.ui.screens.WebOnly.rows("admin"))
+        assertTrue(hub.core.android.ui.screens.WebOnly.rows("member").isEmpty())
+        // Each is a web page of the manifest (so the browser opens a real address).
+        hub.core.android.ui.screens.WebOnly.rows("owner").forEach { assertTrue(it, hub.core.android.nav.AppPaths.webUrl("https://hub.test", it) != null) }
+    }
+
     // ------------------------------------------------------------------ what is sent
 
     private val server = MockWebServer()

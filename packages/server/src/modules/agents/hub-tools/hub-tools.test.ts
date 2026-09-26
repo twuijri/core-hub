@@ -9,7 +9,13 @@ import type { AdapterSet } from '../adapters/index.js';
 import type { AgentEvent } from '../adapters/types.js';
 import { AgentRunner } from '../runner.js';
 import type { AgentsService } from '../service.js';
-import { HUB_TOOLS, HUB_TOOL_GROUPS, confined, phoneToLocate, type ToolContext } from './catalog.js';
+import {
+  HUB_TOOLS,
+  HUB_TOOL_GROUPS,
+  confined,
+  phoneToLocate,
+  type ToolContext,
+} from './catalog.js';
 import { RunLeases } from './leases.js';
 import { handleRpc, type McpHandlers } from './protocol.js';
 
@@ -283,7 +289,12 @@ describe('hub tools: where the phone is (§103)', () => {
       phone('e', { capabilities: [{ kind: 'notifications', enabled: true }] }),
     ];
     expect(phoneToLocate(list, 'work')?.id).toBe('b');
-    expect(phoneToLocate(list.filter((d) => d.id !== 'b'), 'work')?.id).toBe('a');
+    expect(
+      phoneToLocate(
+        list.filter((d) => d.id !== 'b'),
+        'work',
+      )?.id,
+    ).toBe('a');
     expect(phoneToLocate(list, 'home')?.id).toBe('d');
     expect(phoneToLocate(list, 'work', 'a')?.id).toBe('a');
     expect(phoneToLocate(list, 'work', 'c')).toBeNull();
@@ -305,7 +316,8 @@ describe('hub tools: where the phone is (§103)', () => {
       sleep: async () => {},
       async call(method, route, options) {
         calls.push({ method, route, body: options?.body });
-        if (method === 'GET' && route === '/devices') return { items: [phone('p1', { online: true })] };
+        if (method === 'GET' && route === '/devices')
+          return { items: [phone('p1', { online: true })] };
         if (method === 'POST') return { job_id: 'j', request_id: 'r1' };
         reads += 1;
         return reads < 2
@@ -313,7 +325,12 @@ describe('hub tools: where the phone is (§103)', () => {
           : {
               id: 'r1',
               status: 'fulfilled',
-              result: { latitude: 24.7, longitude: 46.7, accuracy_m: 12, captured_at: '2026-09-26T09:00:00Z' },
+              result: {
+                latitude: 24.7,
+                longitude: 46.7,
+                accuracy_m: 12,
+                captured_at: '2026-09-26T09:00:00Z',
+              },
               error: null,
             };
       },
@@ -348,7 +365,12 @@ describe('hub tools: where the phone is (§103)', () => {
       async call(method, route) {
         if (route === '/devices') return { items: [phone('p1')] };
         if (method === 'POST') return { request_id: 'r1' };
-        return { id: 'r1', status: 'denied', result: null, error: { code: 'forbidden', message: 'the person said no' } };
+        return {
+          id: 'r1',
+          status: 'denied',
+          result: null,
+          error: { code: 'forbidden', message: 'the person said no' },
+        };
       },
     };
     await expect(tool.run(ctx, {})).rejects.toMatchObject({ code: 'device_denied' });

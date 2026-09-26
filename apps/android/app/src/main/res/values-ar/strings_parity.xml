@@ -252,4 +252,6 @@
     <string name="locate_choice_always">دائمًا</string>
     <string name="locate_choice_never">أبدًا</string>
     <string name="locate_hint">حين يحتاج وكيل أن يعرف أين أنت، يسألك هذا الجوال أولًا، أو يجيب دائمًا، أو لا يجيب أبدًا.</string>
+    <string name="settings_on_the_web">على الويب</string>
+    <string name="settings_on_the_web_hint">يُفتح في المتصفح: يحتاج شاشة حاسب.</string>
 </resources>

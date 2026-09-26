@@ -78,6 +78,7 @@ enum Lucide: String, CaseIterable {
     case squarePen = "square-pen"
     case sun = "sun"
     case sunMoon = "sun-moon"
+    case terminal = "terminal"
     case trash = "trash"
     case triangleAlert = "triangle-alert"
     case type = "type"
