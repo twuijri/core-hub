@@ -11,8 +11,6 @@
     <string name="error_not_built">المركز لا يقدّم هذا بعد.</string>
     <string name="error_code">رفض المركز: %1$s</string>
     <string name="error_unknown">حدث خطأ ما.</string>
-
-    <string name="connect_title">اتصل بمركزك</string>
     <string name="connect_scan_body">في الويب أو تطبيق سطح المكتب افتح الإعدادات ← اتصالات الأجهزة واختر إقران جهاز، ثم امسح الرمز الذي يظهر.</string>
     <string name="connect_scan">امسح رمز الإقران</string>
     <string name="connect_scan_prompt">وجّه الكاميرا إلى رمز الإقران</string>
@@ -55,8 +53,6 @@
     <string name="theme_system">حسب النظام</string>
 
     <string name="chat_you">أنت</string>
-    <string name="chat_greeting">على ماذا نعمل؟</string>
-    <string name="chat_in_profile">في البروفايل %1$s</string>
     <string name="chat_no_agents">لا وكيل للحديث معه</string>
     <string name="chat_no_agents_body">لا وكيل مثبّت في هذا البروفايل. يثبّته المالك أو المشرف من صفحة الوكلاء.</string>
     <string name="chat_placeholder">اكتب رسالة</string>
@@ -249,7 +245,6 @@
     <string name="attach_too_large">هذا الملف أكبر من %1$s، وهو أكبر ما يقبله المركز.</string>
     <string name="attach_unreadable">تعذّرت قراءة هذا الملف.</string>
     <string name="attach_camera_denied">لا يُسمح لكور هب باستخدام الكاميرا. اسمح به من إعدادات الجوال.</string>
-    <string name="voice_source">الصوت</string>
     <string name="voice_source_hub">كور هب</string>
     <string name="voice_source_phone">الجوال</string>
     <string name="voice_source_hint">يستعمل «كور هب» مزوّدي الكلام في المركز لهذا البروفايل للإملاء ولقراءة الردود؛ وحين لا يوجد مزوّد في المركز يُستعمل صوت الجوال.</string>
@@ -301,7 +296,6 @@
     <string name="room_you_name">%1$s (أنت)</string>
     <string name="room_remove">إزالة</string>
     <string name="room_invite">الدعوة</string>
-    <string name="room_invite_code">رمز الدعوة: %1$s</string>
     <string name="room_invite_hint">يستطيع الانضمام بالرمز أو رابطه كلُّ من يدخل هذا البروفايل.</string>
     <string name="room_invite_share">مشاركة الرابط</string>
     <string name="room_invite_rotate">رمز جديد</string>
@@ -352,4 +346,5 @@
     <string name="pending_count">%1$d بانتظارك</string>
     <string name="chat_new_in_profile">محادثة جديدة في %1$s</string>
     <string name="chat_start_hint">اسأل ما شئت. تبدأ المحادثة مع أول رسالة.</string>
+    <string name="connect_or">أو</string>
 </resources>

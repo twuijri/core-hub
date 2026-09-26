@@ -161,7 +161,8 @@ fun ChatScreen(
         if (chat.running) {
             ThinkingIndicator(chat.runStartedAt, chat.currentStep, queued = chat.activeRun?.status == RunStatus.QUEUED)
         }
-        val agentName = ui.agents.firstOrNull { it.id == ui.agentId }?.name
+        // The chat's agent by name, as on iOS («Message Hermes»): the draft's choice, else the chat's own.
+        val agentName = ui.agents.firstOrNull { it.id == ui.agentId }?.name ?: agents.firstOrNull { it.id == chat.session?.agentId }?.name
         val files by vm.tray.items.collectAsState()
         AttachmentChips(files, onRemove = vm.tray::remove)
         val uploading = files.any { it.state == AttachmentTray.State.Uploading }

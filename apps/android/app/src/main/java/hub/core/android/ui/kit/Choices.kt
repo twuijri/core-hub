@@ -129,7 +129,7 @@ fun HubSwitch(checked: Boolean, onChange: (Boolean) -> Unit, modifier: Modifier 
             .toggleable(checked, enabled = enabled, role = Role.Switch, onValueChange = onChange),
     ) {
         Box(
-            Modifier.offset(x = knob).align(Alignment.CenterStart).size(20.dp)
+            Modifier.offset { androidx.compose.ui.unit.IntOffset(knob.roundToPx(), 0) }.align(Alignment.CenterStart).size(20.dp)
                 .shadow(1.dp, CircleShape).background(if (checked) t.accentText else t.controlRaised, CircleShape),
         )
     }

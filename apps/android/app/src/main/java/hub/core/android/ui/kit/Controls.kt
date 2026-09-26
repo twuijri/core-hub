@@ -30,6 +30,14 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.window.Popup
+import kotlinx.coroutines.delay
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
@@ -177,6 +185,8 @@ fun HubIconButton(
         IconKind.Danger -> t.danger to t.dangerText
         IconKind.Glass -> t.glassTint.copy(alpha = 0.78f) to t.text
     }
+    var tip by remember { mutableStateOf(false) }
+    val haptics = LocalHapticFeedback.current
     Box(
         modifier
             .size(size)
@@ -184,16 +194,37 @@ fun HubIconButton(
             .background(bg, shape)
             .then(if (kind == IconKind.Glass) Modifier.border(0.5.dp, t.border, shape) else Modifier)
             .combinedClickable(
-                enabled = enabled || kind == IconKind.Accent && onLongClick != null,
+                enabled = enabled || onLongClick != null,
                 role = Role.Button,
                 onClickLabel = label,
-                onLongClick = onLongClick,
+                // A long press names the button (the web's tooltip), unless it does something of its own.
+                onLongClick = onLongClick ?: {
+                    haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                    tip = true
+                },
                 onClick = { if (enabled) onClick() },
             )
             .semantics { contentDescription = label },
         contentAlignment = Alignment.Center,
     ) {
         LucideIcon(icon, null, size = iconSize, tint = tint ?: fg)
+    }
+    if (tip) Tooltip(label, onDone = { tip = false })
+}
+
+/** The name of an icon button, above it for a moment after a long press. */
+@Composable
+private fun Tooltip(label: String, onDone: () -> Unit) {
+    val t = LocalTokens.current
+    LaunchedEffect(label) {
+        delay(1_500)
+        onDone()
+    }
+    Popup(alignment = Alignment.TopCenter, offset = IntOffset(0, -96), onDismissRequest = onDone) {
+        Text(
+            label, fontSize = FontTokens.sizeXs.sp, color = t.surface, maxLines = 2,
+            modifier = Modifier.background(t.text, RoundedCornerShape(6.dp)).padding(horizontal = 8.dp, vertical = 4.dp),
+        )
     }
 }
 
@@ -237,6 +268,7 @@ fun StatusDot(color: Color, label: String?, modifier: Modifier = Modifier, size:
 }
 
 /** The one waiting glyph: a ring with a gap that turns (slower when motion is reduced). */
+@Suppress("ModifierParameter") // size and colour are what a caller sets most
 @Composable
 fun Spinner(size: Dp = 18.dp, color: Color = LocalContentColor.current, modifier: Modifier = Modifier) {
     val reduced = LocalReducedMotion.current

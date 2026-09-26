@@ -8,6 +8,7 @@ import android.net.Uri
 import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.junit4.v2.createEmptyComposeRule
+import androidx.compose.ui.test.onFirst
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
 import androidx.test.core.app.ActivityScenario
@@ -83,6 +84,8 @@ class ScreenShots {
 
         open("/chat/${hub.chatId}") { activity ->
             waitFor("message.agent")
+            // The agent's name under the title: the profile's agents have loaded.
+            waitFor("topbar.subtitle")
             save(activity, dir, "01-chat")
             // The composer reads as on iOS and the web: «+», the words, the microphone, Send —
             // from the reading start to its end.
@@ -97,12 +100,26 @@ class ScreenShots {
             val firstRow = compose.onNodeWithTag("chat.row.${hub.chatId}", useUnmergedTree = true).fetchSemanticsNode().boundsInRoot
             assertTrue("the first chat row starts at ${firstRow.top} of ${root.height}", firstRow.top < root.height * 0.5f)
         }
+        open("/new") { activity ->
+            waitFor("screen.new_chat")
+            compose.onNodeWithTag("shell.menu").performClick()
+            waitFor("shell.segment.rooms")
+            compose.onNodeWithTag("shell.segment.rooms", useUnmergedTree = true).performClick()
+            waitForPrefix("room.row.")
+            save(activity, dir, "11-rooms")
+            compose.onAllNodes(androidx.compose.ui.test.SemanticsMatcher("a room row") { node ->
+                node.config.getOrElseNullable(androidx.compose.ui.semantics.SemanticsProperties.TestTag) { null }?.startsWith("room.row.") == true
+            }, useUnmergedTree = true).onFirst().performClick()
+            waitFor("room.transcript")
+            waitForPrefix("message.")
+            save(activity, dir, "12-room")
+        }
         open("/agents") { activity ->
-            waitFor("screen.agent_manager")
+            waitFor("agents.list")
             save(activity, dir, "03-agents")
         }
         open("/tasks") { activity ->
-            waitFor("screen.tasks")
+            waitFor("tasks.board")
             save(activity, dir, "04-tasks")
         }
         open("/new") { activity ->
@@ -110,11 +127,11 @@ class ScreenShots {
             save(activity, dir, "05-new-chat")
         }
         open("/settings") { activity ->
-            waitFor("screen.settings")
+            waitFor("settings.list")
             save(activity, dir, "06-settings")
         }
         open("/schedules") { activity ->
-            waitFor("screen.schedules")
+            waitFor("schedules.list")
             save(activity, dir, "07-schedules")
         }
         open("/search") { activity ->
@@ -122,11 +139,12 @@ class ScreenShots {
             save(activity, dir, "08-search")
         }
         open("/settings/this-device") { activity ->
-            waitFor("screen.this_device")
+            waitFor("device.page")
             save(activity, dir, "09-this-device")
         }
         open("/settings/notifications") { activity ->
-            waitFor("screen.notifications")
+            waitFor("notices.list")
+            waitForPrefix("notice.")
             save(activity, dir, "10-notifications")
         }
         graph.store.save(null)
@@ -150,6 +168,17 @@ class ScreenShots {
     private fun waitFor(tag: String) {
         compose.waitUntil(10_000) { compose.onAllNodes(hasTestTag(tag), useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty() }
         // Let images, fonts and the last frames settle.
+        compose.mainClock.advanceTimeBy(600)
+        compose.waitForIdle()
+    }
+
+    /** Waits for any node whose tag starts with [prefix] (a list's first row). */
+    private fun waitForPrefix(prefix: String) {
+        compose.waitUntil(10_000) {
+            compose.onAllNodes(androidx.compose.ui.test.SemanticsMatcher("tag starts with $prefix") { node ->
+                node.config.getOrElseNullable(androidx.compose.ui.semantics.SemanticsProperties.TestTag) { null }?.startsWith(prefix) == true
+            }, useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty()
+        }
         compose.mainClock.advanceTimeBy(600)
         compose.waitForIdle()
     }

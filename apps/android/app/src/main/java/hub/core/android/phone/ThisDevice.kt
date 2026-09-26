@@ -1,19 +1,30 @@
 package hub.core.android.phone
 
+import androidx.compose.foundation.layout.Row
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.unit.sp
+import hub.core.android.generated.FontTokens
+import hub.core.android.ui.kit.BadgeTone
+import hub.core.android.ui.kit.ButtonKind
+import hub.core.android.ui.kit.Custom
+import hub.core.android.ui.kit.GroupedList
+import hub.core.android.ui.kit.HubButton
+import hub.core.android.ui.kit.HubSwitch
+import hub.core.android.ui.kit.Item
+import hub.core.android.ui.kit.Lucide
+import hub.core.android.ui.kit.NoticeBox
+import hub.core.android.ui.kit.SectionTitle
+import hub.core.android.ui.kit.Segment
+import hub.core.android.ui.kit.Segmented
+import hub.core.android.ui.kit.Spinner
+import hub.core.android.ui.kit.StatusDot
 import android.speech.SpeechRecognizer
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.material3.Button
-import androidx.compose.material3.FilterChip
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
@@ -35,7 +46,6 @@ import hub.core.android.data.TokenKind
 import hub.core.android.data.hubCall
 import hub.core.android.graph
 import hub.core.android.ui.components.ErrorNotice
-import hub.core.android.ui.components.ListRow
 import hub.core.android.ui.components.Notice
 import hub.core.android.ui.screens.ShellViewModel
 import hub.core.android.ui.screens.localTime
@@ -46,20 +56,10 @@ import java.time.Instant
 import java.time.ZoneOffset
 import kotlinx.coroutines.launch
 
-@Composable
-private fun SwitchRow(title: String, subtitle: String?, checked: Boolean, enabled: Boolean = true, onChange: (Boolean) -> Unit) {
-    ListRow(title, subtitle, trailing = { Switch(checked = checked, onCheckedChange = onChange, enabled = enabled) })
-}
-
-@Composable
-private fun Heading(text: String) {
-    Text(text, style = MaterialTheme.typography.titleSmall, modifier = Modifier.padding(top = 12.dp, start = 4.dp))
-}
-
 /**
- * This device (NAVIGATION.md §2): the hub connection, voice input and its language, spoken
- * replies, notifications, and self-update where Android allows it. Everything here is this
- * phone's own and stays on it.
+ * This device (NAVIGATION.md §2), as inset groups: the hub connection, voice input and its
+ * language, spoken replies, notifications, and self-update where Android allows it. Everything
+ * here is this phone's own and stays on it.
  */
 @Composable
 fun ThisDevicePage(shell: ShellViewModel) {
@@ -67,83 +67,87 @@ fun ThisDevicePage(shell: ShellViewModel) {
     val graph = context.graph
     val session by shell.session.collectAsState()
     val choices by graph.device.choices.collectAsState()
+    val connected by graph.realtime.connected.collectAsState()
     val s = session ?: return
     val recognizer = remember { SpeechRecognizer.isRecognitionAvailable(context) }
+    val t = LocalTokens.current
+    var choosing by remember { mutableStateOf(false) }
 
-    LazyColumn(contentPadding = PaddingValues(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-        item { Heading(stringResource(R.string.device_connection)) }
+    LazyColumn(Modifier.testTag("device.page"), contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 24.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
         item {
-            ListRow(
-                s.hub,
-                stringResource(if (s.kind == TokenKind.APP) R.string.device_paired else R.string.device_signed_in) +
-                    (s.expiresAt?.let { " · " + stringResource(R.string.device_until, localTime(Instant.ofEpochMilli(it).atOffset(ZoneOffset.UTC))) } ?: ""),
-            )
-        }
-        item { OutlinedButton(onClick = shell::signOut, modifier = Modifier.fillMaxWidth()) { Text(term("sign_out")) } }
-
-        item { Heading(stringResource(R.string.voice_heading)) }
-        item {
-            Column(Modifier.padding(horizontal = 4.dp)) {
-                Text(stringResource(R.string.voice_source), style = MaterialTheme.typography.labelLarge)
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    listOf(VoiceSource.HUB to R.string.voice_source_hub, VoiceSource.PHONE to R.string.voice_source_phone).forEach { (v, label) ->
-                        FilterChip(
-                            selected = choices.voiceSource == v,
-                            onClick = { graph.device.update { it.copy(voiceSource = v) } },
-                            label = { Text(stringResource(label)) },
-                            modifier = Modifier.testTag("device.voice_source.${v.name.lowercase()}"),
+            GroupedList(title = stringResource(R.string.device_connection)) {
+                Item(
+                    s.hub,
+                    subtitle = stringResource(if (s.kind == TokenKind.APP) R.string.device_paired else R.string.device_signed_in) +
+                        (s.expiresAt?.let { " · " + stringResource(R.string.device_until, localTime(Instant.ofEpochMilli(it).atOffset(ZoneOffset.UTC))) } ?: ""),
+                    icon = Lucide.Server,
+                    trailing = {
+                        StatusDot(
+                            if (connected) t.statusRunning else t.statusBlocked,
+                            stringResource(if (connected) R.string.shell_connected else R.string.shell_offline),
                         )
-                    }
+                    },
+                )
+                Item(term("sign_out"), icon = Lucide.LogOut, danger = true, onClick = shell::signOut)
+            }
+        }
+        item {
+            GroupedList(title = stringResource(R.string.voice_heading)) {
+                Custom {
+                    Segmented(
+                        listOf(
+                            Segment(VoiceSource.HUB, stringResource(R.string.voice_source_hub), tag = "device.voice_source.hub"),
+                            Segment(VoiceSource.PHONE, stringResource(R.string.voice_source_phone), tag = "device.voice_source.phone"),
+                        ),
+                        choices.voiceSource, { v -> graph.device.update { it.copy(voiceSource = v) } }, Modifier.fillMaxWidth(),
+                    )
+                    Text(stringResource(R.string.voice_source_hint), fontSize = FontTokens.sizeXs.sp, color = t.textMuted)
                 }
-                Text(stringResource(R.string.voice_source_hint), style = MaterialTheme.typography.bodySmall, color = LocalTokens.current.textMuted)
-            }
-        }
-        item {
-            SwitchRow(
-                stringResource(R.string.voice_input),
-                stringResource(if (recognizer) R.string.voice_input_hint else R.string.voice_unavailable),
-                choices.voiceInput && recognizer, enabled = recognizer,
-            ) { on -> graph.device.update { it.copy(voiceInput = on) } }
-        }
-        item {
-            // Auto by default: the keyboard in use picks the language; any other can be chosen.
-            var choosing by remember { mutableStateOf(false) }
-            Column(
-                Modifier.fillMaxWidth().clickable { choosing = true }.padding(horizontal = 4.dp, vertical = 8.dp).testTag("device.dictation_language"),
-            ) {
-                Text(stringResource(R.string.voice_language), style = MaterialTheme.typography.labelLarge)
-                Text(
-                    if (choices.dictation == DictationLanguage.AUTO) stringResource(R.string.voice_language_auto)
+                Item(
+                    stringResource(R.string.voice_input),
+                    subtitle = stringResource(if (recognizer) R.string.voice_input_hint else R.string.voice_unavailable),
+                    icon = Lucide.Mic,
+                    trailing = { HubSwitch(choices.voiceInput && recognizer, { on -> graph.device.update { it.copy(voiceInput = on) } }, enabled = recognizer) },
+                )
+                // Auto by default: the keyboard in use picks the language; any other can be chosen.
+                Item(
+                    stringResource(R.string.voice_language),
+                    icon = Lucide.Globe,
+                    value = if (choices.dictation == DictationLanguage.AUTO) stringResource(R.string.voice_language_auto)
                     else DictationLanguage.name(choices.dictation, graph.prefs.effectiveLanguage.tag),
-                    style = MaterialTheme.typography.bodyMedium,
+                    chevron = true, tag = "device.dictation_language", onClick = { choosing = true },
                 )
-            }
-            if (choosing) {
-                DictationLanguageDialog(
-                    choice = choices.dictation,
-                    onChoose = { tag -> graph.device.update { it.copy(dictation = tag) }; choosing = false },
-                    onDismiss = { choosing = false },
+                Item(
+                    stringResource(R.string.voice_spoken), subtitle = stringResource(R.string.voice_spoken_hint), icon = Lucide.Sparkles,
+                    trailing = {
+                        HubSwitch(choices.spokenReplies, { on ->
+                            graph.device.update { it.copy(spokenReplies = on) }
+                            if (!on) graph.speaker.stop()
+                        })
+                    },
                 )
             }
         }
-        item {
-            SwitchRow(stringResource(R.string.voice_spoken), stringResource(R.string.voice_spoken_hint), choices.spokenReplies) { on ->
-                graph.device.update { it.copy(spokenReplies = on) }
-                if (!on) graph.speaker.stop()
-            }
-        }
-
-        item { Heading(term("notifications")) }
+        item { SectionTitle(term("notifications")) }
         item { NotificationRows() }
         item {
-            SwitchRow(stringResource(R.string.notices_background), stringResource(R.string.notices_background_hint), choices.backgroundNotices) { on ->
-                // AppGraph schedules or stops the check from this choice and the push state.
-                graph.device.update { it.copy(backgroundNotices = on) }
+            GroupedList(Modifier.padding(top = 8.dp)) {
+                Item(
+                    stringResource(R.string.notices_background), subtitle = stringResource(R.string.notices_background_hint), icon = Lucide.Clock,
+                    // AppGraph schedules or stops the check from this choice and the push state.
+                    trailing = { HubSwitch(choices.backgroundNotices, { on -> graph.device.update { it.copy(backgroundNotices = on) } }) },
+                )
             }
         }
-
-        item { Heading(stringResource(R.string.update_heading)) }
+        item { SectionTitle(stringResource(R.string.update_heading)) }
         item { UpdateSection() }
+    }
+    if (choosing) {
+        DictationLanguageDialog(
+            choice = choices.dictation,
+            onChoose = { tag -> graph.device.update { it.copy(dictation = tag) }; choosing = false },
+            onDismiss = { choosing = false },
+        )
     }
 }
 
@@ -164,18 +168,25 @@ private fun UpdateSection() {
     var state by remember { mutableStateOf<UpdateState>(UpdateState.Idle) }
     val t = LocalTokens.current
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        ListRow(stringResource(R.string.update_installed, BuildConfig.VERSION_NAME), null)
+        GroupedList {
+            Item(stringResource(R.string.update_installed, BuildConfig.VERSION_NAME), icon = Lucide.Smartphone)
+            (state as? UpdateState.Available)?.let { st ->
+                val notes = if (graph.prefs.effectiveLanguage == AppLanguage.AR) st.release.notes.ar else st.release.notes.en
+                Item(stringResource(R.string.update_available, st.release.version), subtitle = notes, icon = Lucide.CircleArrowDown)
+            }
+        }
         when (val st = state) {
-            UpdateState.Checking, UpdateState.Downloading -> Text(stringResource(R.string.loading), color = t.textMuted)
-            is UpdateState.UpToDate -> Text(
+            UpdateState.Checking, UpdateState.Downloading -> Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Spinner(16.dp, t.textMuted)
+                Text(stringResource(R.string.loading), fontSize = FontTokens.sizeSm.sp, color = t.textMuted)
+            }
+            is UpdateState.UpToDate -> NoticeBox(
                 stringResource(if (st.reason == "not_configured") R.string.update_not_configured else R.string.update_none),
-                color = t.textMuted,
+                if (st.reason == "not_configured") BadgeTone.Info else BadgeTone.Success,
             )
             is UpdateState.Failed -> if (st.error != null) ErrorNotice(st.error) else Notice(stringResource(R.string.update_bad_file))
             is UpdateState.Available -> {
-                val notes = if (graph.prefs.effectiveLanguage == AppLanguage.AR) st.release.notes.ar else st.release.notes.en
-                ListRow(stringResource(R.string.update_available, st.release.version), notes)
-                Button(onClick = {
+                HubButton(stringResource(R.string.update_install), {
                     state = UpdateState.Downloading
                     scope.launch {
                         val session = graph.store.current ?: return@launch
@@ -189,12 +200,13 @@ private fun UpdateSection() {
                             state = UpdateState.Failed(HubError.from(e))
                         }
                     }
-                }, modifier = Modifier.fillMaxWidth()) { Text(stringResource(R.string.update_install)) }
+                }, icon = Lucide.Download, fill = true, modifier = Modifier.fillMaxWidth())
             }
             UpdateState.Idle -> Unit
         }
-        OutlinedButton(
-            onClick = {
+        HubButton(
+            stringResource(R.string.update_check),
+            {
                 state = UpdateState.Checking
                 scope.launch {
                     val session = graph.store.current ?: return@launch
@@ -203,8 +215,9 @@ private fun UpdateSection() {
                         .onFailure { state = UpdateState.Failed(it as HubError) }
                 }
             },
+            kind = ButtonKind.Secondary, icon = Lucide.RefreshCw, fill = true,
             enabled = state != UpdateState.Checking && state != UpdateState.Downloading,
             modifier = Modifier.fillMaxWidth(),
-        ) { Text(stringResource(R.string.update_check)) }
+        )
     }
 }

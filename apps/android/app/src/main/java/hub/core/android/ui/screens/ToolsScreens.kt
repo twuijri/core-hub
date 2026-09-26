@@ -1,5 +1,19 @@
 package hub.core.android.ui.screens
 
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.unit.sp
+import hub.core.android.generated.ControlTokens
+import hub.core.android.generated.FontTokens
+import hub.core.android.ui.kit.BadgeTone
+import hub.core.android.ui.kit.Chip
+import hub.core.android.ui.kit.ControlSize
+import hub.core.android.ui.kit.EmptyState
+import hub.core.android.ui.kit.HubIconButton
+import hub.core.android.ui.kit.Lucide
+import hub.core.android.ui.kit.NoticeBox
+import hub.core.android.ui.kit.SectionTitle
 import android.text.format.DateUtils
 import android.text.format.Formatter
 import androidx.compose.foundation.horizontalScroll
@@ -14,13 +28,6 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Refresh
-import androidx.compose.material3.FilterChip
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -41,7 +48,6 @@ import hub.core.android.tools.LogLevel
 import hub.core.android.tools.LogSource
 import hub.core.android.tools.LogsModel
 import hub.core.android.tools.PerformanceModel
-import hub.core.android.ui.components.EmptyState
 import hub.core.android.ui.components.ErrorNotice
 import hub.core.android.ui.components.ListRow
 import hub.core.android.ui.components.Loading
@@ -74,15 +80,9 @@ fun LogsPage() {
             verticalAlignment = Alignment.CenterVertically,
         ) {
             LogSource.entries.forEach { source ->
-                FilterChip(
-                    selected = state.source == source,
-                    onClick = { scope.launch { model.setSource(source) } },
-                    label = { Text(stringResource(sourceLabel(source))) },
-                )
+                Chip(stringResource(sourceLabel(source)), state.source == source, { scope.launch { model.setSource(source) } }, size = ControlSize.Sm)
             }
-            IconButton(onClick = { scope.launch { model.refresh() } }) {
-                Icon(Icons.Default.Refresh, stringResource(R.string.tools_refresh))
-            }
+            HubIconButton(Lucide.RefreshCw, stringResource(R.string.tools_refresh), { scope.launch { model.refresh() } }, size = ControlTokens.heightSm.dp, iconSize = 16.dp)
         }
         if (state.source != LogSource.ERRORS) {
             Row(
@@ -90,26 +90,22 @@ fun LogsPage() {
                 horizontalArrangement = Arrangement.spacedBy(6.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                Text(stringResource(R.string.logs_level), style = MaterialTheme.typography.labelMedium, color = LocalTokens.current.textMuted)
+                Text(stringResource(R.string.logs_level), fontSize = FontTokens.sizeXs.sp, color = LocalTokens.current.textMuted)
                 LogLevel.entries.forEach { level ->
-                    FilterChip(
-                        selected = state.level == level,
-                        onClick = { scope.launch { model.setLevel(level) } },
-                        label = { Text(stringResource(levelLabel(level))) },
-                    )
+                    Chip(stringResource(levelLabel(level)), state.level == level, { scope.launch { model.setLevel(level) } }, size = ControlSize.Sm)
                 }
             }
         }
         Text(
             stringResource(R.string.logs_kept),
-            style = MaterialTheme.typography.bodySmall,
+            fontSize = FontTokens.sizeXs.sp,
             color = LocalTokens.current.textMuted,
-            modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
+            modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp),
         )
         ErrorNotice(state.error, Modifier.padding(horizontal = 12.dp))
         when {
             state.loading && state.lines.isEmpty() -> Loading()
-            state.lines.isEmpty() -> EmptyState(stringResource(R.string.logs_empty))
+            state.lines.isEmpty() -> EmptyState(stringResource(R.string.logs_empty), icon = Lucide.FileSearch)
             else -> LazyColumn(
                 state = list,
                 contentPadding = PaddingValues(12.dp),
@@ -125,19 +121,19 @@ fun LogsPage() {
 @Composable
 private fun LogRow(line: LogLine) {
     val t = LocalTokens.current
-    Surface(color = t.surface, shape = MaterialTheme.shapes.small, modifier = Modifier.fillMaxWidth()) {
-        Column(Modifier.padding(horizontal = 10.dp, vertical = 6.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-            Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
-                StatusBadge(stringResource(shortLevel(line.level)), levelTone(line.level))
-                Text(whereFrom(line), style = MaterialTheme.typography.labelSmall, color = t.textMuted)
-                Text(localTime(line.at), style = MaterialTheme.typography.labelSmall, color = t.textMuted)
-            }
-            // A log line is the program's words: read as written, left to right unless it is not.
-            Text(
-                line.message,
-                style = MaterialTheme.typography.bodySmall.copy(fontFamily = FontFamily.Monospace, textDirection = TextDirection.Content),
-            )
+    Column(
+        Modifier.fillMaxWidth().background(t.surface, androidx.compose.foundation.shape.RoundedCornerShape(hub.core.android.generated.RadiusTokens.md.dp))
+            .border(0.5.dp, t.border, androidx.compose.foundation.shape.RoundedCornerShape(hub.core.android.generated.RadiusTokens.md.dp))
+            .padding(horizontal = 10.dp, vertical = 8.dp),
+        verticalArrangement = Arrangement.spacedBy(4.dp),
+    ) {
+        Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
+            StatusBadge(stringResource(shortLevel(line.level)), levelTone(line.level))
+            Text(whereFrom(line), fontSize = FontTokens.sizeXs.sp, color = t.textMuted)
+            Text(localTime(line.at), fontSize = FontTokens.sizeXs.sp, color = t.textFaint)
         }
+        // A log line is the program's words: read as written, left to right unless it is not.
+        Text(line.message, fontSize = FontTokens.sizeXs.sp, style = TextStyle(fontFamily = FontFamily.Monospace, textDirection = TextDirection.Content))
     }
 }
 
@@ -199,18 +195,16 @@ fun PerformancePage() {
         return
     }
     val bytes = { value: Long? -> value?.let { Formatter.formatShortFileSize(context, it) } ?: "—" }
-    LazyColumn(contentPadding = PaddingValues(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+    LazyColumn(contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
         item {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(
                     stringResource(R.string.perf_every, live.intervalSeconds, localTime(live.at)),
-                    style = MaterialTheme.typography.bodySmall,
+                    fontSize = FontTokens.sizeXs.sp,
                     color = LocalTokens.current.textMuted,
                     modifier = Modifier.weight(1f),
                 )
-                IconButton(onClick = { scope.launch { model.refresh() } }) {
-                    Icon(Icons.Default.Refresh, stringResource(R.string.tools_refresh))
-                }
+                HubIconButton(Lucide.RefreshCw, stringResource(R.string.tools_refresh), { scope.launch { model.refresh() } }, size = ControlTokens.heightMd.dp, iconSize = 16.dp)
             }
         }
         if (state.error != null) item { ErrorNotice(state.error) }
@@ -229,7 +223,7 @@ fun PerformancePage() {
         }
         item { ListRow(stringResource(R.string.perf_load), live.host.load?.joinToString(" · ") { decimal(it) } ?: "—") }
         if (live.host.measuredFrom.value == "os") {
-            item { Text(stringResource(R.string.perf_no_proc), style = MaterialTheme.typography.bodySmall, color = LocalTokens.current.textMuted) }
+            item { NoticeBox(stringResource(R.string.perf_no_proc), BadgeTone.Info) }
         }
         item { Section(stringResource(R.string.perf_hub)) }
         item { ListRow(stringResource(R.string.perf_cpu), percent(live.hub.cpuPercent)) }
@@ -252,7 +246,7 @@ fun PerformancePage() {
             )
         }
         item { Section(stringResource(R.string.perf_hermes)) }
-        if (live.processes.isEmpty()) item { Text(stringResource(R.string.perf_no_hermes), color = LocalTokens.current.textMuted) }
+        if (live.processes.isEmpty()) item { Text(stringResource(R.string.perf_no_hermes), fontSize = FontTokens.sizeSm.sp, color = LocalTokens.current.textMuted) }
         items(live.processes, key = { "${it.kind.value}/${it.profile}/${it.pid}" }) { process ->
             ListRow(
                 processName(process),
@@ -274,7 +268,7 @@ fun PerformancePage() {
 
 @Composable
 private fun Section(title: String) {
-    Text(title, style = MaterialTheme.typography.titleSmall, modifier = Modifier.padding(top = 8.dp))
+    SectionTitle(title)
 }
 
 @Composable

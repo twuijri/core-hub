@@ -58,9 +58,19 @@ fun HubCard(
 
 /** A small caption above a group of rows or cards («Management», «To do · 1»). */
 @Composable
-fun SectionTitle(text: String, modifier: Modifier = Modifier, trailing: (@Composable RowScope.() -> Unit)? = null) {
+fun SectionTitle(
+    text: String,
+    modifier: Modifier = Modifier,
+    leading: (@Composable RowScope.() -> Unit)? = null,
+    trailing: (@Composable RowScope.() -> Unit)? = null,
+) {
     val t = LocalTokens.current
-    Row(modifier.fillMaxWidth().padding(start = 4.dp, end = 4.dp, top = 16.dp, bottom = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+    Row(
+        modifier.fillMaxWidth().padding(start = 4.dp, end = 4.dp, top = 16.dp, bottom = 6.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        leading?.invoke(this)
         Text(text, fontSize = FontTokens.sizeSm.sp, fontWeight = FontWeight.SemiBold, color = t.textMuted, modifier = Modifier.weight(1f))
         trailing?.invoke(this)
     }
@@ -107,7 +117,8 @@ fun GroupScope.Item(
     tag: String? = null,
     onClick: (() -> Unit)? = null,
     trailing: (@Composable RowScope.() -> Unit)? = null,
-) = ListRow(title, modifier, icon, subtitle, value, chevron, danger, tag, onClick, trailing, divider = true)
+    accent: Boolean = false,
+) = ListRow(title, modifier, icon, subtitle, value, chevron, danger, tag, onClick, trailing, divider = true, accent = accent)
 
 /** Any content as a row of a group, under the same hairline. */
 @Composable
@@ -132,6 +143,8 @@ fun ListRow(
     onClick: (() -> Unit)? = null,
     trailing: (@Composable RowScope.() -> Unit)? = null,
     divider: Boolean = false,
+    /** A link-like row (iOS's «Back to chats»): the words and the icon in the accent. */
+    accent: Boolean = false,
 ) {
     val t = LocalTokens.current
     Column(modifier.fillMaxWidth()) {
@@ -144,10 +157,15 @@ fun ListRow(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-            if (icon != null) LucideIcon(icon, null, size = 20.dp, tint = if (danger) t.danger else t.textMuted)
+            val tone = when {
+                danger -> t.danger
+                accent -> t.accent
+                else -> null
+            }
+            if (icon != null) LucideIcon(icon, null, size = 20.dp, tint = tone ?: t.textMuted)
             Column(Modifier.weight(1f)) {
                 Text(
-                    title, fontSize = FontTokens.sizeMd.sp, color = if (danger) t.danger else t.text,
+                    title, fontSize = FontTokens.sizeMd.sp, color = tone ?: t.text,
                     maxLines = 2, overflow = TextOverflow.Ellipsis,
                 )
                 if (!subtitle.isNullOrBlank()) {
