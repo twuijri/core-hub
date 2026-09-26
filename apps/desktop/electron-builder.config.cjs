@@ -17,8 +17,12 @@ const signed = Boolean(process.env.CSC_LINK || process.env.CSC_NAME);
 /** @type {import('electron-builder').Configuration} */
 module.exports = {
   appId: 'com.twuijri.corehub',
+  // The name a person sees: `Core Hub.app`, the DMG window, the menu bar and the Dock, the Start
+  // menu shortcut and the uninstall entry, the Linux desktop entry's Name. No top-level
+  // `executableName`: electron-builder names the macOS bundle and the DMG volume after it, which
+  // made 1.1.1 a lowercase `corehub.app` in a `corehub 1.1.1-arm64` window. The data folder does
+  // not follow any of these names (src/shared/user-data.ts).
   productName: 'Core Hub',
-  executableName: 'corehub',
   copyright: 'Copyright © twuijri. Apache-2.0.',
   directories: { output: 'release', buildResources: 'assets' },
   // The main process is one bundle; the app needs no node_modules at run time.
@@ -49,6 +53,9 @@ module.exports = {
     maintainer: 'twuijri <twuijri@users.noreply.github.com>',
     mimeTypes: ['x-scheme-handler/corehub'],
     syncDesktopName: true,
+    // The binary stays `corehub` (`/opt/Core Hub/corehub`, the packaged smoke test's path); the
+    // desktop entry's Name is the productName.
+    executableName: 'corehub',
   },
   deb: { packageName: 'corehub', artifactName: 'corehub_${version}_${arch}.${ext}' },
   mac: {
@@ -65,6 +72,10 @@ module.exports = {
   win: {
     target: [{ target: 'nsis', arch: ['x64'] }],
     icon: 'assets/icon.ico',
+    // `corehub.exe` in a `corehub` install folder, as before, so an update replaces the same files
+    // and the MSIX manifest keeps its executable; shortcuts and the uninstall entry use the
+    // productName.
+    executableName: 'corehub',
     // Unsigned: SmartScreen asks "More info → Run anyway" (docs/RELEASING.md). SignPath
     // Foundation's free signing for open source is the option noted for later.
   },
@@ -93,6 +104,7 @@ module.exports = {
     allowToChangeInstallationDirectory: true,
     artifactName: 'Core-Hub-Setup-${version}-${arch}.${ext}',
   },
-  dmg: { artifactName: 'Core-Hub-${version}-${arch}.${ext}' },
+  // The window the DMG opens in, e.g. "Core Hub 1.1.1" (the default adds the arch).
+  dmg: { title: '${productName} ${version}', artifactName: 'Core-Hub-${version}-${arch}.${ext}' },
   appImage: { artifactName: 'Core-Hub-${version}-${arch}.${ext}' },
 };

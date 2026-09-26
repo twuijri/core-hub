@@ -65,6 +65,36 @@ jobs:
       - run: pnpm build
       - name: Package
         run: pnpm --filter @corehub/desktop package ${{ matrix.target }}
+      # The name a person sees is "Core Hub" (1.1.1 shipped `corehub.app` in a `corehub
+      # 1.1.1-arm64` DMG window); the binaries and the .deb package keep `corehub`. A release of an
+      # older tag (publish-release.yml) still builds the old names, so these run from this change on.
+      - name: Check the app name (macOS)
+        if: runner.os == 'macOS' && hashFiles('apps/desktop/src/shared/user-data.ts') != ''
+        run: |
+          v="${COREHUB_VERSION:-$(node -p "require('./package.json').version")}"; v="${v#v}"
+          app=$(ls -d apps/desktop/release/mac*/*.app | head -1)
+          echo "bundle: $app"
+          test "$(basename "$app")" = "Core Hub.app"
+          test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleName' "$app/Contents/Info.plist")" = "Core Hub"
+          dmg=$(ls apps/desktop/release/*.dmg | head -1)
+          mount=$(hdiutil attach -nobrowse -readonly "$dmg" | awk -F'\t' '/\/Volumes\//{print $NF}')
+          echo "DMG window: $mount"
+          ls "$mount"
+          status=0
+          test "$mount" = "/Volumes/Core Hub $v" || status=1
+          test -d "$mount/Core Hub.app" || status=1
+          hdiutil detach "$mount" >/dev/null
+          exit $status
+      - name: Check the app name (Linux)
+        if: runner.os == 'Linux' && hashFiles('apps/desktop/src/shared/user-data.ts') != ''
+        run: |
+          deb=$(ls apps/desktop/release/*.deb | head -1)
+          test "$(dpkg-deb -f "$deb" Package)" = corehub
+          dir="$RUNNER_TEMP/deb"
+          dpkg-deb -x "$deb" "$dir"
+          cat "$dir/usr/share/applications/corehub.desktop"
+          grep -qx 'Name=Core Hub' "$dir/usr/share/applications/corehub.desktop"
+          test -x "$dir/opt/Core Hub/corehub"
       # On Linux the three smoke journeys also run against the packaged app, embedded hub and all.
       - name: Smoke test the packaged app
         if: runner.os == 'Linux'
