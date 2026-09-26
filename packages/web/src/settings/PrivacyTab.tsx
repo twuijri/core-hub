@@ -138,7 +138,7 @@ export function PrivacyTab() {
       cell: (token) => (
         <Button
           size="sm"
-          variant="danger"
+          variant="danger-quiet"
           disabled={revoke.isPending}
           onClick={() => confirmRevoke(token)}
           data-testid="revoke-token"

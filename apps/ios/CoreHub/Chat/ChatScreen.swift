@@ -47,11 +47,11 @@ struct ChatScreen: View {
                     Button {
                         Task { if let url = await model.exportMarkdown() { exported = SharedFile(url: url) } }
                     } label: {
-                        Label(l10n("chat.export"), systemImage: "square.and.arrow.up")
+                        Label { Text(l10n("chat.export")) } icon: { Image(lucide: .share) }
                     }
                     .accessibilityIdentifier("chat.export")
                 } label: {
-                    Image(systemName: "ellipsis.circle")
+                    LucideIcon(.ellipsis, size: 20)
                 }
                 .accessibilityLabel(l10n("chat.more"))
                 .accessibilityIdentifier("chat.more")
@@ -333,19 +333,35 @@ struct ReasoningView: View {
     @Environment(\.l10n) private var l10n
     @State private var open = false
 
+    // One quiet line with a small chevron after it, as on the web — the reasoning is history,
+    // so it must not look like the reply (DESIGN.md §The thinking indicator).
     var body: some View {
-        DisclosureGroup(isExpanded: $open) {
-            Text(reasoning.text)
-                .font(.system(size: FontSize.sizeSm))
+        VStack(alignment: .leading, spacing: Space.s2) {
+            Button {
+                withAnimation(.easeInOut(duration: Motion.fast)) { open.toggle() }
+            } label: {
+                HStack(spacing: Space.s1) {
+                    Text(label)
+                        .font(.system(size: FontSize.sizeSm))
+                    LucideIcon(.chevronDown, size: 12)
+                        .rotationEffect(.degrees(open ? 180 : 0))
+                }
                 .foregroundStyle(Tone.textMuted)
-                .textSelection(.enabled)
-                .contentDirection(of: reasoning.text)
-        } label: {
-            Text(label)
-                .font(.system(size: FontSize.sizeSm))
-                .foregroundStyle(Tone.textMuted)
+                .frame(minHeight: 28)
+                .hitSlop(8)
+            }
+            .buttonStyle(.plain)
+            .accessibilityAddTraits(open ? .isSelected : [])
+            if open {
+                Text(reasoning.text)
+                    .font(.system(size: FontSize.sizeSm))
+                    .foregroundStyle(Tone.textMuted)
+                    .textSelection(.enabled)
+                    .contentDirection(of: reasoning.text)
+                    .transition(.opacity)
+            }
         }
-        .tint(Tone.textMuted)
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     private var label: String {

@@ -115,6 +115,17 @@ the relay when it registers; what the hub lets go of reaches the relay through t
 (on an unregister or unlink at once, otherwise within a minute when the set of tokens changed,
 and once a day regardless).
 
+## Linked hubs (ADR 0026, DECISIONS §101; migration `0031`)
+
+| table | scope | what it holds |
+|---|---|---|
+| peer_identity | global, one row | this hub's hub id and Ed25519 key pair; the private key **ENCRYPTED** with the data key ring |
+| peers | global | another hub: its hub id, names, HTTPS origin, `direction` (inbound/outbound), `status` (pending/waiting/linked), `enabled`, its **public** key and fingerprint, `asks_per_hour`, `last_seen_at`, `approved_at`. Deleting the row is revoking the link |
+| peer_invites | global | an invite: only the SHA-256 of its code, `expires_at` (10 minutes), `used_at` (single use) |
+| peer_nonces | global | nonces of signed calls taken, until their timestamp leaves the 5-minute window |
+| peer_shares | scoped | an agent in a profile linked hubs may ask (`shared`, off unless a row says so) and the description they see; the row id is the id peers see |
+| peer_events | global | the audit log per peer, kept after it is deleted; never a question's words |
+
 ## Push
 
 `notify` hands a written notice to the push port when the kind's `push` switch is on and the

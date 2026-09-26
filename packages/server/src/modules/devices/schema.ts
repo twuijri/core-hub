@@ -18,7 +18,7 @@
  * device_requests.session_id -> sessions.sessions, device_requests.run_id -> sessions.runs,
  * device_requests.job_id -> audit.jobs.
  */
-import { check, index, sqliteTable, text, uniqueIndex } from 'drizzle-orm/sqlite-core';
+import { check, index, integer, sqliteTable, text, uniqueIndex } from 'drizzle-orm/sqlite-core';
 import {
   EMPTY_ARRAY,
   EMPTY_OBJECT,
@@ -274,4 +274,138 @@ export const pushRelay = sqliteTable(
   },
   // NULL (never called yet) passes a CHECK in SQLite and PostgreSQL alike.
   (t) => [check('push_relay_state_check', inList(t.state, PUSH_RELAY_STATES))],
+);
+
+// ------------------------------------------------------------------ linked hubs (ADR 0026)
+
+export const PEER_DIRECTIONS = ['inbound', 'outbound'] as const;
+export const PEER_STATUSES = ['pending', 'waiting', 'linked'] as const;
+export const PEER_EVENT_KINDS = [
+  'joined',
+  'requested',
+  'approved',
+  'approved_by_peer',
+  'updated',
+  'unlinked',
+  'unlinked_by_peer',
+  'list_in',
+  'list_out',
+  'ask_in',
+  'ask_out',
+  'refused',
+] as const;
+export type PeerEventKind = (typeof PEER_EVENT_KINDS)[number];
+
+/**
+ * This hub's own identity towards linked hubs: one row, made the first time it is needed. `id`
+ * is the hub id peers know it by; the Ed25519 private key is sealed with the data key ring and
+ * never leaves the hub.
+ */
+export const peerIdentity = sqliteTable('peer_identity', {
+  id: ulid('id').primaryKey(),
+  /** Ed25519 public key, SPKI DER in base64url. Not a secret. */
+  publicKey: text('public_key').notNull(),
+  /** ENCRYPTED. The private key, PKCS#8 DER in base64url. */
+  ciphertext: text('ciphertext').notNull(),
+  nonce: text('nonce', { length: 32 }).notNull(),
+  keyId: text('key_id', { length: 32 }).notNull(),
+  createdAt: timestampMs('created_at')
+    .notNull()
+    .$defaultFn(() => new Date()),
+});
+
+/**
+ * Another Core Hub, linked or waiting to be. `owner_id` is the admin who invited or asked.
+ * Deleting the row is revoking the link: the public key goes with it.
+ */
+export const peers = sqliteTable(
+  'peers',
+  {
+    ...globalColumns(),
+    /** The peer's own hub id (its `peer_identity.id`). */
+    hubId: ulid('hub_id').notNull(),
+    name: text('name', { length: 80 }).notNull(),
+    hubName: text('hub_name', { length: 80 }).notNull(),
+    /** The peer's HTTPS origin. */
+    url: text('url', { length: 2048 }).notNull(),
+    direction: text('direction', { enum: PEER_DIRECTIONS }).notNull(),
+    status: text('status', { enum: PEER_STATUSES }).notNull(),
+    enabled: bool('enabled').notNull().default(true),
+    publicKey: text('public_key').notNull(),
+    fingerprint: text('fingerprint', { length: 64 }).notNull(),
+    version: text('version', { length: 40 }),
+    asksPerHour: integer('asks_per_hour').notNull().default(30),
+    lastSeenAt: timestampMs('last_seen_at'),
+    approvedAt: timestampMs('approved_at'),
+  },
+  (t) => [
+    uniqueIndex('peers_hub_id_uq').on(t.hubId),
+    check('peers_direction_check', inList(t.direction, PEER_DIRECTIONS)),
+    check('peers_status_check', inList(t.status, PEER_STATUSES)),
+  ],
+);
+
+/** An invite this hub made: only the SHA-256 of its code is kept. Single use, 10 minutes. */
+export const peerInvites = sqliteTable(
+  'peer_invites',
+  {
+    ...globalColumns(),
+    codeHash: text('code_hash', { length: 64 }).notNull(),
+    expiresAt: timestampMs('expires_at').notNull(),
+    usedAt: timestampMs('used_at'),
+  },
+  (t) => [uniqueIndex('peer_invites_code_hash_uq').on(t.codeHash)],
+);
+
+/** Nonces of signed calls already taken, until their timestamp falls out of the window. */
+export const peerNonces = sqliteTable(
+  'peer_nonces',
+  {
+    id: ulid('id').primaryKey(),
+    /** The calling hub's id. */
+    peerHubId: ulid('peer_hub_id').notNull(),
+    nonce: text('nonce', { length: 64 }).notNull(),
+    expiresAt: timestampMs('expires_at').notNull(),
+  },
+  (t) => [
+    uniqueIndex('peer_nonces_uq').on(t.peerHubId, t.nonce),
+    index('peer_nonces_expires_idx').on(t.expiresAt),
+  ],
+);
+
+/**
+ * An agent in a profile that linked hubs may ask (off unless a row says `shared`). `id` is what
+ * peers see as the agent's id, so the agent's own id never leaves the hub.
+ */
+export const peerShares = sqliteTable(
+  'peer_shares',
+  {
+    ...scopedColumns(),
+    agentId: ulid('agent_id').notNull(),
+    shared: bool('shared').notNull().default(false),
+    description: text('description', { length: 280 }),
+  },
+  (t) => [uniqueIndex('peer_shares_workspace_agent_uq').on(t.workspace, t.agentId)],
+);
+
+/** The audit log of linked hubs, on this side. Kept after a peer is deleted. */
+export const peerEvents = sqliteTable(
+  'peer_events',
+  {
+    id: ulid('id').primaryKey(),
+    peerId: ulid('peer_id').notNull(),
+    kind: text('kind', { enum: PEER_EVENT_KINDS }).notNull(),
+    ok: bool('ok').notNull(),
+    /** A short fact: an agent's name, a refusal's reason. Never a question's words. */
+    detail: text('detail', { length: 200 }),
+    /** The person on this hub who acted; null when the peer did. */
+    actorId: ulid('actor_id'),
+    createdAt: timestampMs('created_at')
+      .notNull()
+      .$defaultFn(() => new Date()),
+  },
+  (t) => [
+    index('peer_events_peer_idx').on(t.peerId, t.createdAt),
+    check('peer_events_kind_check', inList(t.kind, PEER_EVENT_KINDS)),
+  ],
 );

@@ -51,6 +51,12 @@ jobs:
       - run: pnpm --filter @corehub/contracts generate:native
       - name: Tokens.swift, Product.swift and InfoPlist.strings match their sources
         run: node apps/ios/scripts/generate-swift.mjs --check
+      - name: The app draws Lucide icons, not SF Symbols (docs/design/family.md)
+        run: |
+          if grep -rnE 'systemName:|systemImage:' apps/ios/CoreHub apps/ios/CoreHubShare; then
+            echo "::error::Use LucideIcon / Image(lucide:) (scripts/icons/lucide-mobile.mjs adds an icon)"
+            exit 1
+          fi
       - uses: actions/upload-artifact@v4
         with:
           name: corehub-swift-client

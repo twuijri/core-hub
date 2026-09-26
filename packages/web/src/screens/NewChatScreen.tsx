@@ -122,6 +122,7 @@ export function NewChatScreen() {
           )}
         </div>
         <Composer
+          agentName={(agents.data ?? []).find((agent) => agent.id === agentId)?.name ?? null}
           busy={false}
           disabled={disabledReason !== null}
           disabledReason={disabledReason}

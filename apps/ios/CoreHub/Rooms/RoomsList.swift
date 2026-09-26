@@ -108,7 +108,7 @@ struct NewRoomSheet: View {
                             AgentAvatar(identity: .of(agent), profile: agent.profile, size: 24)
                             Text(agent.name).foregroundStyle(Tone.text)
                             Spacer()
-                            if chosen.contains(agent.id) { Image(systemName: "checkmark").foregroundStyle(Tone.accent) }
+                            if chosen.contains(agent.id) { LucideIcon(.check, size: 18).foregroundStyle(Tone.accent) }
                         }
                     }
                 }

@@ -15,7 +15,7 @@ import { useAuth } from '../auth/context.js';
 import { useAgents } from '../hub/queries.js';
 import { useI18n } from '../i18n/context.js';
 import { agentRoute, navigation, routeOf, termKey } from '../navigation/manifest.js';
-import { IconArrowStart, IconRestart } from '../ui/icons.js';
+import { destinationIcons, IconArrowStart, IconRestart } from '../ui/icons.js';
 import {
   Avatar,
   Button,
@@ -117,23 +117,27 @@ export function AgentNav({
       </div>
       <SidebarGroup testId="agent-sections">
         <nav aria-label={t('agents.sections', { name: agent.name })}>
-          {sections.map((d) => (
-            <SidebarRow
-              key={d.id}
-              label={t(termKey(d.id))}
-              render={({ className, children }) => (
-                <NavLink
-                  to={agentRoute(d.id, agent.id)}
-                  onClick={onNavigate}
-                  data-nav-id={d.id}
-                  className={className}
-                  aria-current={current === d.id ? 'page' : undefined}
-                >
-                  {children}
-                </NavLink>
-              )}
-            />
-          ))}
+          {sections.map((d) => {
+            const Icon = destinationIcons[d.id];
+            return (
+              <SidebarRow
+                key={d.id}
+                label={t(termKey(d.id))}
+                {...(Icon ? { icon: <Icon size={16} /> } : {})}
+                render={({ className, children }) => (
+                  <NavLink
+                    to={agentRoute(d.id, agent.id)}
+                    onClick={onNavigate}
+                    data-nav-id={d.id}
+                    className={className}
+                    aria-current={current === d.id ? 'page' : undefined}
+                  >
+                    {children}
+                  </NavLink>
+                )}
+              />
+            );
+          })}
         </nav>
       </SidebarGroup>
     </div>

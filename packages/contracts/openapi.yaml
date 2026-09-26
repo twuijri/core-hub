@@ -6921,7 +6921,7 @@ paths:
           $ref: '#/components/responses/NotFound'
         '409':
           $ref: '#/components/responses/Conflict'
-  # ---------------------------------------------------------------- presets (dsh)
+  # ---------------------------------------------------------------- presets (DECISIONS §100)
   /agents/{agent_id}/presets:
     parameters:
       - $ref: '#/components/parameters/Profile'
@@ -6929,38 +6929,111 @@ paths:
     get:
       operationId: agents.listPresets
       tags: [agents]
-      summary: List an agent's presets (agents whose `sections` include `presets`)
+      summary: The agent's saved presets in the selected profile, newest first
+      description: >-
+        A preset is a named, saved bundle of this agent's settings in this profile (decision
+        §100): the chat model with its fallback chain, the agent's own model, which skills and
+        MCP servers are on, and the agent's settings sections. It never holds a secret: models
+        name their provider by id, MCP servers by name, and a settings field of kind `secret`
+        (or a value carrying a password, such as a proxy URL with a user and password) is never
+        saved. Readable by whoever may read the agent's settings; written by admins.
       x-rt-events: []
       responses:
         '200':
-          description: Presets.
+          description: Presets (not paged; at most 50 per agent and profile).
           content:
             application/json:
               schema:
                 type: object
-                required: [items, authorable]
+                required: [items]
                 properties:
                   items:
                     type: array
                     items:
                       $ref: '#/components/schemas/AgentPreset'
-                  authorable:
-                    type: boolean
-                    description: Whether user presets can be created on this hub.
               example:
                 items:
-                  - id: default
-                    name: 'الافتراضي'
-                    description: null
-                    trust: system
-                    is_default: true
-                    broken: false
-                    content: null
-                authorable: false
+                  - id: 01J8QK3ZR2W7M5N4P6T8V9X0PR
+                    profile: default
+                    owner_id: 01J8QK3ZR2W7M5N4P6T8V9X0HM
+                    agent_id: 01J8QK3ZR2W7M5N4P6T8V9X0AC
+                    name: 'بحث سريع'
+                    description: 'نموذج أرخص وأدوات أقل'
+                    content:
+                      model:
+                        default:
+                          provider_id: 01J8QK3ZR2W7M5N4P6T8V9X0PV
+                          model: claude-haiku-4-5
+                        fallbacks: []
+                        agent: null
+                      skills:
+                        web-research: true
+                      mcp_servers:
+                        github: false
+                      settings:
+                        agent:
+                          max_turns: 20
+                    last_activated_at: null
+                    created_at: '2026-09-27T01:00:00Z'
+                    updated_at: '2026-09-27T01:00:00Z'
         '401':
           $ref: '#/components/responses/Unauthorized'
         '404':
           $ref: '#/components/responses/NotFound'
+    post:
+      operationId: agents.createPreset
+      tags: [agents]
+      summary: Save the agent's current settings as a preset (admin)
+      description: >-
+        Reads the agent's settings as they are now, through the same operations its pages read
+        (`models.getDefaults`, `agents.get`, `agents.listSkills`, `agents.listMcpServers`,
+        `agents.getSettings`), drops anything secret, and stores the rest under `name`. A part
+        the agent does not have (skills on an agent that is not Hermes) is saved as `null` and
+        left alone when the preset is activated. A name already used by another preset of the
+        agent in the profile is `409 conflict`; more than 50 presets is `409 state_invalid`.
+      x-roles: [owner, admin]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AgentPresetWrite'
+            example:
+              name: 'بحث سريع'
+              description: 'نموذج أرخص وأدوات أقل'
+      x-rt-events: []
+      responses:
+        '201':
+          description: The saved preset.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AgentPreset'
+              example:
+                id: 01J8QK3ZR2W7M5N4P6T8V9X0PR
+                profile: default
+                owner_id: 01J8QK3ZR2W7M5N4P6T8V9X0HM
+                agent_id: 01J8QK3ZR2W7M5N4P6T8V9X0AC
+                name: 'بحث سريع'
+                description: 'نموذج أرخص وأدوات أقل'
+                content:
+                  model: null
+                  skills: null
+                  mcp_servers: null
+                  settings: {}
+                last_activated_at: null
+                created_at: '2026-09-27T01:00:00Z'
+                updated_at: '2026-09-27T01:00:00Z'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
   /agents/{agent_id}/presets/{preset_id}:
     parameters:
       - $ref: '#/components/parameters/Profile'
@@ -6969,7 +7042,7 @@ paths:
     get:
       operationId: agents.getPreset
       tags: [agents]
-      summary: Read a preset with its content
+      summary: Read one preset with its content
       x-rt-events: []
       responses:
         '200':
@@ -6979,13 +7052,20 @@ paths:
               schema:
                 $ref: '#/components/schemas/AgentPreset'
               example:
-                id: default
-                name: 'الافتراضي'
+                id: 01J8QK3ZR2W7M5N4P6T8V9X0PR
+                profile: default
+                owner_id: 01J8QK3ZR2W7M5N4P6T8V9X0HM
+                agent_id: 01J8QK3ZR2W7M5N4P6T8V9X0AC
+                name: 'بحث سريع'
                 description: null
-                trust: system
-                is_default: true
-                broken: false
-                content: "name: default\nplugins: []\n"
+                content:
+                  model: null
+                  skills: null
+                  mcp_servers: null
+                  settings: {}
+                last_activated_at: null
+                created_at: '2026-09-27T01:00:00Z'
+                updated_at: '2026-09-27T01:00:00Z'
         '401':
           $ref: '#/components/responses/Unauthorized'
         '404':
@@ -6993,9 +7073,9 @@ paths:
     delete:
       operationId: agents.deletePreset
       tags: [agents]
-      summary: Delete a user preset (admin)
+      summary: Delete a preset (admin); the agent's settings are not touched
       x-roles: [owner, admin]
-      x-rt-events: [agent.updated]
+      x-rt-events: []
       responses:
         '204':
           description: Deleted.
@@ -7005,8 +7085,6 @@ paths:
           $ref: '#/components/responses/Forbidden'
         '404':
           $ref: '#/components/responses/NotFound'
-        '409':
-          $ref: '#/components/responses/Conflict'
   /agents/{agent_id}/presets/{preset_id}/activate:
     parameters:
       - $ref: '#/components/parameters/Profile'
@@ -7015,34 +7093,45 @@ paths:
     post:
       operationId: agents.activatePreset
       tags: [agents]
-      summary: Make a preset the default (admin)
+      summary: Apply a preset to the agent (admin)
+      description: >-
+        Applies each saved part through the operation a person would use for it —
+        `models.setDefaults` (chat model and fallbacks), `agents.update` (the agent's own
+        model), `agents.updateSkill`, `agents.updateMcpServer` and `agents.updateSettings` —
+        with the caller's own permissions, so every check, event and restart those make
+        happens as it would from their pages. A part is applied as far as it can be: a
+        provider, model, skill, MCP server or settings section that is gone since the preset
+        was saved is reported in `skipped` with the refusal's code, and the rest still
+        applies. `restart_job_ids` are the restarts the settings asked for.
       x-roles: [owner, admin]
-      x-rt-events: [agent.updated]
+      x-rt-events: [agent.updated, job.queued]
       responses:
         '200':
-          description: The full roster after the change.
+          description: What was applied and what was not.
           content:
             application/json:
               schema:
-                type: object
-                required: [items, authorable]
-                properties:
-                  items:
-                    type: array
-                    items:
-                      $ref: '#/components/schemas/AgentPreset'
-                  authorable:
-                    type: boolean
+                $ref: '#/components/schemas/AgentPresetActivation'
               example:
-                items:
-                  - id: default
-                    name: 'الافتراضي'
-                    description: null
-                    trust: system
-                    is_default: true
-                    broken: false
-                    content: null
-                authorable: false
+                preset:
+                  id: 01J8QK3ZR2W7M5N4P6T8V9X0PR
+                  profile: default
+                  owner_id: 01J8QK3ZR2W7M5N4P6T8V9X0HM
+                  agent_id: 01J8QK3ZR2W7M5N4P6T8V9X0AC
+                  name: 'بحث سريع'
+                  description: null
+                  content:
+                    model: null
+                    skills:
+                      web-research: true
+                    mcp_servers: null
+                    settings: {}
+                  last_activated_at: '2026-09-27T01:10:00Z'
+                  created_at: '2026-09-27T01:00:00Z'
+                  updated_at: '2026-09-27T01:00:00Z'
+                applied: [skills]
+                skipped: []
+                restart_job_ids: []
         '401':
           $ref: '#/components/responses/Unauthorized'
         '403':
@@ -14047,17 +14136,25 @@ paths:
           $ref: '#/components/responses/Conflict'
         '503':
           $ref: '#/components/responses/ServiceUnavailable'
+  # ---------------------------------------------------------------- linked hubs (ADR 0026)
   /peers:
     get:
       operationId: devices.listPeers
       tags: [devices]
-      summary: Other Core Hub installations linked to this one (the admin `Devices` tab)
+      summary: Other Core Hub installations linked to this one, and the ones waiting (admin)
+      description: >-
+        A peer is another Core Hub this one is linked with (ADR 0026). Linking is mutual and
+        needs both owners: one creates an invite (`devices.createPeerInvite`), the other's owner
+        redeems it (`devices.requestPeer`), and the first approves (`devices.updatePeer` with
+        `approve`). `inbound` rows used this hub's invite; `outbound` rows are invites this hub
+        redeemed. `fingerprint` is the peer's public key in short form, for comparing by eye
+        with what the other hub shows.
       x-scope: global
       x-roles: [owner, admin]
       x-rt-events: []
       responses:
         '200':
-          description: Peers (not paged).
+          description: Peers (not paged; at most 50).
           content:
             application/json:
               schema:
@@ -14071,14 +14168,18 @@ paths:
               example:
                 items:
                   - id: 01J8QK3ZR2W7M5N4P6T8V9X0PZ
-                    name: 'حاسوب المكتب'
-                    url: https://desk.local:8443
-                    version: 0.1.0
-                    online: true
-                    inbound_status: approved
-                    outbound_status: connected
-                    last_seen_at: '2026-09-21T13:00:00Z'
-                    created_at: '2026-09-19T00:00:00Z'
+                    name: 'مركز المكتب'
+                    hub_name: Core Hub
+                    url: https://desk.example
+                    direction: inbound
+                    status: linked
+                    enabled: true
+                    fingerprint: 3F9A-1C0B-77DE-5A21-90C4-E2B8-4D17-6A3E
+                    version: 1.1.1
+                    asks_per_hour: 30
+                    last_seen_at: '2026-09-27T01:00:00Z'
+                    approved_at: '2026-09-27T00:40:00Z'
+                    created_at: '2026-09-27T00:30:00Z'
         '401':
           $ref: '#/components/responses/Unauthorized'
         '403':
@@ -14086,7 +14187,16 @@ paths:
     post:
       operationId: devices.requestPeer
       tags: [devices]
-      summary: Ask another hub to link with this one, by URL or invite link (admin)
+      summary: Redeem another hub's invite link, asking to link with it (admin)
+      description: >-
+        The hub calls the invite's hub over HTTPS (`devices.peerJoin`) with its own name,
+        address and public key, and checks that the key it gets back matches the fingerprint in
+        the link. The row starts `waiting` until the other hub's owner approves. Needs this
+        hub to be reached over HTTPS itself (the other hub calls back); `400
+        validation_failed` with `details.reason` = `invite_url_invalid`, `https_required` or
+        `own_url_not_https`. The other hub's refusals come back as `409 state_invalid` with
+        `details.reason` = `invite_refused` (expired, used or unknown), `fingerprint_mismatch`
+        or `peer_unreachable`.
       x-scope: global
       x-roles: [owner, admin]
       requestBody:
@@ -14096,29 +14206,50 @@ paths:
             schema:
               type: object
               required: [url]
+              additionalProperties: false
               properties:
                 url:
                   type: string
                   format: uri
-                  description: The peer's origin or its invite link.
+                  maxLength: 2048
+                  description: The invite link the other hub's owner shared.
+                name:
+                  type: string
+                  minLength: 1
+                  maxLength: 80
+                  description: What to call the other hub here; its own name when absent.
             example:
-              url: https://desk.local:8443/peer-invite/7KQ2M9XW
-      x-rt-events: [job.queued]
+              url: https://desk.example/peer-invite/K7QX2M9WTR4V8B3N6P5C1H0JYD?fp=3F9A1C0B77DE5A2190C4E2B84D176A3E
+      x-rt-events: []
       responses:
-        '202':
-          description: The link request was sent.
+        '201':
+          description: The link request was accepted by the other hub; waiting for its owner.
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/JobAccepted'
+                $ref: '#/components/schemas/Peer'
               example:
-                job_id: 01J8QK3ZR2W7M5N4P6T8V9X0K4
+                id: 01J8QK3ZR2W7M5N4P6T8V9X0PZ
+                name: 'مركز المكتب'
+                hub_name: Core Hub
+                url: https://desk.example
+                direction: outbound
+                status: waiting
+                enabled: true
+                fingerprint: 3F9A-1C0B-77DE-5A21-90C4-E2B8-4D17-6A3E
+                version: 1.1.1
+                asks_per_hour: 30
+                last_seen_at: '2026-09-27T00:31:00Z'
+                approved_at: null
+                created_at: '2026-09-27T00:31:00Z'
         '400':
           $ref: '#/components/responses/BadRequest'
         '401':
           $ref: '#/components/responses/Unauthorized'
         '403':
           $ref: '#/components/responses/Forbidden'
+        '409':
+          $ref: '#/components/responses/Conflict'
   /peers/{peer_id}:
     parameters:
       - name: peer_id
@@ -14129,7 +14260,13 @@ paths:
     patch:
       operationId: devices.updatePeer
       tags: [devices]
-      summary: Approve, reject, block or unblock a peer (admin)
+      summary: Approve a waiting peer, rename it, switch it on or off, or change its limit (admin)
+      description: >-
+        `approve: true` links a `pending` (inbound) peer and tells the other hub so; approving
+        anything else is `409 state_invalid`. `enabled: false` stops both directions at once:
+        this hub refuses the peer's signed calls and makes none to it. `asks_per_hour` is how
+        many questions the peer may ask this hub's shared agents in an hour. To refuse a
+        pending peer, delete it.
       x-scope: global
       x-roles: [owner, admin]
       requestBody:
@@ -14137,14 +14274,9 @@ paths:
         content:
           application/json:
             schema:
-              type: object
-              required: [inbound_status]
-              properties:
-                inbound_status:
-                  type: string
-                  enum: [approved, rejected, blocked]
+              $ref: '#/components/schemas/PeerPatch'
             example:
-              inbound_status: approved
+              approve: true
       x-rt-events: []
       responses:
         '200':
@@ -14155,14 +14287,18 @@ paths:
                 $ref: '#/components/schemas/Peer'
               example:
                 id: 01J8QK3ZR2W7M5N4P6T8V9X0PZ
-                name: 'حاسوب المكتب'
-                url: https://desk.local:8443
-                version: 0.1.0
-                online: true
-                inbound_status: approved
-                outbound_status: connected
-                last_seen_at: '2026-09-21T13:00:00Z'
-                created_at: '2026-09-19T00:00:00Z'
+                name: 'مركز المكتب'
+                hub_name: Core Hub
+                url: https://desk.example
+                direction: inbound
+                status: linked
+                enabled: true
+                fingerprint: 3F9A-1C0B-77DE-5A21-90C4-E2B8-4D17-6A3E
+                version: 1.1.1
+                asks_per_hour: 30
+                last_seen_at: '2026-09-27T00:31:00Z'
+                approved_at: '2026-09-27T00:40:00Z'
+                created_at: '2026-09-27T00:30:00Z'
         '400':
           $ref: '#/components/responses/BadRequest'
         '401':
@@ -14171,10 +14307,16 @@ paths:
           $ref: '#/components/responses/Forbidden'
         '404':
           $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
     delete:
       operationId: devices.deletePeer
       tags: [devices]
-      summary: Disconnect and forget a peer (admin)
+      summary: Unlink and forget a peer (admin); its key is dropped at once
+      description: >-
+        Revokes the link on this side immediately — the peer's key is deleted, so no signed
+        call from it verifies again — and tells the other hub, best effort, so it drops this
+        hub too. Also how a pending request is refused. The audit lines stay.
       x-scope: global
       x-roles: [owner, admin]
       x-rt-events: []
@@ -14187,35 +14329,428 @@ paths:
           $ref: '#/components/responses/Forbidden'
         '404':
           $ref: '#/components/responses/NotFound'
+  /peers/{peer_id}/events:
+    parameters:
+      - name: peer_id
+        in: path
+        required: true
+        schema:
+          $ref: '#/components/schemas/Ulid'
+    get:
+      operationId: devices.listPeerEvents
+      tags: [devices]
+      summary: The audit log of one peer, newest first (admin)
+      description: >-
+        Every link step, every question asked in either direction and every refused call
+        (bad signature, replay, unshared agent, over the limit), kept after the peer is deleted.
+        The questions' words are not kept, only who asked which agent and how it ended.
+      x-scope: global
+      x-roles: [owner, admin]
+      x-rt-events: []
+      responses:
+        '200':
+          description: The last 200 events.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/PeerEvent'
+              example:
+                items:
+                  - id: 01J8QK3ZR2W7M5N4P6T8V9X0PE
+                    peer_id: 01J8QK3ZR2W7M5N4P6T8V9X0PZ
+                    kind: ask_in
+                    ok: true
+                    detail: 'bahth'
+                    actor_id: null
+                    created_at: '2026-09-27T01:00:00Z'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /peers/{peer_id}/agents:
+    parameters:
+      - name: peer_id
+        in: path
+        required: true
+        schema:
+          $ref: '#/components/schemas/Ulid'
+    get:
+      operationId: devices.listPeerAgents
+      tags: [devices]
+      summary: The agents a linked peer shares with this hub (admin)
+      description: >-
+        Asks the peer (`devices.peerAgents`, signed) and answers what it said: names and
+        descriptions only. `409 state_invalid` with `details.reason` = `peer_not_linked`,
+        `peer_disabled` or `peer_unreachable`, or the peer's own refusal code.
+      x-scope: global
+      x-roles: [owner, admin]
+      x-rt-events: []
+      responses:
+        '200':
+          description: The shared agents.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/PeerAgent'
+              example:
+                items:
+                  - id: 01J8QK3ZR2W7M5N4P6T8V9X0SH
+                    name: Hermes
+                    description: 'وكيل المكتب'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+  /peers/{peer_id}/agents/{share_id}/ask:
+    parameters:
+      - name: peer_id
+        in: path
+        required: true
+        schema:
+          $ref: '#/components/schemas/Ulid'
+      - name: share_id
+        in: path
+        required: true
+        description: A `PeerAgent.id` the peer listed.
+        schema:
+          $ref: '#/components/schemas/Ulid'
+    post:
+      operationId: devices.askPeerAgent
+      tags: [devices]
+      summary: Ask one of a peer's shared agents a single question and get its answer (admin)
+      description: >-
+        One prompt in, one answer out (`devices.peerAsk`, signed). The peer answers as its
+        peer guest: from the shared agent's model, without tools, files, memory or any other
+        state, within its own time limit. Refusals as `devices.listPeerAgents`, plus `429
+        rate_limited` when the peer says this hub asked too often.
+      x-scope: global
+      x-roles: [owner, admin]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PeerAsk'
+            example:
+              prompt: 'لخّص لي آخر ما تعرفه عن جدول الاجتماعات'
+      x-rt-events: []
+      responses:
+        '200':
+          description: The answer.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PeerAnswer'
+              example:
+                answer: 'لا أملك جدولًا هنا، لكن…'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+  /peer-shares:
+    get:
+      operationId: devices.listPeerShares
+      tags: [devices]
+      summary: Every agent of every profile, and whether linked hubs may ask it (admin)
+      description: >-
+        Sharing is per agent in a profile, off until an admin switches it on, and applies to
+        every linked peer that is enabled. A shared agent is only ever asked single questions
+        without tools (ADR 0026).
+      x-scope: global
+      x-roles: [owner, admin]
+      x-rt-events: []
+      responses:
+        '200':
+          description: The agents.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/PeerShare'
+              example:
+                items:
+                  - profile: default
+                    agent_id: 01J8QK3ZR2W7M5N4P6T8V9X0AC
+                    name: Hermes
+                    shared: false
+                    description: null
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+    put:
+      operationId: devices.setPeerShare
+      tags: [devices]
+      summary: Share an agent with linked hubs, or stop sharing it (admin)
+      x-scope: global
+      x-roles: [owner, admin]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PeerShareWrite'
+            example:
+              profile: default
+              agent_id: 01J8QK3ZR2W7M5N4P6T8V9X0AC
+              shared: true
+              description: 'وكيل المكتب'
+      x-rt-events: []
+      responses:
+        '200':
+          description: The agent's share.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PeerShare'
+              example:
+                profile: default
+                agent_id: 01J8QK3ZR2W7M5N4P6T8V9X0AC
+                name: Hermes
+                shared: true
+                description: 'وكيل المكتب'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
   /peer-invites:
     post:
       operationId: devices.createPeerInvite
       tags: [devices]
-      summary: Create a one-time invite link another hub can use to link (admin)
+      summary: Create a one-time invite link another hub's owner can redeem (admin)
+      description: >-
+        Single use, valid for 10 minutes. The link carries a code only this hub can check (it
+        keeps a hash of it) and this hub's key fingerprint, which the other hub checks against
+        the key it is sent. Only a hub reached over HTTPS can invite (`400 validation_failed`,
+        `details.reason = own_url_not_https`). At most 5 unused invites at a time.
       x-scope: global
       x-roles: [owner, admin]
       x-rt-events: []
       responses:
         '201':
-          description: The invite (render as QR client-side).
+          description: The invite (render as text or QR client-side).
           content:
             application/json:
               schema:
-                type: object
-                required: [url, expires_at]
-                properties:
-                  url:
-                    type: string
-                    format: uri
-                  expires_at:
-                    $ref: '#/components/schemas/Timestamp'
+                $ref: '#/components/schemas/PeerInvite'
               example:
-                url: https://hub.example/peer-invite/7KQ2M9XW
-                expires_at: '2026-09-21T13:40:00Z'
+                url: https://hub.example/peer-invite/K7QX2M9WTR4V8B3N6P5C1H0JYD?fp=3F9A1C0B77DE5A2190C4E2B84D176A3E
+                expires_at: '2026-09-27T00:40:00Z'
+                fingerprint: 3F9A-1C0B-77DE-5A21-90C4-E2B8-4D17-6A3E
+        '400':
+          $ref: '#/components/responses/BadRequest'
         '401':
           $ref: '#/components/responses/Unauthorized'
         '403':
           $ref: '#/components/responses/Forbidden'
+        '409':
+          $ref: '#/components/responses/Conflict'
+  # -------------------------------------------- hub to hub (ADR 0026; not a client API)
+  /peer-link/join:
+    post:
+      operationId: devices.peerJoin
+      tags: [devices]
+      summary: Another hub redeems this hub's invite (hub to hub)
+      description: >-
+        Not a client API; another Core Hub calls it from `devices.requestPeer`. No bearer: the
+        invite code is the permission, and the request is signed (ADR 0026, the `X-Peer-*`
+        headers) with the very key it registers, which proves the caller holds it. A code that
+        is unknown, used or past its 10 minutes is `404 not_found` — the same answer for all
+        three. Rate limited per caller address.
+      security: []
+      x-scope: global
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PeerJoin'
+            example:
+              code: K7QX2M9WTR4V8B3N6P5C1H0JYD
+              hub_id: 01J8QK3ZR2W7M5N4P6T8V9X0HB
+              name: Core Hub
+              url: https://home.example
+              public_key: MCowBQYDK2VwAyEAGb9ECWmEzf6FQbrBZ9w7lshQhqowtrbLDFw4rXAxZuE
+              version: 1.1.1
+      x-rt-events: []
+      responses:
+        '200':
+          description: The invite was taken; this hub's side of the link.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PeerJoined'
+              example:
+                hub_id: 01J8QK3ZR2W7M5N4P6T8V9X0HA
+                name: Core Hub
+                public_key: MCowBQYDK2VwAyEAvGw0mZm1dYBvS1yRZ6sFYLr3qfTGCkqmYSO3yGmS5CE
+                version: 1.1.1
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+  /peer-link/notice:
+    post:
+      operationId: devices.peerNotice
+      tags: [devices]
+      summary: A linked hub says it approved or dropped the link (hub to hub, signed)
+      security: []
+      x-scope: global
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [kind]
+              additionalProperties: false
+              properties:
+                kind:
+                  type: string
+                  enum: [approved, unlinked]
+            example:
+              kind: approved
+      x-rt-events: []
+      responses:
+        '204':
+          description: Taken.
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+  /peer-link/agents:
+    get:
+      operationId: devices.peerAgents
+      tags: [devices]
+      summary: The agents this hub shares, as the peer guest sees them (hub to hub, signed)
+      security: []
+      x-scope: global
+      x-rt-events: []
+      responses:
+        '200':
+          description: Names and descriptions of the shared agents.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/PeerAgent'
+              example:
+                items:
+                  - id: 01J8QK3ZR2W7M5N4P6T8V9X0SH
+                    name: Hermes
+                    description: 'وكيل المكتب'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+  /peer-link/ask:
+    post:
+      operationId: devices.peerAsk
+      tags: [devices]
+      summary: The peer guest asks one shared agent one question (hub to hub, signed)
+      description: >-
+        The only thing a peer can make this hub do. The agent must be shared; the question is
+        answered by its model without tools, files, memory or conversation, within 120 seconds
+        and 2,000 tokens. `403 forbidden` when the agent is not shared (the same as one that
+        does not exist), `429 rate_limited` past the peer's `asks_per_hour`, `422
+        agent_unavailable` when the agent could not answer.
+      security: []
+      x-scope: global
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [agent, prompt]
+              additionalProperties: false
+              properties:
+                agent:
+                  $ref: '#/components/schemas/Ulid'
+                prompt:
+                  type: string
+                  minLength: 1
+                  maxLength: 8000
+                asked_by:
+                  type: [string, 'null']
+                  maxLength: 80
+                  description: The asking person's display name on the other hub, for the audit.
+            example:
+              agent: 01J8QK3ZR2W7M5N4P6T8V9X0SH
+              prompt: 'لخّص لي آخر ما تعرفه عن جدول الاجتماعات'
+              asked_by: 'طلال'
+      x-rt-events: []
+      responses:
+        '200':
+          description: The answer.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PeerAnswer'
+              example:
+                answer: 'لا أملك جدولًا هنا، لكن…'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '422':
+          $ref: '#/components/responses/AgentUnavailable'
+        '429':
+          $ref: '#/components/responses/RateLimited'
   /push/config:
     get:
       operationId: devices.getPushConfig
@@ -20808,23 +21343,145 @@ components:
                 enum: ['true', 'false', conditional]
     AgentPreset:
       type: object
-      required: [id, name, description, trust, is_default, broken, content]
+      description: A saved, named bundle of one agent's settings in one profile (decision §100).
+      required:
+        [
+          id,
+          profile,
+          owner_id,
+          agent_id,
+          name,
+          description,
+          content,
+          last_activated_at,
+          created_at,
+          updated_at,
+        ]
       properties:
         id:
-          type: string
+          $ref: '#/components/schemas/Ulid'
+        profile:
+          $ref: '#/components/schemas/ProfileSlug'
+        owner_id:
+          description: The admin who saved it.
+          $ref: '#/components/schemas/Ulid'
+        agent_id:
+          $ref: '#/components/schemas/Ulid'
         name:
           type: string
+          minLength: 1
+          maxLength: 80
         description:
           type: [string, 'null']
-        trust:
-          type: string
-          enum: [system, user]
-        is_default:
-          type: boolean
-        broken:
-          type: boolean
+          maxLength: 280
         content:
+          $ref: '#/components/schemas/AgentPresetContent'
+        last_activated_at:
+          oneOf:
+            - $ref: '#/components/schemas/Timestamp'
+            - type: 'null'
+        created_at:
+          $ref: '#/components/schemas/Timestamp'
+        updated_at:
+          $ref: '#/components/schemas/Timestamp'
+    AgentPresetContent:
+      type: object
+      description: >-
+        What a preset sets. Each part is `null` when the agent did not have it when the preset
+        was saved, and a `null` part is left alone on activation. No part ever holds a secret:
+        providers are named by id, MCP servers by name, and secret settings are never saved.
+      required: [model, skills, mcp_servers, settings]
+      properties:
+        model:
+          oneOf:
+            - type: 'null'
+            - type: object
+              required: [default, fallbacks, agent]
+              properties:
+                default:
+                  description: >-
+                    The profile's chat model (`models.getDefaults`); `null` when the profile
+                    inherits the `default` profile's, and activation goes back to inheriting.
+                  oneOf:
+                    - $ref: '#/components/schemas/ModelRef'
+                    - type: 'null'
+                fallbacks:
+                  type: array
+                  items:
+                    $ref: '#/components/schemas/ModelRef'
+                agent:
+                  description: The agent's own model (`Agent.default_model`); `null` for none.
+                  oneOf:
+                    - $ref: '#/components/schemas/ModelRef'
+                    - type: 'null'
+        skills:
+          description: Skill key → on or off. Hermes's built-in skills are not switched and not saved.
+          oneOf:
+            - type: 'null'
+            - type: object
+              additionalProperties:
+                type: boolean
+        mcp_servers:
+          description: MCP server name → on or off. The servers' configuration is not saved.
+          oneOf:
+            - type: 'null'
+            - type: object
+              additionalProperties:
+                type: boolean
+        settings:
+          description: >-
+            Settings section key → field key → value, as `agents.updateSettings` takes them.
+            Fields of kind `secret`, and text values that carry a user and password, are left out.
+          oneOf:
+            - type: 'null'
+            - type: object
+              additionalProperties:
+                type: object
+                additionalProperties: true
+    AgentPresetWrite:
+      type: object
+      required: [name]
+      additionalProperties: false
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 80
+        description:
           type: [string, 'null']
+          maxLength: 280
+    AgentPresetActivation:
+      type: object
+      required: [preset, applied, skipped, restart_job_ids]
+      properties:
+        preset:
+          $ref: '#/components/schemas/AgentPreset'
+        applied:
+          type: array
+          description: The parts that were applied in full.
+          items:
+            $ref: '#/components/schemas/AgentPresetPart'
+        skipped:
+          type: array
+          description: What could not be applied, and the refusal's code.
+          items:
+            type: object
+            required: [part, key, code]
+            properties:
+              part:
+                $ref: '#/components/schemas/AgentPresetPart'
+              key:
+                type: [string, 'null']
+                description: The skill, server or `section.field` refused; `null` for the whole part.
+              code:
+                $ref: '#/components/schemas/ErrorCode'
+        restart_job_ids:
+          type: array
+          items:
+            $ref: '#/components/schemas/Ulid'
+    AgentPresetPart:
+      type: string
+      enum: [model, skills, mcp_servers, settings]
     ChannelField:
       type: object
       required: [key, label, kind, target, value, hint]
@@ -24776,31 +25433,226 @@ components:
           description: The public hostname given to the tunnel in Cloudflare, without `https://`.
     Peer:
       type: object
+      description: Another Core Hub linked with this one, or waiting to be (ADR 0026).
       required:
-        [id, name, url, version, online, inbound_status, outbound_status, last_seen_at, created_at]
+        [
+          id,
+          name,
+          hub_name,
+          url,
+          direction,
+          status,
+          enabled,
+          fingerprint,
+          version,
+          asks_per_hour,
+          last_seen_at,
+          approved_at,
+          created_at,
+        ]
       properties:
         id:
           $ref: '#/components/schemas/Ulid'
         name:
           type: string
+          description: What this hub calls the peer; starts as the peer's own name.
+        hub_name:
+          type: string
+          description: The name the peer gave itself when linking.
         url:
           type: string
+          description: The peer's HTTPS origin.
+        direction:
+          type: string
+          description: "`inbound`: it redeemed this hub's invite. `outbound`: this hub redeemed its invite."
+          enum: [inbound, outbound]
+        status:
+          type: string
+          description: >-
+            `pending`: it asked, and this hub's owner has not approved yet. `waiting`: this hub
+            asked, and the peer's owner has not approved yet. `linked`: both owners agreed.
+          enum: [pending, waiting, linked]
+        enabled:
+          type: boolean
+        fingerprint:
+          type: string
+          description: SHA-256 of the peer's public key, first 16 bytes in hex groups.
         version:
           type: [string, 'null']
-        online:
-          type: boolean
-        inbound_status:
-          type: string
-          enum: [pending, approved, rejected, blocked]
-        outbound_status:
-          type: string
-          enum: [none, requested, connected, rejected, error]
+        asks_per_hour:
+          type: integer
+          minimum: 1
+          maximum: 1000
+          description: How many questions the peer may ask this hub's shared agents in an hour.
         last_seen_at:
+          oneOf:
+            - $ref: '#/components/schemas/Timestamp'
+            - type: 'null'
+        approved_at:
           oneOf:
             - $ref: '#/components/schemas/Timestamp'
             - type: 'null'
         created_at:
           $ref: '#/components/schemas/Timestamp'
+    PeerPatch:
+      type: object
+      additionalProperties: false
+      minProperties: 1
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 80
+        enabled:
+          type: boolean
+        approve:
+          type: boolean
+          const: true
+        asks_per_hour:
+          type: integer
+          minimum: 1
+          maximum: 1000
+    PeerInvite:
+      type: object
+      required: [url, expires_at, fingerprint]
+      properties:
+        url:
+          type: string
+          format: uri
+        expires_at:
+          $ref: '#/components/schemas/Timestamp'
+        fingerprint:
+          type: string
+          description: This hub's key fingerprint, to compare with what the other hub shows.
+    PeerEvent:
+      type: object
+      required: [id, peer_id, kind, ok, detail, actor_id, created_at]
+      properties:
+        id:
+          $ref: '#/components/schemas/Ulid'
+        peer_id:
+          $ref: '#/components/schemas/Ulid'
+        kind:
+          type: string
+          enum:
+            [
+              joined,
+              requested,
+              approved,
+              approved_by_peer,
+              updated,
+              unlinked,
+              unlinked_by_peer,
+              list_in,
+              list_out,
+              ask_in,
+              ask_out,
+              refused,
+            ]
+        ok:
+          type: boolean
+        detail:
+          type: [string, 'null']
+          description: A short fact (an agent's name, a refusal's reason); never a question's words.
+        actor_id:
+          description: The person on this hub who acted; `null` when the peer did.
+          oneOf:
+            - $ref: '#/components/schemas/Ulid'
+            - type: 'null'
+        created_at:
+          $ref: '#/components/schemas/Timestamp'
+    PeerShare:
+      type: object
+      required: [profile, agent_id, name, shared, description]
+      properties:
+        profile:
+          $ref: '#/components/schemas/ProfileSlug'
+        agent_id:
+          $ref: '#/components/schemas/Ulid'
+        name:
+          type: string
+        shared:
+          type: boolean
+        description:
+          type: [string, 'null']
+          description: What linked hubs are shown beside the name.
+    PeerShareWrite:
+      type: object
+      required: [profile, agent_id, shared]
+      additionalProperties: false
+      properties:
+        profile:
+          $ref: '#/components/schemas/ProfileSlug'
+        agent_id:
+          $ref: '#/components/schemas/Ulid'
+        shared:
+          type: boolean
+        description:
+          type: [string, 'null']
+          maxLength: 280
+    PeerAgent:
+      type: object
+      required: [id, name, description]
+      properties:
+        id:
+          description: The share's id on the peer (not the agent's own id there).
+          $ref: '#/components/schemas/Ulid'
+        name:
+          type: string
+        description:
+          type: [string, 'null']
+    PeerAsk:
+      type: object
+      required: [prompt]
+      additionalProperties: false
+      properties:
+        prompt:
+          type: string
+          minLength: 1
+          maxLength: 8000
+    PeerAnswer:
+      type: object
+      required: [answer]
+      properties:
+        answer:
+          type: string
+    PeerJoin:
+      type: object
+      required: [code, hub_id, name, url, public_key, version]
+      additionalProperties: false
+      properties:
+        code:
+          type: string
+          pattern: '^[0-9A-Z]{26}$'
+        hub_id:
+          $ref: '#/components/schemas/Ulid'
+        name:
+          type: string
+          minLength: 1
+          maxLength: 80
+        url:
+          type: string
+          maxLength: 2048
+          description: The joining hub's HTTPS origin.
+        public_key:
+          type: string
+          maxLength: 200
+          description: Ed25519 public key, SPKI DER in base64url.
+        version:
+          type: [string, 'null']
+          maxLength: 40
+    PeerJoined:
+      type: object
+      required: [hub_id, name, public_key, version]
+      properties:
+        hub_id:
+          $ref: '#/components/schemas/Ulid'
+        name:
+          type: string
+        public_key:
+          type: string
+        version:
+          type: [string, 'null']
     # ---------------------------------------------------------------- notify
     NoticeKind:
       type: string

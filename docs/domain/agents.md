@@ -210,6 +210,16 @@ as (`config-files.ts` lists each agent's two), one set for every profile. The hu
 previous version of each write under `<DATA_DIR>/backups/agent-config/<agent>/<key>/` (the newest
 ten) and an `agent_config_file.written` audit event.
 
+## Presets (DECISIONS §100; migration `0031`)
+
+`agent_presets` (scoped): a named bundle of one agent's settings in one profile — `name`
+(unique per agent and profile), `description`, `content` (JSON: `model` {default, fallbacks,
+agent}, `skills` key → on/off, `mcp_servers` name → on/off, `settings` section → field →
+value; a part is `null` when the agent did not have it), `last_activated_at`. Never a secret:
+no keys, no MCP configuration, no field of kind `secret`, no value with a user and password.
+Saved and activated through the agent's own read and write operations, as the caller
+(`presets.ts`).
+
 ## Not stored
 
 - The agent's own configuration files, memory, skills sources, plugin caches.

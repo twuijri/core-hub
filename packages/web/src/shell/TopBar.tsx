@@ -20,10 +20,11 @@ export function TopBar({
   const { t } = useI18n();
   const pane = usePane();
   const meta = useMeta();
-  // The hub answers its name in English; the product's own name reads in the person's
-  // language («كور هب»), and a name the owner set is shown as they wrote it.
+  // Only a name the owner gave the hub is shown, as they wrote it: it says which hub this is
+  // when a person has several. The product's own name is already the sidebar's brand, and a
+  // second copy in the bar is clutter (docs/design/family.md, "One bar").
   const served = meta.data?.name;
-  const hubName = !served || served === PRODUCT.name ? t('app.name') : served;
+  const hubName = !served || served === PRODUCT.name ? null : served;
   return (
     <header
       className="glass sticky top-0 z-[var(--ch-z-chrome)] flex items-center gap-2 border-b px-3"
@@ -41,9 +42,11 @@ export function TopBar({
         {title}
       </h1>
       <div ref={slotRef} className="topbar-slot" data-testid="topbar-slot" />
-      <span className="topbar-hub hidden text-xs text-muted sm:inline" dir="auto">
-        {hubName}
-      </span>
+      {hubName && (
+        <span className="topbar-hub hidden text-xs text-muted sm:inline" dir="auto">
+          {hubName}
+        </span>
+      )}
       <BackgroundTasks />
       <PendingActions />
       <WorkspaceSwitcher />

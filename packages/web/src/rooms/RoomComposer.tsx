@@ -6,10 +6,24 @@
  * names as structured mentions (`mentions.ts`) — the hub never reads names out of text.
  * A message that names nobody goes to the room's lead seat, which the hint under the field
  * says, so nobody wonders who will answer.
+ *
+ * Pictures and files go with the words (contract decision §99): the paperclip, a drop onto the
+ * composer or a paste, uploaded and shown as the chat composer's chips (`attachments/tray.tsx`).
  */
-import { useEffect, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react';
+import {
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ClipboardEvent,
+  type DragEvent,
+  type KeyboardEvent,
+} from 'react';
+import { PendingFilesTray, roomBlocks, usePendingFiles } from '../attachments/tray.js';
 import { useI18n } from '../i18n/context.js';
-import { IconSend } from '../ui/icons.js';
+import type { ContentBlock } from '../types.js';
+import { IconPaperclip, IconSend } from '../ui/icons.js';
 import { Tooltip } from '../ui/index.js';
 import {
   insertMention,
@@ -38,7 +52,8 @@ export function RoomComposer({
   /** Why nothing can be sent right now (an archived room); `null` when it can. */
   disabledReason: string | null;
   sending: boolean;
-  onSend(text: string, mentions: Mention[]): Promise<boolean>;
+  /** The blocks (words, then pictures and files) and the seats the words name. */
+  onSend(content: ContentBlock[], mentions: Mention[]): Promise<boolean>;
   onTyping(on: boolean): void;
 }) {
   const { t } = useI18n();
@@ -50,6 +65,9 @@ export function RoomComposer({
   const field = useRef<HTMLTextAreaElement>(null);
   const typingSince = useRef(0);
   const typingTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const files = usePendingFiles();
+  const fileInput = useRef<HTMLInputElement>(null);
+  const [dragging, setDragging] = useState(false);
 
   const query = mentionQuery(text, caret);
   const options = useMemo(() => {
@@ -93,15 +111,29 @@ export function RoomComposer({
     setPlaceCaret(null);
   }, [placeCaret]);
 
+  const hasContent = text.trim() !== '' || files.ready;
   const send = async () => {
     const trimmed = text.trim();
-    if (!trimmed || disabledReason || sending) return;
-    const mentions = mentionsIn(trimmed, seats, allowAll);
+    if (!hasContent || files.uploading || disabledReason || sending) return;
+    const mentions = trimmed ? mentionsIn(trimmed, seats, allowAll) : [];
     stopTyping();
-    if (await onSend(trimmed, mentions)) {
+    if (await onSend(roomBlocks(trimmed, files.pending), mentions)) {
       setText('');
       setCaret(0);
+      files.clearSent();
     }
+  };
+
+  const onDrop = (event: DragEvent<HTMLElement>) => {
+    event.preventDefault();
+    setDragging(false);
+    if (disabledReason) return;
+    if (event.dataTransfer.files.length > 0) void files.add(event.dataTransfer.files);
+  };
+  const onPaste = (event: ClipboardEvent<HTMLTextAreaElement>) => {
+    if (disabledReason || event.clipboardData.files.length === 0) return;
+    event.preventDefault();
+    void files.add(event.clipboardData.files);
   };
 
   const onKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>) => {
@@ -173,9 +205,25 @@ export function RoomComposer({
           event.preventDefault();
           void send();
         }}
+        onDragOver={(event) => {
+          event.preventDefault();
+          if (!disabledReason) setDragging(true);
+        }}
+        onDragLeave={() => setDragging(false)}
+        onDrop={onDrop}
         aria-label={t('rooms.composer.label')}
         data-testid="room-composer"
       >
+        {dragging && (
+          <p className="composer-drop" role="status">
+            {t('composer.drop_here')}
+          </p>
+        )}
+        <PendingFilesTray
+          pending={files.pending}
+          onRemove={files.remove}
+          testId="room-composer-attachments"
+        />
         <div className="composer-grow" data-value={text}>
           <textarea
             ref={field}
@@ -196,11 +244,35 @@ export function RoomComposer({
             }}
             onSelect={(event) => setCaret(event.currentTarget.selectionStart ?? 0)}
             onKeyDown={onKeyDown}
+            onPaste={onPaste}
             onBlur={stopTyping}
             data-testid="room-input"
           />
         </div>
         <div className="composer-tools">
+          <input
+            ref={fileInput}
+            type="file"
+            multiple
+            hidden
+            data-testid="room-file-input"
+            onChange={(event) => {
+              if (event.target.files) void files.add(event.target.files);
+              event.target.value = '';
+            }}
+          />
+          <Tooltip label={t('composer.attach')}>
+            <button
+              type="button"
+              className="composer-btn"
+              aria-label={t('composer.attach')}
+              disabled={!!disabledReason}
+              onClick={() => fileInput.current?.click()}
+              data-testid="room-attach"
+            >
+              <IconPaperclip />
+            </button>
+          </Tooltip>
           <span
             className="composer-reason min-w-0 flex-1 truncate"
             data-testid="room-composer-hint"
@@ -212,7 +284,7 @@ export function RoomComposer({
               type="submit"
               className="composer-btn composer-btn-send"
               aria-label={t('composer.send')}
-              disabled={!text.trim() || !!disabledReason || sending}
+              disabled={!hasContent || files.uploading || !!disabledReason || sending}
               data-busy={sending ? 'true' : undefined}
               data-testid="room-send"
             >

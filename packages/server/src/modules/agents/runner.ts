@@ -423,7 +423,7 @@ export class AgentRunner implements AgentRunnerPort {
     const { service, adapters } = this.deps;
     const oneshot = {
       prompt: request.prompt,
-      maxTokens: ASK_MAX_TOKENS,
+      maxTokens: request.maxTokens ?? ASK_MAX_TOKENS,
       timeoutMs: request.timeoutMs,
     };
 

@@ -5,13 +5,16 @@ import hub.core.android.R
 
 /** The Lucide icons the app carries (scripts/icons/lucide-mobile.json), as drawable ids. */
 object Lucide {
+    val Activity = R.drawable.lucide_activity
     val Archive = R.drawable.lucide_archive
     val ArchiveRestore = R.drawable.lucide_archive_restore
     val ArrowLeft = R.drawable.lucide_arrow_left
     val ArrowUp = R.drawable.lucide_arrow_up
     val Bell = R.drawable.lucide_bell
     val BellOff = R.drawable.lucide_bell_off
+    val BookOpen = R.drawable.lucide_book_open
     val Bot = R.drawable.lucide_bot
+    val Box = R.drawable.lucide_box
     val Brain = R.drawable.lucide_brain
     val CalendarClock = R.drawable.lucide_calendar_clock
     val Camera = R.drawable.lucide_camera
@@ -22,12 +25,16 @@ object Lucide {
     val ChevronRight = R.drawable.lucide_chevron_right
     val ChevronUp = R.drawable.lucide_chevron_up
     val ChevronsUpDown = R.drawable.lucide_chevrons_up_down
+    val Circle = R.drawable.lucide_circle
     val CircleArrowDown = R.drawable.lucide_circle_arrow_down
     val CircleCheck = R.drawable.lucide_circle_check
     val CirclePlus = R.drawable.lucide_circle_plus
     val CircleQuestionMark = R.drawable.lucide_circle_question_mark
+    val CircleStop = R.drawable.lucide_circle_stop
+    val CircleUser = R.drawable.lucide_circle_user
     val CircleUserRound = R.drawable.lucide_circle_user_round
     val CircleX = R.drawable.lucide_circle_x
+    val ClipboardPaste = R.drawable.lucide_clipboard_paste
     val Clock = R.drawable.lucide_clock
     val ClockArrowUp = R.drawable.lucide_clock_arrow_up
     val Contrast = R.drawable.lucide_contrast
@@ -43,6 +50,7 @@ object Lucide {
     val Folder = R.drawable.lucide_folder
     val Gauge = R.drawable.lucide_gauge
     val Globe = R.drawable.lucide_globe
+    val Hammer = R.drawable.lucide_hammer
     val Hand = R.drawable.lucide_hand
     val Hash = R.drawable.lucide_hash
     val Image = R.drawable.lucide_image
@@ -62,6 +70,7 @@ object Lucide {
     val MessagesSquare = R.drawable.lucide_messages_square
     val Mic = R.drawable.lucide_mic
     val Moon = R.drawable.lucide_moon
+    val OctagonX = R.drawable.lucide_octagon_x
     val Palette = R.drawable.lucide_palette
     val Pause = R.drawable.lucide_pause
     val Pencil = R.drawable.lucide_pencil
@@ -72,18 +81,26 @@ object Lucide {
     val Power = R.drawable.lucide_power
     val Puzzle = R.drawable.lucide_puzzle
     val QrCode = R.drawable.lucide_qr_code
+    val Radio = R.drawable.lucide_radio
     val RefreshCw = R.drawable.lucide_refresh_cw
     val RotateCcw = R.drawable.lucide_rotate_ccw
+    val RotateCcwClock = R.drawable.lucide_rotate_ccw_clock
+    val RotateCw = R.drawable.lucide_rotate_cw
+    val ScanQrCode = R.drawable.lucide_scan_qr_code
+    val ScrollText = R.drawable.lucide_scroll_text
     val Search = R.drawable.lucide_search
     val Server = R.drawable.lucide_server
     val Settings = R.drawable.lucide_settings
+    val Share = R.drawable.lucide_share
     val Share2 = R.drawable.lucide_share_2
     val Shield = R.drawable.lucide_shield
+    val ShieldCheck = R.drawable.lucide_shield_check
     val SlidersHorizontal = R.drawable.lucide_sliders_horizontal
     val Smartphone = R.drawable.lucide_smartphone
     val Sparkles = R.drawable.lucide_sparkles
     val SquarePen = R.drawable.lucide_square_pen
     val Sun = R.drawable.lucide_sun
+    val SunMoon = R.drawable.lucide_sun_moon
     val Terminal = R.drawable.lucide_terminal
     val Trash = R.drawable.lucide_trash
     val TriangleAlert = R.drawable.lucide_triangle_alert

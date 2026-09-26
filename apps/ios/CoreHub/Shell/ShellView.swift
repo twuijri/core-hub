@@ -120,7 +120,7 @@ struct ShellView: View {
                             Button {
                                 setDrawer(true)
                             } label: {
-                                Image(systemName: "line.3.horizontal")
+                                LucideIcon(.menu, size: 20)
                             }
                             .accessibilityLabel(l10n("shell.open_menu"))
                             .accessibilityIdentifier("shell.menu")

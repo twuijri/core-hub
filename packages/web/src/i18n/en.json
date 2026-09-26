@@ -49,7 +49,8 @@
     "back_to_agents": "Back to agents",
     "terminal": "Terminal",
     "files": "Files",
-    "config_files": "Config files"
+    "config_files": "Config files",
+    "linked_hubs": "Linked hubs"
   },
   "common": {
     "loading": "Loading…",
@@ -299,7 +300,7 @@
   },
   "composer": {
     "label": "Message composer",
-    "placeholder": "Message the agent… (Enter to send, Shift+Enter for a new line)",
+    "placeholder": "Message the agent…",
     "disabled": "The session is not ready.",
     "send": "Send",
     "stop": "Stop the run",
@@ -349,7 +350,8 @@
       "high": "High",
       "max": "Max"
     },
-    "context_ring": "Context: {percent}% — {used} of {window} tokens"
+    "context_ring": "Context: {percent}% — {used} of {window} tokens",
+    "placeholder_agent": "Message {agent}…"
   },
   "slash": {
     "title": "Commands",
@@ -418,7 +420,7 @@
     "send": "Answer",
     "skip": "Skip (deny)",
     "waiting": "Waiting on you",
-    "answer_hint": "Type your answer… (Enter to send, Shift+Enter for a new line)"
+    "answer_hint": "Type your answer…"
   },
   "pending": {
     "open": "Waiting for you",
@@ -452,7 +454,8 @@
     "earlier": "{count} earlier",
     "hide_earlier": "Hide {count} earlier",
     "arguments": "Arguments",
-    "result": "Result"
+    "result": "Result",
+    "count_one": "1 tool"
   },
   "agents": {
     "empty": "The registry is empty.",
@@ -475,19 +478,30 @@
       "disabled": "Disabled"
     },
     "capability": {
-      "approvals": "approvals",
-      "channels": "channels",
-      "jobs": "jobs",
+      "approvals": "Approvals",
+      "channels": "Channels",
+      "jobs": "Jobs",
       "kanban": "Tasks",
       "mcp": "MCP",
-      "memory": "memory",
-      "plugins": "plugins",
-      "resume": "resume",
-      "skills": "skills",
-      "streaming": "streaming",
+      "memory": "Memory",
+      "plugins": "Plugins",
+      "resume": "Resume",
+      "skills": "Skills",
+      "streaming": "Streaming",
       "tasks": "Tasks",
-      "tools": "tools",
-      "worktrees": "worktrees"
+      "tools": "Tools",
+      "worktrees": "Worktrees",
+      "vision": "Vision",
+      "audio": "Audio",
+      "presets": "Presets",
+      "journey": "Journey",
+      "compress": "Compress",
+      "steer": "Steer",
+      "goals": "Goals",
+      "plans": "Plans",
+      "learn": "Learn",
+      "skill_commands": "Skill commands",
+      "config_files": "Config files"
     },
     "settings_of": "{name} settings",
     "settings_none": "This agent declares no settings.",
@@ -1189,7 +1203,8 @@
         "removed": "Removed",
         "error": "Git refused"
       }
-    }
+    },
+    "count_one": "1 task"
   },
   "schedules": {
     "new": "New schedule",
@@ -3610,6 +3625,118 @@
       "hostname_invalid": "That is not a hostname. Write it like hub.example.com.",
       "relay_unavailable": "Only the hub the desktop app runs on this computer can open a way in.",
       "relay_host_not_answering": "The desktop app did not answer. Try again in a moment."
+    }
+  },
+  "presets": {
+    "title": "Presets",
+    "subtitle": "This agent's settings in this profile, saved under a name: the chat model and its fallbacks, the agent's own model, which skills and MCP servers are on, and the settings below. Never a key or a password.",
+    "name": "Name for the current settings",
+    "save": "Save current settings",
+    "none": "No presets yet.",
+    "activate": "Activate",
+    "activate_title": "Activate “{name}”?",
+    "activate_body": "Its settings replace this agent's current ones in this profile. What must restart for them restarts.",
+    "delete_title": "Delete “{name}”? The agent's settings do not change.",
+    "applied": "Applied.",
+    "applied_partly": "Applied, except what is gone since it was saved: {skipped}.",
+    "restarting": "Restarting what the settings need.",
+    "separator": ", ",
+    "part": {
+      "model": "Model",
+      "skills": "{count} skills",
+      "mcp_servers": "{count} MCP servers",
+      "settings": "{count} settings sections"
+    },
+    "part_name": {
+      "model": "the model",
+      "skills": "the skills",
+      "mcp_servers": "the MCP servers",
+      "settings": "the settings"
+    }
+  },
+  "linked_hubs": {
+    "intro": "Link this hub with another Core Hub. A link lets each side see the names of the agents the other shares, and lets a person here ask one of them a single question — answered by that agent's model, without tools, files or memory. Nothing else is shared: no files, memory, tasks, providers or keys. Both owners must agree.",
+    "invite_title": "Invite another hub",
+    "invite_hint": "Make a link and send it to the other hub's owner. It works once, for 10 minutes.",
+    "invite_create": "Make an invite link",
+    "invite_again": "Make another",
+    "invite_expires": "Works once, until {time}.",
+    "own_fingerprint": "This hub's key",
+    "their_fingerprint": "Their key",
+    "copy": "Copy",
+    "redeem_title": "Use an invite",
+    "redeem_hint": "Paste the link another hub's owner sent you. Their owner then approves.",
+    "redeem_url": "Invite link",
+    "redeem_name": "Name for it here (optional)",
+    "redeem_submit": "Ask to link",
+    "redeem_sent": "Asked. The link is ready once their owner approves.",
+    "peers_heading": "Hubs",
+    "none": "No linked hubs.",
+    "enabled": "On",
+    "off": "Off",
+    "approve": "Approve",
+    "refuse": "Refuse",
+    "unlink": "Unlink",
+    "unlink_title": "Unlink “{name}”?",
+    "unlink_body": "Its key is forgotten at once and it can no longer ask anything here. The log stays.",
+    "rename": "Rename",
+    "rename_title": "Rename the hub",
+    "rename_label": "Name",
+    "asks_per_hour": "Questions it may ask per hour",
+    "their_agents": "Their shared agents",
+    "their_agents_none": "They share no agents.",
+    "ask_hint": "One question, one answer. Their agent answers without tools, files or memory.",
+    "ask_agent": "Agent",
+    "ask_question": "Your question",
+    "ask_send": "Ask",
+    "log": "Log",
+    "shares_title": "Agents linked hubs may ask",
+    "shares_hint": "Off until you switch an agent on. A linked hub only sees its name and asks it single questions, answered without tools.",
+    "share_label": "Share {name} ({profile})",
+    "pending_hint": "It asked to link; compare its key with what its owner sees, then approve or refuse.",
+    "status": {
+      "pending": "Waiting for you",
+      "waiting": "Waiting for them",
+      "linked": "Linked"
+    },
+    "direction": {
+      "inbound": "It used this hub's invite.",
+      "outbound": "This hub used its invite."
+    },
+    "event": {
+      "joined": "It used an invite",
+      "requested": "Asked to link",
+      "approved": "Approved",
+      "approved_by_peer": "They approved",
+      "updated": "Changed",
+      "unlinked": "Unlinked",
+      "unlinked_by_peer": "They unlinked",
+      "list_in": "They listed the shared agents",
+      "list_out": "Listed their agents",
+      "ask_in": "They asked a question",
+      "ask_out": "Asked them a question",
+      "refused": "Refused a call"
+    },
+    "reason": {
+      "own_url_not_https": "This hub must be reached over HTTPS to link.",
+      "https_required": "The link must start with https://.",
+      "invite_url_invalid": "That is not an invite link.",
+      "invite_refused": "The invite is used, expired or unknown. Ask for a new one.",
+      "fingerprint_mismatch": "The other hub answered with a different key than the link names. Not linked.",
+      "peer_unreachable": "The other hub did not answer.",
+      "peer_exists": "This hub is already linked with it.",
+      "peer_is_self": "That is this hub's own invite.",
+      "peer_limit": "Too many linked hubs.",
+      "invite_limit": "Too many unused invites. Wait for them to expire.",
+      "peer_pending": "Their owner has not approved yet.",
+      "peer_not_linked": "Not linked yet.",
+      "peer_disabled": "The link is switched off.",
+      "agent_not_shared": "That agent is not shared.",
+      "no_answer": "Their agent gave no answer.",
+      "rate_limited": "Too many questions. Try again later.",
+      "peer_calls": "Too many calls. Try again in a minute.",
+      "peer_asks": "They reached their questions for this hour.",
+      "peer_not_pending": "Only a hub waiting for approval can be approved."
     }
   }
 }

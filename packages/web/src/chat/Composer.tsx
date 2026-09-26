@@ -106,6 +106,11 @@ export function blocksFor(text: string, pending: readonly Pending[]): ContentBlo
 }
 
 export interface ComposerProps {
+  /**
+   * The agent this conversation talks to, by the name the person knows it by: the placeholder
+   * says «راسل Hermes» as the phones do (docs/design/family.md, "Voice").
+   */
+  agentName?: string | null;
   busy: boolean;
   disabled: boolean;
   /** Why it is disabled. Required whenever `disabled` is true; shown, never implied. */
@@ -172,6 +177,7 @@ export const APPROVAL_MODES = ['ask', 'auto_safe', 'auto_all'] as const;
 export const REASONING_EFFORTS = ['none', 'minimal', 'low', 'medium', 'high', 'max'] as const;
 
 export function Composer({
+  agentName = null,
   busy,
   disabled,
   disabledReason,
@@ -200,6 +206,10 @@ export function Composer({
   onVoiceMode,
 }: ComposerProps) {
   const { t, language: uiLanguage } = useI18n();
+  // No keyboard hint in the field: Enter sends everywhere, and on a phone the hint is noise.
+  const placeholder = agentName
+    ? t('composer.placeholder_agent', { agent: agentName })
+    : t('composer.placeholder');
   const { upload: uploadAttachment } = useUploadAttachment();
   const [text, setText] = useState('');
   const [pending, setPending] = useState<Pending[]>([]);
@@ -509,8 +519,8 @@ export function Composer({
           <textarea
             ref={textarea}
             rows={1}
-            placeholder={disabled ? t('composer.disabled') : t('composer.placeholder')}
-            aria-label={t('composer.placeholder')}
+            placeholder={disabled ? t('composer.disabled') : placeholder}
+            aria-label={placeholder}
             value={text}
             disabled={disabled}
             onChange={(event) => setText(event.target.value)}

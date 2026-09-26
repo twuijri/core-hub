@@ -2397,7 +2397,7 @@ The owner, 2026-09-25, on the rest of the 501 inventory:
   «خلها بعدين اخاف تفتحلنا ثغرات» — later; the owner is wary of the security surface they open
   (a preset swaps an agent's whole configuration; a peer is another hub reaching into this one).
   Not built and not deleted; they stay 501 until a decision says what they may do and what they
-  may not.
+  may not. *Built on 2026-09-27: presets §100, hub peers §101 (ADR 0026).*
 
 ## 81. A device says what it is and what stops its push; a name a person gives it stays
 
@@ -3105,3 +3105,66 @@ with the quality choice», and «the room's pending items appear in the phone's 
   what waits in the room's seats (it was always empty). The pending list opens such an item in its
   room. `sessions` learns a seat's room from `rooms` through the composition root
   (`registerRoomOfSeat`), so neither module imports the other.
+
+## 100. A preset is a saved bundle of one agent's settings in a profile, applied through the existing saves
+
+Proposed — owner to confirm. The owner parked presets on 2026-09-25 (§80) and lifted it on
+2026-09-26 («كل اللي قلت لك خلها بعدين لا سوها ما عندي مشكلة»). The contract had put them under
+agents for one agent (`dsh`) that is not in the catalog; they now mean something for every agent.
+
+- **What a preset is.** A named bundle (`AgentPreset`) of one agent's settings in one profile:
+  `content.model` — the profile's chat model with its fallback chain (`null` when the profile
+  inherits the `default` profile's) and the agent's own model; `content.skills` — skill key →
+  on/off (Hermes's built-in skills, which the hub does not switch, are left out);
+  `content.mcp_servers` — server name → on/off (never a server's configuration); and
+  `content.settings` — section → field → value, as `agents.updateSettings` takes them. A part the
+  agent did not have when saved is `null` and is left alone on activation.
+- **Never a secret.** Providers are named by id and MCP servers by name; a settings field of
+  kind `secret`, and any text value carrying a user and password (`http://user:pass@proxy`), is
+  not saved — and not written on activation, even from a preset stored before the rule.
+- **Operations.** `agents.listPresets` and `agents.getPreset` (whoever may read the agent's
+  settings), `agents.createPreset` (new: save the current settings under `name`; a name used by
+  another preset of the agent in the profile is `409 conflict`, more than 50 is `409
+  state_invalid`), `agents.deletePreset` and `agents.activatePreset` (owners and admins).
+- **Activating goes through the existing operations, as the caller.** `models.setDefaults`,
+  `agents.update`, `agents.updateSkill`, `agents.updateMcpServer` and `agents.updateSettings`,
+  with the caller's own credentials, so every check, event and restart those make happens as from
+  the pages. Only what differs from the agent's current state is written. What is gone since the
+  preset was saved (a provider, a skill, a server, a section) comes back in
+  `AgentPresetActivation.skipped` with the refusal's code, and the rest still applies;
+  `restart_job_ids` are the restarts the settings asked for. Saving reads through the matching
+  read operations the same way.
+- The old `AgentPreset` shape (`trust`, `is_default`, `broken`, `content` as text) and
+  `authorable` are gone: the operations were 501 and no client used them. `AgentSection.presets`
+  stays declared and unused; the web shows presets as a card on the agent's Settings page.
+- Rejected: storing a copy of Hermes's `config.yaml` (it holds keys and would bypass every
+  check); a preset shared across profiles (the providers and skills differ per profile).
+
+## 101. Linked hubs: invite, approve, signed calls, shared agents and one tool-free question
+
+Proposed — owner to confirm; the threat model and the reasons are ADR 0026.
+
+- **`Peer`** now says `hub_name`, `direction` (`inbound`: it used this hub's invite;
+  `outbound`: this hub used its invite), `status` (`pending` for this owner, `waiting` for
+  theirs, `linked`), `enabled`, `fingerprint` (SHA-256 of its Ed25519 key, 16 bytes in hex
+  groups), `asks_per_hour` and `approved_at`. `inbound_status`, `outbound_status` and `online`
+  are gone (the operations were 501; nothing used them).
+- **Pairing.** `devices.createPeerInvite` answers `PeerInvite` (a single-use link valid 10
+  minutes carrying this hub's fingerprint, and the fingerprint). `devices.requestPeer` redeems a
+  link and answers `201 Peer` (`waiting`) — synchronous, no job: the refusals are
+  `invite_refused`, `fingerprint_mismatch`, `peer_unreachable` (`409 state_invalid`) and
+  `https_required`, `own_url_not_https`, `invite_url_invalid` (`400`). `devices.updatePeer`
+  takes `PeerPatch`: `approve: true` (a `pending` peer only), `name`, `enabled`,
+  `asks_per_hour`. `devices.deletePeer` revokes at once and is also how a request is refused.
+- **Controls and log.** `devices.listPeerShares` / `devices.setPeerShare`: every agent of every
+  profile with its share switch (off until switched on) and an optional description peers see.
+  `devices.listPeerEvents`: the last 200 audit lines of a peer (`PeerEvent`), kept after it is
+  deleted, never a question's words.
+- **Using a link.** `devices.listPeerAgents` (the peer's shared agents: `PeerAgent`, whose id
+  is the share's, not the agent's) and `devices.askPeerAgent` (`PeerAsk` → `PeerAnswer`).
+- **Hub to hub** (not client APIs, `security: []`, signed per ADR 0026): `devices.peerJoin`
+  (the invite redeemed; signed with the key it registers), `devices.peerNotice` (`approved` /
+  `unlinked`), `devices.peerAgents`, `devices.peerAsk` (answered without tools within 120 s;
+  `403` for an unshared or unknown agent alike, `429` past `asks_per_hour`, `422
+  agent_unavailable` when the agent gave no answer).
+- Every operation on this hub's side is for owners and admins, including asking.

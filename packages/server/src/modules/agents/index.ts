@@ -36,7 +36,7 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import type { FastifyInstance, FastifyRequest } from 'fastify';
 import type { Server as SocketServer } from 'socket.io';
-import { loadOpenApiDocument } from '@corehub/contracts';
+import { loadOpenApiDocument, serverBasePath } from '@corehub/contracts';
 import { requireSqlite } from '../../lib/db.js';
 import { HubError, notFound } from '../../lib/errors.js';
 import { createContractIndex } from '../../lib/contract.js';
@@ -44,6 +44,7 @@ import { defineModule } from '../../lib/module.js';
 import { createRealtime } from '../../lib/realtime.js';
 import { defineRoute } from '../../lib/route.js';
 import { registerWebhookRoutes } from './webhook-routes.js';
+import { registerPresetRoutes } from './presets.js';
 import { levelOfHermesLine } from '../../lib/log-ring.js';
 import { t } from '../../i18n/index.js';
 import {
@@ -1072,6 +1073,18 @@ export const agentsModule = defineModule({
       operationId: 'agents.update',
       handler: (request, { params, body }) =>
         service.update(scopeOf(request), params.agent_id as string, body as AgentPatchInput),
+    });
+
+    // Presets (contract decision §100): read and applied through the routes above and below,
+    // as the caller (`presets.ts`).
+    registerPresetRoutes(app, deps, {
+      db: (request) => requireSqlite(request.server.hub.database),
+      scope: scopeOf,
+      actor: actorOf,
+      requireAgent: (request, agentId) => {
+        service.get(scopeOf(request), agentId, request.language);
+      },
+      base: serverBasePath(document),
     });
 
     /**

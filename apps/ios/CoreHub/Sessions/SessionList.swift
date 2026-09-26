@@ -204,7 +204,7 @@ struct SessionListView: View {
     private var controls: some View {
         VStack(alignment: .leading, spacing: Space.s2) {
             HStack(spacing: Space.s2) {
-                Image(systemName: "magnifyingglass").foregroundStyle(Tone.textFaint)
+                LucideIcon(.search, size: 16).foregroundStyle(Tone.textFaint)
                 TextField(l10n("sessions.search_placeholder"), text: $model.query)
                     .textInputAutocapitalization(.never)
                     .submitLabel(.search)
@@ -235,7 +235,7 @@ struct SessionListView: View {
     private var batchBar: some View {
         VStack(alignment: .leading, spacing: Space.s1) {
             HStack {
-                Button { model.clearSelection() } label: { Image(systemName: "xmark") }
+                Button { model.clearSelection() } label: { LucideIcon(.x, size: 18).tapTarget() }
                     .accessibilityLabel(l10n("sessions.batch_done"))
                 Text(l10n("sessions.batch_selected", ["count": String(model.selected.count)]))
                     .font(.system(size: FontSize.sizeSm, weight: .semibold))
@@ -286,7 +286,7 @@ struct SessionListView: View {
             HStack(spacing: Space.s1) {
                 Text(model.profileFilter.map(app.profileName) ?? l10n("sessions.all_profiles"))
                     .lineLimit(1)
-                Image(systemName: "chevron.down").font(.system(size: FontSize.sizeXs))
+                LucideIcon(.chevronDown, size: 12)
             }
             .font(.system(size: FontSize.sizeSm))
             .padding(.horizontal, Space.s2)
@@ -316,8 +316,7 @@ struct SessionListView: View {
         } label: {
             HStack(spacing: Space.s2) {
                 if model.selecting {
-                    Image(systemName: chosen ? "checkmark.circle.fill" : "circle")
-                        .foregroundStyle(chosen ? Tone.accent : Tone.textFaint)
+                    SelectionMark(chosen: chosen)
                 } else if let agent = app.agentDirectory.agents(session.profile).first(where: { $0.id == session.agentId }) {
                     // The chat's agent, by its face (its picture, its mark, or its initial).
                     AgentAvatar(identity: .of(agent), profile: session.profile, size: 22)
@@ -355,7 +354,7 @@ struct SessionListView: View {
         // A long press offers Select, which starts batch mode with this conversation in it.
         .contextMenu {
             Button { model.toggle(session.id) } label: {
-                Label(l10n("sessions.batch_select"), systemImage: "checkmark.circle")
+                Label { Text(l10n("sessions.batch_select")) } icon: { Image(lucide: .circleCheck) }
             }
         }
         .accessibilityIdentifier("session.\(session.id)")
