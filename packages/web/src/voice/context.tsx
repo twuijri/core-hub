@@ -38,7 +38,7 @@ import {
 } from './player.js';
 import { isMissingVoice, synthesize } from './speech-api.js';
 
-/** `auto`, or a language tag (`ar`, `en`, `es`, `ar-EG`, …): any language (DECISIONS §91). */
+/** `auto`, or a language tag (`ar`, `en`, `es`, `ar-EG`, …): any language (DECISIONS §92). */
 export type DictationLanguage = string;
 
 export interface VoicePreferences {

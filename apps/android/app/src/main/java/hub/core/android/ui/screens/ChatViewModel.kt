@@ -205,7 +205,7 @@ class ChatViewModel(
                         id = accepted.messageId, seq = (chat.messages.maxOfOrNull { it.seq } ?: 0) + 1, role = MessageRole.USER,
                         authorName = graph.store.current?.user?.displayName.orEmpty(), text = body, reasoning = "", reasoningMs = null,
                         toolCalls = emptyList(),
-                        attachments = outgoing.blocks().filter { it.attachmentId != null }.map { ChatAttachment(it.type, it.name, it.url) },
+                        attachments = outgoing.blocks().filter { it.attachmentId != null }.map { ChatAttachment(it.type, it.name, it.url, it.attachmentId, it.mime) },
                         runId = accepted.runId, streaming = false,
                     )
                     ui.copy(sending = false, chat = chat.copy(messages = echo, failure = null))

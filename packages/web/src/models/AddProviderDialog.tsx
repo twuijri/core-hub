@@ -109,7 +109,7 @@ export function AddProviderDialog({
 
   const usingPreset = mode === 'preset' && preset !== undefined;
   // A family that already holds a key in the chosen scope lends it: Groq added for chat also
-  // speaks, and adding its speech row asks for nothing (DECISIONS §91).
+  // speaks, and adding its speech row asks for nothing (DECISIONS §92).
   const keyOnFile = usingPreset && (preset.key_on_file ?? []).includes(scope);
   const keyOptional = usingPreset ? preset.key === 'optional' || keyOnFile : true;
   // A speech provider's model is chosen on its own tab, from the provider's own list.

@@ -1,4 +1,4 @@
-// The speech tabs' pickers (DECISIONS §91): a Groq voice chosen from the provider's documented
+// The speech tabs' pickers (DECISIONS §92): a Groq voice chosen from the provider's documented
 // list — by language and gender, searchable, every language offered — previewed before it is
 // saved; a dictation language from Auto, the popular languages or a typed code; and a speech
 // provider added with the key its family already holds.
@@ -204,7 +204,7 @@ async function voiceRows(user: ReturnType<typeof userEvent.setup>): Promise<stri
   return texts;
 }
 
-describe('speech voice picker (§91)', () => {
+describe('speech voice picker (§92)', () => {
   it("offers the model's own voices with language and gender, and says the list is documented", async () => {
     const user = userEvent.setup();
     const { fetchImpl } = fakeHub();
@@ -297,7 +297,7 @@ describe('speech voice picker (§91)', () => {
   });
 });
 
-describe('adding a speech provider (§91)', () => {
+describe('adding a speech provider (§92)', () => {
   const PRESETS = [
     {
       id: 'groq-tts',

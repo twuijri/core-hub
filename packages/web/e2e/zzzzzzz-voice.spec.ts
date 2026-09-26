@@ -72,7 +72,7 @@ test('32. dictation lands in the composer, a reply is read aloud, and voice mode
   });
   await choose(page, 'tts', 'OpenAI — text to speech');
   await expect(page.getByTestId('speech-voice-tts')).toHaveValue('alloy');
-  // OpenAI has no voice list endpoint: its documented voices, labelled as such (§91).
+  // OpenAI has no voice list endpoint: its documented voices, labelled as such (§92).
   await expect(page.getByTestId('speech-voices-documented')).toBeVisible();
   await page.getByTestId('speech-card-tts').screenshot({
     path: path.join(shots, 'models-speech-tts-ar-light.png'),

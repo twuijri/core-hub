@@ -2785,7 +2785,25 @@ owner to confirm:
 Rejected: the bearer in the URL (it would reach logs and history); a service worker that adds the
 header (one more moving part, absent on first load, and the push worker is optional).
 
-## 91. Speech providers: voices from the provider or its documentation, every language, long text in parts
+## 91. A client asks for speech in a format it can play
+
+The owner (2026-09-27): the iPhone cannot play the hub's Ogg speech and falls back to the phone's
+own voice. `models.synthesize` had no way to say what the client plays, so each provider sent its
+own format. Proposed, owner to confirm:
+
+- **`SpeechRequest.format`** (`SpeechFormat`: `mp3`, `aac`, `wav`, `ogg` — Ogg Opus), optional.
+  The hub asks the provider for it where the provider lets it choose (the OpenAI-shaped protocol's
+  `response_format`, where Ogg Opus is `opus`); a provider that cannot choose sends its own format.
+  The response `Content-Type` always says what came, and `audio/aac` joins the declared types.
+- **Omitted or null is the provider's default**, as before: nothing changes for a client that does
+  not ask.
+- The iPhone and Android apps ask for `mp3`, which both play natively and every speech provider the
+  hub drives can produce; the web keeps not asking.
+
+Rejected: converting the audio on the hub (a transcoder in the image for one client's gap), and a
+per-provider setting (the format is the listener's constraint, not the provider's).
+
+## 92. Speech providers: voices from the provider or its documentation, every language, long text in parts
 
 The owner asked for Groq's voices (its Saudi Arabic voice among them, chosen by the person) and
 the well-known speech services, each added in a click, with a voice picker and a preview; and,

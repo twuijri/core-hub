@@ -1,5 +1,5 @@
 /**
- * Text cut into parts a speech provider accepts in one request (DECISIONS §91).
+ * Text cut into parts a speech provider accepts in one request (DECISIONS §92).
  *
  * Groq's Orpheus takes at most 200 characters, far below a reply read aloud. So the text is
  * cut, in order of preference, at the end of a sentence (Latin, Arabic and CJK stops, and line

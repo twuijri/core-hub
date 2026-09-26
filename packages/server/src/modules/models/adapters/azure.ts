@@ -37,6 +37,7 @@ import type {
   ProviderAdapter,
   ProviderContext,
   ProviderTestResult,
+  SpeechFormat,
   SynthesizeRequest,
   SynthesizeResult,
   TranscribeRequest,
@@ -99,6 +100,17 @@ export function azureLocale(language: string | null): string | null {
   if (trimmed.includes('-')) return trimmed;
   return DEFAULT_LOCALE[trimmed.toLowerCase()] ?? trimmed;
 }
+
+/**
+ * `SpeechFormat` as Azure's `X-Microsoft-OutputFormat` (DECISIONS §91). Azure has no AAC
+ * output, so a client asking for AAC gets MP3, which every phone plays, and the type says so.
+ */
+const AZURE_OUTPUT: Record<SpeechFormat, { name: string; mime: string }> = {
+  mp3: { name: 'audio-24khz-48kbitrate-mono-mp3', mime: 'audio/mpeg' },
+  aac: { name: 'audio-24khz-48kbitrate-mono-mp3', mime: 'audio/mpeg' },
+  ogg: { name: 'ogg-24khz-16bit-mono-opus', mime: 'audio/ogg' },
+  wav: { name: 'riff-24khz-16bit-mono-pcm', mime: 'audio/wav' },
+};
 
 function headers(ctx: ProviderContext): Record<string, string> {
   return {
@@ -200,7 +212,7 @@ export const azureAdapter: ProviderAdapter = {
       url: joinUrl(azureTtsBase(ctx.baseUrl), 'cognitiveservices/v1'),
       headers: {
         ...headers(ctx),
-        'X-Microsoft-OutputFormat': 'audio-24khz-48kbitrate-mono-mp3',
+        'X-Microsoft-OutputFormat': AZURE_OUTPUT[request.format ?? 'mp3'].name,
         'User-Agent': 'core-hub',
       },
       body: ssml,
@@ -208,7 +220,11 @@ export const azureAdapter: ProviderAdapter = {
       fetchImpl: ctx.fetchImpl,
     });
     if (!answer.ok || !answer.bytes) return synthesisFailure(answer);
-    return { supported: true, audio: answer.bytes, contentType: 'audio/mpeg' };
+    return {
+      supported: true,
+      audio: answer.bytes,
+      contentType: AZURE_OUTPUT[request.format ?? 'mp3'].mime,
+    };
   },
 
   async transcribe(ctx: ProviderContext, request: TranscribeRequest): Promise<TranscribeResult> {

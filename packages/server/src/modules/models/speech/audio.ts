@@ -1,5 +1,5 @@
 /**
- * The audio of several speech requests, joined into one file in order (DECISIONS §91).
+ * The audio of several speech requests, joined into one file in order (DECISIONS §92).
  *
  * - **WAV** (Groq's only format): every part is a RIFF file with its own header. The samples
  *   of each part's `data` chunk are laid end to end under the first part's `fmt ` chunk, and

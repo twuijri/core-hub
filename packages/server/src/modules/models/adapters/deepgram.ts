@@ -33,11 +33,20 @@ import type {
   ProviderAdapter,
   ProviderContext,
   ProviderTestResult,
+  SpeechFormat,
   SynthesizeRequest,
   SynthesizeResult,
   TranscribeRequest,
   TranscribeResult,
 } from './types.js';
+
+/** `SpeechFormat` in Deepgram's `/speak` words. */
+const DEEPGRAM_ENCODING: Record<SpeechFormat, { query: Record<string, string>; mime: string }> = {
+  mp3: { query: {}, mime: 'audio/mpeg' },
+  aac: { query: { encoding: 'aac' }, mime: 'audio/aac' },
+  ogg: { query: { encoding: 'opus', container: 'ogg' }, mime: 'audio/ogg' },
+  wav: { query: { encoding: 'linear16', container: 'wav' }, mime: 'audio/wav' },
+};
 
 function headers(ctx: ProviderContext): Record<string, string> {
   return {
@@ -172,11 +181,15 @@ export const deepgramAdapter: ProviderAdapter = {
     if (!ctx.apiKey) return { supported: false, reason: 'no_key' };
     const voice = request.voice ?? ctx.settings.voice ?? null;
     if (!voice) return { supported: false, reason: 'no_voice' };
-    const url = `${joinUrl(ctx.baseUrl, 'speak')}?model=${encodeURIComponent(voice)}`;
+    // The format the client can play (`SpeechRequest.format`, DECISIONS §91): Deepgram's
+    // `encoding` (with `container=wav` for WAV); MP3 when nothing is asked.
+    const query = new URLSearchParams({ model: voice });
+    const encoding = DEEPGRAM_ENCODING[request.format ?? 'mp3'];
+    for (const [name, value] of Object.entries(encoding.query)) query.set(name, value);
     const answer = await requestBytes({
-      url,
+      url: `${joinUrl(ctx.baseUrl, 'speak')}?${query.toString()}`,
       method: 'POST',
-      headers: { ...headers(ctx), accept: 'audio/mpeg' },
+      headers: { ...headers(ctx), accept: encoding.mime },
       body: { text: request.text },
       fetchImpl: ctx.fetchImpl,
     });
@@ -184,7 +197,7 @@ export const deepgramAdapter: ProviderAdapter = {
     return {
       supported: true,
       audio: answer.bytes,
-      contentType: answer.contentType ?? 'audio/mpeg',
+      contentType: answer.contentType ?? encoding.mime,
     };
   },
 

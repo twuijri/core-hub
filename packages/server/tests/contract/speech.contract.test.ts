@@ -160,7 +160,7 @@ describe.skipIf(!doc)('contract: speech', () => {
     expect(spoken.headers?.get('x-speech-provider')).toBe('openai-tts');
   });
 
-  it('voices: the documented list, labelled, narrowed by model; a preview names its model (§91)', async () => {
+  it('voices: the documented list, labelled, narrowed by model; a preview names its model (§92)', async () => {
     const { data: speech } = await call('models.getSpeech', 200);
     const tts = (
       speech as { tts: { providers: { id: string; slug: string }[] } }
@@ -181,7 +181,7 @@ describe.skipIf(!doc)('contract: speech', () => {
     expect(preview.headers?.get('x-speech-provider')).toBe('openai-tts');
   });
 
-  it('presets: an address example and the key a family already holds (§91)', async () => {
+  it('presets: an address example and the key a family already holds (§92)', async () => {
     const { data } = await call('models.listProviderPresets', 200);
     const items = (
       data as { items: { id: string; base_url_example?: string | null; key_on_file?: string[] }[] }

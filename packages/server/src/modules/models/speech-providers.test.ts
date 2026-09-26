@@ -1,5 +1,5 @@
 /**
- * The speech providers of DECISIONS §91, each against a fake of its own HTTP surface on a
+ * The speech providers of DECISIONS §92, each against a fake of its own HTTP surface on a
  * loopback port, reached with the real `fetch`: the hub's requests leave for the providers'
  * real addresses (`https://api.groq.com/…`, `https://westeurope.tts.speech.microsoft.com/…`)
  * and are only redirected to the fake at the last moment, so the paths, headers and bodies
@@ -364,7 +364,7 @@ const ARABIC_REPLY =
   'وهذه جملة ثالثة تضمن أن النص أطول من مئتي حرف بكثير حتى نرى ثلاثة أجزاء على الأقل؟ نعم! ' +
   'وجملة رابعة أخيرة، فيها فواصل كثيرة، وكلمات تكفي لأن يمتدّ النص إلى ما بعد أربعمئة حرف بقليل.';
 
-describe('Groq speech (§91)', () => {
+describe('Groq speech (§92)', () => {
   it('adds with the chat key, lists its own models per tab and its documented voices per model', async () => {
     const fake = await fakeProviders();
     const hub = await hubWith(fake.fetchImpl);
@@ -493,7 +493,7 @@ describe('Groq speech (§91)', () => {
   });
 });
 
-describe('OpenAI voices (§91)', () => {
+describe('OpenAI voices (§92)', () => {
   it('answers the documented voices, narrowed to the model that speaks them', async () => {
     const fake = await fakeProviders();
     const hub = await hubWith(fake.fetchImpl);
@@ -508,7 +508,7 @@ describe('OpenAI voices (§91)', () => {
   });
 });
 
-describe('ElevenLabs (§91)', () => {
+describe('ElevenLabs (§92)', () => {
   it("pages through the account's voices, lists its TTS models, and transcribes with Scribe", async () => {
     const fake = await fakeProviders();
     const hub = await hubWith(fake.fetchImpl);
@@ -556,7 +556,7 @@ describe('ElevenLabs (§91)', () => {
   });
 });
 
-describe('Deepgram (§91)', () => {
+describe('Deepgram (§92)', () => {
   it('lists models and Aura voices from its own list, speaks and transcribes', async () => {
     const fake = await fakeProviders();
     const hub = await hubWith(fake.fetchImpl);
@@ -594,6 +594,11 @@ describe('Deepgram (§91)', () => {
     expect(said.query.get('model')).toBe('aura-2-thalia-en');
     expect(said.headers.authorization).toBe('Token test-key-deepgram-stt');
     expect(JSON.parse(said.body.toString('utf8'))).toEqual({ text: 'Hello' });
+    // A phone that asks for a format it can play (§91) gets Deepgram's encoding for it.
+    await speak(hub, { text: 'Hi', provider_id: tts.id, voice: 'aura-2-thalia-en', format: 'wav' });
+    const wavAsked = fake.seen.filter((item) => item.path === '/deepgram/v1/speak').at(-1)!;
+    expect(wavAsked.query.get('encoding')).toBe('linear16');
+    expect(wavAsked.query.get('container')).toBe('wav');
 
     const heard = await transcribe(hub, { provider_id: stt.id });
     expect(heard.statusCode, heard.body).toBe(200);
@@ -606,7 +611,7 @@ describe('Deepgram (§91)', () => {
   });
 });
 
-describe('Azure Speech (§91)', () => {
+describe('Azure Speech (§92)', () => {
   it("asks the region's voice list, speaks SSML and transcribes with a locale", async () => {
     const fake = await fakeProviders();
     const hub = await hubWith(fake.fetchImpl);
@@ -656,6 +661,14 @@ describe('Azure Speech (§91)', () => {
     const ssml = said.body.toString('utf8');
     expect(ssml).toContain('xml:lang="ar-SA"');
     expect(ssml).toContain('<voice name="ar-SA-HamedNeural">أهلًا &lt;وسهلًا&gt;</voice>');
+    await speak(hub, {
+      text: 'أهلًا',
+      provider_id: tts.id,
+      voice: 'ar-SA-HamedNeural',
+      format: 'ogg',
+    });
+    const ogg = fake.seen.filter((item) => item.path === '/azure-tts/cognitiveservices/v1').at(-1)!;
+    expect(ogg.headers['x-microsoft-outputformat']).toBe('ogg-24khz-16bit-mono-opus');
 
     const heard = await transcribe(hub, { provider_id: stt.id, language: 'ar' });
     expect(heard.statusCode, heard.body).toBe(200);
@@ -675,7 +688,7 @@ describe('Azure Speech (§91)', () => {
   });
 });
 
-describe('one key per family, and Hermes hears the choice (§91)', () => {
+describe('one key per family, and Hermes hears the choice (§92)', () => {
   it('adds a speech row of a family that holds a key without asking for it again', async () => {
     const fake = await fakeProviders();
     const hub = await hubWith(fake.fetchImpl);

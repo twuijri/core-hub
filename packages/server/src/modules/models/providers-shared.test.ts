@@ -382,7 +382,7 @@ describe("models: Hermes's default profile is not the last saver's", () => {
       });
 
       // Removing Groq from the work profile removes it from Hermes everywhere. Groq is three
-      // rows and one key — chat, dictation and speech (§91) — and the key goes with the last.
+      // rows and one key — chat, dictation and speech (§92) — and the key goes with the last.
       const rows = await authed(hub, hub.token, {
         method: 'GET',
         url: '/api/v1/models/providers',

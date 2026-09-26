@@ -76,7 +76,7 @@ export type ListModelsResult =
       models: DiscoveredModel[];
       /**
        * `fallback` when the list is not the provider's answer (decision §83) — for a speech
-       * provider with no model endpoint, its documented list (§91), with `reason` saying so.
+       * provider with no model endpoint, its documented list (§92), with `reason` saying so.
        */
       source?: 'provider' | 'fallback';
       reason?: string;
@@ -95,7 +95,7 @@ export interface DiscoveredVoice {
 }
 
 /**
- * Where a voice list came from (DECISIONS §91): the provider's own endpoint, or — for a
+ * Where a voice list came from (DECISIONS §92): the provider's own endpoint, or — for a
  * provider that has none — its public documentation (`speech/documented.ts`).
  */
 export type VoiceSource = 'provider' | 'documented';
@@ -104,12 +104,21 @@ export type ListVoicesResult =
   | { supported: true; voices: DiscoveredVoice[]; source?: VoiceSource }
   | { supported: false; reason: string };
 
+/** `SpeechFormat` in the contract: the audio a client can play (`ogg` is Ogg Opus). */
+export type SpeechFormat = 'mp3' | 'aac' | 'wav' | 'ogg';
+
 export interface SynthesizeRequest {
   text: string;
   language: string | null;
   voice: string | null;
   /** Overrides the row's model for this request (the Models page's preview). */
   model?: string | null;
+  /**
+   * The audio the client asked for (`SpeechRequest.format`, DECISIONS §91). An adapter asks
+   * its provider for it when the provider lets it choose; otherwise it returns its own format
+   * and says so in `contentType`. Absent or null: the adapter's default.
+   */
+  format?: SpeechFormat | null;
 }
 
 export type SynthesizeResult =

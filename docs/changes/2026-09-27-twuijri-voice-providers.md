@@ -14,7 +14,7 @@ groq.com، لا Grok من xAI): «جروك الثاني، وفيه صوت سعو
 حسب اللغة وبحث، والأشهر أولًا و«كل اللغات» خلف مرشّح، وإدخال يدوي للمعرّف؛ وفي الإملاء: اكتشاف تلقائي ثم أي لغة.
 
 ## القرار والموافقات
-قرار العقد §91 في `docs/contracts/DECISIONS.md` — **مقترح، للمالك أن يؤكد**. ما تحققت منه في الوثائق العامة
+قرار العقد §92 في `docs/contracts/DECISIONS.md` — **مقترح، للمالك أن يؤكد**. ما تحققت منه في الوثائق العامة
 (٢٠٢٦-٠٩-٢٦)، بكلماتي:
 
 - **Groq**: الإملاء `POST /openai/v1/audio/transcriptions` بشكل OpenAI بنموذجَي `whisper-large-v3-turbo` و
@@ -79,12 +79,12 @@ OpenAI) في ملف واحد قابل للتحرير `packages/server/src/module
 ## العقد (ما تغيّر في packages/contracts، أو «لا شيء»)
 - `models.listVoices`: معامل اختياري `model`، والجواب `{ items, source }` مع `VoiceListSource` (`provider`/`documented`/`none`)؛
   `Voice.description` و`Voice.models` اختياريان.
-- `SpeechRequest.model` (اختياري)، ووصف التقسيم في `models.synthesize`.
+- `SpeechRequest.model` (اختياري)، ووصف التقسيم في `models.synthesize` (بجانب `format` من §91).
 - `ProviderPreset.base_url_example` و`ProviderPreset.key_on_file` (اختياريان).
-- DECISIONS §91.
+- DECISIONS §92.
 
 ## الملفات والتأثير
-- العقد: `packages/contracts/openapi.yaml`، `docs/contracts/DECISIONS.md` §91.
+- العقد: `packages/contracts/openapi.yaml`، `docs/contracts/DECISIONS.md` §92.
 - الخادم (`packages/server/src/modules/models/`): `catalogue.ts` (القوالب الجديدة، `speech`، `hermesSpeech`،
   `baseUrlExample`، العائلتان `deepgram` و`azure-speech`)؛ `adapters/groq.ts` و`deepgram.ts` و`azure.ts` (جديدة)،
   `adapters/elevenlabs.ts` (v2 للأصوات، `/v1/models`، Scribe)، `adapters/openai.ts` (الأصوات الموثّقة، `orpheus` نموذج
@@ -102,7 +102,10 @@ OpenAI) في ملف واحد قابل للتحرير `packages/server/src/module
 - الوثائق: `docs/STATUS.md`، `docs/domain/models.md`.
 
 ## الفحوص (الأوامر ونواتجها الفعلية)
-كلها عبر `mj-run`، واحدًا بعد الآخر، في `corehub-wt-voice` بعد دمج `origin/night/2026-09-27`:
+كلها عبر `mj-run`، واحدًا بعد الآخر، في `corehub-wt-voice` بعد دمج `origin/night/2026-09-27`. دُمج الفرع مرتين: في
+الثانية كان طلب الجوال قد أخذ §91 (`SpeechRequest.format`)، فصار قرار هذه المهمة §92، ودُمج `format` مع `model` في
+`models.synthesize`، وصارت محوّلات Deepgram وAzure وElevenLabs تحترم الصيغة المطلوبة حيث يسمح المزوّد (Groq ‏WAV فقط؛
+Azure بلا AAC فيجيب MP3؛ والنوع في `Content-Type`). النتائج أدناه بعد الدمج الثاني:
 
 ```
 $ pnpm lint
@@ -113,15 +116,19 @@ $ pnpm contracts:lint                  → exit 0 («Woohoo! Your API descriptio
                                          السطر 7011، مثال برامج الأجهزة، ليس من هذه المهمة)
 contracts:lint  OK
 $ pnpm contracts:check-clients
-check-clients  OK — 653 client file(s) scanned, 235 contract path(s) known.
+check-clients  OK — 662 client file(s) scanned, 235 contract path(s) known.
 $ pnpm i18n:check
-i18n:check  web: 2816 keys, ar/en in parity
+i18n:check  ios: 359 keys, ar/en in parity
 i18n:check  OK
+$ pnpm change-record:check
+change-record  OK — 7 record(s) valid
 $ pnpm nav:check
 nav:check  OK — 38 destinations, 2 pre-auth screens (login, setup), 43 terms, ar/en complete, routes for web, ios, android, desktop
 $ (server) vitest run --project unit src/modules/models/
  Test Files  14 passed | 1 skipped (15)
-      Tests  198 passed | 3 skipped (201)
+      Tests  199 passed | 3 skipped (202)
+$ (server) vitest run --project unit src/modules/models/speech-providers.test.ts   (مع فحص الصيغة)
+      Tests  9 passed (9)
 $ (server) vitest run --project contract tests/contract/speech.contract.test.ts tests/contract/contract.test.ts
  Test Files  2 passed (2)
       Tests  336 passed (336)
@@ -129,7 +136,7 @@ $ (web) vitest run tests/speech-voice-picker.test.tsx tests/models-screen.test.t
     tests/composer.test.tsx tests/i18n.test.ts tests/navigation.parity.test.tsx
  Test Files  6 passed (6)
       Tests  69 passed (69)
-$ pnpm build                            → exit 0
+$ pnpm build                            → exit 0   (قبل الدمج الثاني، ومعه رحلة Playwright أدناه)
 $ COREHUB_E2E_PORT=8871 … PLAYWRIGHT_CHANNEL=chrome pnpm --filter @corehub/web exec playwright test e2e/zzzzzzz-voice.spec.ts --workers=1
   ✓  1 [chromium] › e2e/zzzzzzz-voice.spec.ts:51:1 › 32. dictation lands in the composer, a reply is read aloud, and voice mode goes round (5.8s)
   1 passed (14.8s)
@@ -171,7 +178,7 @@ CI على #165: يُكمل بعد الدفع.
 - الرجوع: revert لهذا الفرع؛ لا ترحيل قاعدة بيانات. صفوف الكلام المضافة تبقى بلا أثر إن رُجع (القوالب تختفي فقط).
 
 ## التسليم والخطوة التالية
-- للمالك أن يؤكد §91: قائمة المزوّدين، عدم وجود صوت افتراضي لـGroq، قائمة «اللغات الأشهر»، الكتابة في `stt:`/`tts:`
+- للمالك أن يؤكد §92: قائمة المزوّدين، عدم وجود صوت افتراضي لـGroq، قائمة «اللغات الأشهر»، الكتابة في `stt:`/`tts:`
   في هرمز، وترك Google وEdge.
 - التالي: تجربة بمفاتيح حقيقية على ستاك التست (Groq أولًا: الصوت السعودي والتقسيم)، وتجربة كتابة الصوت في دور هرمز حقيقي
   (رسالة صوتية على تيليجرام)، وGemini TTS حين تستقر واجهته، وربما مزوّد TTS لهرمز يمرّ بالهب ليصل Groq وAzure إلى القنوات.

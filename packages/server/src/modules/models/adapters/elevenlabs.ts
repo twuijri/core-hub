@@ -9,7 +9,7 @@
  * - `POST /v1/text-to-speech/{voice_id}` answers the audio;
  * - `POST /v1/speech-to-text` takes the recording as `file` with `model_id` (Scribe) and an
  *   optional `language_code`, and answers `text`, `language_code`, `audio_duration_secs`.
- *   Scribe has no model list endpoint, so its documented list answers (decision §91).
+ *   Scribe has no model list endpoint, so its documented list answers (decision §92).
  */
 import {
   detailOf,
@@ -110,7 +110,7 @@ export const elevenLabsAdapter: ElevenLabsAdapter = {
   },
 
   async listModels(ctx: ProviderContext): Promise<ListModelsResult> {
-    // Scribe (speech to text) has no model endpoint: its documented list (decision §91).
+    // Scribe (speech to text) has no model endpoint: its documented list (decision §92).
     const documented = documentedModels(ctx.slug);
     if (documented) return documented;
     const answer = await requestJson({
@@ -194,9 +194,12 @@ export const elevenLabsAdapter: ElevenLabsAdapter = {
     const voice = request.voice ?? ctx.settings.voice ?? null;
     if (!voice) return { supported: false, reason: 'no_voice' };
     const answer = await requestBytes({
-      url: joinUrl(ctx.baseUrl, `text-to-speech/${encodeURIComponent(voice)}`),
+      // Ogg Opus when the client asks for it (DECISIONS §91); otherwise ElevenLabs' MP3.
+      url:
+        joinUrl(ctx.baseUrl, `text-to-speech/${encodeURIComponent(voice)}`) +
+        (request.format === 'ogg' ? '?output_format=opus_48000_64' : ''),
       method: 'POST',
-      headers: { ...headers(ctx), accept: 'audio/mpeg' },
+      headers: { ...headers(ctx), accept: request.format === 'ogg' ? 'audio/ogg' : 'audio/mpeg' },
       body: {
         text: request.text,
         model_id: request.model ?? ctx.settings.model ?? 'eleven_multilingual_v2',
