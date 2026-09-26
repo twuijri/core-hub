@@ -74,7 +74,9 @@ test('30. a linked WhatsApp: how to use it, the senders waiting for approval, an
   await expect(page.getByTestId('channel-account-whatsapp')).toContainText('+966500000000');
   await expect(page.getByTestId('channel-login-whatsapp')).toHaveCount(0);
   await expect(page.getByTestId('channel-pair-whatsapp')).toHaveCount(0);
-  // How to use it, in WhatsApp's own card while somebody waits.
+  // How to use it, in WhatsApp's own card behind «كيف تبدأ», closed even while somebody waits.
+  await expect(page.getByTestId('channel-how-to-use')).toHaveCount(0);
+  await page.getByTestId('channel-guide-whatsapp').click();
   const how = page.getByTestId('channel-list').getByTestId('channel-how-to-use');
   await expect(how).toContainText('من حساب واتساب آخر');
   await expect(how).toContainText('الموافقات');
@@ -116,10 +118,29 @@ test('30. a linked WhatsApp: how to use it, the senders waiting for approval, an
   await modeDialog.getByTestId('channel-mode-save').click();
   await expect(modeDialog).toHaveCount(0);
   await expect(page.getByTestId('channel-mode-whatsapp')).toHaveAttribute('data-mode', 'self-chat');
-  // Nobody is approved any more, so the card's steps are open by themselves.
+  // «كيف تبدأ», still open from before, now explains "Message yourself".
   await expect(page.getByTestId('channel-how-to-use')).toContainText('مراسلة نفسي');
   await expect(page.getByTestId('channel-personal-warning')).toHaveCount(0);
   await shot(page, 'agent-channels-self-chat-ar-light');
+
+  // ---- «عنوان الردود»: switched to self-chat, the agent's name went over its replies.
+  await page.getByTestId('channel-reply-header-whatsapp').click();
+  const headerDialog = page.getByTestId('channel-reply-header-dialog');
+  await expect(headerDialog.getByRole('radio').first()).toHaveAttribute('aria-checked', 'true');
+  await expect(headerDialog.getByTestId('channel-reply-header-hermes')).toHaveCount(0);
+  await expect(headerDialog.getByTestId('channel-reply-header-save')).toBeDisabled();
+  await headerDialog.getByRole('radio').nth(1).click();
+  await headerDialog.getByTestId('channel-reply-header-text').fill('مساعد المركز');
+  await expect(headerDialog.getByTestId('channel-reply-header-preview')).toContainText(
+    'مساعد المركز',
+  );
+  await shot(page, 'agent-channels-reply-header-ar-light');
+  await headerDialog.getByTestId('channel-reply-header-save').click();
+  await expect(headerDialog).toHaveCount(0);
+  await page.getByTestId('channel-reply-header-whatsapp').click();
+  await expect(headerDialog.getByTestId('channel-reply-header-text')).toHaveValue('مساعد المركز');
+  await page.keyboard.press('Escape');
+  await expect(headerDialog).toHaveCount(0);
 
   // ---- Unlink, behind a confirm; the row leaves the list.
   await page.getByTestId('channel-unlink-whatsapp').click();

@@ -97,7 +97,7 @@ struct WebhooksPage: View {
             try await app.api.call { try await NotifyAPI.notifyListWebhooks(apiConfiguration: $0) }.items
         } content: { hooks, reload in
             List {
-                if hooks.isEmpty { Text(l10n("common.empty")).foregroundStyle(Tone.textMuted) }
+                if hooks.isEmpty { EmptyRow(icon: .webhook) }
                 ForEach(hooks, id: \.id) { hook in
                     VStack(alignment: .leading, spacing: Space.s1) {
                         HStack {
@@ -214,12 +214,21 @@ struct NotificationsPage: View {
                 // Whether this phone can show them at all comes first.
                 PushStatusSection()
                 Section {
+                    // Which notice comes in the app and as a push, and quiet hours (phone parity).
+                    NavigationLink {
+                        NotificationSettingsPage()
+                    } label: {
+                        LucideLabel(l10n("notify_page.settings"), icon: .slidersHorizontal, size: 16)
+                    }
+                    .accessibilityIdentifier("notifications.settings")
+                }
+                Section {
                     Toggle(l10n("notifications.on_complete"), isOn: draft.notifyOnComplete)
                     Toggle(l10n("notifications.on_approval"), isOn: draft.notifyOnApproval)
                     Toggle(l10n("notifications.sound"), isOn: draft.soundOnComplete)
                 }
                 Section(l10n("notifications.inbox", ["count": String(loaded.1.unreadCount)])) {
-                    if loaded.1.items.isEmpty { Text(l10n("common.empty")).foregroundStyle(Tone.textMuted) }
+                    if loaded.1.items.isEmpty { EmptyRow(icon: .bell) }
                     ForEach(loaded.1.items, id: \.id) { notice in
                         VStack(alignment: .leading, spacing: 2) {
                             Text(notice.title).font(.system(size: FontSize.sizeSm, weight: notice.readAt == nil ? .semibold : .regular))
@@ -249,7 +258,7 @@ struct PrivacyPage: View {
             List {
                 if let error { NoticeView(text: error, tone: .danger) }
                 Section(l10n("privacy.app_tokens")) {
-                    if tokens.isEmpty { Text(l10n("common.empty")).foregroundStyle(Tone.textMuted) }
+                    if tokens.isEmpty { EmptyRow(icon: .shieldCheck) }
                     ForEach(tokens, id: \.id) { token in
                         VStack(alignment: .leading, spacing: 2) {
                             Text(token.name).font(.system(size: FontSize.sizeSm, weight: .medium))
@@ -301,6 +310,8 @@ struct ThisDevicePage: View {
                 .font(.system(size: FontSize.sizeSm))
             }
             ThisDeviceExtras()
+            // Whether an agent may ask where this phone is (§105).
+            LocationChoiceSection()
             Section {
                 Button(l10n("nav.sign_out"), role: .destructive) { Task { await app.signOut() } }
             }

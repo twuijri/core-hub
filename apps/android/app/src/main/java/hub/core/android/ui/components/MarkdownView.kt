@@ -16,9 +16,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.material3.HorizontalDivider
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -35,6 +32,9 @@ import androidx.compose.ui.text.style.TextDirection
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import hub.core.android.R
+import hub.core.android.ui.kit.Hairline
+import hub.core.android.ui.kit.HubIconButton
+import hub.core.android.ui.kit.Lucide
 import hub.core.android.markdown.MdBlock
 import hub.core.android.markdown.MdColors
 import hub.core.android.markdown.Markdown
@@ -117,7 +117,7 @@ private fun MdBlockView(block: MdBlock) {
             }
         }
         is MdBlock.Table -> Table(block.header, block.rows)
-        MdBlock.Rule -> HorizontalDivider(color = t.border)
+        MdBlock.Rule -> Hairline(Modifier.fillMaxWidth().padding(vertical = 4.dp))
     }
 }
 
@@ -133,9 +133,7 @@ fun CodeBlock(language: String?, code: String) {
         ) {
             Row(Modifier.fillMaxWidth().padding(start = 12.dp), verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
                 Text(language.orEmpty(), style = MaterialTheme.typography.labelSmall, color = t.textMuted, modifier = Modifier.weight(1f))
-                IconButton(onClick = { clipboard.setText(AnnotatedString(code)) }) {
-                    Icon(Glyphs.Copy, contentDescription = stringResource(R.string.chat_copy_code), modifier = Modifier.size(16.dp), tint = t.textMuted)
-                }
+                HubIconButton(Lucide.Copy, stringResource(R.string.chat_copy_code), { clipboard.setText(AnnotatedString(code)) }, size = 28.dp, iconSize = 14.dp)
             }
             Text(
                 code,
@@ -166,7 +164,7 @@ private fun Table(header: List<AnnotatedString>, rows: List<List<AnnotatedString
                         )
                     }
                 }
-                if (r < rows.size) HorizontalDivider(color = t.border)
+                if (r < rows.size) Hairline(Modifier.fillMaxWidth())
             }
         }
     }

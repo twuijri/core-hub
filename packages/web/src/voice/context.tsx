@@ -38,10 +38,11 @@ import {
 } from './player.js';
 import { isMissingVoice, synthesize } from './speech-api.js';
 
-export type DictationLanguage = 'auto' | 'ar' | 'en';
+/** `auto`, or a language tag (`ar`, `en`, `es`, `ar-EG`, …): any language (DECISIONS §94). */
+export type DictationLanguage = string;
 
 export interface VoicePreferences {
-  /** `auto`, `ar` or `en`; `app` (the UI's language) is shown as the UI's own. */
+  /** `auto` or a language tag; `app` (the UI's language) is shown as the UI's own. */
   dictationLanguage: string;
   autoSpeak: boolean;
   setDictationLanguage(value: DictationLanguage): void;

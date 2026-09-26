@@ -256,10 +256,42 @@ describe('webhooks: a real chat reaches the receiver', () => {
     await until(() => endpoint.arrived.length >= 2);
     const byEvent = new Map(endpoint.arrived.map((a) => [a.json.event, a.json]));
     expect(byEvent.get('task.created')).toMatchObject({ data: { task: { id: taskId } } });
+    // The event's schema promises where from, where to and who: the webhook carries all three.
     expect(byEvent.get('task.moved')).toMatchObject({
-      data: { task: { id: taskId, status: 'done' } },
+      data: {
+        task: { id: taskId, status: 'done' },
+        from: 'ready',
+        to: 'done',
+        actor: { kind: 'user', id: expect.stringMatching(/^[0-9A-Z]{26}$/) },
+      },
     });
     for (const arrival of endpoint.arrived) expect(arrival.body).not.toContain('مهمة سرية');
+  });
+
+  it('sends no task.moved for a card put elsewhere in its own column', async () => {
+    hub = await hubWithAgent();
+    await addWebhook(hub, { url: endpoint.url, events: ['task.moved'] });
+    const created = await authed(hub, hub.token, {
+      method: 'POST',
+      url: '/api/v1/tasks',
+      payload: { title: 'reorder', status: 'todo', auto_start: false },
+    });
+    const taskId = (created.json() as { id: string }).id;
+    const same = await authed(hub, hub.token, {
+      method: 'POST',
+      url: `/api/v1/tasks/${taskId}/move`,
+      payload: { status: 'todo' },
+    });
+    expect(same.statusCode, same.body).toBe(200);
+    const moved = await authed(hub, hub.token, {
+      method: 'POST',
+      url: `/api/v1/tasks/${taskId}/move`,
+      payload: { status: 'ready' },
+    });
+    expect(moved.statusCode, moved.body).toBe(200);
+    await until(() => endpoint.arrived.length >= 1);
+    await new Promise((resolve) => setTimeout(resolve, 100));
+    expect(endpoint.arrived.map((arrival) => (arrival.json.data as Json).to)).toEqual(['ready']);
   });
 });
 

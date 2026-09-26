@@ -177,13 +177,22 @@ describe('the Core Hub skill library in a profile', () => {
   it('keeps a switched-off skill off through an update', () => {
     const home = temp('corehub-home-');
     seedLibrary(home, readLibrary(libraryOf(V1)));
+    // Off in Hermes's own list (§103): the update rewrites the file and the skill stays off.
     setSkillEnabled(home, 'beta', false);
     const v2 = readLibrary(libraryOf({ ...V1, 'beta/SKILL.md': skillDoc('beta', 'Better.') }));
 
     expect(seedLibrary(home, v2).updated).toEqual(['beta']);
-    expect(existsSync(inHome(home, 'beta/SKILL.md'))).toBe(false);
-    expect(read(home, 'beta/SKILL.md.off')).toBe(skillDoc('beta', 'Better.'));
+    expect(read(home, 'beta/SKILL.md')).toBe(skillDoc('beta', 'Better.'));
     expect(listSkills(home).find((skill) => skill.key === 'beta')?.enabled).toBe(false);
+
+    // Off the older hub's way, by renaming the file: the update follows it there.
+    const older = temp('corehub-home-');
+    seedLibrary(older, readLibrary(libraryOf(V1)));
+    renameSync(inHome(older, 'beta/SKILL.md'), inHome(older, 'beta/SKILL.md.off'));
+    expect(seedLibrary(older, v2).updated).toEqual(['beta']);
+    expect(existsSync(inHome(older, 'beta/SKILL.md'))).toBe(false);
+    expect(read(older, 'beta/SKILL.md.off')).toBe(skillDoc('beta', 'Better.'));
+    expect(listSkills(older).find((skill) => skill.key === 'beta')?.enabled).toBe(false);
   });
 
   it('does not bring back a skill the person deleted', () => {

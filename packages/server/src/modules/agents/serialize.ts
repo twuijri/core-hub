@@ -162,6 +162,8 @@ export function serializeAgent(
         compareVersions(row.version, pinned) > 0,
       auto_update: row.autoUpdate,
       auto_update_supported: row.packageName !== null,
+      // The agent keeps its own vendor account, and the hub can start its sign-in.
+      ...(entry?.signIn ? { sign_in: true } : {}),
       checked_at: iso(row.checkedAt),
       error: row.lastError,
     },

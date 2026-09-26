@@ -6,10 +6,17 @@
  * URL with the token in it (the contract forbids that), which is also why a plain link
  * cannot open a private file.
  */
+import { HubApiError } from '@corehub/contracts';
 import { keepPreviousData, useQuery } from '@tanstack/react-query';
 import { useCallback } from 'react';
 import { useAuth } from '../auth/context.js';
-import type { RunChangesList, RunFileDiff, SessionFile, SessionFileList } from '../types.js';
+import type {
+  RunChanges,
+  RunChangesList,
+  RunFileDiff,
+  SessionFile,
+  SessionFileList,
+} from '../types.js';
 
 export const fileKeys = {
   list: (profile: string, sessionId: string) => ['session-files', profile, sessionId] as const,
@@ -129,6 +136,36 @@ export function useSessionChanges(sessionId: string, revision: string) {
       return res.data as RunChangesList;
     },
     placeholderData: keepPreviousData,
+  });
+}
+
+/** How often a live run's folder is looked at again while the card is on screen (§102). */
+export const LIVE_CHANGES_POLL_MS = 4_000;
+
+/**
+ * What a run still going has changed so far (decision §102): `live: true` from the hub, read
+ * again every few seconds and whenever one of its tool calls ends (`revision`). `null` when it
+ * has nothing to compare (no folder) or has just ended — its recorded card takes over then.
+ */
+export function useLiveRunChanges(sessionId: string, runId: string, revision: number) {
+  const { client, profile } = useAuth();
+  return useQuery({
+    queryKey: ['live-run-changes', profile, sessionId, runId, revision],
+    queryFn: async ({ signal }) => {
+      try {
+        const res = await client.request('get', '/sessions/{session_id}/runs/{run_id}/changes', {
+          params: { session_id: sessionId, run_id: runId },
+          signal,
+        });
+        return res.data as RunChanges;
+      } catch (error) {
+        if (error instanceof HubApiError && error.status === 404) return null;
+        throw error;
+      }
+    },
+    placeholderData: keepPreviousData,
+    refetchInterval: LIVE_CHANGES_POLL_MS,
+    retry: false,
   });
 }
 

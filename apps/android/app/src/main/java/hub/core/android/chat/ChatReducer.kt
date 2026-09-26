@@ -19,7 +19,17 @@ import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.contentOrNull
 
 /** An attachment shown under a message: a picture or a file the hub keeps. */
-data class ChatAttachment(val kind: ContentBlock.Type, val name: String?, val url: String?)
+data class ChatAttachment(
+    val kind: ContentBlock.Type,
+    val name: String?,
+    val url: String?,
+    /** The hub's id for its bytes (`sessions.downloadAttachment`); null for a block without a file. */
+    val attachmentId: String? = null,
+    val mime: String? = null,
+) {
+    /** A picture is drawn in the message; anything else is its name (web: #154). */
+    val isImage: Boolean get() = kind == ContentBlock.Type.IMAGE && attachmentId != null
+}
 
 /** One message as the transcript draws it. The text is the concatenation of its text blocks. */
 data class ChatMessage(
@@ -34,6 +44,8 @@ data class ChatMessage(
     val attachments: List<ChatAttachment>,
     val runId: String?,
     val streaming: Boolean,
+    /** Who wrote it: a person's user id, or the agent's; in a room, which person is you. */
+    val authorId: String? = null,
 ) {
     /** The hub opens a run with an empty assistant shell; until something lands in it, it is not a turn. */
     val isEmpty: Boolean get() = text.isBlank() && toolCalls.isEmpty() && attachments.isEmpty() && reasoning.isBlank()
@@ -49,9 +61,10 @@ data class ChatMessage(
             reasoningMs = message.reasoning?.durationMs,
             toolCalls = message.toolCalls,
             attachments = message.content.filter { it.type != ContentBlock.Type.TEXT && it.type != ContentBlock.Type.LOCATION }
-                .map { ChatAttachment(it.type, it.name, it.url) },
+                .map { ChatAttachment(it.type, it.name, it.url, it.attachmentId, it.mime) },
             runId = message.runId,
             streaming = message.status == hub.core.client.model.MessageStatus.STREAMING,
+            authorId = message.author.id,
         )
     }
 }

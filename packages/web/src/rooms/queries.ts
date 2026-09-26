@@ -13,6 +13,7 @@ import { useAuth } from '../auth/context.js';
 import { useRealtime } from '../realtime/context.js';
 import { ROOM_EVENTS, isEnvelope } from '../realtime/envelope.js';
 import type {
+  ContentBlock,
   HandoffChain,
   Message,
   Room,
@@ -230,11 +231,13 @@ export function useRemoveSeat(roomId: string) {
 export function usePostMessage(roomId: string) {
   const { client } = useAuth();
   return useMutation({
-    mutationFn: async (body: { text: string; mentions: Mention[] }) =>
+    // Words, files, or both (contract decision §99): `content` is the text block and the
+    // picture/file blocks of what was attached (`attachments/tray.tsx`).
+    mutationFn: async (body: { content: ContentBlock[]; mentions: Mention[] }) =>
       (
         await client.request('post', '/rooms/{room_id}/messages', {
           params: { room_id: roomId },
-          body: { content: [{ type: 'text', text: body.text }], mentions: body.mentions },
+          body: { content: body.content, mentions: body.mentions },
         })
       ).data as unknown as { message_id: string; runs: Array<{ seat_id: string; run_id: string }> },
   });

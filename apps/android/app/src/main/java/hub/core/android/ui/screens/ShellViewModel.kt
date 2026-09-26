@@ -9,7 +9,15 @@ import hub.core.android.data.hubCall
 import hub.core.android.realtime.SESSIONS_NAMESPACE
 import hub.core.client.api.SessionsApi
 import hub.core.client.infrastructure.Serializer
+import hub.core.client.model.Approval
+import hub.core.client.model.ApprovalDecision
+import hub.core.client.model.ApprovalResponse
+import hub.core.client.model.ApprovalStatus
+import hub.core.client.model.BulkResult
 import hub.core.client.model.Profile
+import hub.core.client.model.SessionBulkUpdate
+import hub.core.client.model.SessionBulkUpdatePatch
+import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 import hub.core.client.model.Session
 import hub.core.client.model.SessionSource
 import kotlinx.coroutines.Job
@@ -79,12 +87,26 @@ class ShellViewModel(private val graph: AppGraph) : ViewModel() {
     val chats: StateFlow<ChatsState> = _chats.asStateFlow()
     private var loadJob: Job? = null
 
+    /** What waits for the person in every profile they may enter (the pending list). */
+    private val _pending = MutableStateFlow<List<Approval>>(emptyList())
+    val pending: StateFlow<List<Approval>> = _pending.asStateFlow()
+    private var pendingJob: Job? = null
+
+    /** The chats list's batch mode: the chats selected (empty = not selecting). */
+    private val _selected = MutableStateFlow<Set<String>>(emptySet())
+    val selected: StateFlow<Set<String>> = _selected.asStateFlow()
+    private val _batchError = MutableStateFlow<String?>(null)
+    val batchError: StateFlow<String?> = _batchError.asStateFlow()
+    private val _batchBusy = MutableStateFlow(false)
+    val batchBusy: StateFlow<Boolean> = _batchBusy.asStateFlow()
+
     init {
         viewModelScope.launch {
             graph.store.session.filterNotNull().distinctUntilChangedBy { it.hub + "|" + it.user.id + "|" + it.profile }.collect { s ->
                 graph.realtime.connect(s)
                 loadProfiles()
                 reloadChats()
+                refreshPending()
             }
         }
         viewModelScope.launch {
@@ -105,7 +127,10 @@ class ShellViewModel(private val graph: AppGraph) : ViewModel() {
                     }?.let { s -> _chats.update { ChatsList.upsert(it, s) } }
                     "session.deleted" -> (envelope.payload["session_id"] as? JsonPrimitive)?.contentOrNull?.let { id ->
                         _chats.update { ChatsList.remove(it, id) }
+                        _selected.update { it - id }
                     }
+                    // The sessions socket hears every profile: a room seat's questions arrive here too.
+                    "approval.requested", "approval.resolved" -> schedulePending()
                 }
             }
         }
@@ -177,6 +202,100 @@ class ShellViewModel(private val graph: AppGraph) : ViewModel() {
                     )
                 }
             }.onFailure { e -> _chats.update { it.copy(loading = false, error = e as HubError) } }
+        }
+    }
+
+    private fun schedulePending() {
+        pendingJob?.cancel()
+        pendingJob = viewModelScope.launch {
+            kotlinx.coroutines.delay(300)
+            refreshPending()
+        }
+    }
+
+    /** `sessions.listApprovals` in each profile the person may enter, merged oldest first. */
+    fun refreshPending() {
+        val s = graph.store.current ?: return
+        val slugs = (_profiles.value.map { it.slug }.ifEmpty { s.user.profiles }).ifEmpty { listOf(s.profile) }
+        viewModelScope.launch {
+            val groups = slugs.map { slug ->
+                hubCall { graph.apis(s).sessions.sessionsListApprovals(slug, status = ApprovalStatus.PENDING, limit = 100) }
+                    .getOrNull()?.items.orEmpty()
+            }
+            _pending.value = PendingList.merge(groups)
+        }
+    }
+
+    /** Answers a waiting thing from the list; a `409` means it was answered elsewhere or expired. */
+    fun respond(approval: Approval, decision: ApprovalDecision?, answer: String?) {
+        val s = graph.store.current ?: return
+        viewModelScope.launch {
+            hubCall { graph.apis(s).sessions.sessionsRespondApproval(approval.profile, approval.id, ApprovalResponse(decision, answer)) }
+            _pending.update { list -> list.filter { it.id != approval.id } }
+            schedulePending()
+        }
+    }
+
+    fun toggleSelected(id: String) = _selected.update { ChatsBatch.toggle(it, id) }
+
+    fun clearSelection() {
+        _selected.value = emptySet()
+        _batchError.value = null
+    }
+
+    /** Archive (or bring back) every selected chat, one call per profile. */
+    fun archiveSelected(archived: Boolean) = batch { apis, profile, ids ->
+        apis.sessions.sessionsBulkUpdate(profile, SessionBulkUpdate(ids, SessionBulkUpdatePatch(archived = archived)))
+    }
+
+    fun deleteSelected() = batch { apis, profile, ids -> apis.sessions.sessionsBulkDelete(profile, ids.joinToString(",")) }
+
+    private fun batch(call: suspend (hub.core.android.data.HubApis, String, List<String>) -> BulkResult) {
+        val s = graph.store.current ?: return
+        val groups = ChatsBatch.byProfile(_chats.value.items, _selected.value)
+        if (groups.isEmpty()) return
+        _batchBusy.value = true
+        _batchError.value = null
+        viewModelScope.launch {
+            val results = mutableListOf<BulkResult>()
+            var failure: HubError? = null
+            for ((profile, ids) in groups) {
+                hubCall { call(graph.apis(s), profile, ids) }.onSuccess { results += it }.onFailure { failure = it as HubError }
+            }
+            val refused = ChatsBatch.failures(results)
+            _batchBusy.value = false
+            _batchError.value = failure?.let { it.text ?: it.code } ?: refused.firstOrNull()
+            if (failure == null && refused.isEmpty()) _selected.value = emptySet()
+            reloadChats()
+        }
+    }
+
+    /**
+     * The hub's Markdown transcript of a chat (`sessions.export`), written where the share sheet
+     * can hand it on. Its request is the generated client's own; only the answer is read as text.
+     */
+    suspend fun exportChat(context: android.content.Context, sessionId: String, profile: String, title: String?): java.io.File? {
+        val s = graph.store.current ?: return null
+        return kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+            val config = graph.apis(s).sessions.sessionsExportRequestConfig(profile, sessionId, SessionsApi.FormatSessionsExport.MARKDOWN)
+            val base = (hub.core.android.data.apiBase(s.hub) + config.path).toHttpUrlOrNull() ?: return@withContext null
+            val url = base.newBuilder().apply { config.query.forEach { (k, v) -> v.forEach { value -> addQueryParameter(k, value) } } }.build()
+            val request = okhttp3.Request.Builder().url(url).apply {
+                config.headers.forEach { (k, v) -> header(k, v) }
+                header("Accept", "text/markdown")
+            }.build()
+            runCatching {
+                graph.http.authed.newCall(request).execute().use { response ->
+                    if (!response.isSuccessful) return@use null
+                    val text = response.body?.string() ?: return@use null
+                    val file = hub.core.android.ui.components.AttachmentFiles.place(
+                        java.io.File(context.cacheDir, "attachments"), "export-$sessionId", Exports.fileName(title, sessionId),
+                    )
+                    file.parentFile?.mkdirs()
+                    file.writeText(text)
+                    file
+                }
+            }.getOrNull()
         }
     }
 

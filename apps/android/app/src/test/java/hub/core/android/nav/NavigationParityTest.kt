@@ -53,7 +53,7 @@ class NavigationParityTest {
         assertEquals(list("segments"), Screens.segments)
         assertEquals(list("footer"), Screens.footer)
         assertEquals(list("settingsTabs").filter { it in ids }, Screens.settingsTabs)
-        assertEquals(list("settingsManagement"), Screens.settingsManagement)
+        assertEquals(list("settingsManagement").filter { it in ids }, Screens.settingsManagement)
         assertEquals(list("settingsTools").filter { it in ids }, Screens.settingsTools)
         assertEquals(list("agentLevel").filter { it in ids }, Screens.agentLevel)
         assertEquals(listOf(Screens.settingsTabs, Screens.settingsManagement, Screens.settingsTools), SettingsList.groups.map { it.second })
@@ -118,11 +118,12 @@ class NavigationParityTest {
         val android = manifest.getValue("surfaceRoutes").jsonObject.getValue("android").jsonObject
         assertEquals(ids.toSet(), android.keys)
         for ((id, route) in android) {
-            val path = route.jsonPrimitive.content.replace(":agentId", "01J8QK3ZR2W7M5N4P6T8V9X0AG").replace("/:sessionId?", "/01J8QK3ZR2W7M5N4P6T8V9X0YA")
+            val path = route.jsonPrimitive.content.replace(":agentId", "01J8QK3ZR2W7M5N4P6T8V9X0AG")
+                .replace("/:sessionId?", "/01J8QK3ZR2W7M5N4P6T8V9X0YA").replace("/:roomId?", "/01J8QK3ZR2W7M5N4P6T8V9X0RM")
             val target = AppPaths.resolve(path)
             assertEquals(path, id, target?.destination)
             val opened = AppPaths.route(target!!, "default")
-            if (id != "rooms") assertEquals(path, id, opened?.destination)
+            assertEquals(path, id, opened?.destination)
         }
         assertEquals(SurfaceRoutes.android.keys, android.keys)
     }

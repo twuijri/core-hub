@@ -1,5 +1,19 @@
 package hub.core.android.phone
 
+import hub.core.android.ui.kit.Badge
+import hub.core.android.ui.kit.Custom
+import hub.core.android.ui.kit.LucideIcon
+import hub.core.android.generated.FontTokens
+import hub.core.android.ui.theme.LocalTokens
+import androidx.compose.foundation.layout.Row
+import androidx.compose.material3.Text
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.unit.sp
+import hub.core.android.ui.kit.BadgeTone
+import hub.core.android.ui.kit.ButtonKind
+import hub.core.android.ui.kit.GroupedList
+import hub.core.android.ui.kit.HubButton
+import hub.core.android.ui.kit.Lucide
 import android.Manifest
 import android.content.Intent
 import android.os.Build
@@ -9,9 +23,6 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.material3.Button
-import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -30,9 +41,6 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import hub.core.android.R
 import hub.core.android.graph
-import hub.core.android.ui.components.ListRow
-import hub.core.android.ui.components.Notice
-import hub.core.android.ui.components.Tone
 
 /*
  * Notifications on this phone, in plain words (owner, 2026-09-25): whether the app may show them,
@@ -107,23 +115,38 @@ fun NotificationRows() {
         owner.lifecycle.addObserver(observer)
         onDispose { owner.lifecycle.removeObserver(observer) }
     }
-    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-        ListRow(stringResource(R.string.push_label), stringResource(PushStatus.label(push, allowed, denied)), modifier = Modifier.testTag("push.state"))
-        Notice(stringResource(PushStatus.note(push)), Tone.INFO)
+    // The state is a tinted badge with a dot; what it means is the line under it.
+    val tone = when {
+        !allowed -> BadgeTone.Danger
+        push == PushState.ACTIVE -> BadgeTone.Success
+        else -> BadgeTone.Warning
+    }
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        GroupedList {
+            Custom(Modifier.testTag("push.state")) {
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    LucideIcon(Lucide.Bell, null, size = 20.dp, tint = LocalTokens.current.textMuted)
+                    Text(stringResource(R.string.push_label), fontSize = FontTokens.sizeMd.sp, modifier = Modifier.weight(1f))
+                    Badge(stringResource(PushStatus.label(push, allowed, denied)), tone = tone, dot = true)
+                }
+                Text(stringResource(PushStatus.note(push)), fontSize = FontTokens.sizeSm.sp, color = LocalTokens.current.textMuted)
+            }
+        }
         if (!allowed && !denied && Build.VERSION.SDK_INT >= 33) {
-            Button(onClick = {
+            HubButton(stringResource(R.string.notices_allow), {
                 NotificationAsk.askedThisLaunch = true
                 ask.launch(Manifest.permission.POST_NOTIFICATIONS)
-            }, modifier = Modifier.fillMaxWidth()) { Text(stringResource(R.string.notices_allow)) }
+            }, icon = Lucide.Bell, fill = true, modifier = Modifier.fillMaxWidth())
         } else if (!allowed) {
-            OutlinedButton(onClick = {
-                context.startActivity(
-                    Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS).putExtra(Settings.EXTRA_APP_PACKAGE, context.packageName)
-                        .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
-                )
-            }, modifier = Modifier.fillMaxWidth().testTag("push.open_settings")) {
-                Text(stringResource(R.string.notices_off) + " — " + stringResource(R.string.notices_open_settings))
-            }
+            HubButton(
+                stringResource(R.string.notices_off) + " — " + stringResource(R.string.notices_open_settings), {
+                    context.startActivity(
+                        Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS).putExtra(Settings.EXTRA_APP_PACKAGE, context.packageName)
+                            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
+                    )
+                },
+                kind = ButtonKind.Secondary, icon = Lucide.ExternalLink, fill = true, modifier = Modifier.fillMaxWidth().testTag("push.open_settings"),
+            )
         }
     }
 }

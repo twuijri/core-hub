@@ -6,6 +6,12 @@
  * key, and hand the subscription to the hub — registering this browser as a device first,
  * under a key it keeps in local storage so it stays one device across visits.
  *
+ * The subscription lives only as long as the sign-in that registered it (the hub forgets it
+ * when that sign-in ends). The browser keeps its subscription, and remembers whose it is: after
+ * that same person signs in again, `resumeBrowserPush` hands it back without asking anything —
+ * only while the browser's permission is still granted. Another person signing in to the same
+ * browser is not subscribed silently; they turn it on themselves.
+ *
  * The browser's objects are passed in (`PushEnvironment`) so the tests can play a browser
  * without one.
  */
@@ -19,7 +25,7 @@ export interface PushEnvironment {
     permission: NotificationPermission;
     requestPermission(): Promise<NotificationPermission>;
   } | null;
-  storage: Pick<Storage, 'getItem' | 'setItem'> | null;
+  storage: Pick<Storage, 'getItem' | 'setItem' | 'removeItem'> | null;
   userAgent: string;
 }
 
@@ -46,7 +52,26 @@ export function browserEnvironment(): PushEnvironment {
 }
 
 const KEY = `${derived.storagePrefix}device.key`;
+/** The person who turned push on in this browser (their user id). */
+const OWNER_KEY = `${derived.storagePrefix}push.user`;
 export const SERVICE_WORKER_URL = '/push-sw.js';
+
+function pushOwner(storage: PushEnvironment['storage']): string | null {
+  try {
+    return storage?.getItem(OWNER_KEY) ?? null;
+  } catch {
+    return null;
+  }
+}
+
+function setPushOwner(storage: PushEnvironment['storage'], userId: string | null): void {
+  try {
+    if (userId) storage?.setItem(OWNER_KEY, userId);
+    else storage?.removeItem(OWNER_KEY);
+  } catch {
+    // Without a store the browser simply is not handed back silently.
+  }
+}
 
 /** The key this browser registered under, if it ever did (reading makes nothing). */
 export function knownDeviceKey(storage: PushEnvironment['storage']): string | null {
@@ -114,10 +139,19 @@ async function registration(env: PushEnvironment): Promise<ServiceWorkerRegistra
   return (await env.serviceWorker.getRegistration(SERVICE_WORKER_URL)) ?? null;
 }
 
-export async function browserPushState(env: PushEnvironment): Promise<BrowserPushState> {
+/**
+ * On, off, or impossible here. With `userId`, a subscription another person turned on is
+ * "off" for this one: it is not registered for them.
+ */
+export async function browserPushState(
+  env: PushEnvironment,
+  userId?: string | null,
+): Promise<BrowserPushState> {
   if (!env.serviceWorker || !env.notification) return 'unsupported';
   if (env.notification.permission === 'denied') return 'denied';
   if (env.notification.permission !== 'granted') return 'off';
+  const owner = pushOwner(env.storage);
+  if (userId && owner && owner !== userId) return 'off';
   const existing = await registration(env);
   const subscription = await existing?.pushManager.getSubscription();
   return subscription ? 'on' : 'off';
@@ -144,10 +178,43 @@ export class BrowserPushError extends Error {
   }
 }
 
+/**
+ * This browser's subscription with the hub's key, made now if there is none or it was made
+ * with another key (the hub's data was replaced). Asks nothing: the permission is granted.
+ */
+async function subscriptionFor(worker: ServiceWorkerRegistration, publicKey: string) {
+  const key = base64UrlToBytes(publicKey);
+  const subscription = await worker.pushManager.getSubscription();
+  if (subscription) {
+    const current = subscription.options?.applicationServerKey;
+    const same =
+      current &&
+      new Uint8Array(current).length === key.length &&
+      new Uint8Array(current).every((byte, i) => byte === key[i]);
+    if (same) return subscription;
+    await subscription.unsubscribe();
+  }
+  return worker.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: key });
+}
+
+/** Registers this browser as a device and hands the hub its subscription. */
+async function handToHub(
+  client: HubClient,
+  env: PushEnvironment,
+  subscription: PushSubscription,
+  locale: 'ar' | 'en',
+): Promise<void> {
+  const device = await registerThisBrowser(client, env);
+  await client.request('put', '/devices/{device_id}/push', {
+    params: { device_id: device.id },
+    body: { provider: 'webpush', token: JSON.stringify(subscription.toJSON()), locale },
+  });
+}
+
 export async function enableBrowserPush(
   client: HubClient,
   env: PushEnvironment,
-  options: { publicKey: string | null; locale: 'ar' | 'en' },
+  options: { publicKey: string | null; locale: 'ar' | 'en'; userId?: string | null },
 ): Promise<void> {
   if (!env.serviceWorker || !env.notification) throw new BrowserPushError('unsupported');
   if (!options.publicKey) throw new BrowserPushError('no_key');
@@ -159,41 +226,55 @@ export async function enableBrowserPush(
   const worker =
     (await registration(env)) ??
     (await env.serviceWorker.register(SERVICE_WORKER_URL, { scope: '/' }));
-  const key = base64UrlToBytes(options.publicKey);
-  let subscription = await worker.pushManager.getSubscription();
-  if (subscription) {
-    // A subscription made with another key (the hub's data was replaced) cannot be used.
-    const current = subscription.options?.applicationServerKey;
-    const same =
-      current &&
-      new Uint8Array(current).length === key.length &&
-      new Uint8Array(current).every((byte, i) => byte === key[i]);
-    if (!same) {
-      await subscription.unsubscribe();
-      subscription = null;
-    }
-  }
-  subscription ??= await worker.pushManager.subscribe({
-    userVisibleOnly: true,
-    applicationServerKey: key,
-  });
-  const device = await registerThisBrowser(client, env);
-  await client.request('put', '/devices/{device_id}/push', {
-    params: { device_id: device.id },
-    body: {
-      provider: 'webpush',
-      token: JSON.stringify(subscription.toJSON()),
-      locale: options.locale,
-    },
-  });
+  const subscription = await subscriptionFor(worker, options.publicKey);
+  await handToHub(client, env, subscription, options.locale);
+  if (options.userId) setPushOwner(env.storage, options.userId);
 }
 
 export async function disableBrowserPush(client: HubClient, env: PushEnvironment): Promise<void> {
   const worker = await registration(env);
   const subscription = await worker?.pushManager.getSubscription();
   await subscription?.unsubscribe();
+  setPushOwner(env.storage, null);
   const device = await registerThisBrowser(client, env);
   await client.request('delete', '/devices/{device_id}/push', {
     params: { device_id: device.id },
   });
+}
+
+/** What `resumeBrowserPush` did, for the tests and nothing else. */
+export type ResumeOutcome =
+  | 'unsupported'
+  | 'not_granted'
+  | 'not_theirs'
+  | 'no_subscription'
+  | 'no_key'
+  | 'registered'
+  | 'failed';
+
+/**
+ * Right after a sign-in: the hub forgot this browser's subscription when the previous sign-in
+ * ended, so it is handed back — silently, and only when the browser still allows notifications,
+ * still holds a subscription, and it was this person who turned push on here. Never asks for a
+ * permission and never throws: at worst the person turns it on again from Notifications.
+ */
+export async function resumeBrowserPush(
+  client: HubClient,
+  env: PushEnvironment,
+  options: { userId: string; locale: 'ar' | 'en' },
+): Promise<ResumeOutcome> {
+  try {
+    if (!env.serviceWorker || !env.notification) return 'unsupported';
+    if (env.notification.permission !== 'granted') return 'not_granted';
+    if (pushOwner(env.storage) !== options.userId) return 'not_theirs';
+    const worker = await registration(env);
+    if (!worker || !(await worker.pushManager.getSubscription())) return 'no_subscription';
+    const { data } = await client.request('get', '/push/config');
+    if (!data.webpush_public_key) return 'no_key';
+    const subscription = await subscriptionFor(worker, data.webpush_public_key);
+    await handToHub(client, env, subscription, options.locale);
+    return 'registered';
+  } catch {
+    return 'failed';
+  }
 }

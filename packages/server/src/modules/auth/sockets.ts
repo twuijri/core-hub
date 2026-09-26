@@ -17,6 +17,7 @@
 // workspace) calls `revalidateSockets`, which disconnects every socket no longer admitted.
 import type { Server as SocketServer, Socket } from 'socket.io';
 import { eq } from 'drizzle-orm';
+import { socketAddressOf } from '../../lib/client-address.js';
 import type { ModuleDb } from '../../lib/db.js';
 import { HubError, type ErrorCode } from '../../lib/errors.js';
 import { REALTIME_NAMESPACES } from '../../lib/module.js';
@@ -60,7 +61,7 @@ export function registerSocketAuth(io: SocketServer, ctx: () => AuthContext | nu
       }
       const context = ctx();
       if (!context) return next(socketRefusal('unauthorized'));
-      const ip = socket.handshake.address;
+      const ip = socketAddressOf(socket);
       const profile = socket.handshake.auth?.profile;
       resolvePrincipal(context, token, ip).then(
         (principal) => {

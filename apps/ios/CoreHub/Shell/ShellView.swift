@@ -8,6 +8,8 @@ import SwiftUI
 enum MainContent: Equatable {
     case newChat
     case chat(sessionID: String, profile: String)
+    /// One room, opened from the Rooms segment, in its own profile.
+    case room(roomID: String, profile: String)
     case destination(DestinationID)
     case settings
 }
@@ -25,8 +27,14 @@ struct ShellView: View {
     @State private var searching = false
     /// A shared text waiting in the new chat's composer.
     @State private var seed: String?
+    /// Shared pictures and files waiting to be attached in the new chat.
+    @State private var seedFiles: [URL] = []
+    @State private var pending: PendingModel?
+    @State private var showingPending = false
 
     var body: some View {
+        // Read here, so the shell redraws when an agent's location request arrives (§105).
+        let locating = LocationRequests.shared.waiting.first
         GeometryReader { geometry in
             ZStack(alignment: .leading) {
                 page
@@ -40,6 +48,7 @@ struct ShellView: View {
                         segment: $segment,
                         sessionList: sessionList,
                         selectedSession: selectedSession,
+                        selectedRoom: selectedRoom,
                         navigate: navigate,
                         openSession: { session in
                             navigate(.chat(sessionID: session.id, profile: session.profile))
@@ -54,6 +63,8 @@ struct ShellView: View {
         }
         .onAppear {
             if sessionList == nil { sessionList = SessionListModel(app: app) }
+            if pending == nil { pending = PendingModel(app: app) }
+            pending?.start()
             takeLink()
             takeDraft()
         }
@@ -65,6 +76,23 @@ struct ShellView: View {
                 openGlobalAgent: { navigate(.destination(.globalAgent)) }
             )
         }
+        // An agent asked where this phone is: the person answers here, once or for good (§105).
+        .sheet(isPresented: Binding(
+            get: { locating != nil },
+            set: { shown in
+                // Swiped away: no, this time only.
+                if !shown, let first = LocationRequests.shared.waiting.first, first.id == locating?.id {
+                    Task { await LocationRequests.shared.decide(first, allow: false, remember: false) }
+                }
+            }
+        )) {
+            if let locating { LocationConsentSheet(request: locating) }
+        }
+        .sheet(isPresented: $showingPending) {
+            if let pending {
+                NavigationStack { PendingSheet(model: pending, go: navigate) }
+            }
+        }
     }
 
     /// Text shared from another app opens a new chat with it in the composer.
@@ -72,6 +100,8 @@ struct ShellView: View {
         guard let draft = app.pendingDraft else { return }
         app.pendingDraft = nil
         seed = draft
+        seedFiles = app.pendingFiles
+        app.pendingFiles = []
         navigate(.newChat)
     }
 
@@ -84,6 +114,11 @@ struct ShellView: View {
 
     private var selectedSession: String? {
         if case .chat(let id, _) = main { return id }
+        return nil
+    }
+
+    private var selectedRoom: String? {
+        if case .room(let id, _) = main { return id }
         return nil
     }
 
@@ -103,10 +138,15 @@ struct ShellView: View {
                             Button {
                                 setDrawer(true)
                             } label: {
-                                Image(systemName: "line.3.horizontal")
+                                LucideIcon(.menu, size: 20)
                             }
                             .accessibilityLabel(l10n("shell.open_menu"))
                             .accessibilityIdentifier("shell.menu")
+                        }
+                        ToolbarItem(placement: .topBarTrailing) {
+                            if let pending {
+                                PendingButton(model: pending) { showingPending = true }
+                            }
                         }
                     }
             }
@@ -120,9 +160,10 @@ struct ShellView: View {
             NewChatScreen(opened: { sessionID, profile, message in
                 firstMessages.put(sessionID, message)
                 seed = nil
+                seedFiles = []
                 main = .chat(sessionID: sessionID, profile: profile)
-            }, seed: seed)
-            .id(seed ?? "")
+            }, seed: seed, seedFiles: seedFiles)
+            .id((seed ?? "") + seedFiles.map(\.lastPathComponent).joined())
         case .chat(let sessionID, let profile):
             ChatScreen(model: ChatModel(
                 app: app,
@@ -131,6 +172,12 @@ struct ShellView: View {
                 firstMessage: firstMessages.take(sessionID)
             ))
             .id(sessionID)
+        case .room(let roomID, let profile):
+            RoomScreen(
+                model: RoomModel(app: app, roomID: roomID, profile: profile),
+                onGone: { navigate(.newChat) }
+            )
+            .id(roomID)
         case .destination(.tasks):
             TasksScreen(openChat: { sessionID, profile in navigate(.chat(sessionID: sessionID, profile: profile)) })
         case .destination(.schedules):
@@ -150,6 +197,7 @@ struct ShellView: View {
             searching = true
             return
         }
+        if case .room = target { segment = .rooms }
         if target == .settings, main != .settings { beforeSettings = main }
         main = target
         setDrawer(false)

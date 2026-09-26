@@ -7,7 +7,7 @@
  * - Plugins: what Hermes lists in the profile, in Hermes's words; switch, install (a job),
  *   remove only what was installed.
  * - Skills: skills in Hermes's category folders are listed under their category, and Hermes's
- *   own (`builtin`) offer no switch and no delete.
+ *   own (`builtin`) offer no delete, and switch through Hermes's own list (§103).
  *
  * The whole app is mounted on a scripted hub, so what is asserted is what a person meets and
  * what the page asks the hub.
@@ -406,8 +406,8 @@ describe("an agent's Plugins page", () => {
 });
 
 describe("Hermes's own skills on the Skills page", () => {
-  it('lists them under their category with its description, without a switch or a delete', async () => {
-    const { fetchImpl } = hub();
+  it('lists them under their category with its description, switchable but not deletable', async () => {
+    const { fetchImpl, sent } = hub();
     mount(`/agents/${HERMES}/skills`, fetchImpl);
     const categories = await screen.findAllByTestId('skill-category');
     expect(categories.map((section) => section.getAttribute('data-category'))).toEqual([
@@ -419,8 +419,15 @@ describe("Hermes's own skills on the Skills page", () => {
     expect(findmy.getAttribute('data-source')).toBe('builtin');
     expect(within(findmy).getByText('Built into Hermes')).toBeTruthy();
     expect(screen.queryByTestId('skill-delete-findmy')).toBeNull();
-    expect((within(findmy).getByTestId('skill-toggle-findmy') as HTMLButtonElement).disabled).toBe(
-      true,
+    // Hermes's own switch (its `skills.disabled` list) leaves its files alone: offered (§103).
+    const toggle = within(findmy).getByTestId('skill-toggle-findmy') as HTMLButtonElement;
+    expect(toggle.disabled).toBe(false);
+    fireEvent.click(toggle);
+    await waitFor(() =>
+      expect(sent.find((call) => call.method === 'PATCH')).toMatchObject({
+        url: expect.stringContaining('/skills/findmy'),
+        body: { enabled: false },
+      }),
     );
     // The person's own skill keeps both.
     expect(screen.getByTestId('skill-delete-my-notes')).toBeTruthy();

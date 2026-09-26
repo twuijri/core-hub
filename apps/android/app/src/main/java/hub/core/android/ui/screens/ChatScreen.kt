@@ -1,5 +1,7 @@
 package hub.core.android.ui.screens
 
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.getValue
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -13,19 +15,14 @@ import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.gestures.scrollBy
 import androidx.compose.foundation.lazy.rememberLazyListState
-import androidx.compose.material3.FilterChip
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.derivedStateOf
-import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
-import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -35,11 +32,14 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import hub.core.android.R
 import hub.core.android.chat.Turns
 import hub.core.android.graph
-import hub.core.android.phone.VoiceButton
+import hub.core.android.phone.DictationStrip
+import hub.core.android.phone.MicButton
+import hub.core.android.phone.rememberDictation
 import hub.core.android.chat.AttachmentTray
 import hub.core.android.ui.components.ApprovalCard
 import hub.core.android.ui.components.AttachButton
@@ -82,8 +82,15 @@ fun ChatScreen(
         // Text shared from another app lands in the new chat's draft, once.
         val shared by context.graph.sharedText.collectAsState()
         LaunchedEffect(shared) {
-            shared?.let { draft = if (draft.isBlank()) it else "$draft\n$it" }
+            shared?.takeIf { it.isNotBlank() }?.let { draft = if (draft.isBlank()) it else "$draft\n$it" }
             context.graph.sharedText.value = null
+        }
+        // Pictures and files shared from another app go into the tray and upload, once.
+        val sharedFiles by context.graph.sharedFiles.collectAsState()
+        LaunchedEffect(sharedFiles) {
+            if (sharedFiles.isEmpty()) return@LaunchedEffect
+            sharedFiles.forEach { vm.tray.add(it.file, isImage = it.isImage, preview = it.preview) }
+            context.graph.sharedFiles.value = emptyList()
         }
     }
     val chat = ui.chat
@@ -91,6 +98,8 @@ fun ChatScreen(
     val listState = rememberLazyListState()
     val atBottom by remember { derivedStateOf { !listState.canScrollForward } }
     val youLabel = stringResource(R.string.chat_you)
+    val agents = hub.core.android.ui.components.rememberAgents(profile)
+    val agentFallback = agents.firstOrNull { it.id == chat.session?.agentId }?.name ?: stringResource(R.string.agent_fallback)
 
     // Follow the reply while the reader is at the bottom; leave them where they are otherwise.
     LaunchedEffect(turns.size, turns.lastOrNull()?.messages?.lastOrNull()?.text?.length) {
@@ -129,17 +138,22 @@ fun ChatScreen(
         ) {
             when {
                 ui.loading -> Loading()
-                sessionId == null -> DraftIntro(profileName, ui, vm::selectAgent)
+                sessionId == null -> DraftIntro(profileName, profile, ui, vm::selectAgent)
                 else -> LazyColumn(
                     state = listState,
                     contentPadding = PaddingValues(horizontal = 16.dp, vertical = 12.dp),
-                    verticalArrangement = Arrangement.spacedBy(20.dp),
+                    verticalArrangement = Arrangement.spacedBy(hub.core.android.generated.LayoutTokens.turnGap.dp),
                     modifier = Modifier.fillMaxSize(),
                 ) {
                     item(key = "older") {
                         if (ui.loadingOlder) Text(stringResource(R.string.chat_loading_older), color = LocalTokens.current.textMuted)
                     }
-                    items(turns, key = { it.messages.first().id }) { turn -> TurnView(turn, youLabel) }
+                    items(turns, key = { it.messages.first().id }) { turn ->
+                        val agent = if (turn.fromPerson) null else hub.core.android.ui.components.AgentIdentity.of(
+                            turn.messages.first().authorId, turn.authorName, agents, agentFallback,
+                        )
+                        TurnView(turn, youLabel, profile, agent = agent)
+                    }
                 }
             }
         }
@@ -154,44 +168,80 @@ fun ChatScreen(
         if (chat.running) {
             ThinkingIndicator(chat.runStartedAt, chat.currentStep, queued = chat.activeRun?.status == RunStatus.QUEUED)
         }
-        val agentName = ui.agents.firstOrNull { it.id == ui.agentId }?.name
+        // The chat's agent by name, as on iOS («Message Hermes»): the draft's choice, else the chat's own.
+        val agentName = ui.agents.firstOrNull { it.id == ui.agentId }?.name ?: agents.firstOrNull { it.id == chat.session?.agentId }?.name
         val files by vm.tray.items.collectAsState()
         AttachmentChips(files, onRemove = vm.tray::remove)
         val uploading = files.any { it.state == AttachmentTray.State.Uploading }
         val ready = files.any { it.state is AttachmentTray.State.Ready }
+        val send = {
+            val text = draft
+            draft = ""
+            vm.send(text, onCreated)
+        }
+        // The words appear in the draft while they are spoken; with Auto and no keyboard to go
+        // by, the conversation's own language is the one listened in.
+        val dictation = rememberDictation(
+            profile = profile,
+            recent = remember(chat.messages) { chat.messages.takeLast(8).map { it.text } },
+            draft = { draft },
+            onDraft = { draft = it },
+            onSend = send,
+        )
+        DictationStrip(dictation)
         Composer(
             text = draft,
             onText = { draft = it },
             placeholder = if (agentName != null) stringResource(R.string.chat_placeholder_agent, agentName) else stringResource(R.string.chat_placeholder),
             running = chat.running,
             sending = ui.sending || uploading || (sessionId == null && ui.agentId == null),
-            onSend = {
-                val text = draft
-                draft = ""
-                vm.send(text, onCreated)
-            },
+            onSend = { if (dictation.active) dictation.send() else send() },
             onStop = vm::stop,
-            extra = {
-                AttachButton(vm.tray)
-                VoiceButton(profile) { spoken -> draft = if (draft.isBlank()) spoken else "$draft $spoken" }
-            },
+            leading = { AttachButton(vm.tray) },
+            trailing = { MicButton(dictation) },
             hasAttachments = ready,
         )
     }
 }
 
+/**
+ * The new chat's empty state, as on iOS: the mark, the profile the chat will be made in, one line
+ * of help; the agents as chips just above the composer (the draft is made on the first message).
+ */
 @Composable
-private fun DraftIntro(profileName: String, ui: ChatUi, onSelect: (String) -> Unit) {
+private fun DraftIntro(profileName: String, profile: String, ui: ChatUi, onSelect: (String) -> Unit) {
     val t = LocalTokens.current
-    Column(Modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.Bottom, horizontalAlignment = Alignment.CenterHorizontally) {
-        Text(stringResource(R.string.chat_greeting), style = MaterialTheme.typography.headlineSmall, textAlign = TextAlign.Center)
-        Text(stringResource(R.string.chat_in_profile, profileName), style = MaterialTheme.typography.bodyMedium, color = t.textMuted)
-        if (ui.agents.isEmpty() && ui.error == null) {
-            EmptyState(stringResource(R.string.chat_no_agents), stringResource(R.string.chat_no_agents_body))
+    Column(Modifier.fillMaxSize().padding(bottom = 4.dp).testTag("screen.new_chat"), horizontalAlignment = Alignment.CenterHorizontally) {
+        Column(
+            Modifier.weight(1f).fillMaxWidth().padding(horizontal = 24.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp, Alignment.CenterVertically),
+            horizontalAlignment = Alignment.CenterHorizontally,
+        ) {
+            hub.core.android.ui.components.BrandMark(48)
+            Text(
+                stringResource(R.string.chat_new_in_profile, profileName), textAlign = TextAlign.Center,
+                fontSize = hub.core.android.generated.FontTokens.sizeXl.sp, fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold, color = t.text,
+                modifier = Modifier.testTag("chat.greeting"),
+            )
+            Text(stringResource(R.string.chat_start_hint), textAlign = TextAlign.Center, fontSize = hub.core.android.generated.FontTokens.sizeSm.sp, color = t.textMuted)
         }
-        LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp), contentPadding = PaddingValues(vertical = 12.dp)) {
+        if (ui.agentsLoaded && ui.agents.isEmpty() && ui.error == null) {
+            hub.core.android.ui.kit.NoticeBox(
+                stringResource(R.string.chat_no_agents) + " — " + stringResource(R.string.chat_no_agents_body),
+                hub.core.android.ui.kit.BadgeTone.Warning, Modifier.padding(horizontal = 12.dp),
+            )
+        }
+        LazyRow(
+            Modifier.fillMaxWidth().testTag("chat.agents"),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
+        ) {
             items(ui.agents, key = { it.id }) { agent ->
-                FilterChip(selected = agent.id == ui.agentId, onClick = { onSelect(agent.id) }, label = { Text(agent.name) })
+                hub.core.android.ui.kit.Chip(
+                    agent.name, selected = agent.id == ui.agentId, onClick = { onSelect(agent.id) },
+                    leading = { hub.core.android.ui.components.AgentAvatar(hub.core.android.ui.components.AgentIdentity.of(agent), profile, 20.dp) },
+                    modifier = Modifier.testTag("chat.agent.${agent.slug}"),
+                )
             }
         }
     }
@@ -200,7 +250,7 @@ private fun DraftIntro(profileName: String, ui: ChatUi, onSelect: (String) -> Un
 @Composable
 fun PlaceholderScreen(title: String, body: String, onBack: (() -> Unit)? = null) {
     Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.Center, horizontalAlignment = Alignment.CenterHorizontally) {
-        EmptyState(title, body)
-        if (onBack != null) TextButton(onClick = onBack) { Text(stringResource(R.string.back)) }
+        hub.core.android.ui.kit.EmptyState(title, body = body, icon = hub.core.android.ui.kit.Lucide.Wrench)
+        if (onBack != null) hub.core.android.ui.kit.HubButton(stringResource(R.string.back), onBack, kind = hub.core.android.ui.kit.ButtonKind.Secondary, icon = hub.core.android.ui.kit.Lucide.ArrowLeft)
     }
 }

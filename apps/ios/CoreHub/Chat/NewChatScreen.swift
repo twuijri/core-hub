@@ -8,6 +8,8 @@ struct NewChatScreen: View {
     let opened: (_ sessionID: String, _ profile: String, _ firstMessage: OutgoingMessage) -> Void
     /// Text shared from another app, put in the composer to review before sending.
     var seed: String? = nil
+    /// Pictures and files shared from another app, attached (and uploaded) as the draft opens.
+    var seedFiles: [URL] = []
     @Environment(AppModel.self) private var app
     @Environment(\.l10n) private var l10n
     @State private var draft = ""
@@ -68,6 +70,13 @@ struct NewChatScreen: View {
         .onAppear {
             if tray == nil { tray = AttachmentTray(app: app) }
             if let seed, draft.isEmpty { draft = seed }
+            if !seedFiles.isEmpty, let tray, tray.items.isEmpty {
+                for file in seedFiles {
+                    tray.addFile(file, profile: app.currentProfile)
+                    // Read into the tray: the shared copy in the App Group is not needed any more.
+                    try? FileManager.default.removeItem(at: file)
+                }
+            }
         }
         .navigationTitle(l10n("nav.new_chat"))
         .navigationBarTitleDisplayMode(.inline)
@@ -82,7 +91,10 @@ struct NewChatScreen: View {
                     Button {
                         agentID = agent.id
                     } label: {
-                        Text(agent.name)
+                        HStack(spacing: Space.s1) {
+                            AgentAvatar(identity: .of(agent), profile: agent.profile, size: 20)
+                            Text(agent.name)
+                        }
                             .font(.system(size: FontSize.sizeSm, weight: selected ? .semibold : .regular))
                             .padding(.horizontal, Space.s3)
                             .frame(height: Control.heightMd)

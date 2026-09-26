@@ -3,6 +3,7 @@ CFBundleDisplayName = "Core Hub";
 CFBundleName = "Core Hub";
 NSCameraUsageDescription = "Core Hub uses the camera to scan the pairing code your hub shows on the web, and to take photos you attach to a message.";
 NSLocalNetworkUsageDescription = "Core Hub connects to your hub on your local network.";
+NSLocationWhenInUseUsageDescription = "Core Hub tells an agent where this phone is when the agent asks and you allow it.";
 NSMicrophoneUsageDescription = "Core Hub listens while you dictate a message.";
 NSPhotoLibraryUsageDescription = "Core Hub attaches the photos you choose to your messages.";
 NSSpeechRecognitionUsageDescription = "Core Hub turns what you dictate into text.";

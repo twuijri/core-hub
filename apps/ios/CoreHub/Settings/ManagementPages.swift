@@ -21,7 +21,7 @@ struct ModelsPage: View {
                     Text(l10n("models.edit_on_web")).font(.system(size: FontSize.sizeXs)).foregroundStyle(Tone.textMuted)
                 }
                 Section(l10n("models.providers")) {
-                    if loaded.0.isEmpty { Text(l10n("common.empty")).foregroundStyle(Tone.textMuted) }
+                    if loaded.0.isEmpty { EmptyRow(icon: .box) }
                     ForEach(loaded.0, id: \.id) { provider in
                         VStack(alignment: .leading, spacing: 2) {
                             HStack {
@@ -51,28 +51,16 @@ struct DeviceConnectionsPage: View {
         VStack(spacing: 0) {
             Picker("", selection: $tab) {
                 Text(l10n("devices.tab_app")).tag(0)
-                if app.isAdmin { Text(l10n("devices.tab_devices")).tag(1) }
+                // Everyone sees their own devices; an admin sees everyone's (the hub decides).
+                Text(l10n("devices.tab_devices")).tag(1)
             }
             .pickerStyle(.segmented)
             .padding(Space.s3)
             if tab == 0 {
                 PairingMaker()
             } else {
-                AsyncContent(key: "devices") {
-                    try await app.api.call { try await DevicesAPI.devicesList(apiConfiguration: $0) }.items
-                } content: { devices, reload in
-                    List {
-                        if devices.isEmpty { Text(l10n("common.empty")).foregroundStyle(Tone.textMuted) }
-                        ForEach(devices, id: \.id) { device in
-                            HStack {
-                                Text(device.name)
-                                Spacer()
-                                StatusPill(text: device.online ? l10n("shell.connected") : l10n("shell.offline"), kind: device.online ? .good : .neutral)
-                            }
-                        }
-                    }
-                    .refreshable { reload() }
-                }
+                // The cards of #149: state, last active, push; rename, test the push, remove.
+                DeviceCardsList()
             }
         }
     }
@@ -112,7 +100,7 @@ struct PairingMaker: View {
                 Button {
                     Task { await make() }
                 } label: {
-                    Label(pairing == nil ? l10n("devices.make_pairing") : l10n("devices.new_pairing"), systemImage: "qrcode")
+                    LucideLabel(pairing == nil ? l10n("devices.make_pairing") : l10n("devices.new_pairing"), icon: .qrCode)
                 }
                 .buttonStyle(.borderedProminent)
                 .disabled(busy)
@@ -154,7 +142,7 @@ struct KnowledgePage: View {
             return try await app.api.call { try await KnowledgeAPI.knowledgeListItems(xHubProfile: profile, limit: 100, apiConfiguration: $0) }.items
         } content: { items, reload in
             List {
-                if items.isEmpty { Text(l10n("common.empty")).foregroundStyle(Tone.textMuted) }
+                if items.isEmpty { EmptyRow(icon: .bookOpen) }
                 ForEach(items, id: \.id) { item in
                     VStack(alignment: .leading, spacing: 2) {
                         HStack {
@@ -209,7 +197,7 @@ struct ThemePage: View {
             Section {
                 Picker(l10n("nav.theme"), selection: Binding(get: { app.theme }, set: { app.theme = $0 })) {
                     ForEach(ThemeChoice.allCases) { choice in
-                        Label(l10n(choice.labelKey), systemImage: choice.symbol).tag(choice)
+                        Label { Text(l10n(choice.labelKey)) } icon: { Image(lucide: choice.icon) }.tag(choice)
                     }
                 }
                 .pickerStyle(.inline)
@@ -308,7 +296,7 @@ struct HubPluginsPage: View {
             try await app.api.call { try await PluginsAPI.pluginsList(apiConfiguration: $0) }.items
         } content: { plugins, reload in
             List {
-                if plugins.isEmpty { Text(l10n("common.empty")).foregroundStyle(Tone.textMuted) }
+                if plugins.isEmpty { EmptyRow(icon: .puzzle) }
                 ForEach(plugins, id: \.id) { plugin in
                     HStack {
                         Text(plugin.name)

@@ -255,6 +255,57 @@ final class ChatModel {
     }
 }
 
+extension ChatModel {
+    /// The hub's Markdown transcript of the conversation (`sessions.export`), written where the
+    /// share sheet can hand it on. The request is the generated client's own; only the answer
+    /// is read as text, since the client would read it as JSON.
+    func exportMarkdown() async -> URL? {
+        guard let app else { return nil }
+        let profile = profile
+        let sessionID = sessionID
+        let title = state.title
+        do {
+            let text = try await app.api.call { configuration -> String in
+                let builder = SessionsAPI.sessionsExportWithRequestBuilder(
+                    xHubProfile: profile, sessionId: sessionID, format: .markdown, apiConfiguration: configuration
+                )
+                guard let url = URL(string: builder.URLString) else { throw HubFailure.signedOut }
+                var request = URLRequest(url: url)
+                for (name, value) in builder.headers { request.setValue(value, forHTTPHeaderField: name) }
+                request.setValue("text/markdown", forHTTPHeaderField: "Accept")
+                let (data, response) = try await URLSession.shared.data(for: request)
+                let status = (response as? HTTPURLResponse)?.statusCode ?? 0
+                guard (200..<300).contains(status) else {
+                    throw ErrorResponse.error(status, data, response, ChatExport.Refused())
+                }
+                return String(decoding: data, as: UTF8.self)
+            }
+            let folder = FileManager.default.temporaryDirectory.appendingPathComponent("export-\(sessionID)", isDirectory: true)
+            try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+            let file = folder.appendingPathComponent(ChatExport.fileName(title: title, sessionID: sessionID))
+            try text.write(to: file, atomically: true, encoding: .utf8)
+            return file
+        } catch {
+            actionError = HubFailure(error).describe(l10n)
+            return nil
+        }
+    }
+}
+
+enum ChatExport {
+    /// The hub answered the export with an error (its envelope is in the response).
+    struct Refused: Error {}
+
+    /// The file a conversation is shared as: its title, made safe for a file name.
+    static func fileName(title: String?, sessionID: String) -> String {
+        let bad = CharacterSet(charactersIn: "\\/:*?\"<>|\n\r\t")
+        let cleaned = (title ?? "").components(separatedBy: bad).joined(separator: " ")
+            .trimmingCharacters(in: .whitespaces)
+        let short = String(cleaned.prefix(80))
+        return (short.isEmpty ? sessionID : short) + ".md"
+    }
+}
+
 /// The ack of `subscribe`: `{ ok, replayed, truncated }` or `{ ok: false, error, code }`.
 struct SubscribeAck: Equatable {
     var ok: Bool

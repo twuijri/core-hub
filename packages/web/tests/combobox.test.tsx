@@ -1,7 +1,7 @@
 // The searchable picker itself (src/ui/Combobox.tsx): the field keeps the focus, the
 // arrows move a highlight, hundreds of rows stay a handful of elements, and every state
 // the list can be in says something.
-import { cleanup, render, screen, waitFor, within } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { I18nProvider } from '../src/i18n/context.js';
@@ -136,12 +136,21 @@ describe('the searchable picker', () => {
     expect(onChange).not.toHaveBeenCalled();
   });
 
-  it('groups by provider with a sticky header once more than one is in scope', async () => {
+  it('groups by provider, and holds the header at the top once its row scrolls away', async () => {
     const user = userEvent.setup();
     renderBox();
     await openBox(user);
-    await waitFor(() => expect(screen.getByTestId('combobox-sticky')).toBeTruthy());
-    expect(screen.getByTestId('combobox-sticky')).toHaveTextContent('anthropic');
+    await waitFor(() => expect(rows().length).toBeGreaterThan(0));
+    // At the top the header is the list's own row, said once — no second copy above it.
+    expect(screen.queryByTestId('combobox-sticky')).toBeNull();
+    expect(screen.getByTestId('combobox-list')).toHaveTextContent(/^anthropic/);
+    // Scrolled past it, the header is held over the rows.
+    const list = screen.getByTestId('combobox-list');
+    list.scrollTop = 60;
+    fireEvent.scroll(list);
+    await waitFor(() =>
+      expect(screen.getByTestId('combobox-sticky')).toHaveTextContent('anthropic'),
+    );
   });
 
   it('keeps 500 rows to a handful of elements, and still finds one of them', async () => {
@@ -207,7 +216,10 @@ describe('the searchable picker', () => {
     await openBox(user);
     await waitFor(() => expect(rows().length).toBeGreaterThan(0));
     expect(rows()[0]).toHaveTextContent('GPT-5');
-    expect(screen.getByTestId('combobox-sticky')).toHaveTextContent('Recent');
+    // "Recent" once, as the list's own header; the model once, under it.
+    expect(screen.queryByTestId('combobox-sticky')).toBeNull();
+    expect(screen.getAllByText('Recent')).toHaveLength(1);
+    expect(rows().filter((row) => row.textContent?.includes('GPT-5'))).toHaveLength(1);
   });
 
   it('reads right to left in Arabic, with the id kept left to right', async () => {

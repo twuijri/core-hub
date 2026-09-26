@@ -116,6 +116,15 @@ export interface AttachmentsPort {
     scope: { workspace: string; userId: string },
     file: { name: string; mime: string; bytes: Buffer },
   ): Promise<Omit<AttachmentSummary, 'url'>>;
+  /**
+   * A one-hour address a media element plays one file of the working folder from, byte range
+   * by byte range (contract `sessions.createFileStream`, decision §98). Absent where no
+   * `knowledge` is wired: the operation is then `503`.
+   */
+  streamFile?(
+    scope: { workspace: string; profile: string; userId: string },
+    file: { root: string; relative: string; mime: string },
+  ): { url: string; expires_at: string };
 }
 
 export interface AgentRunRequest {
@@ -290,6 +299,14 @@ export interface AgentCompressResult {
   message: string | null;
 }
 
+/** `sessions.getContextBreakdown`'s answer from the agent (decision §102). */
+export interface AgentContextBreakdown {
+  usedTokens: number;
+  windowTokens: number | null;
+  estimated: boolean;
+  categories: Array<{ id: string; label: string; tokens: number }>;
+}
+
 export interface AgentRunner {
   /** Hand the turn to the agent. Throws to fail the run before it streams. */
   start(request: AgentRunRequest): Promise<AgentRunAccepted>;
@@ -311,6 +328,11 @@ export interface AgentRunner {
    * `HubError('state_invalid', {reason: 'command_unsupported'})`.
    */
   compress?(request: AgentCompressRequest): Promise<AgentCompressResult>;
+  /**
+   * Optional (decision §102): what fills the window of this conversation, by category, from
+   * the conversation the agent already has open. `null` when none is open or it cannot tell.
+   */
+  contextBreakdown?(sessionId: string): Promise<AgentContextBreakdown | null>;
   /** Optional: guidance into the run in flight without stopping it (`sessions.steerRun`). */
   steer?(runId: string, text: string): Promise<'queued' | 'rejected'>;
   /**
@@ -424,4 +446,14 @@ export interface SessionsPorts {
   agentTimeoutMs: number;
   /** Who continues a workflow when its gate is answered; `null` when nobody can. */
   gate?: (() => WorkflowGate | null) | undefined;
+  /** Which room a seat sits in, for `Approval.room_id`; `null` when no rooms are composed. */
+  roomOfSeat?: (() => RoomOfSeat | null) | undefined;
 }
+
+/**
+ * The room a seat sits in (`rooms`, DECISIONS §69), or `null` for a seat that is gone. An
+ * approval raised in a seat's own session names its room with it (`Approval.room_id`), so a
+ * pending list opens it in the room. The composition root joins it (`registerRoomOfSeat`),
+ * so neither module imports the other.
+ */
+export type RoomOfSeat = (workspace: string, seatId: string) => string | null;

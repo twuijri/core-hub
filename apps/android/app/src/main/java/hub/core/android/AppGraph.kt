@@ -11,7 +11,9 @@ import hub.core.android.data.SessionStore
 import hub.core.android.data.StoredSession
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.ProcessLifecycleOwner
+import hub.core.android.phone.DeviceProof
 import hub.core.android.phone.DeviceSettings
+import hub.core.android.phone.KeystoreProofKeys
 import hub.core.android.phone.NoticeTracker
 import hub.core.android.phone.NoticeWorker
 import hub.core.android.phone.Notifier
@@ -80,11 +82,14 @@ class AppPrefs(private val prefs: SharedPreferences) {
     }
 }
 
-/** Everything long-lived the screens share, made once per process. */
-class AppGraph(context: Context) {
+/**
+ * Everything long-lived the screens share, made once per process. [sealer] guards the stored
+ * tokens: the Android Keystore in the app; the JVM screenshot tests hand in their own.
+ */
+class AppGraph(context: Context, sealer: hub.core.android.data.Sealer = KeystoreSealer()) {
     val prefs = AppPrefs(context.getSharedPreferences("corehub.prefs", Context.MODE_PRIVATE))
     val store = SessionStore(
-        SecureStore(context.getSharedPreferences("corehub.secure", Context.MODE_PRIVATE), KeystoreSealer()),
+        SecureStore(context.getSharedPreferences("corehub.secure", Context.MODE_PRIVATE), sealer),
     )
     private val _signedOut = MutableSharedFlow<String?>(extraBufferCapacity = 4)
 
@@ -93,16 +98,24 @@ class AppGraph(context: Context) {
     val http = HttpClients(store, { prefs.effectiveLanguage.tag }) { reason -> _signedOut.tryEmit(reason) }
     val realtime = Realtime(http.plain)
 
+    /** The agents of each profile, for their names, marks and pictures (`ui/components/AgentIdentity.kt`). */
+    val agents = hub.core.android.ui.components.AgentDirectory(this)
+
     /** This phone's own choices (This device), kept on the phone. */
     val device = DeviceSettings(context.getSharedPreferences("corehub.device", Context.MODE_PRIVATE))
     val speaker = Speaker(context)
     private val notifier = Notifier(context)
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
 
+    /** This install's key for the push relay's device proof (DeviceProof.kt). */
+    private val proofKeys = KeystoreProofKeys()
+
     /** FCM: registered with the hub while someone is signed in, when this build has Firebase. */
     val push = PushManager(
         context,
-        PushRegistrar(store, { apis(it) }) { thisPhone(store.deviceKey, DeviceInfos.current(context).name, pushBlocker()) },
+        PushRegistrar(store, { apis(it) }, { token -> DeviceProof.proof(proofKeys, "fcm", token) }) {
+            thisPhone(store.deviceKey, DeviceInfos.current(context).name, pushBlocker())
+        },
         { prefs.effectiveLanguage.tag },
         scope,
     )
@@ -118,10 +131,20 @@ class AppGraph(context: Context) {
         sdk = android.os.Build.VERSION.SDK_INT,
     )
 
-    /** Tells the hub what this phone is now; at each launch and after the permission answer. */
+    /** Tells the hub what this phone is now; at each launch, after the permission answer, and when the location choice changes. */
     fun reportDevice() {
-        scope.launch { push.registrar.report(thisPhoneReport(pushBlocker(), DeviceInfos.current(appContext))) }
+        val capabilities = listOf(hub.core.android.phone.Locating.capability(locationChoices.choice.value))
+        scope.launch { push.registrar.report(thisPhoneReport(pushBlocker(), DeviceInfos.current(appContext), capabilities)) }
     }
+
+    /** Whether agents may ask where this phone is (§105): asked once, kept here. */
+    val locationChoices = hub.core.android.phone.LocationChoices(context.getSharedPreferences("corehub.device", Context.MODE_PRIVATE))
+
+    /** Location requests to answer, from `/rt/devices` and the catch-up when the app comes back. */
+    val locations = hub.core.android.phone.LocationRequests(
+        { store.current?.let { apis(it) to it } },
+        locationChoices,
+    ) { hub.core.android.phone.PhoneLocation.read(appContext) }
 
     /** True while a screen of the app is visible. */
     fun inForeground(): Boolean = ProcessLifecycleOwner.get().lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED)
@@ -131,6 +154,7 @@ class AppGraph(context: Context) {
         // While the process lives, a notice the hub announces becomes a notification when no screen shows it.
         scope.launch {
             realtime.events.collect { e ->
+                hub.core.android.phone.Locating.requestOf(e)?.let { request -> launch { locations.heard(request) } }
                 if (e.namespace != DEVICES_NAMESPACE || e.event != "notice.created") return@collect
                 val notice = e.payload["notice"]?.let {
                     runCatching { Serializer.kotlinxSerializationJson.decodeFromJsonElement(Notice.serializer(), it) }.getOrNull()
@@ -150,6 +174,9 @@ class AppGraph(context: Context) {
 
     /** Text another app shared to Core Hub, waiting to become a new chat's draft. */
     val sharedText = MutableStateFlow<String?>(null)
+
+    /** Pictures and files another app shared, copied into the cache, waiting for the new chat's tray. */
+    val sharedFiles = MutableStateFlow<List<hub.core.android.phone.Share.SharedFile>>(emptyList())
 
     private var apisFor: String? = null
     private var cachedApis: HubApis? = null
@@ -177,6 +204,7 @@ class AppGraph(context: Context) {
         push.signOut(session)
         if (logout) hubCall { apis(session).auth.authLogout() }
         realtime.close()
+        agents.forget()
         store.save(null)
     }
 
@@ -202,6 +230,8 @@ class AppGraph(context: Context) {
                 ) {
                     push.refresh()
                 }
+                // A location request asked while the app was closed waits to be answered.
+                if (event == Lifecycle.Event.ON_START && store.current != null) scope.launch { locations.catchUp() }
             },
         )
         // The background check runs while someone is signed in, This device allows it, and push
@@ -218,14 +248,17 @@ class AppGraph(context: Context) {
     }
 }
 
-class CoreHubApp : Application() {
+open class CoreHubApp : Application() {
     lateinit var graph: AppGraph
         private set
 
     override fun onCreate() {
         super.onCreate()
-        graph = AppGraph(this)
+        graph = makeGraph()
     }
+
+    /** The graph of this process; the screenshot tests' application builds it without the Keystore. */
+    protected open fun makeGraph(): AppGraph = AppGraph(this)
 }
 
 val Context.graph: AppGraph get() = (applicationContext as CoreHubApp).graph

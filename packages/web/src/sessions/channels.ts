@@ -5,7 +5,7 @@
 // Hermes announces nothing when a channel message arrives, so the list asks again every
 // `POLL_MS` while it is on screen (and the tab is visible); the hub answers from what it read
 // unless Hermes's store changed, so the polling costs Hermes nothing when nothing happens.
-import { useQuery } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '../auth/context.js';
 import { ALL_PROFILES_KEY } from '../hub/queries.js';
 import type { Translator } from '../i18n/index.js';
@@ -21,6 +21,10 @@ export type ChannelUnavailable = Schemas['ChannelConversationsUnavailable'];
 export const POLL_MS = 45_000;
 /** Between two reads of an open transcript. */
 export const TRANSCRIPT_POLL_MS = 30_000;
+/** How many of each profile's conversations a list reads, and how many more "older" adds. */
+export const CHANNEL_PAGE = 100;
+/** The most the hub lists per profile (`limit`, §103). */
+export const CHANNEL_MAX = 1000;
 
 /** `?source=channel` on the chat's address: this id is Hermes's, not a hub session's. */
 export const SOURCE_PARAM = 'source';
@@ -40,16 +44,30 @@ const inProfile = (profile: string | null | undefined) =>
  * the one the list is narrowed to. Off while `enabled` is false (the archive is on screen).
  */
 export function useChannelConversations(
-  filters: { allProfiles?: boolean; profile?: string | null; enabled?: boolean } = {},
+  filters: {
+    allProfiles?: boolean;
+    profile?: string | null;
+    enabled?: boolean;
+    /** Each profile's most recent this many (§103); the hub's own 100 when not said. */
+    limit?: number;
+  } = {},
 ) {
   const { client, profile, session } = useAuth();
   const listed = filters.profile ?? profile;
+  const limit = filters.limit ?? CHANNEL_PAGE;
   return useQuery({
-    queryKey: channelKeys.list(filters.allProfiles ? ALL_PROFILES_KEY : listed),
+    queryKey: [...channelKeys.list(filters.allProfiles ? ALL_PROFILES_KEY : listed), limit],
+    // The rows already shown stay while a longer list is read.
+    placeholderData: (previous) => previous,
     queryFn: async () =>
       (
         await client.request('get', '/channel-conversations', {
-          ...(filters.allProfiles ? { query: { profiles: 'all' as const } } : {}),
+          // Hidden ones too, marked: the list leaves them out unless asked to show them (§88).
+          query: {
+            hidden: 'include' as const,
+            ...(filters.allProfiles ? { profiles: 'all' as const } : {}),
+            ...(limit !== CHANNEL_PAGE ? { limit } : {}),
+          },
           ...inProfile(filters.profile),
         })
       ).data,
@@ -58,6 +76,52 @@ export function useChannelConversations(
     // A list nobody is looking at does not need to be current.
     refetchIntervalInBackground: false,
     staleTime: 10_000,
+  });
+}
+
+/**
+ * The pages before the latest one, read when the person asks for older messages (§103): each
+ * page is Hermes's own, asked from where the one after it stopped (`next_offset`).
+ */
+export function useOlderChannelMessages(id: string) {
+  const { client } = useAuth();
+  return useMutation({
+    mutationFn: async (offset: number) =>
+      (
+        await client.request('get', '/channel-conversations/{conversation_id}/messages', {
+          params: { conversation_id: id },
+          query: { offset },
+        })
+      ).data,
+  });
+}
+
+/**
+ * A picture the person sent on the channel, as an address the page can draw (§103): read with
+ * the person's own credentials, kept as a blob for as long as it is on screen.
+ */
+export function useChannelPicture(conversationId: string, pictureId: string, enabled: boolean) {
+  const { client, profile } = useAuth();
+  return useQuery({
+    queryKey: ['channel-picture', profile, conversationId, pictureId] as const,
+    queryFn: async ({ signal }) => {
+      const res = await client.request(
+        'get',
+        '/channel-conversations/{conversation_id}/pictures/{picture_id}',
+        {
+          params: { conversation_id: conversationId, picture_id: pictureId },
+          responseKind: 'bytes',
+          signal,
+        },
+      );
+      return new Blob([res.data as unknown as ArrayBuffer], {
+        type: res.headers.get('content-type') ?? 'image/jpeg',
+      });
+    },
+    enabled,
+    staleTime: Infinity,
+    gcTime: 5 * 60_000,
+    retry: false,
   });
 }
 
@@ -75,6 +139,43 @@ export function useChannelConversation(id: string) {
     refetchInterval: TRANSCRIPT_POLL_MS,
     refetchIntervalInBackground: false,
   });
+}
+
+/**
+ * Hiding one from the person's own list, showing it again, and — for an admin — deleting it
+ * from Hermes for good (contract decision §88). Each in the conversation's own profile; the
+ * lists read again afterwards.
+ */
+export function useChannelConversationWrites() {
+  const { client } = useAuth();
+  const queryClient = useQueryClient();
+  const settle = () => queryClient.invalidateQueries({ queryKey: channelKeys.all });
+  const call =
+    (method: 'put' | 'delete', path: '/channel-conversations/{conversation_id}/hidden') =>
+    async (conversation: Pick<ChannelConversation, 'id' | 'profile'>) => {
+      await client.request(method, path, {
+        params: { conversation_id: conversation.id },
+        ...inProfile(conversation.profile),
+      });
+    };
+  const hide = useMutation({
+    mutationFn: call('put', '/channel-conversations/{conversation_id}/hidden'),
+    onSettled: settle,
+  });
+  const unhide = useMutation({
+    mutationFn: call('delete', '/channel-conversations/{conversation_id}/hidden'),
+    onSettled: settle,
+  });
+  const remove = useMutation({
+    mutationFn: async (conversation: Pick<ChannelConversation, 'id' | 'profile'>) => {
+      await client.request('delete', '/channel-conversations/{conversation_id}', {
+        params: { conversation_id: conversation.id },
+        ...inProfile(conversation.profile),
+      });
+    },
+    onSettled: settle,
+  });
+  return { hide, unhide, remove };
 }
 
 /** The address a channel conversation opens at: the chat's, marked as Hermes's id. */

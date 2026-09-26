@@ -15,8 +15,9 @@
  * evidence): Claude Code's bridge loads user settings (`settingSources: ["user", …]`) from
  * `CLAUDE_CONFIG_DIR` or `~/.claude`; Codex reads `CODEX_HOME` or `~/.codex`; Gemini CLI
  * `$GEMINI_CLI_HOME/.gemini` or `~/.gemini`; Qwen Code `QWEN_HOME` or `~/.qwen`; Kimi Code
- * `KIMI_CODE_HOME` or `~/.kimi-code`; Pi `PI_CODING_AGENT_DIR` or `~/.pi/agent`. OpenCode is
- * not listed: its files were not verified. Each agent's own variable is honoured, from the
+ * `KIMI_CODE_HOME` or `~/.kimi-code`; Pi `PI_CODING_AGENT_DIR` or `~/.pi/agent`; Goose
+ * `~/.config/goose` (its settings file only). OpenCode and Grok Build are not listed: their
+ * files were not verified. Each agent's own variable is honoured, from the
  * environment the hub hands its agents, so the page edits the file the agent will read.
  *
  * **What a write does.** The `revision` read must still be the file's (a hash of its bytes) or
@@ -49,7 +50,7 @@ export const CONFIG_FILE_MAX_BYTES = 1024 * 1024;
 /** Backups kept per file. */
 export const CONFIG_FILE_BACKUPS = 10;
 
-export type ConfigFileLanguage = 'markdown' | 'json' | 'toml';
+export type ConfigFileLanguage = 'markdown' | 'json' | 'toml' | 'yaml';
 
 interface Folder {
   /** The agent's own variable that moves the folder, or `null`. */
@@ -125,6 +126,13 @@ export const CONFIG_FILES: Readonly<Record<string, AgentFiles>> = {
       { key: 'instructions', label: INSTRUCTIONS, name: 'AGENTS.md', language: 'markdown' },
       { key: 'settings', label: SETTINGS, name: 'config.toml', language: 'toml' },
     ],
+  },
+  // Goose reads `GOOSE_PROVIDER`, `GOOSE_MODEL` and the rest of its settings from
+  // `~/.config/goose/config.yaml` (checked on 1.52.0, 2026-09-26: an ACP session starts only
+  // once both are set). A host that moves `XDG_CONFIG_HOME` is not followed; the image does not.
+  goose: {
+    folder: { variable: null, replaces: 'folder', under: ['.config', 'goose'] },
+    files: [{ key: 'settings', label: SETTINGS, name: 'config.yaml', language: 'yaml' }],
   },
   pi: {
     folder: { variable: 'PI_CODING_AGENT_DIR', replaces: 'folder', under: ['.pi', 'agent'] },

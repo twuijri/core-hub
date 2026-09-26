@@ -7,13 +7,17 @@
  * person: which hub the window talks to and in which mode, the app's version, and whether
  * closing the window keeps it in the tray.
  *
- * Voice input, dictation language and spoken replies are listed by the navigation note too;
- * the desktop app does not do voice yet, and the page says so rather than showing switches
- * that do nothing.
+ * Voice (B11) is a folded part: the microphone as the OS answered for the app, and a test of
+ * dictation and reading aloud through the hub. In local mode an admin also gets «الوصول من خارج
+ * البيت» / "Reach from outside" (DECISIONS §95): the way a phone reaches the hub on this
+ * computer through the person's own Cloudflare Tunnel or Tailscale.
  */
 import { useEffect, useState } from 'react';
 import { useI18n } from '../i18n/context.js';
 import { useMeta } from '../hub/queries.js';
+import { useAuth } from '../auth/context.js';
+import { OutsideAccessSection } from '../desktop/OutsideAccessSection.js';
+import { VoiceSection } from '../desktop/VoiceSection.js';
 import { desktopBridge, type DesktopState } from '../desktop/desktop.js';
 import { HelperSection } from '../desktop/HelperSection.js';
 import { UpdatesSection } from '../desktop/UpdatesSection.js';
@@ -29,6 +33,8 @@ export function ThisDeviceTab() {
   const { t } = useI18n();
   const bridge = desktopBridge();
   const meta = useMeta();
+  const { user } = useAuth();
+  const isAdmin = user?.role === 'owner' || user?.role === 'admin';
   const [state, setState] = useState<DesktopState | null>(null);
   const [failed, setFailed] = useState(false);
 
@@ -159,12 +165,9 @@ export function ThisDeviceTab() {
 
       <UpdatesSection bridge={bridge} version={state.appVersion} />
 
-      <section className="flex flex-col gap-3" aria-labelledby="this-device-voice">
-        <h3 id="this-device-voice" className="text-sm font-semibold">
-          {t('this_device.voice')}
-        </h3>
-        <Notice>{t('this_device.voice_later')}</Notice>
-      </section>
+      <VoiceSection bridge={bridge} />
+
+      {state.mode === 'local' && isAdmin && <OutsideAccessSection />}
     </div>
   );
 }

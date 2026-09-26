@@ -19,13 +19,15 @@ import { hideRunPaths } from '../files/run-paths.js';
 import { useI18n } from '../i18n/context.js';
 import type { Message, Run, RunChanges } from '../types.js';
 import { highlightParts, matchRanges } from '../ui/combobox-filter.js';
+import { AgentFace, type AgentIdentity } from '../agents/identity.js';
 import { Avatar } from '../ui/Avatar.js';
 import { Badge } from '../ui/Badge.js';
 import { agentMark } from '../ui/brand/marks.js';
 import { MessageActions } from './MessageActions.js';
 import { useOpenFile, useSessionFilesOptional } from '../files/context.js';
 import { lastReplyOfRuns } from '../files/changes.js';
-import { RunChangesCard } from '../files/RunChangesCard.js';
+import { LiveRunChanges, RunChangesCard } from '../files/RunChangesCard.js';
+import { InlineMedia, isPlayable } from './InlineMedia.js';
 import { Markdown } from './Markdown.js';
 import { Reasoning } from './Reasoning.js';
 import { AnsweredQuestions } from './AnsweredQuestions.js';
@@ -154,7 +156,7 @@ function InlineImage({
  * name. Both open beside the chat, like any other file of the conversation (decision §48) —
  * on the person's messages and on the agent's replies alike.
  */
-function Attachments({ message }: { message: Message }) {
+export function Attachments({ message }: { message: Message }) {
   const { t } = useI18n();
   const files = useSessionFilesOptional();
   const open = useOpenFile();
@@ -180,6 +182,41 @@ function Attachments({ message }: { message: Message }) {
                 fallback={<Badge>{label}</Badge>}
                 onOpen={file && open ? () => open(file.key) : null}
               />
+            </li>
+          );
+        }
+        const mime = 'mime' in block ? (block.mime ?? file?.mime) : file?.mime;
+        // Any video or sound the browser may play, by its type or its name (§98); one it cannot
+        // play falls back to the name under it.
+        const playable =
+          'attachment_id' in block && block.attachment_id
+            ? isPlayable(mime, ('name' in block ? block.name : null) ?? file?.name)
+            : null;
+        const chip =
+          file && open ? (
+            <button
+              type="button"
+              className="msg-attachment-open"
+              aria-label={t('files.open', { name: file.name })}
+              onClick={() => open(file.key)}
+              data-testid="attachment-open"
+            >
+              <Badge>{label}</Badge>
+            </button>
+          ) : (
+            <Badge>{label}</Badge>
+          );
+        if (playable && 'attachment_id' in block && block.attachment_id) {
+          // A video (a render a program made, say) plays in the reply; its name stays under it.
+          return (
+            <li key={i} className="msg-attachment-media">
+              <InlineMedia
+                attachmentId={block.attachment_id}
+                name={block.name ?? file?.name ?? playable}
+                kind={playable}
+                fallback={null}
+              />
+              {chip}
             </li>
           );
         }
@@ -212,14 +249,18 @@ export function MessageView({
   showCost = false,
   runs = {},
   markSlug,
+  identity,
   anchored = false,
   mark = null,
   notice = null,
   changes,
+  liveSessionId,
   onReply,
   onFork,
 }: {
   message: Message;
+  /** The conversation, when this reply may be live: its run's changes so far are drawn under it. */
+  liveSessionId?: string | undefined;
   /** The files this reply's run changed, when it is the run's last reply (decision §49). */
   changes?: RunChanges | undefined;
   /** Continues the turn above it: no name, no avatar, the tighter gap. */
@@ -235,6 +276,11 @@ export function MessageView({
    * message must stay a thing that can be drawn without a hub behind it.
    */
   markSlug?: string | undefined;
+  /**
+   * Who wrote it, resolved against the registry (`agentIdentity`): the real name instead of
+   * the hub's placeholder «agent», and whether the agent has a picture of its own.
+   */
+  identity?: AgentIdentity | undefined;
   /** The message a search result opened the conversation at (anchor.ts): flashed once. */
   anchored?: boolean;
   /** The searched words, marked inside this message's text. */
@@ -294,7 +340,7 @@ export function MessageView({
   }
 
   const streaming = message.status === 'streaming';
-  const name = message.author.name || t('chat.assistant');
+  const name = identity?.name ?? (message.author.name || t('chat.assistant'));
   const seconds = thoughtSeconds(message, runs);
   const reasoning =
     showReasoning && !streaming && reasoningWorthShowing(message) ? message.reasoning!.text : null;
@@ -309,12 +355,16 @@ export function MessageView({
     >
       {grouped ? (
         <span className="msg-gutter" aria-hidden />
+      ) : // The agent's face (agents/identity.tsx): its own picture when it has one, else its
+      // catalog mark, else its initial.
+      identity?.hasPicture ? (
+        <AgentFace identity={identity} size="sm" testId="message-agent-face" />
       ) : (
         <Avatar
           name={name}
-          src={message.author.avatar?.url ?? null}
           size="sm"
-          mark={agentMark(markSlug ?? '', 16)}
+          mark={agentMark(identity?.slug ?? markSlug ?? '', 16)}
+          testId="message-agent-face"
         />
       )}
       <div className="msg-stack">
@@ -346,6 +396,14 @@ export function MessageView({
         {/* The files the reply carries: what the agent left in the run's output folder. */}
         {!streaming && <Attachments message={message} />}
         {changes && !streaming && <RunChangesCard changes={changes} />}
+        {/* While the run works: what it has changed so far (decision §102). */}
+        {streaming && liveSessionId && message.run_id && (
+          <LiveRunChanges
+            sessionId={liveSessionId}
+            runId={message.run_id}
+            revision={message.tool_calls?.filter((call) => call.status !== 'running').length ?? 0}
+          />
+        )}
         {!streaming && <FallbackNote run={message.run_id ? runs[message.run_id] : undefined} />}
         {message.usage && !streaming && (
           <p className="msg-usage" dir="auto">
@@ -375,6 +433,7 @@ export function Transcript({
   showCost = false,
   runs,
   slugOf,
+  identityOf,
   anchor = null,
   noticeFor,
   onReply,
@@ -386,6 +445,8 @@ export function Transcript({
   runs: Record<string, Run>;
   /** The registry's answer for an author id; the transcript itself asks no questions. */
   slugOf?: ((authorId: string | null) => string | undefined) | undefined;
+  /** The registry's identity for an agent message's author (`agentIdentity`). */
+  identityOf?: ((message: Message) => AgentIdentity) | undefined;
   /** The message a search opened the conversation at, and the words to mark in it. */
   anchor?: { messageId: string; query: string } | null;
   /** What hangs under a message: a failed run's notice, on the turn that failed. */
@@ -411,10 +472,12 @@ export function Transcript({
           showCost={showCost}
           runs={runs}
           markSlug={slugOf?.(turn.message.author.id ?? null)}
+          identity={turn.message.role === 'assistant' ? identityOf?.(turn.message) : undefined}
           anchored={turn.message.id === anchor?.messageId}
           mark={turn.message.id === anchor?.messageId ? anchor.query : null}
           notice={noticeFor?.(turn.message) ?? null}
           changes={changesOf(turn.message)}
+          liveSessionId={files?.sessionId}
           onReply={onReply}
           onFork={onFork}
         />

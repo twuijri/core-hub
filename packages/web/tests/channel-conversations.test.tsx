@@ -9,7 +9,7 @@
  * contract. The hub's half is `modules/sessions/channel-conversations.test.ts`.
  */
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { cleanup, render, screen, waitFor, within } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter, Route, Routes } from 'react-router';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -140,13 +140,17 @@ function memoryStorage(): Storage {
 }
 
 interface Seen {
+  method: string;
   path: string;
   query: URLSearchParams;
   profile: string | null;
 }
 
-function fakeHub(options: { unreachable?: boolean } = {}) {
+function fakeHub(options: { unreachable?: boolean; paged?: boolean } = {}) {
   const seen: Seen[] = [];
+  // The hub's per-person marks and Hermes's store, as the routes change them (§88).
+  const hidden = new Set<string>();
+  const gone = new Set<string>();
   const json = (body: unknown, status = 200) =>
     Promise.resolve(
       new Response(JSON.stringify(body), {
@@ -158,12 +162,79 @@ function fakeHub(options: { unreachable?: boolean } = {}) {
     const url = new URL(String(input));
     const path = url.pathname.replace(/^\/api\/v1/, '');
     const profile = new Headers(init?.headers).get('X-Hub-Profile');
-    seen.push({ path, query: url.searchParams, profile });
+    const method = (init?.method ?? 'GET').toUpperCase();
+    seen.push({ method, path, query: url.searchParams, profile });
     if (path === '/profiles')
       return json({ items: [{ id: '01J8QK3ZR2W7M5N4P6T8V9X0P1', slug: 'default', name: 'D' }] });
+    const mark = /^\/channel-conversations\/([^/]+)\/hidden$/.exec(path);
+    if (mark) {
+      if (method === 'PUT') hidden.add(decodeURIComponent(mark[1]!));
+      else hidden.delete(decodeURIComponent(mark[1]!));
+      return Promise.resolve(new Response(null, { status: 204 }));
+    }
+    const one = /^\/channel-conversations\/([^/]+)$/.exec(path);
+    if (one && method === 'DELETE') {
+      gone.add(decodeURIComponent(one[1]!));
+      return Promise.resolve(new Response(null, { status: 204 }));
+    }
+    // Paging and pictures (§103): the list has older conversations until 200 are asked for,
+    // the transcript an older page, and the person sent a picture Hermes still keeps.
+    if (options.paged && path === '/channel-conversations') {
+      const limit = Number(url.searchParams.get('limit') ?? 100);
+      const older = { ...WA, id: '20260801_080000_00000001', peer_name: 'زبون قديم' };
+      return json({
+        items: limit >= 200 ? [TG, WA, older] : [TG, WA],
+        unavailable: [],
+        has_more: limit < 200,
+      });
+    }
+    if (options.paged && path === `/channel-conversations/${TG.id}/messages`) {
+      if (url.searchParams.get('offset') === '500')
+        return json({
+          conversation: TG,
+          items: [
+            {
+              id: '0',
+              role: 'user',
+              text: 'أول رسالة',
+              created_at: TG.started_at,
+              attachments: [],
+            },
+          ],
+          has_more: false,
+          next_offset: null,
+        });
+      return json({
+        conversation: TG,
+        items: [
+          {
+            id: '1',
+            role: 'user',
+            text: 'هذه الفاتورة',
+            created_at: TG.started_at,
+            attachments: [
+              { id: 'img_a1b2c3d4e5f6.png', kind: 'image', available: true },
+              { id: 'img_000000000000.png', kind: 'image', available: false },
+            ],
+          },
+        ],
+        has_more: true,
+        next_offset: 500,
+      });
+    }
+    if (options.paged && path.includes('/pictures/'))
+      return Promise.resolve(
+        new Response(new Uint8Array([0x89, 0x50, 0x4e, 0x47]), {
+          status: 200,
+          headers: { 'Content-Type': 'image/png' },
+        }),
+      );
     if (path === '/channel-conversations')
       return json({
-        items: [TG, WA],
+        items: [TG, WA]
+          .filter((c) => !gone.has(c.id))
+          .filter((c) => url.searchParams.get('hidden') === 'include' || !hidden.has(c.id))
+          .map((c) => (hidden.has(c.id) ? { ...c, hidden: true } : c)),
         unavailable: options.unreachable
           ? [{ profile: 'default', reason: 'hermes_unreachable', message: 'down' }]
           : [],
@@ -187,10 +258,12 @@ function fakeHub(options: { unreachable?: boolean } = {}) {
 function Providers({
   fetchImpl,
   path,
+  role = 'owner',
   children,
 }: {
   fetchImpl: typeof fetch;
   path: string;
+  role?: 'owner' | 'member';
   children: React.ReactNode;
 }) {
   const store = new SessionStore(memoryStorage());
@@ -199,7 +272,7 @@ function Providers({
     token: 't',
     refresh_token: null,
     expires_at: null,
-    user: { id: 'u', username: 'admin', display_name: 'Admin', role: 'owner' },
+    user: { id: 'u', username: 'admin', display_name: 'Admin', role },
   });
   return (
     <ThemeProvider>
@@ -280,6 +353,135 @@ describe('the chats list shows them in their channel group', () => {
   });
 });
 
+describe('hiding one, and deleting one from Hermes (§88)', () => {
+  const rowOf = async (id: string) =>
+    (await screen.findAllByTestId('channel-row')).find((r) => r.dataset.conversationId === id)!;
+  /** The row's own "More" menu, opened from the keyboard (see helpers/ui.ts). */
+  const openMenu = async (user: ReturnType<typeof userEvent.setup>, id: string) => {
+    const more = within(await rowOf(id)).getByTestId('channel-more-button');
+    more.focus();
+    await user.keyboard('{Enter}');
+    await screen.findByTestId('channel-more');
+  };
+
+  it('hides one from the person’s own list, and brings it back from "Show hidden"', async () => {
+    const user = userEvent.setup();
+    const hub = fakeHub();
+    render(
+      <Providers fetchImpl={hub.fetchImpl} path="/chat">
+        <SessionList />
+      </Providers>,
+    );
+    await openMenu(user, TG.id);
+    await user.click(await screen.findByRole('menuitem', { name: 'إخفاء من قائمتي' }));
+    await waitFor(() =>
+      expect(
+        hub.seen.some(
+          (c) => c.method === 'PUT' && c.path === `/channel-conversations/${TG.id}/hidden`,
+        ),
+      ).toBe(true),
+    );
+    // Gone from the list; WhatsApp stays. Hermes was not asked to delete anything.
+    await waitFor(() =>
+      expect(screen.getAllByTestId('channel-row').map((r) => r.dataset.conversationId)).toEqual([
+        WA.id,
+      ]),
+    );
+    expect(hub.seen.some((c) => c.method === 'DELETE')).toBe(false);
+
+    const toggle = screen.getByTestId('channel-show-hidden');
+    expect(toggle).toHaveTextContent('إظهار المحادثات المخفية (1)');
+    await user.click(toggle);
+    const back = await rowOf(TG.id);
+    expect(back.dataset.hidden).toBe('true');
+    await openMenu(user, TG.id);
+    await user.click(await screen.findByRole('menuitem', { name: 'إظهار مرة أخرى' }));
+    await waitFor(() =>
+      expect(
+        hub.seen.some(
+          (c) => c.method === 'DELETE' && c.path === `/channel-conversations/${TG.id}/hidden`,
+        ),
+      ).toBe(true),
+    );
+    await waitFor(() => expect(screen.queryByTestId('channel-show-hidden')).toBeNull());
+  });
+
+  it('deletes one from Hermes for an admin, after a confirmation that says it is permanent', async () => {
+    const user = userEvent.setup();
+    const hub = fakeHub();
+    render(
+      <Providers fetchImpl={hub.fetchImpl} path="/chat">
+        <SessionList />
+      </Providers>,
+    );
+    await openMenu(user, WA.id);
+    await user.click(await screen.findByRole('menuitem', { name: 'حذف من هرمز…' }));
+    const dialog = await screen.findByTestId('confirm-dialog');
+    expect(dialog).toHaveTextContent('حذف «مجموعة العائلة» من هرمز؟');
+    expect(dialog).toHaveTextContent('نهائيًا');
+    expect(dialog).toHaveTextContent('لا يمكن استرجاعها');
+    // Nothing is sent before the answer.
+    expect(hub.seen.some((c) => c.method === 'DELETE')).toBe(false);
+    await user.click(within(dialog).getByRole('button', { name: 'حذف نهائي' }));
+    await waitFor(() =>
+      expect(
+        hub.seen.some((c) => c.method === 'DELETE' && c.path === `/channel-conversations/${WA.id}`),
+      ).toBe(true),
+    );
+    await waitFor(() =>
+      expect(screen.getAllByTestId('channel-row').map((r) => r.dataset.conversationId)).toEqual([
+        TG.id,
+      ]),
+    );
+  });
+
+  it('offers a member hiding only: deleting from Hermes is an admin’s', async () => {
+    const user = userEvent.setup();
+    const hub = fakeHub();
+    render(
+      <Providers fetchImpl={hub.fetchImpl} path="/chat" role="member">
+        <SessionList />
+      </Providers>,
+    );
+    await openMenu(user, TG.id);
+    expect(await screen.findByRole('menuitem', { name: 'إخفاء من قائمتي' })).toBeTruthy();
+    expect(screen.queryByRole('menuitem', { name: 'حذف من هرمز…' })).toBeNull();
+    await user.keyboard('{Escape}');
+    // The right-click offers the same, and no more.
+    fireEvent.contextMenu(await rowOf(TG.id));
+    const menu = await screen.findByTestId('channel-menu');
+    expect(menu).toHaveTextContent('إخفاء من قائمتي');
+    expect(menu).not.toHaveTextContent('حذف من هرمز');
+  });
+
+  it('puts the same actions in the open conversation’s bar', async () => {
+    const user = userEvent.setup();
+    const hub = fakeHub();
+    render(
+      <Providers fetchImpl={hub.fetchImpl} path={`/chat/${TG.id}?source=channel`}>
+        <Routes>
+          <Route path="/chat/:sessionId?" element={<ChatScreen />} />
+        </Routes>
+      </Providers>,
+    );
+    const bar = await screen.findByTestId('chat-header');
+    expect(screen.getByTestId('topbar-slot')).toContainElement(bar);
+    const actions = await within(bar).findByTestId('channel-actions');
+    actions.focus();
+    await user.keyboard('{Enter}');
+    expect(await screen.findByRole('menuitem', { name: 'إخفاء من قائمتي' })).toBeTruthy();
+    expect(screen.getByRole('menuitem', { name: 'حذف من هرمز…' })).toBeTruthy();
+    await user.click(screen.getByRole('menuitem', { name: 'إخفاء من قائمتي' }));
+    await waitFor(() =>
+      expect(
+        hub.seen.some(
+          (c) => c.method === 'PUT' && c.path === `/channel-conversations/${TG.id}/hidden`,
+        ),
+      ).toBe(true),
+    );
+  });
+});
+
 describe('a channel conversation opens read-only', () => {
   it('shows the transcript and the banner where the composer would be', async () => {
     const hub = fakeHub();
@@ -313,5 +515,62 @@ describe('a channel conversation opens read-only', () => {
     );
     expect(await screen.findByRole('alert')).toBeTruthy();
     expect(screen.queryByTestId('channel-readonly')).toBeNull();
+  });
+});
+
+describe('paging and pictures (§103)', () => {
+  it('reads older channel conversations when asked, a hundred more each time', async () => {
+    const user = userEvent.setup();
+    const hub = fakeHub({ paged: true });
+    render(
+      <Providers fetchImpl={hub.fetchImpl} path="/chat">
+        <SessionList />
+      </Providers>,
+    );
+    await screen.findAllByTestId('channel-row');
+    expect(screen.queryByText('زبون قديم')).toBeNull();
+    await user.click(await screen.findByTestId('channel-show-older'));
+    expect(await screen.findByText('زبون قديم')).toBeTruthy();
+    const asked = hub.seen.filter((c) => c.path === '/channel-conversations');
+    expect(asked.at(-1)?.query.get('limit')).toBe('200');
+    // The first read asked for Hermes's own hundred, without naming it.
+    expect(asked[0]?.query.get('limit')).toBeNull();
+    await waitFor(() => expect(screen.queryByTestId('channel-show-older')).toBeNull());
+  });
+
+  it('loads the page before from where the last one stopped, and draws the pictures', async () => {
+    const created = vi.fn(() => 'blob:http://hub.test/picture');
+    URL.createObjectURL = created;
+    URL.revokeObjectURL = vi.fn();
+    const user = userEvent.setup();
+    const hub = fakeHub({ paged: true });
+    render(
+      <Providers fetchImpl={hub.fetchImpl} path={`/chat/${TG.id}?source=channel`}>
+        <Routes>
+          <Route path="/chat/:sessionId?" element={<ChatScreen />} />
+        </Routes>
+      </Providers>,
+    );
+    const screenEl = await screen.findByTestId('channel-screen');
+    const picture = await within(screenEl).findByTestId('channel-picture');
+    expect(picture).toHaveAttribute('src', 'blob:http://hub.test/picture');
+    expect(picture).toHaveAttribute('alt', 'صورة أُرسلت في القناة');
+    // The one Hermes has already deleted says so, and is never asked for.
+    expect(within(screenEl).getByTestId('channel-picture-gone')).toHaveTextContent('يومًا واحدًا');
+    const pictures = hub.seen.filter((c) => c.path.includes('/pictures/'));
+    expect(pictures.map((c) => c.path)).toEqual([
+      `/channel-conversations/${TG.id}/pictures/img_a1b2c3d4e5f6.png`,
+    ]);
+
+    await user.click(within(screenEl).getByTestId('channel-older'));
+    await within(screenEl).findByText('أول رسالة');
+    const asked = hub.seen.filter((c) => c.path === `/channel-conversations/${TG.id}/messages`);
+    expect(asked.at(-1)?.query.get('offset')).toBe('500');
+    // Oldest first: the older page goes above.
+    const texts = within(screenEl)
+      .getAllByTestId('message-user')
+      .map((el) => el.textContent ?? '');
+    expect(texts[0]).toContain('أول رسالة');
+    expect(within(screenEl).queryByTestId('channel-older')).toBeNull();
   });
 });

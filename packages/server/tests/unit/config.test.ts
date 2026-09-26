@@ -24,6 +24,7 @@ describe('config', () => {
       'COREHUB_SETUP_OPEN_MINUTES',
       'COREHUB_RESET_OWNER',
       'COREHUB_TASK_AUTO_START_MAX',
+      'COREHUB_TASK_STUCK_MINUTES',
       'COREHUB_PUSH_CONTACT',
       'COREHUB_FCM_SERVICE_ACCOUNT',
       'COREHUB_APNS_KEY_ID',
@@ -35,6 +36,7 @@ describe('config', () => {
       'COREHUB_PUSH_RELAY',
       'COREHUB_WEB_TERMINAL',
       'COREHUB_WEB_TERMINAL_IDLE_MINUTES',
+      'COREHUB_TRUST_PROXY',
     ]);
     const picked = pickEnv({
       DATA_DIR: '/x',
@@ -72,6 +74,15 @@ describe('config', () => {
     expect(loadConfig({ COREHUB_TASK_AUTO_START_MAX: '5' }).taskAutoStartMax).toBe(5);
     expect(() => loadConfig({ COREHUB_TASK_AUTO_START_MAX: '0' })).toThrow(
       /COREHUB_TASK_AUTO_START_MAX/,
+    );
+  });
+
+  it('marks a running task stuck after 30 silent minutes unless told otherwise; 0 is off', () => {
+    expect(loadConfig({}).taskStuckMinutes).toBe(30);
+    expect(loadConfig({ COREHUB_TASK_STUCK_MINUTES: '5' }).taskStuckMinutes).toBe(5);
+    expect(loadConfig({ COREHUB_TASK_STUCK_MINUTES: '0' }).taskStuckMinutes).toBe(0);
+    expect(() => loadConfig({ COREHUB_TASK_STUCK_MINUTES: '-1' })).toThrow(
+      /COREHUB_TASK_STUCK_MINUTES/,
     );
   });
 

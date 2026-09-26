@@ -260,7 +260,7 @@ export function DeviceCard({
               )}
               <Button
                 size="sm"
-                variant="danger"
+                variant="danger-quiet"
                 disabled={unlink.isPending}
                 onClick={() => void onRemove()}
                 data-testid="device-revoke"

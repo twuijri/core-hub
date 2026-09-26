@@ -9,7 +9,8 @@
 import type { ReactNode } from 'react';
 import { Avatar as RadixAvatar } from 'radix-ui';
 
-export type AvatarSize = 'sm' | 'md' | 'lg';
+/** `xs` sits inside a list row's first line (the chats list); `sm` beside a message. */
+export type AvatarSize = 'xs' | 'sm' | 'md' | 'lg';
 
 /** The first grapheme of a name — one character a person would recognise, never half of one. */
 export function initialOf(name: string): string {

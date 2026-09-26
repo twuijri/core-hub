@@ -570,6 +570,43 @@ describe('models: a local provider, with no key and with one', () => {
     }
   });
 
+  it('says which probed models only draw, so the dialog leaves them out of its chat picker (§87)', async () => {
+    const host = 'http://proxy.local:4000/v1';
+    const { fetchImpl } = scriptedFetch((url) =>
+      url === `${host}/models`
+        ? {
+            json: {
+              data: [
+                { id: 'gpt-4o' },
+                { id: 'gpt-image-1' },
+                { id: 'flux-1-schnell' },
+                { id: 'gemini-2.5-flash-image' },
+              ],
+            },
+          }
+        : { status: 503, json: { error: 'not part of this test' } },
+    );
+    const hub = await signedInHub({}, { models: { fetchImpl } });
+    try {
+      const probed = await authed(hub, hub.token, {
+        method: 'POST',
+        url: '/api/v1/models/provider-probes',
+        payload: { base_url: host, api_mode: 'chat_completions' },
+      });
+      expect(probed.statusCode, probed.body).toBe(200);
+      const models = (probed.json() as { models: { id: string; image_only: boolean }[] }).models;
+      expect(Object.fromEntries(models.map((m) => [m.id, m.image_only]))).toEqual({
+        'gpt-4o': false,
+        'gpt-image-1': true,
+        'flux-1-schnell': true,
+        // Draws and chats: still a chat model.
+        'gemini-2.5-flash-image': false,
+      });
+    } finally {
+      await hub.close();
+    }
+  });
+
   it('reports a probe of an endpoint that is not listening as a failure, not an empty list', async () => {
     const { fetchImpl } = scriptedFetch(() => ({ status: 502, text: 'Bad Gateway' }));
     const hub = await signedInHub({}, { models: { fetchImpl } });

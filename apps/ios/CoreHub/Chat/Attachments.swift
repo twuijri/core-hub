@@ -10,6 +10,7 @@ import CoreHubClient
 import Foundation
 import Observation
 import PhotosUI
+import QuickLook
 import SwiftUI
 import UIKit
 import UniformTypeIdentifiers
@@ -464,39 +465,157 @@ struct CameraPicker: UIViewControllerRepresentable {
     }
 }
 
-/// The files a message carries, under its text: a name per file (web: the message's attachment row).
+/// The files a message carries, under its text (web: the message's attachment row, #154): a
+/// picture is drawn in place, anything else is its name. A tap opens either full screen in the
+/// system's viewer — zoom, and the share sheet to save or send it on. The bytes come with the
+/// bearer header (`sessions.downloadAttachment`), never a token in a URL.
 struct MessageAttachments: View {
     let content: [ContentBlock]
+    /// The chat's profile, which the files belong to.
+    var profile: String = ""
+    @Environment(AppModel.self) private var app
+    @Environment(\.l10n) private var l10n
+    @State private var open: URL?
+    @State private var opening: String?
 
-    private var files: [(name: String, isImage: Bool)] {
-        content.compactMap { block in
+    struct File: Identifiable, Equatable {
+        let id: Int
+        let attachmentID: String
+        let name: String
+        let isImage: Bool
+    }
+
+    static func files(_ content: [ContentBlock]) -> [File] {
+        content.enumerated().compactMap { index, block in
             switch block {
-            case .typeImageBlock(let image): return (image.name ?? "image", true)
-            case .typeFileBlock(let file): return (file.name ?? "file", false)
-            case .typeAudioBlock(let audio): return (audio.name ?? "audio", false)
+            case .typeImageBlock(let image): return File(id: index, attachmentID: image.attachmentId, name: image.name ?? "image", isImage: true)
+            case .typeFileBlock(let file): return File(id: index, attachmentID: file.attachmentId, name: file.name ?? "file", isImage: false)
+            case .typeAudioBlock(let audio): return File(id: index, attachmentID: audio.attachmentId, name: audio.name ?? "audio", isImage: false)
             default: return nil
             }
         }
     }
 
     var body: some View {
+        let files = Self.files(content)
         if !files.isEmpty {
             VStack(alignment: .leading, spacing: Space.s1) {
-                ForEach(Array(files.enumerated()), id: \.offset) { _, file in
-                    HStack(spacing: Space.s1) {
-                        Image(lucide: file.isImage ? .image : .fileText)
-                            .resizable()
-                            .frame(width: 14, height: 14)
-                        Text(file.name)
-                            .lineLimit(1)
-                            .truncationMode(.middle)
+                ForEach(files) { file in
+                    if file.isImage {
+                        InlineImage(file: file, profile: profile, chip: chip(file)) { open = $0 }
+                    } else {
+                        Button { Task { await show(file) } } label: { chip(file) }
+                            .buttonStyle(.plain)
+                            .accessibilityLabel(l10n("attachments.open", ["name": file.name]))
                     }
-                    .font(.system(size: FontSize.sizeSm))
-                    .foregroundStyle(Tone.textMuted)
                 }
             }
+            .quickLookPreview($open)
             .accessibilityIdentifier("message.attachments")
         }
+    }
+
+    private func chip(_ file: File) -> some View {
+        HStack(spacing: Space.s1) {
+            if opening == file.attachmentID {
+                ProgressView().controlSize(.mini)
+            } else {
+                Image(lucide: file.isImage ? .image : .fileText)
+                    .resizable()
+                    .frame(width: 14, height: 14)
+            }
+            Text(file.name)
+                .lineLimit(1)
+                .truncationMode(.middle)
+        }
+        .font(.system(size: FontSize.sizeSm))
+        .foregroundStyle(Tone.textMuted)
+    }
+
+    private func show(_ file: File) async {
+        opening = file.attachmentID
+        defer { opening = nil }
+        open = await AttachmentFiles.shared.file(file.attachmentID, name: file.name, profile: profile, app: app)
+    }
+}
+
+/// A picture on a message, drawn in place once its bytes are here; its name until then, or if
+/// they cannot be fetched. A tap opens it full screen.
+struct InlineImage<Chip: View>: View {
+    let file: MessageAttachments.File
+    let profile: String
+    let chip: Chip
+    let onOpen: (URL) -> Void
+    @Environment(AppModel.self) private var app
+    @Environment(\.l10n) private var l10n
+    @State private var loaded: (url: URL, image: UIImage)?
+
+    var body: some View {
+        Group {
+            if let loaded {
+                Button { onOpen(loaded.url) } label: {
+                    Image(uiImage: loaded.image)
+                        .resizable()
+                        .scaledToFit()
+                        .frame(maxWidth: 260, maxHeight: 260, alignment: .leading)
+                        .clipShape(RoundedRectangle(cornerRadius: Radius.md, style: .continuous))
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel(l10n("attachments.open", ["name": file.name]))
+                .accessibilityIdentifier("message.image")
+            } else {
+                chip
+            }
+        }
+        .task(id: file.attachmentID) {
+            guard let url = await AttachmentFiles.shared.file(file.attachmentID, name: file.name, profile: profile, app: app) else { return }
+            // Decoded off the main thread: a photo from the camera is large.
+            let image = await Task.detached(priority: .userInitiated) { UIImage(contentsOfFile: url.path)?.preparingThumbnail(of: CGSize(width: 780, height: 780)) }.value
+            if let image { loaded = (url, image) }
+        }
+    }
+}
+
+/// The files of messages, fetched once and kept in the app's caches under their own names (the
+/// system viewer tells a file's kind by its extension). The system empties the caches when it
+/// needs the space.
+@MainActor
+final class AttachmentFiles {
+    static let shared = AttachmentFiles()
+    private var inFlight: [String: Task<URL?, Never>] = [:]
+
+    private var root: URL {
+        FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask)[0].appendingPathComponent("attachments", isDirectory: true)
+    }
+
+    /// Where a file is kept: a folder per attachment, the file under its own (safe) name.
+    nonisolated static func place(_ id: String, name: String, in root: URL) -> URL {
+        let safe = name.replacingOccurrences(of: "/", with: "_").replacingOccurrences(of: ":", with: "_")
+        return root.appendingPathComponent(id, isDirectory: true).appendingPathComponent(safe.isEmpty ? id : safe)
+    }
+
+    func file(_ id: String, name: String, profile: String, app: AppModel) async -> URL? {
+        let target = Self.place(id, name: name, in: root)
+        if FileManager.default.fileExists(atPath: target.path) { return target }
+        if let running = inFlight[id] { return await running.value }
+        let task = Task<URL?, Never> {
+            let scope = profile.isEmpty ? app.currentProfile : profile
+            guard let downloaded = try? await app.api.call({
+                try await SessionsAPI.sessionsDownloadAttachment(xHubProfile: scope, attachmentId: id, apiConfiguration: $0)
+            }) else { return nil }
+            do {
+                try FileManager.default.createDirectory(at: target.deletingLastPathComponent(), withIntermediateDirectories: true)
+                try? FileManager.default.removeItem(at: target)
+                try FileManager.default.moveItem(at: downloaded, to: target)
+                return target
+            } catch {
+                return nil
+            }
+        }
+        inFlight[id] = task
+        let url = await task.value
+        inFlight[id] = nil
+        return url
     }
 }
 

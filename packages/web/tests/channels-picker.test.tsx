@@ -146,7 +146,10 @@ const WHATSAPP_UNPAIRED: Row = {
   fields: [],
 };
 
-/** Written into the file by hand, outside the catalog: listed, it is set up. */
+/**
+ * Written into the file by hand, outside the catalog: it is set up — and it is Hermes's webhook
+ * receiver, which has its own «ويب هوك» section under the list (§97), not a card in it.
+ */
 const WEBHOOK_BY_HAND: Row = {
   platform: 'webhook',
   label: 'webhook',
@@ -246,7 +249,8 @@ describe('The Channels page lists only what is linked', () => {
     const rows = [...list.querySelectorAll('[data-testid^="channel-toggle-"]')].map((node) =>
       node.getAttribute('data-testid'),
     );
-    expect(rows).toEqual(['channel-toggle-telegram', 'channel-toggle-webhook']);
+    expect(rows).toEqual(['channel-toggle-telegram']);
+    expect(await screen.findByTestId('webhooks')).toBeTruthy();
     expect(within(list).getByTestId('channel-account-telegram').textContent).toContain(
       '@office_helper_bot',
     );
@@ -259,9 +263,24 @@ describe('The Channels page lists only what is linked', () => {
     expect(screen.getByTestId('platform-picker-open').textContent).toMatch(
       /^(ربط منصة|Link a platform)$/,
     );
-    // Nobody approved on Telegram yet: its "how to start" is open, in its own card.
+    // Nobody approved on Telegram yet, and still its "how to start" waits behind «كيف تبدأ» (the
+    // owner, 2026-09-26: it opened by itself on every visit); pressed, it opens in its own card.
+    expect(screen.queryByTestId('telegram-how-to-use')).toBeNull();
+    const button = within(list).getByTestId('channel-guide-telegram');
+    expect(button.getAttribute('aria-expanded')).toBe('false');
+    fireEvent.click(button);
     const how = screen.getByTestId('telegram-how-to-use');
     expect(list.contains(how)).toBe(true);
+    expect(button.getAttribute('aria-expanded')).toBe('true');
+    // Approving is the Approvals button at the top now, and the hub restarts Hermes by itself.
+    expect(how.textContent).toMatch(
+      /«الموافقات» أعلى هذه الصفحة|“Approvals” at the top of this page/,
+    );
+    expect(how.textContent).not.toMatch(/restart|تشغيل|Waiting for approval|بانتظار الموافقة/i);
+    fireEvent.click(button);
+    expect(screen.queryByTestId('telegram-how-to-use')).toBeNull();
+    // The hub runs Hermes here: no "restart it for a change to take effect" under the title.
+    expect(screen.queryByText(/restart it for a change|أعد تشغيله ليسري/)).toBeNull();
   });
 
   it('with nothing linked, is a short explanation and the same button', async () => {

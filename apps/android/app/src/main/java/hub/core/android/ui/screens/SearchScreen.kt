@@ -1,5 +1,15 @@
 package hub.core.android.ui.screens
 
+import androidx.compose.ui.platform.testTag
+import hub.core.android.ui.kit.Badge
+import hub.core.android.ui.kit.BadgeTone
+import hub.core.android.ui.kit.EmptyState
+import hub.core.android.ui.kit.GroupedList
+import hub.core.android.ui.kit.HubIconButton
+import hub.core.android.ui.kit.HubTextField
+import hub.core.android.ui.kit.Item
+import hub.core.android.ui.kit.Lucide
+import hub.core.android.ui.kit.NoticeBox
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -8,8 +18,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -29,11 +37,7 @@ import hub.core.android.data.hubCall
 import hub.core.android.graph
 import hub.core.android.nav.Route
 import hub.core.android.ui.components.ErrorNotice
-import hub.core.android.ui.components.ListRow
 import hub.core.android.ui.components.LoadView
-import hub.core.android.ui.components.ProfileBadge
-import hub.core.android.ui.components.StatusBadge
-import hub.core.android.ui.components.Tone
 import hub.core.android.ui.components.rememberLoad
 import hub.core.android.ui.theme.LocalTokens
 import hub.core.client.api.SessionsApi
@@ -76,31 +80,39 @@ fun SearchScreen(shell: ShellViewModel, onOpen: (Route) -> Unit) {
             )
         }.onSuccess { results = it.items; error = null }.onFailure { error = it as HubError }
     }
+    val t = LocalTokens.current
     Column(Modifier.fillMaxSize()) {
-        OutlinedTextField(
-            value = query,
-            onValueChange = { query = it },
-            placeholder = { Text(stringResource(R.string.search_placeholder)) },
-            singleLine = true,
-            modifier = Modifier.fillMaxWidth().padding(12.dp).focusRequester(focus),
+        HubTextField(
+            query, { query = it }, placeholder = stringResource(R.string.search_placeholder), leadingIcon = Lucide.Search,
+            trailing = if (query.isNotEmpty()) ({ HubIconButton(Lucide.X, stringResource(R.string.close), { query = "" }, size = 28.dp, iconSize = 14.dp) }) else null,
+            focusRequester = focus, fieldTag = "search.field",
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
         )
-        error?.let { ErrorNotice(it, Modifier.padding(horizontal = 12.dp)) }
-        LazyColumn(contentPadding = PaddingValues(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            if (query.isNotBlank() && results.isEmpty() && error == null) {
-                item { Text(stringResource(R.string.search_none), color = LocalTokens.current.textMuted) }
+        error?.let { ErrorNotice(it, Modifier.padding(horizontal = 16.dp)) }
+        LazyColumn(Modifier.fillMaxSize().testTag("search.results"), contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp)) {
+            if (query.isBlank()) {
+                item { EmptyState(stringResource(R.string.search_placeholder), icon = Lucide.Search) }
+            } else if (results.isEmpty() && error == null) {
+                item { EmptyState(stringResource(R.string.search_none), icon = Lucide.Inbox) }
             }
-            items(results, key = { it.id }) { session ->
-                ListRow(
-                    title = if (session.source == SessionSource.GLOBAL_AGENT) term("global_agent") else session.title ?: term("new_chat"),
-                    subtitle = session.match?.snippet ?: session.preview,
-                    trailing = {
-                        Column(horizontalAlignment = androidx.compose.ui.Alignment.End, verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                            if (session.archived) StatusBadge(stringResource(R.string.chats_archived))
-                            ProfileBadge(shell.profileName(session.profile))
-                        }
-                    },
-                    onClick = { onOpen(SearchHits.routeOf(session)) },
-                )
+            if (results.isNotEmpty()) item {
+                GroupedList {
+                    results.forEach { session ->
+                        Item(
+                            if (session.source == SessionSource.GLOBAL_AGENT) term("global_agent") else session.title ?: term("new_chat"),
+                            subtitle = session.match?.snippet ?: session.preview,
+                            icon = if (session.source == SessionSource.GLOBAL_AGENT) Lucide.Globe else Lucide.MessagesSquare,
+                            onClick = { onOpen(SearchHits.routeOf(session)) },
+                            tag = "search.hit.${session.id}",
+                            trailing = {
+                                Column(horizontalAlignment = androidx.compose.ui.Alignment.End, verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                    if (session.archived) Badge(stringResource(R.string.chats_archived))
+                                    Badge(shell.profileName(session.profile), tone = BadgeTone.Accent)
+                                }
+                            },
+                        )
+                    }
+                }
             }
         }
     }
@@ -124,6 +136,6 @@ fun GlobalAgentScreen(profile: String, profileName: String) {
         ChatScreen(session.id, session.profile, profileName, onCreated = { _, _ -> })
     }
     if (opened.state is hub.core.android.ui.components.Load.Failed) {
-        StatusBadge(stringResource(R.string.chat_no_agents), Tone.WARNING)
+        NoticeBox(stringResource(R.string.chat_no_agents), BadgeTone.Warning, Modifier.padding(16.dp))
     }
 }

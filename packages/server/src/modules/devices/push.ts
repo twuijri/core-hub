@@ -77,6 +77,8 @@ export interface PushServiceOptions {
    * composition root)? Without it every registration is taken as live.
    */
   sessionLive?: (tokenId: string, now: number) => boolean;
+  /** A device's registration was forgotten here (dead token, ended sign-in): announce it. */
+  onTokenForgotten?: (deviceId: string) => void;
   /** Refuses a Web Push endpoint the hub must not call (returns why), null when fine. */
   checkEndpoint?: (endpoint: string) => Promise<string | null>;
   fetchImpl?: typeof fetch;
@@ -689,8 +691,8 @@ export class PushService {
   /**
    * The sign-in behind a device's registration has ended (expired, revoked, its person
    * disabled) without anyone telling the device: the token is forgotten before it is used.
-   * A phone registered before `push_session_id` answers to its pairing token; a browser's
-   * subscription has neither and is the browser's own.
+   * A phone registered before `push_session_id` answers to its pairing token; a browser that
+   * subscribed before its subscription was tied to its sign-in has neither and keeps it.
    */
   private sessionEnded(device: typeof devices.$inferSelect): boolean {
     const session = device.pushSessionId ?? device.appTokenId;
@@ -757,6 +759,7 @@ export class PushService {
       .set({ pushProvider: 'none', pushToken: null, pushRegisteredAt: null, pushSessionId: null })
       .where(eq(devices.id, deviceId))
       .run();
+    this.options.onTokenForgotten?.(deviceId);
   }
 
   /** Every linked device of the person with a push registration, in parallel. */

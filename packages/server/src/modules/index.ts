@@ -50,6 +50,7 @@ import {
   hermesRuntimeFor,
   installedSkillNames,
   registerAgentAttachments,
+  registerHubToolsHandOver,
   registerHubToolsNotify,
   seedSkillLibraryOf,
 } from './agents/index.js';
@@ -59,17 +60,19 @@ import {
   attachmentReferences,
   createSessionsModule,
   registerChannelSource,
+  registerRoomOfSeat,
   registerWorkflowGate,
   runActivity,
   sessionActivityFor,
   sessionBackgroundFor,
   seatSessionsFor,
   sessionRunsFor,
+  sessionHandOverFor,
   sessionTurnsFor,
   workflowApprovalsFor,
   type ChannelSource,
 } from './sessions/index.js';
-import { registerRoomPorts, roomsModule, roomsServiceFor } from './rooms/index.js';
+import { registerRoomPorts, roomOfSeatFor, roomsModule, roomsServiceFor } from './rooms/index.js';
 import { t as translate } from '../i18n/index.js';
 import {
   HermesApiUnavailable,
@@ -77,9 +80,11 @@ import {
   createHermesCardApi,
   registerHermesBoard,
   registerTaskNames,
+  registerTaskNotices,
   registerTaskRunner,
   TasksService,
   tasksModule,
+  watchStuckTasks,
   type HermesCardApi,
 } from './tasks/index.js';
 import { createHermesKanban, processRunner } from './tasks/hermes-kanban.js';
@@ -87,6 +92,7 @@ import { createHermesJobs } from './schedules/hermes-jobs.js';
 import {
   registerHermesCron,
   registerScheduleRunner,
+  registerSchedulerWork,
   registerWorkflowPorts,
   schedulesModule,
   workflowBackgroundFor,
@@ -146,6 +152,41 @@ export const devicesModule = createDevicesModule({
   userLanguage: (app, userId) =>
     findUser(requireSqlite(app.hub.database), userId)?.locale === 'en' ? 'en' : 'ar',
   sessionLive: (db, tokenId, now) => tokenLive(db, tokenId, now),
+  // Linked hubs (ADR 0026): every agent of every profile for the share list, and the peer
+  // guest's one question — the runner's tool-free one-shot, never a run with tools.
+  peerAgents: {
+    list(app, language) {
+      const db = requireSqlite(app.hub.database);
+      const service = agentsServiceFor(app);
+      return listWorkspacesFor(db, { id: '', role: 'owner' }).flatMap((row) =>
+        service
+          .list(
+            { id: row.id, slug: row.slug, name: row.name, isDefault: row.isDefault },
+            { language },
+          )
+          .map((agent) => ({
+            workspaceId: row.id,
+            profile: row.slug,
+            agentId: agent.id,
+            name: agent.name,
+          })),
+      );
+    },
+    async ask(app, input) {
+      const runner = agentRunner(app);
+      if (!runner.ask) return null;
+      return runner.ask({
+        workspace: input.workspaceId,
+        agentId: input.agentId,
+        sessionId: `peer-guest-${input.agentId}`,
+        prompt: input.prompt,
+        model: null,
+        provider: null,
+        timeoutMs: input.timeoutMs,
+        maxTokens: input.maxTokens,
+      });
+    },
+  },
 });
 
 /** A notice that passed the person's push switch and quiet hours goes to their devices. */
@@ -209,6 +250,8 @@ registerAgentAttachments((app) => ({
  * `notifications.notify`, a tool of the hub's own (contract decision §67): `agents` serves
  * the tool, `notify` owns the inbox. A notice to the run's owner, in the run's profile.
  */
+registerHubToolsHandOver((app) => sessionHandOverFor(app));
+
 registerHubToolsNotify((app) => {
   const notifier = createNotifier(requireSqlite(app.hub.database), () => app.hub.io);
   return (input) =>
@@ -315,6 +358,19 @@ export function hermesChannelSourceOver(
 ): ChannelSource {
   const homeOf = (profile: string) =>
     profile === RUNTIME_DEFAULT_PROFILE ? root : path.join(root, 'profiles', profile);
+  const call = async <T>(method: 'GET' | 'DELETE', apiPath: string): Promise<T> => {
+    try {
+      return await dashboard.request<T>(method, apiPath);
+    } catch (error) {
+      if (error instanceof HermesDashboardRefusal) {
+        throw new ChannelSourceRefusal(error.status, error.message);
+      }
+      if (error instanceof HermesDashboardUnavailable) {
+        throw new ChannelSourceUnavailable(error.message);
+      }
+      throw error;
+    }
+  };
   return {
     hermesProfile(workspace) {
       const profile = profileOf(workspace);
@@ -325,18 +381,25 @@ export function hermesChannelSourceOver(
         return null;
       }
     },
-    async get<T>(apiPath: string): Promise<T> {
-      try {
-        return await dashboard.request<T>('GET', apiPath);
-      } catch (error) {
-        if (error instanceof HermesDashboardRefusal) {
-          throw new ChannelSourceRefusal(error.status, error.message);
+    get<T>(apiPath: string): Promise<T> {
+      return call<T>('GET', apiPath);
+    },
+    delete<T>(apiPath: string): Promise<T> {
+      return call<T>('DELETE', apiPath);
+    },
+    picture(profile, name) {
+      // Hermes's image cache of that profile: `cache/images/`, or `image_cache/` where an
+      // older install still keeps it (`get_hermes_dir`). A name, never a path (§103).
+      if (!/^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/.test(name)) return null;
+      for (const folder of ['cache/images', 'image_cache']) {
+        const file = path.join(homeOf(profile), folder, name);
+        try {
+          if (statSync(file).isFile()) return file;
+        } catch {
+          // not in this one
         }
-        if (error instanceof HermesDashboardUnavailable) {
-          throw new ChannelSourceUnavailable(error.message);
-        }
-        throw error;
       }
+      return null;
     },
     stamp(profile) {
       const parts: string[] = [];
@@ -371,6 +434,7 @@ registerProfileMirror((app) => {
   });
   return {
     list: () => profiles.list(),
+    displayName: (name) => profiles.displayName(name),
     async create(name, origin) {
       try {
         await profiles.create(name, origin);
@@ -588,6 +652,9 @@ registerWorkflowPorts((app) => {
 /** The answer to a workflow step's gate (`sessions`) continues the paused run (`schedules`). */
 registerWorkflowGate((app) => workflowGateFor(app));
 
+/** An approval a seat's session raises names the seat's room (`rooms` → `sessions`). */
+registerRoomOfSeat((app) => roomOfSeatFor(app));
+
 /**
  * The hub fires its own schedules: a prompt schedule's run is a `sessions` turn in a
  * session of its own (source `schedule`, origin its history line), which the history opens.
@@ -645,6 +712,28 @@ registerTaskRunner((app) => {
     },
     cancel: (scope, sessionId, runId) => runs.cancel(scope, sessionId, runId),
     outcome: (workspace, runId) => runs.outcome(workspace, runId),
+  };
+});
+
+/**
+ * The stuck-task watchdog (DECISIONS §93) runs on the scheduler's clock — `schedules` owns
+ * the clock, `tasks` the rule — and tells a stuck task's owner through `notify`, which owns
+ * the words. None of the three knows the others; they meet here.
+ */
+registerSchedulerWork((app) => (now) => watchStuckTasks(app, now));
+registerTaskNotices((app) => {
+  const notifier = createNotifier(
+    requireSqlite(app.hub.database),
+    () => app.hub.io,
+    noticePushPort(app),
+  );
+  return {
+    stuck: (input) =>
+      notifier.announce(
+        { userId: input.userId, workspace: input.workspace, profile: input.profile },
+        { kind: 'task_stuck', task: input.label, minutes: input.minutes },
+        { kind: 'task', id: input.taskId },
+      ),
   };
 });
 
@@ -773,6 +862,15 @@ registerRoomPorts((app) => ({
     const user = findUser(db, userId);
     if (!user) return [];
     return listWorkspacesFor(db, user).map((row) => ({ id: row.id, slug: row.slug }));
+  },
+  files(workspace, ids) {
+    const found = attachmentsPort(app).resolve(workspace, ids);
+    return new Map(
+      [...found].map(([id, file]) => [
+        id,
+        { name: file.name, mime: file.mime, sizeBytes: file.sizeBytes, url: file.url },
+      ]),
+    );
   },
 }));
 

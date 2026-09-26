@@ -14,6 +14,9 @@
  *
  * Every drag has a keyboard equivalent (dnd-kit's keyboard sensor), and the card's own
  * menu moves it with no dragging at all — which is what a phone uses.
+ *
+ * "Select" ticks several cards for one change (§103): a priority, or the same comment on each —
+ * on a Hermes card said on Hermes first, like one comment is.
  */
 import {
   DndContext,
@@ -33,9 +36,10 @@ import {
   verticalListSortingStrategy,
 } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
-import { useMemo, useState, type ReactNode } from 'react';
+import { createContext, useContext, useMemo, useState, type ReactNode } from 'react';
 import { Link } from 'react-router';
 import { describeError } from '../auth/client.js';
+import { exactTime } from '../devices/format.js';
 import { agentMark } from '../ui/brand/marks.js';
 import { Tooltip } from '../ui/Tooltip.js';
 import { ProfileScope, useAuth } from '../auth/context.js';
@@ -48,6 +52,7 @@ import { useManyProfiles, useProfileInLink, useProfileName } from '../shell/prof
 import {
   Badge,
   Button,
+  Checkbox,
   Dialog,
   Input,
   Menu,
@@ -61,10 +66,13 @@ import {
   usePrompt,
 } from '../ui/index.js';
 import {
+  IconCheck,
+  IconClose,
   IconGrip,
   IconMore,
   IconPlus,
   IconSchedules,
+  IconSelect,
   IconSettings,
   IconStop,
   IconTrash,
@@ -75,6 +83,7 @@ import { HandOverDialog } from './HandOverDialog.js';
 import { ProjectDialog } from './ProjectDialog.js';
 import { TaskDialog } from './TaskDialog.js';
 import {
+  ARCHIVED_STATUS,
   COLUMNS,
   INTAKE_STATUS,
   cardFrame,
@@ -82,6 +91,7 @@ import {
   dropOptions,
   isColumnCollapsed,
   isDropTarget,
+  listOf,
   quickActionFor,
   quickActionTarget,
   showsStatusWord,
@@ -93,6 +103,7 @@ import {
 import {
   useArchive,
   useBoard,
+  useBulkUpdateTasks,
   useCreateTask,
   useDeleteTask,
   useMoveTask,
@@ -101,6 +112,8 @@ import {
   useTaskEvents,
   useUnassignTask,
   useUpdateTask,
+  type BoardFilter,
+  type BulkPatch,
   type Task,
 } from './queries.js';
 
@@ -116,6 +129,23 @@ export interface CardActions {
   onHandOver(): void;
   onStop(): void;
   onUnassign(): void;
+}
+
+/**
+ * The board's selection, while "Select" is on: which cards are ticked. Read by each card, so the
+ * columns do not pass it down.
+ */
+interface Selection {
+  ticked: ReadonlySet<string>;
+  toggle(id: string): void;
+}
+const SelectionContext = createContext<Selection | null>(null);
+
+const BULK_PRIORITIES = ['low', 'normal', 'high', 'urgent'] as const;
+
+/** "1 task", never "1 tasks". */
+function taskCount(t: (key: string, params?: Record<string, number>) => string, count: number) {
+  return count === 1 ? t('tasks.count_one') : t('tasks.count', { count });
 }
 
 export function TasksScreen() {
@@ -136,8 +166,10 @@ export function TasksScreen() {
     ? t('tasks.new_task_in', { name: profileName(homeProfile) })
     : t('tasks.new_task');
   const board = useBoard(filter);
-  // The archive behind Done, read-only: counted for its link, shown when asked for.
-  const archive = useArchive(filter);
+  // The archive behind Done, read-only: the board counts it for its link, and it is read
+  // only when a person opens it (DECISIONS §93).
+  const archivedCount =
+    board.data?.columns.find((column) => column.status === ARCHIVED_STATUS)?.count ?? 0;
   const createTask = useCreateTask();
   const move = useMoveTask();
   const update = useUpdateTask();
@@ -160,6 +192,25 @@ export function TasksScreen() {
   const [dragging, setDragging] = useState<TaskStatus | null>(null);
   /** A drop that could mean two things, waiting for the person to say which. */
   const [choice, setChoice] = useState<{ task: Task; options: ColumnDrop[] } | null>(null);
+  /** `null` while the board is not selecting; the ticked cards while it is (§103). */
+  const [ticked, setTicked] = useState<Set<string> | null>(null);
+  const bulk = useBulkUpdateTasks();
+  const selection = useMemo<Selection | null>(
+    () =>
+      ticked === null
+        ? null
+        : {
+            ticked,
+            toggle: (id) =>
+              setTicked((current) => {
+                const next = new Set(current ?? []);
+                if (next.has(id)) next.delete(id);
+                else next.add(id);
+                return next;
+              }),
+          },
+    [ticked],
+  );
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
@@ -254,6 +305,30 @@ export function TasksScreen() {
     onUnassign: () => unassign.mutate({ id: task.id, profile: task.profile }),
   });
 
+  /** The ticked cards that are still on the board, with the profile each is in. */
+  const tickedTasks = (ticked ? [...ticked] : [])
+    .map((id) => byId.get(id))
+    .filter((task): task is Task => task !== undefined);
+  const applyBulk = (patch: BulkPatch) => {
+    if (tickedTasks.length === 0) return;
+    bulk.mutate(
+      { tasks: tickedTasks.map((task) => ({ id: task.id, profile: task.profile })), patch },
+      {
+        onSuccess: (outcome) => {
+          if (outcome.refused === 0) setTicked(new Set());
+        },
+      },
+    );
+  };
+  const bulkComment = () =>
+    void askText({
+      title: t('tasks.bulk.comment_title', { count: tickedTasks.length }),
+      label: t('tasks.details.add_comment'),
+      confirmLabel: t('tasks.details.send_comment'),
+    }).then((value) => {
+      if (value?.trim()) applyBulk({ comment: value.trim() });
+    });
+
   const onDragEnd = (event: DragEndEvent) => {
     setDragging(null);
     const { active, over } = event;
@@ -330,7 +405,20 @@ export function TasksScreen() {
             {t('tasks.project_settings.open')}
           </Button>
         )}
-        <Badge>{t('tasks.count', { count: board.data?.counts.total ?? 0 })}</Badge>
+        <Badge>{taskCount(t, board.data?.counts.total ?? 0)}</Badge>
+        <Button
+          size="sm"
+          variant="ghost"
+          icon={<IconSelect size={14} />}
+          aria-pressed={ticked !== null}
+          onClick={() => {
+            setTicked((current) => (current === null ? new Set() : null));
+            bulk.reset();
+          }}
+          data-testid="task-select"
+        >
+          {t('tasks.bulk.select')}
+        </Button>
         <span className="ms-auto flex items-center gap-2">
           <Input
             inputSize="sm"
@@ -363,6 +451,57 @@ export function TasksScreen() {
         </span>
       </header>
 
+      {ticked !== null && (
+        /* What the selection is for: a priority, or the same comment, on every ticked card. */
+        <div className="session-select-bar mb-3" data-testid="task-bulk-bar">
+          <span className="session-select-count" data-testid="task-bulk-count">
+            {t('tasks.bulk.count', { count: tickedTasks.length })}
+          </span>
+          <Select
+            value=""
+            placeholder={t('tasks.bulk.priority')}
+            onValueChange={(value) => {
+              const priority = BULK_PRIORITIES.find((one) => one === value);
+              if (priority) applyBulk({ priority });
+            }}
+            options={BULK_PRIORITIES.map((value) => ({
+              value,
+              label: t(`tasks.priority.${value}`),
+            }))}
+            label={t('tasks.bulk.priority')}
+            disabled={tickedTasks.length === 0 || bulk.isPending}
+            testId="task-bulk-priority"
+          />
+          <Button
+            size="sm"
+            variant="secondary"
+            disabled={tickedTasks.length === 0}
+            loading={bulk.isPending}
+            onClick={bulkComment}
+            data-testid="task-bulk-comment"
+          >
+            {t('tasks.bulk.comment')}
+          </Button>
+          <span className="ms-auto">
+            <Button
+              variant="ghost"
+              size="sm"
+              iconOnly
+              tooltip={t('common.cancel')}
+              aria-label={t('common.cancel')}
+              icon={<IconClose size={14} />}
+              onClick={() => setTicked(null)}
+              data-testid="task-bulk-done"
+            />
+          </span>
+        </div>
+      )}
+      {bulk.data && bulk.data.refused > 0 && (
+        <Notice tone="warning">
+          {t('tasks.bulk.refused', { count: bulk.data.refused, done: bulk.data.changed })}
+        </Notice>
+      )}
+      {bulk.isError && <Notice tone="danger">{describeTaskError(bulk.error, t)}</Notice>}
       {board.isError && <Notice tone="danger">{describeError(board.error, t)}</Notice>}
       {(move.isError ||
         createTask.isError ||
@@ -383,59 +522,61 @@ export function TasksScreen() {
         </Notice>
       )}
 
-      <DndContext
-        sensors={sensors}
-        collisionDetection={closestCorners}
-        onDragStart={(event: DragStartEvent) =>
-          setDragging(byId.get(String(event.active.id))?.status ?? null)
-        }
-        onDragCancel={() => setDragging(null)}
-        onDragEnd={onDragEnd}
-      >
-        <div className="task-board" data-testid="task-board">
-          {/* Intake: a task arrives here and is specified before it joins the queue, so
+      <SelectionContext.Provider value={selection}>
+        <DndContext
+          sensors={sensors}
+          collisionDetection={closestCorners}
+          onDragStart={(event: DragStartEvent) =>
+            setDragging(byId.get(String(event.active.id))?.status ?? null)
+          }
+          onDragCancel={() => setDragging(null)}
+          onDragEnd={onDragEnd}
+        >
+          <div className="task-board" data-testid="task-board">
+            {/* Intake: a task arrives here and is specified before it joins the queue, so
               nothing is ever dropped in. It is a strip until somebody opens it. */}
-          <aside
-            className="task-intake"
-            data-open={intakeOpen ? 'true' : undefined}
-            data-testid="task-intake"
-            aria-label={t('tasks.status.triage')}
-          >
-            <button
-              type="button"
-              className="task-intake-toggle"
-              aria-expanded={intakeOpen}
-              onClick={() => setIntakeOpen((open) => !open)}
-              data-testid="task-intake-toggle"
+            <aside
+              className="task-intake"
+              data-open={intakeOpen ? 'true' : undefined}
+              data-testid="task-intake"
+              aria-label={t('tasks.status.triage')}
             >
-              <span className="task-strip-title">{t('tasks.status.triage')}</span>
-              <span className="task-strip-count">{grouped.intake.length}</span>
-            </button>
-            {intakeOpen && (
-              <div className="task-column-body">
-                <p className="task-intake-hint">{t('tasks.intake_hint')}</p>
-                {grouped.intake.map((task) => (
-                  <TaskCard key={task.id} task={task} actions={actionsFor(task)} />
-                ))}
-                {grouped.intake.length === 0 && (
-                  <p className="task-column-empty">{t('tasks.nothing')}</p>
-                )}
-              </div>
-            )}
-          </aside>
+              <button
+                type="button"
+                className="task-intake-toggle"
+                aria-expanded={intakeOpen}
+                onClick={() => setIntakeOpen((open) => !open)}
+                data-testid="task-intake-toggle"
+              >
+                <span className="task-strip-title">{t('tasks.status.triage')}</span>
+                <span className="task-strip-count">{grouped.intake.length}</span>
+              </button>
+              {intakeOpen && (
+                <div className="task-column-body">
+                  <p className="task-intake-hint">{t('tasks.intake_hint')}</p>
+                  {grouped.intake.map((task) => (
+                    <TaskCard key={task.id} task={task} actions={actionsFor(task)} />
+                  ))}
+                  {grouped.intake.length === 0 && (
+                    <p className="task-column-empty">{t('tasks.nothing')}</p>
+                  )}
+                </div>
+              )}
+            </aside>
 
-          {COLUMNS.map((column) => (
-            <BoardColumn
-              key={column.id}
-              column={column}
-              tasks={grouped.columns.get(column.id) ?? []}
-              dragging={dragging}
-              actionsFor={actionsFor}
-              {...(column.id === 'done' ? { archived: archive.data ?? [] } : {})}
-            />
-          ))}
-        </div>
-      </DndContext>
+            {COLUMNS.map((column) => (
+              <BoardColumn
+                key={column.id}
+                column={column}
+                tasks={grouped.columns.get(column.id) ?? []}
+                dragging={dragging}
+                actionsFor={actionsFor}
+                {...(column.id === 'done' ? { archive: { count: archivedCount, filter } } : {})}
+              />
+            ))}
+          </div>
+        </DndContext>
+      </SelectionContext.Provider>
 
       <Dialog
         open={choice !== null}
@@ -493,14 +634,14 @@ function BoardColumn({
   tasks,
   dragging,
   actionsFor,
-  archived,
+  archive,
 }: {
   column: ColumnDef;
   tasks: Task[];
   dragging: TaskStatus | null;
   actionsFor(task: Task): CardActions;
-  /** Done only: the archive behind it, shown read-only when the person asks. */
-  archived?: Task[];
+  /** Done only: how many are archived behind it; read, and shown, when the person asks. */
+  archive?: { count: number; filter: BoardFilter };
 }) {
   const { t } = useI18n();
   const [openedByHand, setOpenedByHand] = useState(false);
@@ -552,7 +693,7 @@ function BoardColumn({
               <TaskCard key={task.id} task={task} actions={actionsFor(task)} />
             ))}
             {tasks.length === 0 && <li className="task-column-empty">{t('tasks.nothing')}</li>}
-            {archived && archived.length > 0 && (
+            {archive && archive.count > 0 && (
               <li className="task-archive">
                 <button
                   type="button"
@@ -562,16 +703,10 @@ function BoardColumn({
                   data-testid="task-archive-toggle"
                 >
                   {t(showArchived ? 'tasks.hide_archived' : 'tasks.show_archived', {
-                    count: archived.length,
+                    count: archive.count,
                   })}
                 </button>
-                {showArchived && (
-                  <ul className="task-archive-list" data-testid="task-archive">
-                    {archived.map((task) => (
-                      <ArchivedCard key={task.id} task={task} />
-                    ))}
-                  </ul>
-                )}
+                {showArchived && <ArchiveList filter={archive.filter} />}
               </li>
             )}
           </ul>
@@ -582,7 +717,7 @@ function BoardColumn({
 }
 
 export function TaskCard({ task, actions }: { task: Task; actions: CardActions }) {
-  const { t } = useI18n();
+  const { t, language } = useI18n();
   const many = useManyProfiles();
   const inLink = useProfileInLink();
   const {
@@ -595,6 +730,8 @@ export function TaskCard({ task, actions }: { task: Task; actions: CardActions }
     isDragging,
   } = useSortable({ id: task.id });
   const quick = quickActionFor(task.status);
+  const selection = useContext(SelectionContext);
+  const dod = task.definition_of_done ?? [];
   // The column groups several statuses, so the card is where the stage is readable: a
   // frame drawn for the stage (board.ts, `cardFrame`) and the word beside it, so neither
   // colour nor motion is the only thing that says it.
@@ -605,6 +742,9 @@ export function TaskCard({ task, actions }: { task: Task; actions: CardActions }
   const fromHermes = task.external?.source === 'hermes';
   const running = task.status === 'running';
   const open = task.status !== 'done' && task.status !== 'archived';
+  // Said only while it matters: before the task runs. A running or finished task waits for
+  // nothing any more, whatever its dependencies are doing.
+  const waitingOn = open && !running && task.status !== 'review' ? (task.waiting_on ?? []) : [];
   // A task can be given to an agent until it is finished; a Hermes card is handed to
   // another workspace's Hermes profile instead, because Hermes's dispatcher runs it.
   const assignable = !fromHermes && open;
@@ -629,17 +769,29 @@ export function TaskCard({ task, actions }: { task: Task; actions: CardActions }
       data-status={task.status}
       data-frame={frame ?? undefined}
       data-external={fromHermes ? 'hermes' : undefined}
+      data-selected={selection?.ticked.has(task.id) ? 'true' : undefined}
     >
-      <button
-        ref={setActivatorNodeRef}
-        type="button"
-        className="task-card-grip"
-        aria-label={t('tasks.reorder', { title: task.title })}
-        {...attributes}
-        {...listeners}
-      >
-        <IconGrip size={14} />
-      </button>
+      {selection ? (
+        // While the board is selecting, the grip's place is the tick.
+        <Checkbox
+          checked={selection.ticked.has(task.id)}
+          onChange={() => selection.toggle(task.id)}
+          label={t('tasks.bulk.tick', { title: task.title })}
+          labelHidden
+          testId="task-tick"
+        />
+      ) : (
+        <button
+          ref={setActivatorNodeRef}
+          type="button"
+          className="task-card-grip"
+          aria-label={t('tasks.reorder', { title: task.title })}
+          {...attributes}
+          {...listeners}
+        >
+          <IconGrip size={14} />
+        </button>
+      )}
       <div className="min-w-0 flex-1">
         <p className="truncate text-sm" dir="auto">
           {task.title}
@@ -674,6 +826,49 @@ export function TaskCard({ task, actions }: { task: Task; actions: CardActions }
             <span className="text-xs text-muted">
               {task.subtask_counts.done}/{task.subtask_counts.total}
             </span>
+          )}
+          {dod.length > 0 && (
+            // Its definition of done: how many lines the reviewer ticked (§104).
+            <Tooltip
+              label={t('tasks.dod.card', {
+                done: dod.filter((item) => item.checked).length,
+                total: dod.length,
+              })}
+            >
+              <span
+                className="inline-flex items-center gap-0.5 text-xs text-muted"
+                tabIndex={0}
+                data-testid="task-dod-badge"
+              >
+                <IconCheck size={12} />
+                {dod.filter((item) => item.checked).length}/{dod.length}
+              </span>
+            </Tooltip>
+          )}
+          {waitingOn.length > 0 && (
+            // What it waits for, by name on hover or focus: a task set to start on its own
+            // does not start before these are done (DECISIONS §93).
+            <Tooltip
+              label={t('tasks.waiting_on_list', {
+                titles: listOf(
+                  waitingOn.map((one) => one.title),
+                  language,
+                ),
+              })}
+            >
+              <span tabIndex={0} data-testid="task-waiting-on">
+                <Badge tone="warning">{t('tasks.waiting_on', { count: waitingOn.length })}</Badge>
+              </span>
+            </Tooltip>
+          )}
+          {running && task.stuck_since && (
+            <Tooltip
+              label={t('tasks.stuck_since', { time: exactTime(task.stuck_since, language) })}
+            >
+              <span tabIndex={0} data-testid="task-stuck">
+                <Badge tone="danger">{t('tasks.stuck')}</Badge>
+              </span>
+            </Tooltip>
           )}
           {task.blocked_reason && (
             // A reason cut short on the card is read whole on hover or focus.
@@ -800,6 +995,25 @@ const STATUS_TONE: Partial<Record<TaskStatus, 'success' | 'danger' | 'warning' |
   scheduled: 'warning',
   ready: 'info',
 };
+
+/** The archive itself, read from the hub the moment a person opens it. */
+function ArchiveList({ filter }: { filter: BoardFilter }) {
+  const { t } = useI18n();
+  const archived = useArchive(filter, true);
+  if (archived.isPending) {
+    return <p className="task-column-empty">{t('common.loading')}</p>;
+  }
+  if (archived.isError) {
+    return <Notice tone="danger">{describeError(archived.error, t)}</Notice>;
+  }
+  return (
+    <ul className="task-archive-list" data-testid="task-archive">
+      {archived.data.map((task) => (
+        <ArchivedCard key={task.id} task={task} />
+      ))}
+    </ul>
+  );
+}
 
 /**
  * A card in the archive: read-only. It is there to be found again, not worked — no grip,

@@ -35,10 +35,12 @@ sets:
 | `COREHUB_SETUP_OPEN_MINUTES` | Optional. Minutes after the hub starts, while it has no owner, in which setup is open without the token. Default `60`; `0` = token only (§2). |
 | `COREHUB_RESET_OWNER` | Optional, recovery only. `1` disables the owner on the next boot and reopens setup (§2). Remove it afterwards. |
 | `COREHUB_TASK_AUTO_START_MAX` | Optional. How many task runs the hub starts **by itself** (a task's "Start automatically") at once in one profile; the rest wait their turn. Default `2`. A person's "Assign and start" is never held back by it. |
+| `COREHUB_TASK_STUCK_MINUTES` | Optional. After how many minutes without any activity from its run a running task is marked **stuck** and its owner gets a notice (the task is not stopped). Default `30` (proposed); `0` switches the watchdog off. |
 | `COREHUB_WEB_TERMINAL` | Optional, **off by default**. `1` gives the owner — and only the owner — a shell on this host from Settings → Terminal (§3c). Read the risk first. |
 | `COREHUB_WEB_TERMINAL_IDLE_MINUTES` | Optional. A web terminal nobody types in closes after this many minutes. Default `15`. |
+| `COREHUB_TRUST_PROXY` | Optional. Which reverse proxies may say who their client was (`X-Forwarded-For`). Unset: loopback and the private ranges, which fits Caddy/Traefik on the stack's Docker network and cloudflared on the same machine. A comma list of addresses/CIDRs, `false` for none, or a hop count (§3d). |
 
-These nine are the whole configuration (ARCHITECTURE invariant 5). There is
+These are the whole configuration (ARCHITECTURE invariant 5). There is
 no variable for model provider keys either — they are added once on the Models
 screen and the hub carries them to every agent (§3).
 
@@ -307,6 +309,46 @@ What limits it: the owner only, and only from a signed-in browser (an app token 
 an integration — is refused); three terminals at once; each closes after the idle timeout; and
 every start and end is written to the audit log (Settings → Logs, `terminal.opened` /
 `terminal.closed`: who, when, in which folder, why it ended). What is typed is not recorded.
+
+## 3d. Behind a reverse proxy: who is asking
+
+The hub counts failed sign-ins, app tokens and pairing codes per client address and locks an
+address after five (the audit log and the admin's Lockouts list show it too). Behind a proxy
+every connection comes from the proxy, which says who its client was in `X-Forwarded-For` — but
+anyone can send that header. So the hub believes it only when the connection comes from a proxy
+it trusts, and takes the right-most address in the header that is **not** such a proxy; what a
+client wrote further left is ignored. `X-Forwarded-Host` and `X-Forwarded-Proto` (the hub's own
+address in pairing QR codes) follow the same rule.
+
+`COREHUB_TRUST_PROXY` says which proxies to trust:
+
+| Value | Trusts |
+|---|---|
+| *(unset)* | `127.0.0.0/8`, `::1`, `10.0.0.0/8`, `172.16.0.0/12`, `192.168.0.0/16`, `fc00::/7` — loopback and the private ranges. |
+| `10.0.5.2, 172.20.0.0/16` | Only these addresses / ranges. |
+| `false` | Nobody: the address is always the one that connected. |
+| `1` … `10` | That many hops from the hub, whoever they are. Only when nothing can reach the hub except through the proxy. |
+
+- **Caddy or Traefik in Docker** (the reference setup): the proxy reaches the hub over the
+  stack's Docker network from a `172.x` address — the default covers it. Out of the box both
+  drop a client's own `X-Forwarded-For` and send the address they saw; nothing else to set. To
+  be strict, name the proxy network's range, e.g. `COREHUB_TRUST_PROXY: '172.20.0.0/16'`.
+- **Cloudflare's proxy (orange cloud)** in front of Caddy/Traefik: the proxy then sees
+  Cloudflare's edge, not the visitor. Tell the proxy to trust Cloudflare's ranges (published at
+  `https://www.cloudflare.com/ips/`; Caddy: `trusted_proxies` in the global `servers` options,
+  Traefik: the entry point's `forwardedHeaders.trustedIPs`) so it keeps Cloudflare's
+  `X-Forwarded-For`, and give the hub the same ranges plus your proxy's network, e.g.
+  `COREHUB_TRUST_PROXY: '172.20.0.0/16, 173.245.48.0/20, …'`. Without that the lockout counts
+  Cloudflare's edge addresses, which many visitors share.
+- **Cloudflare Tunnel** (`cloudflared` on the same machine or in the same stack): it connects from
+  loopback or the Docker network and passes on Cloudflare's `X-Forwarded-For`; the default
+  covers it.
+- **No proxy** — the hub's port published straight to the internet or a LAN: set
+  `COREHUB_TRUST_PROXY: 'false'`. Otherwise a machine on your LAN (a private address) could write
+  its own `X-Forwarded-For`, and Docker's userland proxy, when it is in the path (IPv6 clients of
+  an IPv4 container), connects from the bridge's `172.17.0.1`.
+
+A value the hub cannot read stops it at boot with the reason, as every other variable does.
 
 ## 4. Smoke checklist
 

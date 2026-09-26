@@ -13,13 +13,35 @@ import { directionOf } from '../i18n/index.js';
 import type { RunChanges, RunFileChange } from '../types.js';
 import { pluralOf } from './changes.js';
 import { useOpenDiff } from './context.js';
+import { useLiveRunChanges } from './queries.js';
 
 /** Files shown before "Show all": a card under a reply stays a glance. */
 export const CARD_FILES = 5;
 
-export function RunChangesCard({ changes }: { changes: RunChanges }) {
+/**
+ * The same card while the run is still going (decision §102): what it has changed so far, read
+ * again as it works. Nothing until it has changed a file; its files open no diff yet — the hub
+ * records the diffs when the run ends, and the card under the reply then takes over.
+ */
+export function LiveRunChanges({
+  sessionId,
+  runId,
+  revision,
+}: {
+  sessionId: string;
+  runId: string;
+  revision: number;
+}) {
+  const live = useLiveRunChanges(sessionId, runId, revision);
+  const changes = live.data;
+  if (!changes || changes.files_changed === 0) return null;
+  return <RunChangesCard changes={changes} live />;
+}
+
+export function RunChangesCard({ changes, live = false }: { changes: RunChanges; live?: boolean }) {
   const { t, language } = useI18n();
-  const open = useOpenDiff();
+  const recorded = useOpenDiff();
+  const open = live ? null : recorded;
   const [expanded, setExpanded] = useState(false);
   const count = changes.files_changed;
   const shown = expanded ? changes.files : changes.files.slice(0, CARD_FILES);
@@ -32,10 +54,17 @@ export function RunChangesCard({ changes }: { changes: RunChanges }) {
       // words follow the page, and its paths and counts isolate themselves.
       dir={directionOf(language)}
       aria-label={t('changes.label')}
-      data-testid="run-changes"
+      data-testid={live ? 'run-changes-live' : 'run-changes'}
       data-run-id={changes.run_id}
+      data-live={live ? 'true' : undefined}
     >
       <header className="run-changes-head">
+        {live && (
+          <span className="run-changes-live" data-testid="run-changes-live-badge">
+            <span className="run-changes-live-dot" aria-hidden />
+            {t('changes.live')}
+          </span>
+        )}
         <span className="run-changes-title" data-testid="run-changes-title">
           {t(`changes.summary.${pluralOf(language, count)}`, { count })}
         </span>

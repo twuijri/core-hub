@@ -3,8 +3,48 @@
  * speaks the relay's API, checks every call's HMAC signature, timestamp and nonce the way the
  * relay does, and keeps what it received so a test can read what a phone would have shown.
  */
-import { createHash, createHmac, randomBytes } from 'node:crypto';
+import { createHash, createHmac, createPublicKey, randomBytes, verify } from 'node:crypto';
 import { relaySigningInput } from '../relay.js';
+
+/** The relay's device-proof prefix (packages/push-relay/src/relay.ts `PROOF_PREFIX`). */
+export const RELAY_PROOF_PREFIX = 'corehub-push-bind-v1';
+
+/**
+ * Checks a device proof the way the relay does: `key` the raw P-256 point (65 bytes), the
+ * signature raw `r || s` (64 bytes), both base64url, over prefix, platform, token and time.
+ * Returns the key's hash, or null when it does not verify.
+ */
+export function verifyRelayProof(
+  proof: { key?: unknown; signature?: unknown; signed_at?: unknown },
+  platform: string,
+  token: string,
+): string | null {
+  if (typeof proof.key !== 'string' || typeof proof.signature !== 'string') return null;
+  const raw = Buffer.from(proof.key, 'base64url');
+  const signature = Buffer.from(proof.signature, 'base64url');
+  if (raw.length !== 65 || raw[0] !== 4 || signature.length !== 64) return null;
+  try {
+    const key = createPublicKey({
+      key: {
+        kty: 'EC',
+        crv: 'P-256',
+        x: raw.subarray(1, 33).toString('base64url'),
+        y: raw.subarray(33).toString('base64url'),
+      },
+      format: 'jwk',
+    });
+    const message = [RELAY_PROOF_PREFIX, platform, token, String(proof.signed_at)].join('\n');
+    const ok = verify(
+      'sha256',
+      Buffer.from(message),
+      { key, dsaEncoding: 'ieee-p1363' },
+      signature,
+    );
+    return ok ? createHash('sha256').update(raw).digest('hex') : null;
+  } catch {
+    return null;
+  }
+}
 
 export interface FakeRelayMessage {
   platform: 'apns' | 'fcm';
@@ -24,6 +64,10 @@ export interface FakeRelay {
   hubs: Map<string, string>;
   /** `platform:token` → hub id. */
   bindings: Map<string, string>;
+  /** `platform:token` → the device key the first proof recorded, and that proof's time. */
+  deviceKeys: Map<string, { keyHash: string; signedAt: number }>;
+  /** Every bind's proof as it arrived (null when the bind had none). */
+  proofs: Array<Record<string, unknown> | null>;
   pushed: FakeRelayMessage[];
   /** Every call's path, in order, with whether its signature held. */
   calls: Array<{ method: string; path: string; signed: boolean }>;
@@ -41,6 +85,8 @@ const json = (status: number, body: unknown) =>
 export function fakeRelay(url = 'https://relay.test'): FakeRelay {
   const hubs = new Map<string, string>();
   const bindings = new Map<string, string>();
+  const deviceKeys: FakeRelay['deviceKeys'] = new Map();
+  const proofs: FakeRelay['proofs'] = [];
   const nonces = new Set<string>();
   const pushed: FakeRelayMessage[] = [];
   const calls: FakeRelay['calls'] = [];
@@ -49,6 +95,8 @@ export function fakeRelay(url = 'https://relay.test'): FakeRelay {
     url,
     hubs,
     bindings,
+    deviceKeys,
+    proofs,
     pushed,
     calls,
     gone,
@@ -98,11 +146,37 @@ export function fakeRelay(url = 'https://relay.test'): FakeRelay {
       const key = (platform: unknown, token: unknown) => `${String(platform)}:${String(token)}`;
       if (method === 'POST' && path === '/v1/tokens') {
         const k = key(body.platform, body.token);
+        const raw = (body.proof ?? null) as Record<string, unknown> | null;
+        proofs.push(raw);
+        let proof: { keyHash: string; signedAt: number } | null = null;
+        if (raw) {
+          const keyHash = verifyRelayProof(raw, String(body.platform), String(body.token));
+          if (!keyHash) {
+            return json(400, {
+              error: 'invalid_proof',
+              message: 'the device proof does not verify',
+            });
+          }
+          proof = { keyHash, signedAt: Number(raw.signed_at) };
+        }
         const holder = bindings.get(k);
+        const known = deviceKeys.get(k);
         if (holder && holder !== id) {
-          return json(409, { error: 'bound_elsewhere', message: 'bound to another hub' });
+          // Another hub holds it: only a newer proof from the key it recorded moves it.
+          const proven =
+            !!proof &&
+            !!known &&
+            known.keyHash === proof.keyHash &&
+            proof.signedAt > known.signedAt;
+          if (!proven) {
+            return json(409, { error: 'bound_elsewhere', message: 'bound to another hub' });
+          }
+          bindings.set(k, id);
+          deviceKeys.set(k, proof!);
+          return json(200, { status: 'rebound', reason: 'proof' });
         }
         bindings.set(k, id);
+        if (proof && (!known || proof.signedAt > known.signedAt)) deviceKeys.set(k, proof);
         return json(200, { status: 'bound' });
       }
       if (method === 'POST' && path === '/v1/tokens/sync') {
@@ -117,6 +191,7 @@ export function fakeRelay(url = 'https://relay.test'): FakeRelay {
           if (wanted.has(hashOf(k))) held.add(hashOf(k));
           else {
             bindings.delete(k);
+            deviceKeys.delete(k);
             removed += 1;
           }
         }
@@ -131,6 +206,7 @@ export function fakeRelay(url = 'https://relay.test'): FakeRelay {
           }
           if (gone.has(message.token)) {
             bindings.delete(k);
+            deviceKeys.delete(k);
             return { status: 'gone', ref: null, error: 'APNs: Unregistered (410)' };
           }
           pushed.push(message);

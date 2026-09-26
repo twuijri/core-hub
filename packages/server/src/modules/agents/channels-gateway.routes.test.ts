@@ -353,6 +353,136 @@ describe("WhatsApp's mode: a number for the agent, or the person's own", () => {
   });
 });
 
+describe("the header over the agent's WhatsApp replies in self-chat", () => {
+  const nameOf = async (h: Hub, agent: string) =>
+    ((await authed(h, h.token, { url: `/api/v1/agents/${agent}` })).json() as { name: string })
+      .name;
+  const envOf = (root: string) => readFileSync(path.join(root, '.env'), 'utf8');
+
+  it('a self-chat link carries the agent’s name; a bot link and a read write nothing', async () => {
+    const { hub: h, agent, root } = await boot();
+    await authed(h, h.token, {
+      method: 'POST',
+      url: `/api/v1/agents/${agent}/channels/whatsapp/login`,
+    });
+    await drainJobs(h.app);
+    await channels(h, agent, 'default');
+    expect(envOf(root)).not.toContain('WHATSAPP_REPLY_PREFIX');
+    expect((await channels(h, agent, 'default')).items[0]).toMatchObject({
+      link: { mode: 'bot', reply_title: null },
+    });
+
+    await authed(h, h.token, {
+      method: 'POST',
+      url: `/api/v1/agents/${agent}/channels/whatsapp/login`,
+      payload: { mode: 'self-chat' },
+    });
+    await drainJobs(h.app);
+    const name = await nameOf(h, agent);
+    expect(envOf(root)).toMatch(/^WHATSAPP_REPLY_PREFIX=.*────────────\\n"?$/m);
+    expect((await channels(h, agent, 'default')).items[0]).toMatchObject({
+      link: { mode: 'self-chat', reply_title: name },
+    });
+  });
+
+  it('switching an old link to self-chat writes the name only where nothing is written', async () => {
+    const { hub: h, agent, root, of } = await boot();
+    await authed(h, h.token, {
+      method: 'POST',
+      url: `/api/v1/agents/${agent}/channels/whatsapp/login`,
+    });
+    await drainJobs(h.app);
+    await vi.waitFor(() => expect(of('default')).toHaveLength(2));
+    const changed = await authed(h, h.token, {
+      method: 'PUT',
+      url: `/api/v1/agents/${agent}/channels/whatsapp/mode`,
+      payload: { mode: 'self-chat' },
+    });
+    expect(changed.json()).toMatchObject({ link: { reply_title: await nameOf(h, agent) } });
+
+    // A value somebody wrote stays as it is.
+    writeFileSync(
+      path.join(root, '.env'),
+      envOf(root).replace(/^WHATSAPP_REPLY_PREFIX=.*$/m, 'WHATSAPP_REPLY_PREFIX=🤖 Office:\\n'),
+    );
+    await authed(h, h.token, {
+      method: 'PUT',
+      url: `/api/v1/agents/${agent}/channels/whatsapp/mode`,
+      payload: { mode: 'bot' },
+    });
+    const again = await authed(h, h.token, {
+      method: 'PUT',
+      url: `/api/v1/agents/${agent}/channels/whatsapp/mode`,
+      payload: { mode: 'self-chat' },
+    });
+    expect(again.json()).toMatchObject({ link: { reply_title: '🤖 Office:' } });
+    expect(envOf(root)).toContain('WHATSAPP_REPLY_PREFIX=🤖 Office:\\n\n');
+  });
+
+  it('is set to a typed title or the agent’s name, and the gateway follows', async () => {
+    const { hub: h, agent, root, of } = await boot();
+    await makeProfile(h, 'manger');
+    await authed(h, h.token, {
+      method: 'POST',
+      url: `/api/v1/agents/${agent}/channels/whatsapp/login`,
+      payload: { mode: 'self-chat' },
+    });
+    await drainJobs(h.app);
+    await vi.waitFor(() => expect(of('default')).toHaveLength(2));
+
+    const custom = await authed(h, h.token, {
+      method: 'PUT',
+      url: `/api/v1/agents/${agent}/channels/whatsapp/reply-header`,
+      payload: { use: 'custom', title: '  مساعد   المكتب ' },
+    });
+    expect(custom.statusCode, custom.body).toBe(200);
+    expect(custom.json()).toMatchObject({
+      platform: 'whatsapp',
+      link: { linked: true, mode: 'self-chat', reply_title: 'مساعد المكتب' },
+    });
+    // Written as Hermes reads it: the title in bold over the rule, the line breaks as `\n`.
+    expect(envOf(root)).toContain('WHATSAPP_REPLY_PREFIX="*مساعد المكتب*\\\\n────────────\\\\n"\n');
+    // The gateway serving the profile restarts to follow, like any other channel change.
+    await vi.waitFor(() => expect(of('default')).toHaveLength(3));
+    expect(of('default')[1]?.child.killed).toEqual(['SIGTERM']);
+
+    const named = await authed(h, h.token, {
+      method: 'PUT',
+      url: `/api/v1/agents/${agent}/channels/whatsapp/reply-header`,
+      payload: { use: 'agent_name', title: 'ignored' },
+    });
+    expect(named.json()).toMatchObject({ link: { reply_title: await nameOf(h, agent) } });
+
+    const empty = await authed(h, h.token, {
+      method: 'PUT',
+      url: `/api/v1/agents/${agent}/channels/whatsapp/reply-header`,
+      payload: { use: 'custom', title: '   ' },
+    });
+    expect(empty.statusCode).toBe(400);
+    const none = await authed(h, h.token, {
+      method: 'PUT',
+      url: `/api/v1/agents/${agent}/channels/whatsapp/reply-header`,
+      payload: { use: 'none' },
+    });
+    expect(none.statusCode).toBe(400);
+    const telegram = await authed(h, h.token, {
+      method: 'PUT',
+      url: `/api/v1/agents/${agent}/channels/telegram/reply-header`,
+      payload: { use: 'agent_name' },
+    });
+    expect(telegram.statusCode).toBe(409);
+    expect(telegram.json()).toMatchObject({ details: { reason: 'reply_header_not_supported' } });
+    const nothing = await authed(h, h.token, {
+      method: 'PUT',
+      url: `/api/v1/agents/${agent}/channels/whatsapp/reply-header`,
+      profile: 'manger',
+      payload: { use: 'agent_name' },
+    });
+    expect(nothing.statusCode).toBe(409);
+    expect(nothing.json()).toMatchObject({ details: { reason: 'not_linked' } });
+  });
+});
+
 describe('a channel the running gateway does not serve', () => {
   it('says a restart is needed until Hermes names it, then how it is', async () => {
     const { hub: h, agent, root, of } = await boot();

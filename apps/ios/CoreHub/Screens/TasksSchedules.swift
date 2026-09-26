@@ -15,27 +15,8 @@ struct TasksScreen: View {
     @Environment(\.l10n) private var l10n
 
     var body: some View {
-        AsyncContent(key: "tasks") {
-            let header = app.currentProfile
-            return try await app.api.call {
-                try await TasksAPI.tasksListTasks(xHubProfile: header, profiles: .all, limit: 200, apiConfiguration: $0)
-            }.items
-        } content: { tasks, reload in
-            List {
-                if tasks.isEmpty { Text(l10n("tasks.empty")).foregroundStyle(Tone.textMuted) }
-                ForEach(TaskColumns.order, id: \.self) { status in
-                    let column = tasks.filter { $0.status == status }
-                    if !column.isEmpty {
-                        Section(l10n("tasks.status_\(status.rawValue)") + " · \(column.count)") {
-                            ForEach(column, id: \.id) { task in
-                                TaskRow(task: task, openChat: openChat, changed: reload)
-                            }
-                        }
-                    }
-                }
-            }
-            .refreshable { reload() }
-        }
+        // Columns side by side with drag between them (B15), as on the web.
+        TaskBoardView(openChat: openChat)
         .navigationTitle(l10n("nav.tasks"))
         .navigationBarTitleDisplayMode(.inline)
         .accessibilityIdentifier("screen.tasks")
@@ -105,11 +86,35 @@ struct TaskRow: View {
     }
 }
 
+enum SchedulesHalf: Hashable { case jobs, workflows }
+
 struct SchedulesScreen: View {
     @Environment(AppModel.self) private var app
     @Environment(\.l10n) private var l10n
+    @State private var half: SchedulesHalf = .jobs
 
     var body: some View {
+        // Schedules and workflows share the page, as on the web: one segmented switch above them.
+        VStack(spacing: 0) {
+            Picker(l10n("nav.schedules"), selection: $half) {
+                Text(l10n("schedules.tab_jobs")).tag(SchedulesHalf.jobs)
+                Text(l10n("schedules.tab_workflows")).tag(SchedulesHalf.workflows)
+            }
+            .pickerStyle(.segmented)
+            .padding(.horizontal, Space.s4)
+            .padding(.vertical, Space.s2)
+            .accessibilityIdentifier("schedules.half")
+            switch half {
+            case .jobs: jobs
+            case .workflows: WorkflowsList()
+            }
+        }
+        .navigationTitle(l10n("nav.schedules"))
+        .navigationBarTitleDisplayMode(.inline)
+        .accessibilityIdentifier("screen.schedules")
+    }
+
+    private var jobs: some View {
         AsyncContent(key: "schedules") {
             try await app.api.call { try await SchedulesAPI.schedulesList(profiles: .all, limit: 200, apiConfiguration: $0) }.items
         } content: { schedules, reload in
@@ -121,9 +126,6 @@ struct SchedulesScreen: View {
             }
             .refreshable { reload() }
         }
-        .navigationTitle(l10n("nav.schedules"))
-        .navigationBarTitleDisplayMode(.inline)
-        .accessibilityIdentifier("screen.schedules")
     }
 }
 
@@ -160,7 +162,7 @@ struct ScheduleRow: View {
             Button {
                 Task { await runNow() }
             } label: {
-                Label(l10n("schedules.run_now"), systemImage: "play")
+                LucideLabel(l10n("schedules.run_now"), icon: .play, size: 16)
             }
             .font(.system(size: FontSize.sizeSm))
             .disabled(busy)
@@ -180,32 +182,5 @@ struct ScheduleRow: View {
         } catch {
             note = HubFailure(error).describe(l10n)
         }
-    }
-}
-
-/// The Rooms segment's list. The hub's `rooms` module is not built yet; the list says what the
-/// hub answers instead of an empty space.
-struct RoomsList: View {
-    @Environment(AppModel.self) private var app
-    @Environment(\.l10n) private var l10n
-
-    var body: some View {
-        AsyncContent(key: app.currentProfile) {
-            let profile = app.currentProfile
-            return try await app.api.call { try await RoomsAPI.roomsList(xHubProfile: profile, apiConfiguration: $0) }.items
-        } content: { rooms, _ in
-            VStack(alignment: .leading, spacing: Space.s2) {
-                if rooms.isEmpty { Text(l10n("rooms.empty")).font(.system(size: FontSize.sizeSm)).foregroundStyle(Tone.textMuted) }
-                ForEach(rooms, id: \.id) { room in
-                    HStack {
-                        Text(room.name).font(.system(size: FontSize.sizeSm, weight: .medium))
-                        Spacer()
-                        Text(l10n("rooms.members", ["count": String(room.memberCount)]))
-                            .font(.system(size: FontSize.sizeXs)).foregroundStyle(Tone.textMuted)
-                    }
-                }
-            }
-        }
-        .accessibilityIdentifier("screen.rooms")
     }
 }

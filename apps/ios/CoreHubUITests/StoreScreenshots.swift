@@ -70,6 +70,25 @@ final class StoreScreenshots: XCTestCase {
         app = launch(language: language, theme: theme, open: nil, demo: false)
         try wait(for: "login.submit", in: app)
         shots.take("00-sign-in", of: app, extra: true)
+
+        // Not for the store either: the design audit's other pages (docs/design/family.md), on
+        // the phone only. Whatever the demo hub answers — a page, its empty state or its error
+        // state — is what the audit looks at, so nothing here waits for particular content.
+        if shots.device == "iphone" {
+            for (name, path) in [
+                ("audit-search", "/search"),
+                ("audit-rooms", "/rooms"),
+                ("audit-schedules", "/schedules"),
+                ("audit-models", "/settings/models"),
+                ("audit-this-device", "/settings/this-device"),
+                ("audit-display", "/settings/display"),
+            ] {
+                app = launch(language: language, theme: theme, open: path)
+                _ = app.wait(for: .runningForeground, timeout: 15)
+                Thread.sleep(forTimeInterval: 2)
+                shots.take(name, of: app, extra: true)
+            }
+        }
         app.terminate()
     }
 

@@ -49,6 +49,8 @@ export interface NewRoomMessage {
   sessionId: string;
   content: string;
   parts: Array<Record<string, unknown>>;
+  /** The attachments the message's file blocks name (contract decision §99). */
+  attachmentIds?: string[];
   mentions?: StoredMention[];
   replyToId?: string | null;
   runId?: string | null;
@@ -287,6 +289,16 @@ export class RoomsStore {
       .get();
   }
 
+  /** The room a seat sits in (a removed seat's too), within one workspace. */
+  roomOfSeat(workspace: string, seatId: string): string | null {
+    const row = this.db
+      .select({ roomId: seats.roomId })
+      .from(seats)
+      .where(and(eq(seats.workspace, workspace), eq(seats.id, seatId)))
+      .get();
+    return row?.roomId ?? null;
+  }
+
   seatBySession(sessionId: string): SeatRow | undefined {
     return this.db.select().from(seats).where(eq(seats.sessionId, sessionId)).get();
   }
@@ -374,6 +386,7 @@ export class RoomsStore {
           sessionId: input.sessionId,
           content: input.content,
           parts: input.parts as never,
+          attachmentIds: input.attachmentIds ?? [],
           mentions: (input.mentions ?? [])
             .map((m) => m.seat_id)
             .filter((v): v is string => typeof v === 'string'),

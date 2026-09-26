@@ -27,6 +27,7 @@ import {
   type BadgeTone,
 } from '../../ui/index.js';
 import { Combobox } from '../../ui/Combobox.js';
+import { chatModels } from '../../models/queries.js';
 import { modelOption } from '../../models/useModelPicker.js';
 import type { Agent, Model } from '../../types.js';
 import {
@@ -133,6 +134,7 @@ export function StepPanel({
   problems,
   onRunFrom,
   runFromBusy,
+  settings,
 }: {
   draft: Draft;
   node: WfNode | null;
@@ -144,6 +146,8 @@ export function StepPanel({
   problems: readonly WorkflowIssue[];
   onRunFrom: (nodeId: string) => void;
   runFromBusy: boolean;
+  /** The workflow's own settings (its limits), shown while no step is selected (§102). */
+  settings?: ReactNode;
 }) {
   const { t } = useI18n();
   if (edge)
@@ -152,9 +156,12 @@ export function StepPanel({
     );
   if (!node) {
     return (
-      <p className="text-sm text-muted" data-testid="workflow-panel-empty">
-        {t('workflows.editor.no_selection')}
-      </p>
+      <div className="flex flex-col gap-3">
+        <p className="text-sm text-muted" data-testid="workflow-panel-empty">
+          {t('workflows.editor.no_selection')}
+        </p>
+        {settings}
+      </div>
     );
   }
   const update = (patch: Partial<Omit<WfNode, 'id' | 'kind'>>) =>
@@ -236,7 +243,7 @@ export function StepPanel({
         </Button>
         <Button
           size="sm"
-          variant="danger"
+          variant="danger-quiet"
           className="ms-auto"
           onClick={() => dispatch({ type: 'remove_node', id: node.id })}
           data-testid="workflow-step-delete"
@@ -262,8 +269,8 @@ function AgentForm({
   models: readonly Model[];
 }) {
   const { t } = useI18n();
-  const modelOptions = models
-    .filter((model) => model.visible && !model.disabled && model.kind === 'chat')
+  const modelOptions = chatModels(models)
+    .filter((model) => model.visible && !model.disabled)
     .map((model) => modelOption(model, model.key));
   return (
     <>
@@ -702,7 +709,7 @@ function EdgeForm({
       </Field>
       <Button
         size="sm"
-        variant="danger"
+        variant="danger-quiet"
         className="self-start"
         onClick={() => dispatch({ type: 'remove_edge', id: edge.id })}
         data-testid="workflow-edge-delete"

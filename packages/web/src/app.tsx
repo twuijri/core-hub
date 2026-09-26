@@ -3,6 +3,7 @@ import { HubApiError } from '@corehub/contracts';
 import { useMemo, type ReactNode } from 'react';
 import { BrowserRouter, Navigate, Route, Routes, useLocation, useParams } from 'react-router';
 import { AuthProvider, useAuth } from './auth/context.js';
+import { BrowserPushResume } from './devices/BrowserPushResume.js';
 import { SessionStore } from './auth/store.js';
 import { ThemeProvider, useTheme } from './design/theme.js';
 import { I18nProvider } from './i18n/context.js';
@@ -125,6 +126,7 @@ export function App({ store, baseUrl, fetchImpl, router }: AppProps) {
             {...(baseUrl !== undefined ? { baseUrl } : {})}
             {...(fetchImpl ? { fetchImpl } : {})}
           >
+            <BrowserPushResume />
             {router ? router(tree) : <BrowserRouter>{tree}</BrowserRouter>}
           </AuthProvider>
         </QueryClientProvider>

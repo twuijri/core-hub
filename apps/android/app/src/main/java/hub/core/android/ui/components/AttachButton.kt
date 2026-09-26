@@ -1,5 +1,16 @@
 package hub.core.android.ui.components
 
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.getValue
+import hub.core.android.generated.ControlTokens
+import hub.core.android.ui.kit.HubIconButton
+import hub.core.android.ui.kit.HubMenu
+import hub.core.android.ui.kit.Lucide
+import hub.core.android.ui.kit.LucideIcon
+import hub.core.android.ui.kit.MenuDivider
+import hub.core.android.ui.kit.MenuItem
+import hub.core.android.ui.kit.MenuLabel
+import hub.core.android.ui.kit.Spinner
 import android.Manifest
 import android.content.Context
 import android.content.pm.PackageManager
@@ -26,23 +37,14 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
-import androidx.compose.material3.HorizontalDivider
-import androidx.compose.material3.RadioButton
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
-import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -50,7 +52,6 @@ import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
-import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -203,38 +204,21 @@ fun AttachButton(tray: AttachmentTray) {
     }
 
     Box {
-        IconButton(onClick = { open = true }, modifier = Modifier.testTag("composer.attach")) {
-            Icon(painterResource(R.drawable.lucide_plus), stringResource(R.string.attach_add), tint = t.textMuted, modifier = Modifier.size(22.dp))
-        }
-        DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
-            // Telegram's choice for photos: compressed, or the original file.
-            Text(
-                stringResource(R.string.attach_photo_quality),
-                style = MaterialTheme.typography.labelMedium, color = t.textMuted,
-                modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
-            )
-            listOf(false to R.string.attach_compressed, true to R.string.attach_original).forEach { (original, label) ->
-                DropdownMenuItem(
-                    text = { Text(stringResource(label)) },
-                    leadingIcon = { RadioButton(selected = choices.photoOriginal == original, onClick = null) },
-                    onClick = { context.graph.device.update { it.copy(photoOriginal = original) } },
-                    modifier = Modifier.testTag(if (original) "composer.photo_original" else "composer.photo_compressed"),
-                )
-            }
-            HorizontalDivider()
-            DropdownMenuItem(
-                text = { Text(stringResource(R.string.attach_photo)) },
-                leadingIcon = { Icon(painterResource(R.drawable.lucide_image), null, modifier = Modifier.size(20.dp)) },
-                onClick = {
+        HubIconButton(
+            Lucide.Plus, stringResource(R.string.attach_add), { open = true },
+            size = ControlTokens.heightMd.dp, iconSize = 20.dp, modifier = Modifier.testTag("composer.attach"),
+        )
+        HubMenu(open, { open = false }) {
+            MenuItem(
+                stringResource(R.string.attach_photo), {
                     open = false
                     photos.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
                 },
+                icon = Lucide.Image,
             )
             if (context.packageManager.hasSystemFeature(PackageManager.FEATURE_CAMERA_ANY)) {
-                DropdownMenuItem(
-                    text = { Text(stringResource(R.string.attach_camera)) },
-                    leadingIcon = { Icon(painterResource(R.drawable.lucide_camera), null, modifier = Modifier.size(20.dp)) },
-                    onClick = {
+                MenuItem(
+                    stringResource(R.string.attach_camera), {
                         open = false
                         if (ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED) {
                             PickedFiles.cameraTarget(context).also { cameraUri = it; camera.launch(it) }
@@ -242,16 +226,26 @@ fun AttachButton(tray: AttachmentTray) {
                             cameraPermission.launch(Manifest.permission.CAMERA)
                         }
                     },
+                    icon = Lucide.Camera,
                 )
             }
-            DropdownMenuItem(
-                text = { Text(stringResource(R.string.attach_file)) },
-                leadingIcon = { Icon(painterResource(R.drawable.lucide_file_text), null, modifier = Modifier.size(20.dp)) },
-                onClick = {
+            MenuItem(
+                stringResource(R.string.attach_file), {
                     open = false
                     files.launch(arrayOf("*/*"))
                 },
+                icon = Lucide.FileText,
             )
+            MenuDivider()
+            // Telegram's choice for photos: compressed, or the original file.
+            MenuLabel(stringResource(R.string.attach_photo_quality))
+            listOf(false to R.string.attach_compressed, true to R.string.attach_original).forEach { (original, label) ->
+                MenuItem(
+                    stringResource(label), { context.graph.device.update { it.copy(photoOriginal = original) } },
+                    checked = choices.photoOriginal == original,
+                    modifier = Modifier.testTag(if (original) "composer.photo_original" else "composer.photo_compressed"),
+                )
+            }
         }
     }
 }
@@ -276,9 +270,9 @@ fun AttachmentChips(items: List<AttachmentTray.Item>, onRemove: (String) -> Unit
                     if (bitmap != null) {
                         Image(bitmap.asImageBitmap(), null, contentScale = ContentScale.Crop, modifier = Modifier.size(36.dp))
                     } else {
-                        Icon(painterResource(if (item.isImage) R.drawable.lucide_image else R.drawable.lucide_file_text), null, tint = t.textMuted, modifier = Modifier.size(18.dp))
+                        LucideIcon(if (item.isImage) Lucide.Image else Lucide.FileText, null, size = 18.dp, tint = t.textMuted)
                     }
-                    if (item.state == AttachmentTray.State.Uploading) CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp)
+                    if (item.state == AttachmentTray.State.Uploading) Spinner(20.dp, t.accent)
                 }
                 Column(Modifier.widthIn(max = 160.dp)) {
                     Text(item.name, style = MaterialTheme.typography.labelSmall, maxLines = 1, overflow = TextOverflow.MiddleEllipsis)
@@ -293,9 +287,7 @@ fun AttachmentChips(items: List<AttachmentTray.Item>, onRemove: (String) -> Unit
                         )
                     }
                 }
-                IconButton(onClick = { onRemove(item.id) }, modifier = Modifier.size(28.dp)) {
-                    Icon(painterResource(R.drawable.lucide_x), stringResource(R.string.attach_remove, item.name), tint = t.textMuted, modifier = Modifier.size(14.dp))
-                }
+                HubIconButton(Lucide.X, stringResource(R.string.attach_remove, item.name), { onRemove(item.id) }, size = ControlTokens.heightSm.dp, iconSize = 14.dp)
             }
         }
     }

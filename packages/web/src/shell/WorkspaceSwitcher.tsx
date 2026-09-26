@@ -19,7 +19,9 @@ export function WorkspaceSwitcher() {
       : items.map((p) => ({ value: p.slug, label: p.name }));
   return (
     <span className="inline-flex items-center gap-1 text-xs">
-      <span className="text-muted">{t('shell.workspace')}</span>
+      {/* The word steps aside on a phone, where the bar also holds a conversation's controls;
+          the selector keeps it as its label. */}
+      <span className="hidden text-muted sm:inline">{t('shell.workspace')}</span>
       <Select
         value={profile}
         onValueChange={(next) => next && setProfile(next)}

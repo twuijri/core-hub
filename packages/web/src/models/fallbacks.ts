@@ -30,6 +30,23 @@ export function moveFallback(chain: readonly ModelRef[], index: number, by: -1 |
   return next;
 }
 
+/**
+ * Puts the entry `value` (its `refValue`) at `index`, the rest keeping their order — what a
+ * drag and drop does. An unknown value or an index outside the chain changes nothing.
+ */
+export function reorderFallback(
+  chain: readonly ModelRef[],
+  value: string,
+  index: number,
+): ModelRef[] {
+  const from = chain.findIndex((each) => `${each.provider_id}|${each.model}` === value);
+  if (from < 0 || index < 0 || index >= chain.length) return [...chain];
+  const next = [...chain];
+  const [moved] = next.splice(from, 1);
+  next.splice(index, 0, moved as ModelRef);
+  return next;
+}
+
 export function removeFallback(chain: readonly ModelRef[], index: number): ModelRef[] {
   return chain.filter((_, at) => at !== index);
 }

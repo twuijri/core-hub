@@ -9,7 +9,13 @@ import type { AdapterSet } from '../adapters/index.js';
 import type { AgentEvent } from '../adapters/types.js';
 import { AgentRunner } from '../runner.js';
 import type { AgentsService } from '../service.js';
-import { HUB_TOOLS, HUB_TOOL_GROUPS, confined } from './catalog.js';
+import {
+  HUB_TOOLS,
+  HUB_TOOL_GROUPS,
+  confined,
+  phoneToLocate,
+  type ToolContext,
+} from './catalog.js';
 import { RunLeases } from './leases.js';
 import { handleRpc, type McpHandlers } from './protocol.js';
 
@@ -86,6 +92,7 @@ describe('hub tools: the protocol', () => {
       'notifications',
       'workflows',
       'files',
+      'devices',
     ]);
     expect(HUB_TOOLS.map((tool) => tool.name)).toEqual([
       'tasks.list',
@@ -106,6 +113,15 @@ describe('hub tools: the protocol', () => {
       'files.list',
       'files.read',
       'files.write',
+      'devices.list',
+      'devices.list_folder',
+      'devices.read_file',
+      'devices.write_file',
+      'devices.open',
+      'devices.fetch_file',
+      'devices.run',
+      'devices.locate',
+      'devices.run_status',
     ]);
     for (const tool of HUB_TOOLS) {
       expect(tool.name.startsWith(`${tool.group}.`)).toBe(true);
@@ -249,5 +265,116 @@ describe('hub tools: the runner opens a lease for the life of a run', () => {
     await drained;
     expect(leases.live('W')).toEqual([]);
     expect(runGrantOf(lease!.token)).toBeNull();
+  });
+});
+
+describe('hub tools: where the phone is (§105)', () => {
+  const phone = (id: string, over: Record<string, unknown> = {}) => ({
+    id,
+    name: `Phone ${id}`,
+    kind: 'phone',
+    online: false,
+    last_seen_at: '2026-09-26T08:00:00Z',
+    profiles: null,
+    capabilities: [{ kind: 'location', enabled: true }],
+    ...over,
+  });
+
+  it('asks the phone that can tell: named, else connected, else seen last', () => {
+    const list = [
+      phone('a', { last_seen_at: '2026-09-26T09:00:00Z' }),
+      phone('b', { online: true }),
+      phone('c', { capabilities: [{ kind: 'location', enabled: false }], online: true }),
+      phone('d', { profiles: ['home'], online: true, last_seen_at: '2026-09-26T10:00:00Z' }),
+      phone('e', { capabilities: [{ kind: 'notifications', enabled: true }] }),
+    ];
+    expect(phoneToLocate(list, 'work')?.id).toBe('b');
+    expect(
+      phoneToLocate(
+        list.filter((d) => d.id !== 'b'),
+        'work',
+      )?.id,
+    ).toBe('a');
+    expect(phoneToLocate(list, 'home')?.id).toBe('d');
+    expect(phoneToLocate(list, 'work', 'a')?.id).toBe('a');
+    expect(phoneToLocate(list, 'work', 'c')).toBeNull();
+    expect(phoneToLocate([phone('x', { capabilities: [] })], 'work')).toBeNull();
+  });
+
+  it('makes a location request with the why, and answers with the place the phone sent', async () => {
+    const tool = HUB_TOOLS.find((t) => t.name === 'devices.locate')!;
+    expect(tool.access).toBe('read');
+    const calls: Array<{ method: string; route: string; body?: unknown }> = [];
+    let reads = 0;
+    const ctx: ToolContext = {
+      profile: 'work',
+      agentId: null,
+      filesRoot: '/tmp',
+      timezone: 'UTC',
+      sessionId: '01J8QK3ZR2W7M5N4P6T8V9X0SS',
+      notify: () => {},
+      sleep: async () => {},
+      async call(method, route, options) {
+        calls.push({ method, route, body: options?.body });
+        if (method === 'GET' && route === '/devices')
+          return { items: [phone('p1', { online: true })] };
+        if (method === 'POST') return { job_id: 'j', request_id: 'r1' };
+        reads += 1;
+        return reads < 2
+          ? { id: 'r1', status: 'pending', result: null, error: null }
+          : {
+              id: 'r1',
+              status: 'fulfilled',
+              result: {
+                latitude: 24.7,
+                longitude: 46.7,
+                accuracy_m: 12,
+                captured_at: '2026-09-26T09:00:00Z',
+              },
+              error: null,
+            };
+      },
+    };
+    const answer = await tool.run(ctx, { why: 'أقرب صيدلية' });
+    expect(answer).toEqual({
+      device: 'Phone p1',
+      latitude: 24.7,
+      longitude: 46.7,
+      accuracy_m: 12,
+      captured_at: '2026-09-26T09:00:00Z',
+    });
+    const created = calls.find((c) => c.method === 'POST')!;
+    expect(created.body).toMatchObject({
+      device_id: 'p1',
+      capability: 'location',
+      purpose: 'أقرب صيدلية',
+      session_id: '01J8QK3ZR2W7M5N4P6T8V9X0SS',
+      timeout_ms: 90_000,
+    });
+  });
+
+  it('a phone that says no is a refusal the agent can read', async () => {
+    const tool = HUB_TOOLS.find((t) => t.name === 'devices.locate')!;
+    const ctx: ToolContext = {
+      profile: 'work',
+      agentId: null,
+      filesRoot: '/tmp',
+      timezone: 'UTC',
+      notify: () => {},
+      sleep: async () => {},
+      async call(method, route) {
+        if (route === '/devices') return { items: [phone('p1')] };
+        if (method === 'POST') return { request_id: 'r1' };
+        return {
+          id: 'r1',
+          status: 'denied',
+          result: null,
+          error: { code: 'forbidden', message: 'the person said no' },
+        };
+      },
+    };
+    await expect(tool.run(ctx, {})).rejects.toMatchObject({ code: 'device_denied' });
+    const none: ToolContext = { ...ctx, call: async () => ({ items: [] }) };
+    await expect(tool.run(none, {})).rejects.toMatchObject({ code: 'device_capability_off' });
   });
 });

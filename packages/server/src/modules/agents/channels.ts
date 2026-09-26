@@ -104,6 +104,11 @@ export interface ChannelLink {
   accountUsername: string | null;
   /** WhatsApp: how Hermes uses the linked number (`whatsappMode`); null for every other platform. */
   mode: WhatsAppMode | null;
+  /**
+   * WhatsApp: the title of the header over the agent's replies in self-chat (`whatsappReplyTitle`);
+   * null while the hub has not written one (Hermes's own header shows) and for every other platform.
+   */
+  replyTitle?: string | null;
 }
 
 export interface Channel {
@@ -209,7 +214,11 @@ export function listChannels(home: string): Channel[] {
           configured: whatsapp.linked,
           exclusive: true,
           fields,
-          link: { ...whatsapp, mode: whatsapp.linked ? whatsappMode(env) : null },
+          link: {
+            ...whatsapp,
+            mode: whatsapp.linked ? whatsappMode(env) : null,
+            replyTitle: whatsapp.linked ? whatsappReplyTitle(env) : null,
+          },
         };
       }
       if (platform === 'telegram') {
@@ -433,6 +442,73 @@ export function setWhatsAppMode(home: string, mode: WhatsAppMode): Channel {
   const written = getChannel(home, 'whatsapp');
   if (!written) throw new ChannelError('channel_write_failed');
   return written;
+}
+
+// ------------------------------------------------------------------ WhatsApp reply header
+
+/**
+ * The header over the agent's replies in self-chat. The owner and the agent write from one number
+ * there, so Hermes's WhatsApp bridge puts a header over every reply: its own is «☤ *Hermes Agent*»
+ * over a rule, and `WHATSAPP_REPLY_PREFIX` in the profile's `.env` replaces it
+ * (`gateway/platforms/whatsapp_common.py` §_effective_reply_prefix, `scripts/whatsapp-bridge/bridge.js`
+ * §formatOutgoingMessage; Hermes v2026.9.14, MIT). A written `\n` is a line break to both. In `bot`
+ * mode the bridge sends no header at all.
+ *
+ * The hub writes the same shape with another title: `*<title>*`, the rule, a line break. It never
+ * writes an empty value: Hermes's Python side reads empty as "no header", but its adapter drops an
+ * empty variable before starting the bridge, and the bridge then sends Hermes's own header (seen on
+ * the real Hermes, `whatsapp-reply-header.real.test.ts`).
+ */
+export const REPLY_RULE = '────────────';
+export const REPLY_TITLE_MAX = 64;
+
+/** `WHATSAPP_REPLY_PREFIX` for a title, as `.env` holds it (the line breaks written `\n`). */
+export function replyPrefixFor(title: string): string {
+  return `*${title}*\\n${REPLY_RULE}\\n`;
+}
+
+/**
+ * The title of the header the profile's replies carry, or null for Hermes's own — nothing written,
+ * or an empty value (the bridge sends Hermes's header for that too). A prefix the hub did not write
+ * reads as its text on one line.
+ */
+export function whatsappReplyTitle(env: Record<string, string>): string | null {
+  const raw = env.WHATSAPP_REPLY_PREFIX;
+  if (raw === undefined) return null;
+  const text = raw.replace(/\\n/g, '\n');
+  if (text.trim() === '') return null;
+  const ours = /^\*([^\n]+)\*\n─+\n?$/.exec(text);
+  if (ours) return ours[1]!;
+  return text.replace(/─+/g, ' ').replace(/\s+/g, ' ').trim() || null;
+}
+
+/** A title as a person typed it: one line, trimmed; null when there is nothing left or too much. */
+export function cleanReplyTitle(title: string): string | null {
+  const clean = title.replace(/\s+/g, ' ').trim();
+  if (clean === '' || [...clean].length > REPLY_TITLE_MAX) return null;
+  return clean;
+}
+
+/** Writes the header's title. The caller has the gateway serving the profile follow. */
+export function setWhatsAppReplyTitle(home: string, title: string): Channel {
+  const clean = cleanReplyTitle(title);
+  if (!clean) throw new ChannelError('channel_reply_title_invalid');
+  if (!whatsappLink(home).linked) throw new ChannelError('channel_not_linked');
+  writeEnvValue(home, 'WHATSAPP_REPLY_PREFIX', replyPrefixFor(clean));
+  const written = getChannel(home, 'whatsapp');
+  if (!written) throw new ChannelError('channel_write_failed');
+  return written;
+}
+
+/**
+ * The agent's name over its replies where nothing was written yet — when a number is linked or
+ * switched to self-chat. What is already there (a title, or a value somebody wrote by hand) stays;
+ * nothing is rewritten when the hub starts.
+ */
+export function defaultReplyTitle(home: string, agentName: string): void {
+  if (readEnv(home).WHATSAPP_REPLY_PREFIX !== undefined) return;
+  const clean = cleanReplyTitle(agentName);
+  if (clean) writeEnvValue(home, 'WHATSAPP_REPLY_PREFIX', replyPrefixFor(clean));
 }
 
 // ------------------------------------------------------------------ Telegram bot

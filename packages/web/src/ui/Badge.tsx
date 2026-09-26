@@ -12,18 +12,28 @@ export type BadgeTone = 'neutral' | 'accent' | 'success' | 'warning' | 'danger' 
 export function Badge({
   tone = 'neutral',
   dot = false,
+  narrow,
   children,
   className = '',
   testId,
 }: {
   tone?: BadgeTone;
   dot?: boolean;
+  /**
+   * `dot`: on a phone-width screen only the dot is drawn — «نقطة خضراء بدل كلمة أونلاين»
+   * (owner, 2026-09-27). The words must then be the accessible name of what holds the badge.
+   */
+  narrow?: 'dot';
   children: ReactNode;
   className?: string;
   testId?: string;
 }) {
   return (
-    <span className={`ch-badge ch-badge-${tone} ${className}`} data-testid={testId}>
+    <span
+      className={`ch-badge ch-badge-${tone} ${className}`}
+      data-testid={testId}
+      data-narrow={narrow}
+    >
       {dot && <span className="ch-badge-dot" aria-hidden />}
       <span className="ch-badge-label" dir="auto">
         {children}

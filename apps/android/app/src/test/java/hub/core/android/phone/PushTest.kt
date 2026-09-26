@@ -9,6 +9,7 @@ import hub.core.client.model.DevicePatch
 import hub.core.client.model.DevicePlatform
 import hub.core.client.model.DeviceRegistration
 import hub.core.client.model.PushBlocker
+import hub.core.client.model.PushRelayProof
 import kotlinx.coroutines.test.runTest
 import okhttp3.OkHttpClient
 import okhttp3.mockwebserver.Dispatcher
@@ -17,6 +18,7 @@ import okhttp3.mockwebserver.MockWebServer
 import okhttp3.mockwebserver.RecordedRequest
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
@@ -177,6 +179,27 @@ class PushTest {
         patchStatus = 404
         assertTrue(registrar.report(report))
         assertEquals(listOf("PATCH /api/v1/devices/$ID_D0", "POST /api/v1/devices"), calls)
+    }
+
+    @Test fun `each registration carries the relay proof for its token`() = runTest {
+        store.save(storedSession(hub = hub()).copy(deviceId = ID_DV))
+        val proving = PushRegistrar(
+            store,
+            { HubApis(it.hub, OkHttpClient()) },
+            { token -> PushRelayProof(key = "key-of-this-install", signedAt = 1_790_000_000, signature = "signed-$token") },
+        ) { DeviceRegistration("key-1", "Pixel 9", DevicePlatform.ANDROID, DeviceKind.PHONE) }
+        proving.register("fcm-token-9", "ar")
+        val push = bodies.getValue("PUT /api/v1/devices/$ID_DV/push")
+        assertTrue(
+            push,
+            push.contains(
+                "\"relay_proof\":{\"key\":\"key-of-this-install\",\"signed_at\":1790000000,\"signature\":\"signed-fcm-token-9\"}",
+            ),
+        )
+        // Without a proof (the key could not be made), the registration goes on without one.
+        calls.clear()
+        registrar.register("fcm-token-9", "ar")
+        assertFalse(bodies.getValue("PUT /api/v1/devices/$ID_DV/push").contains("relay_proof"))
     }
 
     @Test fun `signed out, nothing is registered`() = runTest {

@@ -91,6 +91,13 @@ class Recording(context: Context) {
         start()
     }
 
+    /** How loud the microphone is now, 0…1, for the strip's waveform. */
+    fun level(): Float {
+        val amplitude = runCatching { recorder.maxAmplitude }.getOrDefault(0)
+        if (amplitude <= 0) return 0f
+        return Dictations.level(20f * kotlin.math.log10(amplitude / 32767f))
+    }
+
     /** Ends the take; how long it lasted, in ms. */
     fun finish(): Int {
         runCatching { recorder.stop() }

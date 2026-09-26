@@ -33,11 +33,12 @@ import { requireSqlite } from '../../lib/db.js';
 import { HubError, notFound } from '../../lib/errors.js';
 import { defineModule, REALTIME_NAMESPACES } from '../../lib/module.js';
 import { clampLimit, decodeCursor, encodeCursor } from '../../lib/pagination.js';
-import { createRealtime, type Realtime } from '../../lib/realtime.js';
+import { createRealtime, tapRealtime, type Realtime } from '../../lib/realtime.js';
 import { defineRoute } from '../../lib/route.js';
 import { HermesRefusal } from './hermes-kanban.js';
 import {
   HermesApiUnavailable,
+  toHermesHistory,
   toHermesPriority,
   type HermesCardApi,
   type HubPriority,
@@ -53,8 +54,8 @@ import {
   requireUser,
   requireWorkspace,
 } from '../auth/index.js';
-import { TasksService, type Actor, type Scope, type TaskStatus } from './service.js';
-import { TaskRuns, type TaskRunPort, type TaskRunScope } from './runs.js';
+import { TasksService, checkItems, type Actor, type Scope, type TaskStatus } from './service.js';
+import { TaskRuns, checkListsBrief, type TaskRunPort, type TaskRunScope } from './runs.js';
 import {
   toComment,
   toProject,
@@ -237,6 +238,13 @@ export function taskRunsFor(app: FastifyInstance): TaskRuns {
       renderTask(new TasksService(requireSqlite(app.hub.database)), scope, id, namesOf(app)),
     app.log,
   );
+  // Every event of a session that names a run is that run showing signs of life: what the
+  // stuck-task watchdog reads (DECISIONS §93). Only the runs this worker follows are kept.
+  tapRealtime(app.hub.io, (event) => {
+    if (event.namespace !== REALTIME_NAMESPACES.sessions) return;
+    const runId = runIdOf(event.payload);
+    if (runId) created.noteActivity(runId);
+  });
   // A run's ending moved its task: read the worktree's numbers again (what the agent
   // changed), then let the next task waiting to start on its own take the freed place.
   created.afterSettle = (scope, taskId) => {
@@ -247,6 +255,104 @@ export function taskRunsFor(app: FastifyInstance): TaskRuns {
   };
   workers.set(app.hub.io, created);
   return created;
+}
+
+/** The run a `/rt/sessions` payload is about: `run_id`, or the id of its `run` or `message`. */
+function runIdOf(payload: unknown): string | null {
+  if (!payload || typeof payload !== 'object') return null;
+  const record = payload as Record<string, unknown>;
+  if (typeof record.run_id === 'string') return record.run_id;
+  for (const key of ['run', 'message', 'subagent', 'approval'] as const) {
+    const inner = record[key];
+    if (inner && typeof inner === 'object') {
+      const nested = inner as Record<string, unknown>;
+      if (key === 'run' && typeof nested.id === 'string') return nested.id;
+      if (typeof nested.run_id === 'string') return nested.run_id;
+    }
+  }
+  return null;
+}
+
+// ------------------------------------------------------------------ the watchdog
+
+/**
+ * What `tasks` needs from `notify` to tell a task's owner it is stuck. Filled by the
+ * composition root; without it the marker is still set, and nobody is told.
+ */
+export interface TaskNoticePort {
+  stuck(input: {
+    userId: string;
+    workspace: string;
+    profile: string;
+    taskId: string;
+    /** How the board names the task: "HUB-12 · the title". */
+    label: string;
+    minutes: number;
+  }): void;
+}
+let taskNoticesFactory: ((app: FastifyInstance) => TaskNoticePort | null) | null = null;
+export function registerTaskNotices(
+  factory: ((app: FastifyInstance) => TaskNoticePort | null) | null,
+): ((app: FastifyInstance) => TaskNoticePort | null) | null {
+  const previous = taskNoticesFactory;
+  taskNoticesFactory = factory;
+  return previous;
+}
+
+/**
+ * The stuck-task watchdog (DECISIONS §93, proposed — owner to confirm), run on the
+ * scheduler's clock. A task of the hub's own that is `running` and whose run has shown no
+ * activity for `COREHUB_TASK_STUCK_MINUTES` gets the stuck marker (`stuck_since`, the moment
+ * it last showed any) and its owner one notice; the marker goes again when the run speaks.
+ *
+ * Nothing is moved and nothing is stopped: a run can be slow for good reasons, and the
+ * person decides. A run waiting for a person's answer is not stuck — it has already asked.
+ */
+export function watchStuckTasks(
+  app: FastifyInstance,
+  now: Date = new Date(),
+): { marked: number; cleared: number } {
+  const minutes = app.hub.config.taskStuckMinutes;
+  const counts = { marked: 0, cleared: 0 };
+  if (!minutes || minutes <= 0) return counts;
+  const db = requireSqlite(app.hub.database);
+  const service = new TasksService(db);
+  const runs = taskRunsFor(app);
+  const limitMs = minutes * 60_000;
+  for (const row of service.runningEverywhere()) {
+    if (!row.currentRunId) continue;
+    const status = runs.runStatus(row.workspace, row.currentRunId);
+    const waiting = status === 'waiting_approval' || status === 'waiting_input';
+    const last = runs.lastActivity(row.currentRunId) ?? row.updatedAt.getTime();
+    const stuck = !waiting && now.getTime() - last > limitMs;
+    if (stuck === (row.stuckAt !== null)) continue;
+    const home = findWorkspace(db, row.workspace);
+    if (!home) continue;
+    const scope: Scope = { workspace: row.workspace, profile: home.slug, userId: row.ownerId };
+    service.markStuck(row.id, stuck ? new Date(last) : null);
+    emitTasks(app, home.slug, 'task.updated', {
+      task: renderTask(service, scope, row.id, namesOf(app)),
+    });
+    if (!stuck) {
+      counts.cleared += 1;
+      continue;
+    }
+    counts.marked += 1;
+    try {
+      const project = service.project(scope, row.projectId);
+      taskNoticesFactory?.(app)?.stuck({
+        userId: row.ownerId,
+        workspace: row.workspace,
+        profile: home.slug,
+        taskId: row.id,
+        label: `${project.key}-${row.number} · ${row.title}`,
+        minutes,
+      });
+    } catch (error) {
+      app.log.warn({ err: error, taskId: row.id }, 'tasks: could not tell anyone a task is stuck');
+    }
+  }
+  return counts;
 }
 
 function emitTasks(
@@ -588,6 +694,7 @@ function renderTask(
     nameOf,
     subtaskCounts: service.subtaskCounts(row.id),
     dependsOn: service.dependenciesOf(row.id),
+    waitingOn: service.waitingOn(row.id),
     worktree: service.worktreeOf(row.id),
   });
 }
@@ -832,7 +939,12 @@ export const tasksModule = defineModule({
       // anything else changes, so a refusal from Hermes leaves the task as it was.
       if (hermes && input.start === true && mirror && !HermesMirror.isHermes(current)) {
         try {
-          const brief = [current.description, input.instructions]
+          // Hermes's worker reads only the card, so the lists go into its brief (§104).
+          const brief = [
+            current.description,
+            checkListsBrief(current, scope.language),
+            input.instructions,
+          ]
             .filter((part): part is string => !!part?.trim())
             .join('\n\n');
           const externalId = await mirror.createThrough({
@@ -1078,6 +1190,16 @@ export const tasksModule = defineModule({
 
         const nameOf = namesOf(request.server);
         const columns = TASK_STATUSES.map((status) => {
+          // The archive only grows, and the board is asked again every few seconds while a
+          // task runs: without `include_archived` it says how many, and sends none of them
+          // (DECISIONS §93). The client asks for them when a person opens the archive.
+          if (status === 'archived' && !includeArchived) {
+            return {
+              status,
+              count: service.archivedCount(ids, { projectId, agentId }),
+              tasks: [] as Record<string, unknown>[],
+            };
+          }
           const rows = service.columnAcross(ids, { projectId, agentId }, status, includeArchived);
           return {
             status,
@@ -1087,12 +1209,14 @@ export const tasksModule = defineModule({
                 nameOf,
                 subtaskCounts: service.subtaskCounts(row.id),
                 dependsOn: service.dependenciesOf(row.id),
+                waitingOn: service.waitingOn(row.id),
                 worktree: service.worktreeOf(row.id),
               }),
             ),
           };
         });
-        const total = columns.reduce((sum, column) => sum + column.count, 0);
+        // The columns whose tasks came along; an archive only counted is not in the total.
+        const total = columns.reduce((sum, column) => sum + column.tasks.length, 0);
         return {
           project_id: projectId ?? null,
           columns,
@@ -1209,6 +1333,7 @@ export const tasksModule = defineModule({
               nameOf,
               subtaskCounts: service.subtaskCounts(row.id),
               dependsOn: service.dependenciesOf(row.id),
+              waitingOn: service.waitingOn(row.id),
               worktree: service.worktreeOf(row.id),
             }),
           ),
@@ -1224,13 +1349,24 @@ export const tasksModule = defineModule({
         const scope = scopeOf(request);
         const service = serviceOf(request);
         const input = body as Record<string, unknown>;
+        const mirror = mirrorOf(request.server);
+        const toHermes =
+          mirror?.isHermesAgent(scope.workspace, input.assignee_agent_id as string | null) === true;
+        // Hermes briefs its own worker: lists it would never see are refused (decision §104).
+        if (
+          toHermes &&
+          checkItems(input.definition_of_done).length + checkItems(input.constraints).length > 0
+        ) {
+          throw new HubError('conflict', {
+            details: { reason: 'hermes_owns_card', action: 'definition_of_done' },
+          });
+        }
         let row = service.createTask(scope, actorOf(request), input);
         // A card given to Hermes goes on Hermes's board too, with the hub's id as the
         // idempotency key — so a retry after a half-finished create finds the same card
         // rather than making a second one. If Hermes refuses, the hub's row goes as well:
         // a card that exists here and not there is the one thing the mirror must not make.
-        const mirror = mirrorOf(request.server);
-        if (mirror?.isHermesAgent(scope.workspace, input.assignee_agent_id as string | null)) {
+        if (mirror && toHermes) {
           try {
             const externalId = await mirror.createThrough({
               id: row.id,
@@ -1262,10 +1398,12 @@ export const tasksModule = defineModule({
         const scope = scopeOf(request);
         const service = serviceOf(request);
         const input = body as { task_ids: string[]; patch: Record<string, unknown> };
+        const said = typeof input.patch.comment === 'string' ? input.patch.comment.trim() : '';
         const results = [];
         for (const id of input.task_ids) {
           try {
-            let patch = input.patch;
+            const { comment: _comment, ...asked } = input.patch;
+            let patch = asked;
             const row = service.task(scope, id);
             const hermes = hermesApiOf(request.server, row);
             if (hermes) {
@@ -1294,9 +1432,27 @@ export const tasksModule = defineModule({
             ) {
               refuseOnHermesCard(row, 'bulk_update');
             }
-            service.bulkUpdate(scope, actorOf(request), [id], patch);
+            if (Object.keys(patch).length > 0) {
+              service.bulkUpdate(scope, actorOf(request), [id], patch);
+            }
             if (patch.archived === true) {
               await releaseQuietly(request.server, service, scope.profile, service.worktreeOf(id));
+            }
+            // The same words on every card (decision §103): on Hermes's card first, in the
+            // person's name, as one comment is — and read back, so the hub shows what Hermes kept.
+            if (said !== '') {
+              if (hermes) {
+                const author = displayNameOf(request);
+                await hermes.api.comment(hermes.id, said, author).catch(refusedByHermes);
+                const detail = await hermes.api.show(hermes.id).catch(refusedByHermes);
+                hermes.mirror.reflectComments(service, row, detail.comments, {
+                  id: request.principal?.user.id ?? null,
+                  name: author,
+                  body: said,
+                });
+              } else {
+                service.comment(scope, actorOf(request), row.id, said);
+              }
             }
             results.push({ id, ok: true, error: null });
           } catch (error) {
@@ -1312,7 +1468,7 @@ export const tasksModule = defineModule({
           }
         }
         announce(request, 'task.updated', { task_ids: input.task_ids });
-        if (input.patch.auto_start === true) {
+        if (input.patch.auto_start === true || input.patch.status === 'done') {
           kickAutoStart(request.server, scope.workspace, runScopeOf(request).language);
         }
         return { results };
@@ -1357,14 +1513,17 @@ export const tasksModule = defineModule({
         const id = params.task_id as string;
         let row = service.task(scope, id);
         // A Hermes card is read from Hermes when it is opened: the card as Hermes has it
-        // now, and what was said on it there. A Hermes that cannot answer leaves the last
-        // reflection showing — opening a card must not fail because a helper did.
+        // now, what was said on it there, and its history there (§103). A Hermes that cannot
+        // answer leaves the last reflection showing — opening a card must not fail because a
+        // helper did.
         const hermes = hermesApiOf(request.server, row);
+        let history: ReturnType<typeof toHermesHistory> | null = null;
         if (hermes) {
           try {
             const detail = await hermes.api.show(hermes.id);
             row = hermes.mirror.reflectCard(service, scope, detail.task);
             hermes.mirror.reflectComments(service, row, detail.comments);
+            history = toHermesHistory(detail);
             row = service.task(scope, id);
           } catch (error) {
             if (error instanceof HubError) throw error;
@@ -1379,12 +1538,14 @@ export const tasksModule = defineModule({
             nameOf: namesOf(request.server),
             subtaskCounts: service.subtaskCounts(id),
             dependsOn: service.dependenciesOf(id),
+            waitingOn: service.waitingOn(id),
             worktree: service.worktreeOf(id),
           }),
           subtasks: service.subtasksOf(id).map(toSubtask),
           comments: service.commentsOf(id).map((row) => toComment(row, namesOf(request.server))),
           // The runs of a task live in the session it works in; `sessions` owns that table.
           runs: [],
+          hermes: history,
         };
       },
     });
@@ -1396,6 +1557,11 @@ export const tasksModule = defineModule({
         const service = serviceOf(request);
         let patch = body as Record<string, unknown>;
         const current = service.task(scope, params.task_id as string);
+        // Hermes's worker is briefed by Hermes, not by the hub: a definition of done it never
+        // sees would only look as if it had been kept (decision §104).
+        if (patch.definition_of_done !== undefined || patch.constraints !== undefined) {
+          refuseOnHermesCard(current, 'definition_of_done');
+        }
         const hermes = hermesApiOf(request.server, current);
         if (hermes) {
           // Hermes's words and priority are written on Hermes first, through its server;
@@ -1446,7 +1612,11 @@ export const tasksModule = defineModule({
         const updated = task(request, service, scope, params.task_id as string);
         announce(request, 'task.updated', { task: updated });
         // Switched to start on its own while already ready and given to an agent: it starts.
-        if (patch.auto_start === true && !HermesMirror.isHermes(current)) {
+        // Marked done: a task that waited for this one may start now.
+        if (
+          (patch.auto_start === true || (patch.status === 'done' && current.status !== 'done')) &&
+          !HermesMirror.isHermes(current)
+        ) {
           kickAutoStart(request.server, scope.workspace, runScopeOf(request).language);
         }
         return updated;
@@ -1524,8 +1694,25 @@ export const tasksModule = defineModule({
           );
         }
         const moved = task(request, service, scope, params.task_id as string);
-        announce(request, 'task.moved', { task: moved });
-        if (move.status === 'ready' && !HermesMirror.isHermes(current)) {
+        // `task.moved` says from where, to where and who (the event's schema requires all
+        // three, and webhooks forward it as it is); a card put elsewhere in the same column
+        // has not moved column, so that is an update.
+        if (moved.status !== current.status) {
+          announce(request, 'task.moved', {
+            task: moved,
+            from: current.status,
+            to: moved.status,
+            actor: authorOf(actorOf(request)),
+          });
+        } else {
+          announce(request, 'task.updated', { task: moved });
+        }
+        // Moved to Ready by a person: a task set to start on its own starts. Moved to Done:
+        // a task that waited for this one may start now (DECISIONS §93).
+        if (
+          (move.status === 'ready' || move.status === 'done') &&
+          !HermesMirror.isHermes(current)
+        ) {
           kickAutoStart(request.server, scope.workspace, runScopeOf(request).language);
         }
         return moved;
@@ -1656,6 +1843,10 @@ export const tasksModule = defineModule({
         service.setDependencies(scope, id, (body as { depends_on: string[] }).depends_on ?? []);
         const updated = task(request, service, scope, id);
         announce(request, 'task.updated', { task: updated });
+        // Nothing left to wait for (a dependency taken off): it may start on its own now.
+        if (updated.auto_start === true && (updated.waiting_on as unknown[]).length === 0) {
+          kickAutoStart(request.server, scope.workspace, runScopeOf(request).language);
+        }
         return updated;
       },
     });

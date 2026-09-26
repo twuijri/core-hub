@@ -107,12 +107,17 @@ test.describe('web smoke journeys', () => {
     await expect(page.getByTestId('session-row').first()).toContainText(
       'خطة الإطلاق في ثلاث مراحل',
     );
-    // Once the chat has run, the folder is fixed and says so instead of going quiet.
-    await expect(page.getByTestId('working-dir-button')).toBeDisabled();
-    await expect(page.getByTestId('working-dir-locked')).toBeVisible();
     // The column has handed itself to the transcript: the composer is docked.
     await expect(page.getByTestId('chat-screen')).toHaveAttribute('data-empty', 'false');
     await shot(page, 'chat-reply-ar-light');
+    // Once the chat has run, the folder is fixed and says so instead of going quiet: the
+    // folder icon in the top bar opens its name, its path and why it no longer moves.
+    await page.getByTestId('working-dir-button').click();
+    await expect(page.getByTestId('working-dir-locked')).toBeVisible();
+    await expect(page.getByTestId('working-dir-path')).toContainText('لوحة-الإطلاق');
+    await expect(page.getByTestId('working-dir-new')).toHaveCount(0);
+    await shot(page, 'chat-bar-folder-ar-light');
+    await page.keyboard.press('Escape');
 
     // A finished turn folds its tools into one line beside the reply; opened, a call
     // shows its output and sends it to the split pane. The divider is a keyboard separator.
@@ -141,7 +146,8 @@ test.describe('web smoke journeys', () => {
     // Inside Settings the sidebar *is* the settings list (owner, 2026-09-22): the
     // management pages are rows in it, and the conversation list has stepped aside.
     // Models · Device connections · Knowledge: Agents left for the rail (owner, 2026-09-24).
-    await expect(page.getByTestId('settings-management').getByRole('link')).toHaveCount(3);
+    // Four since «المراكز المرتبطة» / Linked hubs joined them (ADR 0026).
+    await expect(page.getByTestId('settings-management').getByRole('link')).toHaveCount(4);
     await expect(page.getByTestId('session-row')).toHaveCount(0);
     // And the rail too (owner, 2026-09-23): one row leads back, to the conversation that
     // was open — not a New chat pressed to get out.
@@ -208,10 +214,11 @@ test.describe('web smoke journeys', () => {
     await login(page);
     await newChat(page);
     const row = page.getByTestId('agent-chips');
-    // Nine agents from the catalog — Hermes, the hub's own `direct` agent
-    // (ADOPTION-BACKLOG §2.15) and the seven coding CLIs (Qwen Code, Kimi Code and Pi since
-    // 2026-09-25) — and a trailing "+" that goes to the Agents page.
-    await expect(page.getByTestId('agent-chip')).toHaveCount(9);
+    // Eleven agents from the catalog — Hermes, the hub's own `direct` agent
+    // (ADOPTION-BACKLOG §2.15) and the nine coding CLIs (Qwen Code, Kimi Code and Pi since
+    // 2026-09-25, Goose and Grok Build since 2026-09-27) — and a trailing "+" that goes to
+    // the Agents page.
+    await expect(page.getByTestId('agent-chip')).toHaveCount(11);
     await expect(page.getByTestId('agent-add')).toBeVisible();
     // Pages take the whole width (owner, 2026-09-23), so on a wide screen the row is at the
     // top of the ladder or one rung down — which one depends on the machine's fonts (CI's
@@ -1122,7 +1129,9 @@ test.describe('web smoke journeys', () => {
 
     // Always the same three documents, including the ones nothing has written yet.
     const docs = page.getByTestId('memory-list');
-    await expect(docs.getByRole('listitem')).toHaveCount(3);
+    // Each document is one row; a list's own entries are rows inside it (decision §102).
+    const documents = docs.locator('[data-testid^="memory-doc-"]');
+    await expect(documents).toHaveCount(3);
     await expect(docs).toContainText('SOUL.md');
     await expect(docs).toContainText('لم يكتب عنك شيئًا بعد.');
 
@@ -1130,8 +1139,11 @@ test.describe('web smoke journeys', () => {
     await page.getByTestId('memory-content').fill('أفضّل الردود القصيرة.');
     await page.getByTestId('save-memory').click();
     await expect(docs).toContainText('أفضّل الردود القصيرة.');
-    // Still three: writing one does not add a row, and there is no delete to offer.
-    await expect(docs.getByRole('listitem')).toHaveCount(3);
+    // Still three: writing one does not add a document, and there is no delete to offer.
+    await expect(documents).toHaveCount(3);
+    await expect(page.getByTestId('memory-entries-user').getByTestId('memory-entry')).toHaveCount(
+      1,
+    );
     await shot(page, 'agent-memory-ar-light');
 
     // Channels: nothing linked yet — a short explanation and the one «ربط منصة» button.

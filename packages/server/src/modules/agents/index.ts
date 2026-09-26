@@ -36,13 +36,15 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import type { FastifyInstance, FastifyRequest } from 'fastify';
 import type { Server as SocketServer } from 'socket.io';
-import { loadOpenApiDocument } from '@corehub/contracts';
+import { loadOpenApiDocument, serverBasePath } from '@corehub/contracts';
 import { requireSqlite } from '../../lib/db.js';
 import { HubError, notFound } from '../../lib/errors.js';
 import { createContractIndex } from '../../lib/contract.js';
 import { defineModule } from '../../lib/module.js';
 import { createRealtime } from '../../lib/realtime.js';
 import { defineRoute } from '../../lib/route.js';
+import { registerWebhookRoutes } from './webhook-routes.js';
+import { registerPresetRoutes } from './presets.js';
 import { levelOfHermesLine } from '../../lib/log-ring.js';
 import { t } from '../../i18n/index.js';
 import {
@@ -58,7 +60,7 @@ import {
 import { auditFor, jobRunnerFor } from '../audit/index.js';
 import { createAdapterSet, type AdapterSet, type AdapterSetOptions } from './adapters/index.js';
 import type { AdapterKind, AgentTarget } from './adapters/types.js';
-import { HERMES_ENTRY } from './catalog/index.js';
+import { HERMES_ENTRY, catalogEntry } from './catalog/index.js';
 import { HermesRuntime, type HermesRuntimeStatus, type Spawner } from './hermes-runtime.js';
 import { HermesDashboard, type DashboardSpawner } from './hermes-dashboard.js';
 import { QR_PLATFORMS, pairWhatsApp, testMcpServer, type HermesApiCall } from './hermes-tools.js';
@@ -68,7 +70,11 @@ import { namedHermesProfiles } from './hermes-profiles.js';
 import { RunLeases } from './hub-tools/leases.js';
 import { HUB_SERVER_NAME } from './hub-tools/block.js';
 import { registerHubToolRoutes } from './hub-tools/routes.js';
-import { HubToolsService, type HubToolsNotify } from './hub-tools/service.js';
+import {
+  HubToolsService,
+  type HubToolsHandOver,
+  type HubToolsNotify,
+} from './hub-tools/service.js';
 import { telegramGetMe } from './telegram-api.js';
 import { TELEGRAM_OPTIONS } from './telegram-settings.js';
 import {
@@ -110,6 +116,8 @@ import {
 import { hermesProfileName, profileHome } from './profile-home.js';
 import { SkillImportError, installPack, planImport, type UploadedFile } from './skill-import.js';
 import { createNpmInstaller, managedBinDirs, type AgentInstaller } from './installer.js';
+import { AgentSignIns, type SpawnSignIn } from './agent-sign-in.js';
+import { agentEnvironment } from './adapters/acp.js';
 import type { AgentDirectoryPort, AgentInfo, AgentModelsPort, AgentRunnerPort } from './ports.js';
 import { AgentRunner } from './runner.js';
 import { ConfigFileError, ConfigFileStore } from './config-files.js';
@@ -131,6 +139,9 @@ import {
   unlinkPlatform,
   readEnv,
   setWhatsAppMode,
+  setWhatsAppReplyTitle,
+  defaultReplyTitle,
+  cleanReplyTitle,
   telegramToken,
   TELEGRAM_TOKEN,
   whatsappLink,
@@ -328,6 +339,8 @@ export interface AgentsOverrides {
   };
   /** The home coding agents read their config files from (`config-files.ts`), for the tests. */
   agentHome?: string;
+  /** How an agent's own sign-in command is started (`agent-sign-in.ts`), scripted in tests. */
+  signIn?: { spawnImpl?: SpawnSignIn; promptTimeoutMs?: number };
 }
 
 /** Platforms linked by pasting a bot token (`agents.linkChannel`). */
@@ -430,6 +443,10 @@ interface AgentsContext {
   channelProbe: ProbeOptions;
   /** The coding agents' own config files, one set for the hub (decision §78). */
   configFiles: ConfigFileStore;
+  /** Agents signing in to their own vendor account (catalog `signIn`). */
+  signIns: AgentSignIns;
+  /** The environment a coding agent's process inherits, before its own variables. */
+  agentInherited: NodeJS.ProcessEnv;
 }
 
 /**
@@ -484,6 +501,17 @@ export function migrateMemoryOfEveryProfile(
 }
 
 let hubToolsNotifyFactory: ((app: FastifyInstance) => HubToolsNotify) | null = null;
+let hubToolsHandOverFactory: ((app: FastifyInstance) => HubToolsHandOver | null) | null = null;
+
+/**
+ * `devices.fetch_file` puts what a device sent on the run's reply (§89); `sessions` owns the
+ * reply, so the composition root lends it here.
+ */
+export function registerHubToolsHandOver(
+  factory: (app: FastifyInstance) => HubToolsHandOver | null,
+): void {
+  hubToolsHandOverFactory = factory;
+}
 
 /**
  * `notifications.notify`, the one hub tool with no REST operation to go through: a notice
@@ -725,6 +753,7 @@ function contextOf(app: FastifyInstance): AgentsContext {
         .list({ id: workspaceId, slug: '', name: '', isDefault: false }, { kind: 'hermes' })
         .find((agent) => agent.slug === 'hermes')?.id ?? null,
     notify: () => hubToolsNotifyFactory?.(app) ?? null,
+    handOver: () => hubToolsHandOverFactory?.(app) ?? null,
     timezone: () => runtime.timezone(),
     refreshRuntime: () => runtime.refreshTui(),
     homeOf: (workspace) => {
@@ -790,6 +819,13 @@ function contextOf(app: FastifyInstance): AgentsContext {
       ...(own.agentHome ? { home: own.agentHome } : {}),
       dataDir: hub.config.dataDir,
     }),
+    signIns: new AgentSignIns({
+      ...(own.signIn?.spawnImpl ? { spawnImpl: own.signIn.spawnImpl } : {}),
+      ...(own.signIn?.promptTimeoutMs !== undefined
+        ? { promptTimeoutMs: own.signIn.promptTimeoutMs }
+        : {}),
+    }),
+    agentInherited: host.inherited ?? {},
   };
   // The home coding agents read their files from exists before anything is spawned: the
   // image's `/data/home` is made on the first boot of a volume that predates it.
@@ -1025,6 +1061,7 @@ export const agentsModule = defineModule({
     });
     app.addHook('onClose', async () => {
       ctx.updates.stop();
+      ctx.signIns.close();
       await ctx.runner.closeAll();
       await ctx.dashboard.close();
       await ctx.runtime.stop();
@@ -1052,6 +1089,18 @@ export const agentsModule = defineModule({
       operationId: 'agents.update',
       handler: (request, { params, body }) =>
         service.update(scopeOf(request), params.agent_id as string, body as AgentPatchInput),
+    });
+
+    // Presets (contract decision §100): read and applied through the routes above and below,
+    // as the caller (`presets.ts`).
+    registerPresetRoutes(app, deps, {
+      db: (request) => requireSqlite(request.server.hub.database),
+      scope: scopeOf,
+      actor: actorOf,
+      requireAgent: (request, agentId) => {
+        service.get(scopeOf(request), agentId, request.language);
+      },
+      base: serverBasePath(document),
     });
 
     /**
@@ -1095,6 +1144,10 @@ export const agentsModule = defineModule({
     };
     const skillHome = (request: FastifyRequest, agentId: string): string =>
       toolHome(request, agentId).home;
+
+    /** The agent's name as the hub shows it to the person asking. */
+    const agentNameOf = (request: FastifyRequest, agentId: string): string =>
+      contextOf(request.server).service.get(scopeOf(request), agentId, request.language).name;
 
     /** Hermes's API for the tools that need Hermes to act, or the reason there is none. */
     const hermesApiOf = (request: FastifyRequest, agentId: string): HermesApiCall => {
@@ -1282,6 +1335,10 @@ export const agentsModule = defineModule({
         // Hermes's own skill: it keeps it in step with its bundle, so the hub leaves it be.
         if (error.reason === 'skill_bundled') {
           throw new HubError('conflict', { details: { reason: 'skill_bundled' } });
+        }
+        // Hermes's manual: Hermes never lets it be off, so neither does the hub (§103).
+        if (error.reason === 'skill_essential') {
+          throw new HubError('conflict', { details: { reason: 'skill_essential' } });
         }
         throw new HubError('bad_request', { details: { reason: error.reason } });
       }
@@ -1729,6 +1786,59 @@ export const agentsModule = defineModule({
       },
     });
 
+    // An installed agent signing in to its own vendor account (catalog `signIn`): the hub runs
+    // the agent's device-code command and relays its link and code; the agent keeps the token.
+    defineRoute(app, deps, {
+      operationId: 'agents.startSignIn',
+      status: 201,
+      handler: async (request, { params }) => {
+        const agentId = params.agent_id as string;
+        const row = service.loadAgent(agentId);
+        const entry = catalogEntry(row.slug);
+        if (!entry?.signIn) {
+          throw new HubError('state_invalid', {
+            details: { agent_id: agentId, reason: 'sign_in_unsupported' },
+          });
+        }
+        if (row.installState !== 'installed' || !row.executablePath) {
+          throw new HubError('state_invalid', {
+            details: { agent_id: agentId, reason: 'not_installed' },
+          });
+        }
+        const ctx = contextOf(request.server);
+        const env = agentEnvironment(ctx.agentInherited, { executablePath: row.executablePath });
+        const started = await ctx.signIns.start(
+          agentId,
+          [row.executablePath, ...entry.signIn.args],
+          env,
+        );
+        const scope = scopeOf(request);
+        const actor = actorOf(request).userId;
+        auditFor(request.server).record({
+          workspace: scope.id,
+          ownerId: actor,
+          actorKind: 'user',
+          actorId: actor,
+          action: 'agent.sign_in_started',
+          entityKind: 'agent',
+          entityId: agentId,
+          summary: `sign-in of ${row.slug} started`,
+          data: { agent: row.slug },
+          requestId: String(request.id),
+        });
+        return started;
+      },
+    });
+
+    defineRoute(app, deps, {
+      operationId: 'agents.getSignIn',
+      handler: (request, { params }) =>
+        contextOf(request.server).signIns.get(
+          params.agent_id as string,
+          params.sign_in_id as string,
+        ),
+    });
+
     registerHubToolRoutes(app, deps, {
       service: (server) => contextOf(server).hubTools,
       scopeOf,
@@ -1775,6 +1885,10 @@ export const agentsModule = defineModule({
       // for something a person can also edit with an editor.
       revision: 0,
       updated_at: item.updatedAt?.toISOString() ?? null,
+      // Decision §102: the entries as Hermes reads them, and the budget they count against.
+      entries: item.entries,
+      char_limit: item.limit,
+      char_count: item.length,
     });
 
     defineRoute(app, deps, {
@@ -1914,6 +2028,7 @@ export const agentsModule = defineModule({
             account_phone: channel.link.accountPhone,
             account_username: channel.link.accountUsername,
             mode: channel.link.mode,
+            reply_title: channel.link.replyTitle ?? null,
           }
         : null,
       fields: channel.fields.map((field) => ({
@@ -2045,6 +2160,19 @@ export const agentsModule = defineModule({
       },
     });
 
+    // Incoming webhooks (`webhook-routes.ts`, decision §97): Hermes's `webhook` platform.
+    await registerWebhookRoutes(app, deps, {
+      toolHome: (request, agentId) => toolHome(request, agentId),
+      listenerStatus: (request, profile, home) => {
+        const channel = listChannels(home).find((entry) => entry.platform === 'webhook');
+        if (!channel) return { status: 'offline', error: null };
+        const health = channelStatus(request, profile, channel);
+        return { status: health.status, error: health.error };
+      },
+      followChannels,
+      root: (server) => contextOf(server).runtime.status().home,
+    });
+
     /**
      * Unlink WhatsApp: the gateway that runs the bridge is held down while the session goes,
      * so the bridge cannot write it back, and comes back up when the profile still needs it.
@@ -2131,11 +2259,65 @@ export const agentsModule = defineModule({
         const { runtime } = contextOf(request.server);
         let channel: Channel;
         try {
-          channel = await runtime.withGatewayStopped(profile, () => setWhatsAppMode(home, mode));
+          channel = await runtime.withGatewayStopped(profile, () => {
+            // Self-chat replies carry a header: the agent's name where none was written yet.
+            if (mode === 'self-chat') defaultReplyTitle(home, agentNameOf(request, agentId));
+            return setWhatsAppMode(home, mode);
+          });
         } catch (error) {
           return channelFault(error);
         }
         request.log.info({ profile, mode }, 'agents: WhatsApp mode changed');
+        return toChannel(channel, channelStatus(request, profile, channel));
+      },
+    });
+
+    /**
+     * The header over the agent's replies in WhatsApp's self-chat (`channels.ts` §replyPrefixFor):
+     * the agent's name as the hub names it, or a title the person typed. Written to the profile's
+     * `.env`; the gateway serving the profile follows like any other channel change.
+     */
+    defineRoute(app, deps, {
+      operationId: 'agents.setChannelReplyHeader',
+      handler: (request, { params, body }) => {
+        const agentId = params.agent_id as string;
+        const platform = params.platform as string;
+        const { home, profile } = toolHome(request, agentId);
+        if (platform !== 'whatsapp') {
+          throw new HubError('state_invalid', {
+            details: { agent_id: agentId, platform, reason: 'reply_header_not_supported' },
+          });
+        }
+        if (!whatsappLink(home).linked) {
+          throw new HubError('state_invalid', {
+            details: { agent_id: agentId, platform, reason: 'not_linked' },
+          });
+        }
+        const input = body as { use: 'agent_name' | 'custom'; title?: string };
+        let title: string | null;
+        if (input.use === 'custom') {
+          title = cleanReplyTitle(input.title ?? '');
+          if (!title) {
+            throw new HubError('validation_failed', {
+              details: { field: 'title', reason: 'reply_title_invalid' },
+            });
+          }
+        } else {
+          title = cleanReplyTitle(agentNameOf(request, agentId));
+          if (!title) {
+            throw new HubError('state_invalid', {
+              details: { agent_id: agentId, platform, reason: 'agent_name_unusable' },
+            });
+          }
+        }
+        let channel: Channel;
+        try {
+          channel = setWhatsAppReplyTitle(home, title);
+        } catch (error) {
+          return channelFault(error);
+        }
+        followChannels(request, profile);
+        request.log.info({ profile, use: input.use }, 'agents: WhatsApp reply header changed');
         return toChannel(channel, channelStatus(request, profile, channel));
       },
     });
@@ -2469,6 +2651,7 @@ export const agentsModule = defineModule({
         // Asked of the person, never guessed from the number; `bot` is what every link was before.
         const mode: WhatsAppMode = (body as { mode?: WhatsAppMode } | undefined)?.mode ?? 'bot';
         const allowedUsers = readEnv(home).WHATSAPP_ALLOWED_USERS;
+        const agentName = agentNameOf(request, agentId);
         const job = jobRunnerFor(request.server).start(
           {
             kind: 'agents.channel_login',
@@ -2490,6 +2673,8 @@ export const agentsModule = defineModule({
             // Linked: the gateway that serves the profile starts, or starts again, now — the
             // default profile's too — so the number is answered without anyone pressing Restart.
             if (outcome.status === 'connected') {
+              // Self-chat replies carry a header: the agent's name where none was written yet.
+              if (mode === 'self-chat') defaultReplyTitle(home, agentName);
               await contextOf(app)
                 .runtime.channelsChanged(profile)
                 .catch((error: unknown) => {

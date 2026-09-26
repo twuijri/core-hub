@@ -58,7 +58,10 @@ import type {
 } from './ports.js';
 import { SessionNamer } from './naming.js';
 import { OutputWatcher, ensureRunFolders, type ProducedRefusal } from './run-files.js';
-import { startChangeTracking, type ChangeTracker } from './run-changes.js';
+import { startChangeTracking, type ChangeTracker, type RunChangesRecord } from './run-changes.js';
+
+/** How long one live look at a run's folder answers every asker (decision §102). */
+const LIVE_CHANGES_MS = 2_000;
 import { fileRefsOf } from './files.js';
 import {
   initialRunState,
@@ -96,6 +99,8 @@ interface ActiveRun {
   outputs: OutputWatcher | null;
   /** The working folder as the run started it (decision §49); `null` without one. */
   changes: ChangeTracker | null;
+  /** Attachments a tool put on the reply while the run was live (a device's file, §89). */
+  handedOver: Array<{ id: string; kind: string }>;
 }
 
 export interface EngineDeps {
@@ -170,6 +175,43 @@ export class RunEngine {
 
   isActive(runId: string): boolean {
     return this.active.has(runId);
+  }
+
+  /** The last look at each live run's folder, kept briefly so a card on every screen asks once. */
+  private readonly peeks = new Map<
+    string,
+    { at: number; record: Promise<RunChangesRecord | null> }
+  >();
+
+  /**
+   * What a live run has changed in its folder so far (decision §102): the folder now against
+   * the run's start, the same comparison the run's end records, but kept nowhere. `null` when
+   * the run is not live or has no folder to compare. Looks are shared for `LIVE_CHANGES_MS`,
+   * so several people watching one run cost one comparison.
+   */
+  async liveChanges(runId: string): Promise<{ record: RunChangesRecord; at: Date } | null> {
+    const run = this.active.get(runId);
+    if (!run?.changes) return null;
+    const now = Date.now();
+    let peek = this.peeks.get(runId);
+    if (!peek || now - peek.at > LIVE_CHANGES_MS) {
+      const tracker = run.changes;
+      peek = {
+        at: now,
+        record: tracker.finish().catch((error: unknown) => {
+          this.deps.log.warn(
+            { err: error, runId },
+            'sessions: a live look at the run folder failed',
+          );
+          return null;
+        }),
+      };
+      this.peeks.set(runId, peek);
+    }
+    const record = await peek.record;
+    // The run may have ended meanwhile: its recorded answer is the one to read now.
+    if (!record || !this.active.has(runId)) return null;
+    return { record, at: new Date(peek.at) };
   }
 
   /** The run going on in a session right now, if any. */
@@ -365,6 +407,7 @@ export class RunEngine {
       state: initialRunState(shell.id),
       outputs: exchange ? new OutputWatcher(exchange.files.outputDir).start() : null,
       changes,
+      handedOver: [],
     };
     this.active.set(runRow.id, active);
 
@@ -394,6 +437,7 @@ export class RunEngine {
       }
     } catch (error) {
       this.active.delete(runRow.id);
+      this.peeks.delete(runRow.id);
       active.outputs?.stop();
       store.updateMessage(scope.workspace, shell.id, { content: '' });
       this.failBeforeStart(scope, runRow, {
@@ -438,6 +482,7 @@ export class RunEngine {
       });
     } finally {
       this.active.delete(runRow.id);
+      this.peeks.delete(runRow.id);
       await this.finalise(active, shell.id);
     }
   }
@@ -521,19 +566,35 @@ export class RunEngine {
    * the reply, so the person can download it. What the caps refused is named in the
    * message rather than dropped in silence.
    */
+  /**
+   * An attachment of the run's profile goes on the reply this run is writing (a file one of
+   * the person's devices sent for it, §89). False when no such run is live here.
+   */
+  handOver(workspace: string, runId: string, attachment: { id: string; kind: string }): boolean {
+    const run = this.active.get(runId);
+    if (!run || run.scope.workspace !== workspace) return false;
+    if (!run.handedOver.some((known) => known.id === attachment.id))
+      run.handedOver.push(attachment);
+    return true;
+  }
+
   private async collectProduced(
     run: ActiveRun,
   ): Promise<{ parts: MessagePart[]; ids: string[]; refused: ProducedRefusal[] }> {
+    const handed = run.handedOver.map((attachment) => ({
+      part: partOf(attachment),
+      id: attachment.id,
+    }));
     const empty = {
-      parts: [] as MessagePart[],
-      ids: [] as string[],
+      parts: handed.map((h) => h.part),
+      ids: handed.map((h) => h.id),
       refused: [] as ProducedRefusal[],
     };
     if (!run.outputs) return empty;
     const collected = run.outputs.collect();
     if (collected.files.length === 0 && collected.refused.length === 0) return empty;
-    const parts: MessagePart[] = [];
-    const ids: string[] = [];
+    const parts: MessagePart[] = [...empty.parts];
+    const ids: string[] = [...empty.ids];
     for (const file of collected.files) {
       try {
         const attachment = await this.deps.ports.attachments.capture(
@@ -541,13 +602,7 @@ export class RunEngine {
           file,
           run.state.messageId,
         );
-        parts.push(
-          attachment.kind === 'image'
-            ? { type: 'image', attachmentId: attachment.id }
-            : attachment.kind === 'audio'
-              ? { type: 'audio', attachmentId: attachment.id }
-              : { type: 'file', attachmentId: attachment.id },
-        );
+        parts.push(partOf(attachment));
         ids.push(attachment.id);
       } catch (error) {
         this.deps.log.warn(
@@ -1247,4 +1302,13 @@ export async function* withTimeout(
     if (result.done) return;
     yield result.value;
   }
+}
+
+/** How an attachment sits in a message: a picture and a sound are drawn, anything else named. */
+function partOf(attachment: { id: string; kind: string }): MessagePart {
+  return attachment.kind === 'image'
+    ? { type: 'image', attachmentId: attachment.id }
+    : attachment.kind === 'audio'
+      ? { type: 'audio', attachmentId: attachment.id }
+      : { type: 'file', attachmentId: attachment.id };
 }

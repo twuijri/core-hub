@@ -17,12 +17,14 @@ import { claudeCode } from './claude-code.js';
 import { codex } from './codex.js';
 import { direct } from './direct.js';
 import { geminiCli } from './gemini-cli.js';
+import { goose } from './goose.js';
+import { grokBuild } from './grok-build.js';
 import { hermes } from './hermes.js';
 import { kimiCode } from './kimi-code.js';
 import { opencode } from './opencode.js';
 import { pi } from './pi.js';
 import { qwenCode } from './qwen-code.js';
-import type { CatalogEntry } from './types.js';
+import { DOWNLOAD_PLATFORMS, type CatalogEntry } from './types.js';
 
 export * from './types.js';
 
@@ -41,13 +43,15 @@ export const CATALOG: readonly CatalogEntry[] = [
   qwenCode,
   kimiCode,
   pi,
+  goose,
+  grokBuild,
 ];
 
 export const HERMES_ENTRY = hermes;
 export const DIRECT_ENTRY = direct;
 
 /** Every entry the hub can install on demand (everything except the bundled runtime). */
-export const INSTALLABLE = CATALOG.filter((entry) => entry.install.kind === 'npm');
+export const INSTALLABLE = CATALOG.filter((entry) => entry.install.kind !== 'bundled');
 
 /** Entries driven by one adapter kind, for that adapter's own detection. */
 export function entriesFor(adapter: CatalogEntry['adapter']): CatalogEntry[] {
@@ -109,6 +113,10 @@ export function assertCatalogIsWellFormed(catalog: readonly CatalogEntry[] = CAT
         packages.add(pin.package);
       }
     }
+    if (entry.install.kind === 'download') assertDownloadIsPinned(entry.id, entry.install);
+    if (entry.signIn && (entry.signIn.args.length === 0 || entry.install.kind === 'bundled')) {
+      throw new Error(`catalog: "${entry.id}" names a sign-in the hub cannot run`);
+    }
     if (!entry.licence) throw new Error(`catalog: "${entry.id}" has no licence`);
     if (!ACCEPTED_LICENCES.includes(entry.licence)) {
       throw new Error(
@@ -144,6 +152,57 @@ export function assertCatalogIsWellFormed(catalog: readonly CatalogEntry[] = CAT
             'environment variable name',
         );
       }
+    }
+  }
+}
+
+/**
+ * A download recipe is only as safe as its pin: an exact version that every URL names, an
+ * `https` URL, a full SHA-256 per file, and — for an archive — a relative path to the
+ * executable that cannot climb out of the folder it is unpacked into.
+ */
+function assertDownloadIsPinned(
+  id: string,
+  recipe: Extract<CatalogEntry['install'], { kind: 'download' }>,
+): void {
+  if (!EXACT_STABLE.test(recipe.version)) {
+    throw new Error(`catalog: "${id}" must pin an exact version, got "${recipe.version}"`);
+  }
+  const platforms = Object.keys(recipe.assets);
+  if (platforms.length === 0) throw new Error(`catalog: "${id}" names no download`);
+  for (const platform of platforms) {
+    if (!(DOWNLOAD_PLATFORMS as readonly string[]).includes(platform)) {
+      throw new Error(`catalog: "${id}" names an unknown platform "${platform}"`);
+    }
+    const asset = recipe.assets[platform as keyof typeof recipe.assets];
+    if (!asset) continue;
+    let url: URL;
+    try {
+      url = new URL(asset.url);
+    } catch {
+      throw new Error(`catalog: "${id}" ${platform} has no usable URL`);
+    }
+    if (url.protocol !== 'https:') {
+      throw new Error(`catalog: "${id}" ${platform} must download over https`);
+    }
+    // The URL is the version's own file: a moving "latest" link would make the hash a lie.
+    if (!asset.url.includes(recipe.version)) {
+      throw new Error(`catalog: "${id}" ${platform} URL does not name ${recipe.version}`);
+    }
+    if (!/^[0-9a-f]{64}$/.test(asset.sha256)) {
+      throw new Error(`catalog: "${id}" ${platform} needs a lower-case hex SHA-256`);
+    }
+    if (asset.format === 'tar.gz') {
+      const inner = asset.extract ?? '';
+      if (
+        !inner ||
+        inner.startsWith('/') ||
+        inner.split(/[\\/]/).some((part) => part === '..' || part === '')
+      ) {
+        throw new Error(`catalog: "${id}" ${platform} needs a relative path inside the archive`);
+      }
+    } else if (asset.extract !== undefined) {
+      throw new Error(`catalog: "${id}" ${platform} names a path in a file that is no archive`);
     }
   }
 }

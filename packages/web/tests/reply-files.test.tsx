@@ -30,6 +30,7 @@ const CAT = '01M3CXDE8PXTY3W2C3DRCF0CAT';
 const OLD_CAT = '01M3CXDE8PXTY3W2C3DRCF0OLD';
 const NOTES = '01M3CXDE8PXTY3W2C3DRCF0TXT';
 const OUT = `/data/workspaces/default/${SESSION}/.corehub/runs/${RUN}/out`;
+const TICKET = 'a'.repeat(64);
 const PNG = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
 
 function attachment(id: string, name: string, mime: string, preview: SessionFile['preview']) {
@@ -123,6 +124,18 @@ function mount(message: Message, files: SessionFile[]) {
           status: 200,
           headers: { 'Content-Type': 'application/json' },
         }),
+      );
+    }
+    if (url.pathname.endsWith('/stream')) {
+      // A stream ticket (§90): the page plays the video from it, never with the bearer.
+      return Promise.resolve(
+        new Response(
+          JSON.stringify({
+            url: `/api/v1/attachment-streams/${TICKET}`,
+            expires_at: '2026-09-27T11:00:00Z',
+          }),
+          { status: 201, headers: { 'Content-Type': 'application/json' } },
+        ),
       );
     }
     if (url.pathname.endsWith(`/attachments/${NOTES}/content`)) {
@@ -228,5 +241,34 @@ describe('a reply that carries files', () => {
     fireEvent.click(mention);
     await screen.findByTestId('file-view');
     expect(requests.some((r) => r.path === `/api/v1/attachments/${OLD_CAT}/content`)).toBe(false);
+  });
+});
+
+describe('a reply that carries a video (a render a program made)', () => {
+  it('plays it in place from a stream ticket, without fetching the whole file first', async () => {
+    const VIDEO = '01M3CXDE8PXTY3W2C3DRCF0VID';
+    mount(
+      reply('Your cut is rendered.', [
+        {
+          type: 'file' as const,
+          attachment_id: VIDEO,
+          url: `/api/v1/attachments/${VIDEO}/content`,
+          name: 'trip.mp4',
+          mime: 'video/mp4',
+          size_bytes: 40_000_000,
+        },
+      ]),
+      [attachment(VIDEO, 'trip.mp4', 'video/mp4', 'none')],
+    );
+    const video = await screen.findByTestId('message-video');
+    expect(video).toHaveAttribute('src', `/api/v1/attachment-streams/${TICKET}`);
+    expect(video).toHaveAttribute('controls');
+    expect(video).toHaveAttribute('aria-label', 'trip.mp4');
+    expect(requests.find((r) => r.path === `/api/v1/attachments/${VIDEO}/stream`)?.auth).toBe(
+      'Bearer t',
+    );
+    expect(requests.some((r) => r.path === `/api/v1/attachments/${VIDEO}/content`)).toBe(false);
+    // Its name stays under it, and opens it beside the chat like any file.
+    expect(within(screen.getByTestId('message-assistant')).getByText('trip.mp4')).toBeTruthy();
   });
 });

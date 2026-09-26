@@ -16,7 +16,12 @@ import { loadOpenApiDocument } from '@corehub/contracts';
 import { modules as defaultModules } from '../index.js';
 import { testHub, type TestHub } from '../../../tests/unit/helpers.js';
 import { createSessionsModule } from './index.js';
-import { FakeAgentDirectory, FakeAgentRunner, fakeHermes } from './testing/fake-runner.js';
+import {
+  FakeAgentDirectory,
+  FakeAgentRunner,
+  fakeHermes,
+  type ScriptStep,
+} from './testing/fake-runner.js';
 
 const AGENT_ID = '01J8QK3ZR2W7M5N4P6T8V9X0AG';
 const document = loadOpenApiDocument();
@@ -38,25 +43,31 @@ function schemaErrors(name: string, data: unknown): string[] {
 /** The agent's work, done when the turn is accepted: edit two files, create one. */
 let work: ((dir: string) => void) | null = null;
 
-async function hub(): Promise<TestHub> {
+const WRITE_TOOL: ScriptStep[] = [
+  {
+    type: 'tool_started',
+    ref: 't1',
+    name: 'write_file',
+    kind: 'file_write',
+    input: { path: 'notes.md' },
+  },
+  { type: 'tool_completed', ref: 't1', output: 'ok' },
+];
+
+async function hub(
+  script: ScriptStep[] = [
+    ...WRITE_TOOL,
+    { type: 'message_delta', text: 'عدّلت الملفات' },
+    { type: 'completed' },
+  ],
+): Promise<TestHub> {
   const sessions = createSessionsModule({
     agents: new FakeAgentDirectory([fakeHermes(AGENT_ID)]),
     runner: new FakeAgentRunner({
       onStart(request) {
         if (request.workingDir && work) work(request.workingDir);
       },
-      script: [
-        {
-          type: 'tool_started',
-          ref: 't1',
-          name: 'write_file',
-          kind: 'file_write',
-          input: { path: 'notes.md' },
-        },
-        { type: 'tool_completed', ref: 't1', output: 'ok' },
-        { type: 'message_delta', text: 'عدّلت الملفات' },
-        { type: 'completed' },
-      ],
+      script,
     }),
   });
   return testHub(
@@ -241,6 +252,57 @@ describe('the files a run changed', () => {
       const quiet = await get(h.app, `/sessions/${id}/runs/${second}/changes`);
       expect(quiet.statusCode).toBe(200);
       expect(quiet.json()).toMatchObject({ files_changed: 0, files: [] });
+    } finally {
+      work = null;
+      await h.close();
+    }
+  });
+
+  it('answers what a run has changed so far while it is still going (decision §102)', async () => {
+    // The agent writes, then waits for a person: the run is live, nothing is recorded yet.
+    const h = await hub([...WRITE_TOOL, { type: 'await_input' }, { type: 'completed' }]);
+    try {
+      const { id, dir } = await session(h);
+      seed(dir);
+      work = edit;
+      const accepted = await h.app.inject({
+        method: 'POST',
+        url: `/api/v1/sessions/${id}/runs`,
+        headers: { 'x-hub-profile': 'default' },
+        payload: { content: [{ type: 'text', text: 'عدّل الملفات' }] },
+      });
+      const runId = (accepted.json() as { run_id: string }).run_id;
+      let live = await get(h.app, `/sessions/${id}/runs/${runId}/changes`);
+      for (let attempt = 0; attempt < 100 && live.statusCode !== 200; attempt += 1) {
+        await new Promise((resolve) => setTimeout(resolve, 20));
+        live = await get(h.app, `/sessions/${id}/runs/${runId}/changes`);
+      }
+      expect(live.statusCode, live.body).toBe(200);
+      const body = live.json() as { files: Array<{ path: string }> };
+      expect(schemaErrors('RunChanges', body)).toEqual([]);
+      expect(body).toMatchObject({ run_id: runId, live: true, files_changed: 3 });
+      expect(body.files.map((file) => file.path)).toEqual(['app.js', 'notes.md', 'report.html']);
+      // Not recorded: the conversation's list of recorded runs is still empty.
+      expect((await get(h.app, `/sessions/${id}/changes`)).json()).toMatchObject({ items: [] });
+      // Nor is a diff: it is fetched once the run has ended.
+      expect(
+        (await get(h.app, `/sessions/${id}/runs/${runId}/changes/diff?path=notes.md`)).statusCode,
+      ).toBe(404);
+
+      // The run ends: the same run now answers its recorded changes, no longer live.
+      await h.app.inject({
+        method: 'POST',
+        url: `/api/v1/sessions/${id}/runs/${runId}/cancel`,
+        headers: { 'x-hub-profile': 'default' },
+      });
+      let recorded = live.json() as { live?: boolean };
+      for (let attempt = 0; attempt < 100 && recorded.live; attempt += 1) {
+        await new Promise((resolve) => setTimeout(resolve, 20));
+        const res = await get(h.app, `/sessions/${id}/runs/${runId}/changes`);
+        recorded = res.statusCode === 200 ? (res.json() as { live?: boolean }) : { live: true };
+      }
+      expect(recorded).toMatchObject({ files_changed: 3 });
+      expect(recorded.live).toBeUndefined();
     } finally {
       work = null;
       await h.close();

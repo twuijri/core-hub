@@ -50,6 +50,8 @@ data class ChatUi(
     /** The draft's agent row (an empty chat only). */
     val agents: List<Agent> = emptyList(),
     val agentId: String? = null,
+    /** The draft's agents have been read: «no agent» is said only then, never while they load. */
+    val agentsLoaded: Boolean = false,
 )
 
 /**
@@ -115,7 +117,7 @@ class ChatViewModel(
         viewModelScope.launch {
             hubCall { api.agents.agentsList(profile) }.onSuccess { page ->
                 val agents = ChatAgents.startable(page.items)
-                _ui.update { it.copy(agents = agents, agentId = it.agentId ?: agents.firstOrNull()?.id) }
+                _ui.update { it.copy(agents = agents, agentId = it.agentId ?: agents.firstOrNull()?.id, agentsLoaded = true) }
             }.onFailure { e -> _ui.update { it.copy(error = e as HubError) } }
         }
     }
@@ -205,7 +207,7 @@ class ChatViewModel(
                         id = accepted.messageId, seq = (chat.messages.maxOfOrNull { it.seq } ?: 0) + 1, role = MessageRole.USER,
                         authorName = graph.store.current?.user?.displayName.orEmpty(), text = body, reasoning = "", reasoningMs = null,
                         toolCalls = emptyList(),
-                        attachments = outgoing.blocks().filter { it.attachmentId != null }.map { ChatAttachment(it.type, it.name, it.url) },
+                        attachments = outgoing.blocks().filter { it.attachmentId != null }.map { ChatAttachment(it.type, it.name, it.url, it.attachmentId, it.mime) },
                         runId = accepted.runId, streaming = false,
                     )
                     ui.copy(sending = false, chat = chat.copy(messages = echo, failure = null))

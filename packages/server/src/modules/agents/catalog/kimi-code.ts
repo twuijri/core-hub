@@ -16,7 +16,11 @@ export const kimiCode: CatalogEntry = {
   install: { kind: 'npm', package: '@moonshot-ai/kimi-code', version: '2.1.1' },
   // Kimi Code reads no key from the environment (its `env-vars.md`: keys live in its own
   // `config.toml`, or come from `kimi login`), so handing it one would do nothing. It signs
-  // in with its own account until the hub has a Moonshot credential family to map.
+  // in with its own Kimi account: `kimi login` is a device-code flow that prints its link and
+  // code and needs no browser on the hub (checked on 2.1.1, 2026-09-26), so the hub starts it
+  // (`signIn`). `--region global` is kimi.ai; the mainland-China kimi.com account is not
+  // offered. The API-key route stays the Config files page: a provider block with its
+  // `api_key` in `config.toml`.
   credentials: {},
   health: { kind: 'command', args: ['--version'] },
   capabilities: ['streaming', 'tools', 'approvals', 'mcp', 'resume', 'config_files'],
@@ -24,4 +28,5 @@ export const kimiCode: CatalogEntry = {
   // Not verified that its ACP stream marks a delegation, so none is claimed (§56): an
   // unmarked tool call stays the parent's (added when #114 and #140 were integrated).
   subagents: 'none',
+  signIn: { args: ['login', '--region', 'global'] },
 };

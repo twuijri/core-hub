@@ -32,6 +32,7 @@ import type {
   AgentInfo,
   AgentRunner,
   AttachmentsPort,
+  RoomOfSeat,
   SessionsNotifier,
   SessionsPorts,
   WorkflowGate,
@@ -71,6 +72,7 @@ export function createSessionsModule(options: SessionsModuleOptions = {}): HubMo
     notifier: resolvePort(options.notifier ?? noNotifier, app),
     agentTimeoutMs: options.agentTimeoutMs ?? 10 * 60_000,
     gate: () => workflowGateFactory?.(app) ?? null,
+    roomOfSeat: () => roomOfSeatFactory?.(app) ?? null,
   });
   const scopesFor = (app: FastifyInstance): ScopeResolver =>
     resolvePort(options.scopes ?? derivedScopeResolver, app);
@@ -125,6 +127,9 @@ export function createSessionsModule(options: SessionsModuleOptions = {}): HubMo
       registerSessionRoutes(app, { service, scopes, channels });
       sessionsRealtimeFor(app.hub.io)?.authorizeFollowWith(followCheck(app, scopes));
       turns.set(app, (scope, input) => serviceFor(app, app.log).oneTurn(scope, input));
+      handOvers.set(app, (workspace, runId, attachment) =>
+        serviceFor(app, app.log).engine.handOver(workspace, runId, attachment),
+      );
       runs.set(app, {
         start: (scope, input) => serviceFor(app, app.log).startTurn(scope, input),
         async cancel(scope, sessionId, runId) {
@@ -160,6 +165,8 @@ export function createSessionsModule(options: SessionsModuleOptions = {}): HubMo
           }
         },
         runs: (scope, runIds) => serviceFor(app, app.log).runsById(scope, runIds),
+        pending: (scope, sessionIds) =>
+          serviceFor(app, app.log).pendingApprovalsOf(scope, sessionIds),
         list: (scope, sessionIds, filter) =>
           serviceFor(app, app.log).runsOfSessions(
             scope,
@@ -252,6 +259,20 @@ export function sessionRunsFor(app: FastifyInstance): SessionRuns | null {
   return runs.get(app) ?? null;
 }
 
+/**
+ * Put an attachment on the reply a live run is writing (§89: a file one of the person's
+ * devices sent for the run). `null` when this app composes no sessions module.
+ */
+export type RunHandOver = (
+  workspace: string,
+  runId: string,
+  attachment: { id: string; kind: string },
+) => boolean;
+const handOvers = new WeakMap<FastifyInstance, RunHandOver>();
+export function sessionHandOverFor(app: FastifyInstance): RunHandOver | null {
+  return handOvers.get(app) ?? null;
+}
+
 const backgrounds = new WeakMap<FastifyInstance, BackgroundSource>();
 
 /** This module's runs and subagents in the Background panel (§56); `null` when not composed. */
@@ -279,7 +300,13 @@ export interface SeatSessions {
   ): Promise<string>;
   start(
     scope: EngineScope,
-    input: { sessionId: string; seatId: string; prompt: string },
+    input: {
+      sessionId: string;
+      seatId: string;
+      prompt: string;
+      /** Files people posted in the room since the seat's last turn (contract decision §99). */
+      files?: ReadonlyArray<{ type: 'image' | 'file'; attachment_id: string }>;
+    },
   ): Promise<TurnHandle>;
   /** A seat's model, provider or effort changed: its session follows. */
   configure(
@@ -296,6 +323,8 @@ export interface SeatSessions {
   cancel(scope: EngineScope, sessionId: string, runId: string): Promise<void>;
   /** The contract's `Run` for each id that exists. */
   runs(scope: EngineScope, runIds: readonly string[]): Record<string, unknown>[];
+  /** The approvals and questions waiting in these sessions, oldest first. */
+  pending(scope: EngineScope, sessionIds: readonly string[]): Record<string, unknown>[];
   list(
     scope: EngineScope,
     sessionIds: readonly string[],
@@ -358,6 +387,19 @@ export function registerWorkflowGate(
   return previous;
 }
 
+/**
+ * Which room a seat sits in (`Approval.room_id`), joined to `rooms` by the composition root —
+ * registered once for the process like the workflow gate.
+ */
+let roomOfSeatFactory: ((app: FastifyInstance) => RoomOfSeat | null) | null = null;
+export function registerRoomOfSeat(
+  factory: ((app: FastifyInstance) => RoomOfSeat | null) | null,
+): ((app: FastifyInstance) => RoomOfSeat | null) | null {
+  const previous = roomOfSeatFactory;
+  roomOfSeatFactory = factory;
+  return previous;
+}
+
 /** The module the app composes (`src/modules/index.ts`). */
 export const sessionsModule = createSessionsModule();
 
@@ -402,6 +444,7 @@ export type {
   AttachmentsPort,
   AttachmentSummary,
   MaterialisedAttachment,
+  RoomOfSeat,
   WorkflowGate,
 } from './ports.js';
 export {

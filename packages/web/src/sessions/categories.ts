@@ -64,7 +64,7 @@ export function useUpdateCategory() {
       profile,
     }: {
       id: string;
-      patch: { name?: string; position?: number };
+      patch: { name?: string; position?: number; color?: string | null };
       profile?: string | undefined;
     }) =>
       (

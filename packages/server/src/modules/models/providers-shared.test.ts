@@ -95,10 +95,11 @@ async function addProvider(
   return response.json() as Provider;
 }
 
+/** The chat providers a profile sees (Groq's dictation and speech rows are on their tabs). */
 async function providersIn(hub: Hub, profile: string): Promise<Provider[]> {
   const response = await authed(hub, hub.token, {
     method: 'GET',
-    url: '/api/v1/models/providers',
+    url: '/api/v1/models/providers?kind=llm',
     profile,
   });
   expect(response.statusCode).toBe(200);
@@ -380,13 +381,30 @@ describe("models: Hermes's default profile is not the last saver's", () => {
         GROQ_API_KEY: 'gsk-work',
       });
 
-      // Removing Groq from the work profile removes it from Hermes everywhere.
-      const removed = await authed(hub, hub.token, {
-        method: 'DELETE',
-        url: `/api/v1/models/providers/${groq.id}`,
+      // Removing Groq from the work profile removes it from Hermes everywhere. Groq is three
+      // rows and one key — chat, dictation and speech (§94) — and the key goes with the last.
+      const rows = await authed(hub, hub.token, {
+        method: 'GET',
+        url: '/api/v1/models/providers',
         profile: 'work',
       });
-      expect(removed.statusCode).toBe(204);
+      const groqRows = (rows.json() as { items: { id: string; slug: string }[] }).items.filter(
+        (row) => row.slug.startsWith('groq'),
+      );
+      expect(groqRows.map((row) => row.slug).sort()).toEqual(['groq', 'groq-stt', 'groq-tts']);
+      for (const row of groqRows) {
+        const removed = await authed(hub, hub.token, {
+          method: 'DELETE',
+          url: `/api/v1/models/providers/${row.id}`,
+          profile: 'work',
+        });
+        expect(removed.statusCode).toBe(204);
+        if (row.id !== groqRows.at(-1)!.id) {
+          // Still a Groq row with the key: still in Hermes.
+          const partway = parseEnv(readFileSync(path.join(home, '.env'), 'utf8'));
+          expect(partway.get('GROQ_API_KEY')).toBe('gsk-work');
+        }
+      }
       const after = parseEnv(readFileSync(path.join(home, '.env'), 'utf8'));
       expect(after.has('GROQ_API_KEY')).toBe(false);
       expect(after.get('ANTHROPIC_API_KEY')).toBe('sk-ant-default');

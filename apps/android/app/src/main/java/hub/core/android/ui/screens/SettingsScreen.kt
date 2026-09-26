@@ -1,31 +1,40 @@
 package hub.core.android.ui.screens
 
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.sp
+import hub.core.android.generated.FontTokens
+import hub.core.android.ui.kit.Badge
+import hub.core.android.ui.kit.BadgeTone
+import hub.core.android.ui.kit.ButtonKind
+import hub.core.android.ui.kit.ControlSize
+import hub.core.android.ui.kit.EmptyState
+import hub.core.android.ui.kit.GroupedList
+import hub.core.android.ui.kit.HubButton
+import hub.core.android.ui.kit.Item
+import hub.core.android.ui.kit.Lucide
+import hub.core.android.ui.kit.NoticeBox
+import hub.core.android.ui.kit.SectionTitle
+import hub.core.android.ui.kit.Segment
+import hub.core.android.ui.kit.Segmented
+import hub.core.android.ui.kit.StatusDot
 import android.app.Activity
 import android.content.Intent
 import android.net.Uri
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.lazy.items
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
-import androidx.compose.material3.Button
-import androidx.compose.material3.FilterChip
-import androidx.compose.material3.Icon
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
@@ -40,11 +49,7 @@ import hub.core.android.graph
 import hub.core.android.nav.AppPaths
 import hub.core.android.nav.Route
 import hub.core.android.nav.Screens
-import hub.core.android.ui.components.EmptyState
-import hub.core.android.ui.components.ListRow
 import hub.core.android.ui.components.LoadView
-import hub.core.android.ui.components.StatusBadge
-import hub.core.android.ui.components.Tone
 import hub.core.android.ui.components.rememberLoad
 import hub.core.android.ui.theme.LocalTokens
 import hub.core.android.ui.theme.ThemeChoice
@@ -72,40 +77,113 @@ object SettingsList {
     )
 }
 
+/** Each Settings row's icon, the iOS app's and the web's (Lucide on every surface). */
+fun settingsIcon(destination: String): Int = when (destination) {
+    "account" -> Lucide.CircleUserRound
+    "users" -> Lucide.Users
+    "webhooks" -> Lucide.Webhook
+    "display" -> Lucide.Type
+    "notifications" -> Lucide.Bell
+    "privacy" -> Lucide.Hand
+    "this_device" -> Lucide.Smartphone
+    "about" -> Lucide.Info
+    "models" -> Lucide.Layers
+    "device_connections" -> Lucide.QrCode
+    "knowledge" -> Lucide.Library
+    "logs" -> Lucide.FileSearch
+    "usage" -> Lucide.ChartColumn
+    "skills_usage" -> Lucide.WandSparkles
+    "performance" -> Lucide.Gauge
+    "theme" -> Lucide.Palette
+    "workspaces" -> Lucide.LayoutGrid
+    "updates" -> Lucide.CircleArrowDown
+    "plugins" -> Lucide.Puzzle
+    "files" -> Lucide.Folder
+    else -> Lucide.Settings
+}
+
 /**
- * Settings on the phone: the list is the page (NAVIGATION.md §2), headed by «Back to chats»,
- * which returns to the conversation that was open before Settings.
+ * Settings on the phone, as on iOS: the list is the page (NAVIGATION.md §2), headed by «Back to
+ * chats» (which returns to the conversation that was open before Settings), then the groups as
+ * inset lists with an icon per row.
  */
 @Composable
 fun SettingsScreen(isAdmin: Boolean, onOpen: (Route) -> Unit, onBackToChats: () -> Unit) {
-    LazyColumn(contentPadding = PaddingValues(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+    val t = LocalTokens.current
+    LazyColumn(Modifier.fillMaxSize().testTag("settings.list"), contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 24.dp)) {
         item {
-            TextButton(onClick = onBackToChats) {
-                Icon(Icons.AutoMirrored.Filled.ArrowBack, null)
-                Text(stringResource(R.string.settings_back_to_chats), modifier = Modifier.padding(start = 6.dp))
+            GroupedList {
+                Item(
+                    stringResource(R.string.settings_back_to_chats), icon = Lucide.ArrowLeft, onClick = onBackToChats, tag = "settings.back", accent = true,
+                )
             }
         }
         SettingsList.visible(isAdmin).forEach { (title, rows) ->
-            if (title != null) item(key = "h$title") {
-                Text(stringResource(title), style = MaterialTheme.typography.labelLarge, color = LocalTokens.current.textMuted, modifier = Modifier.padding(top = 12.dp, start = 4.dp))
-            }
-            items(rows, key = { it }) { destination ->
-                ListRow(term(destination), trailing = { Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, null) }, onClick = { onOpen(Route.SettingsPage(destination)) })
+            if (rows.isEmpty()) return@forEach
+            item(key = "g$title") {
+                GroupedList(Modifier.padding(top = if (title == null) 16.dp else 0.dp), title = title?.let { stringResource(it) }) {
+                    rows.forEach { destination ->
+                        Item(
+                            term(destination), icon = settingsIcon(destination), iconTint = t.accent, chevron = true,
+                            tag = "settings.row.$destination", onClick = { onOpen(Route.SettingsPage(destination)) },
+                        )
+                    }
+                }
             }
         }
+        // What only a computer's screen does (a shell on the hub's host, linking hubs) stays on the
+        // web: said here, one tap away, rather than missing (not destinations of the phone).
+        if (isAdmin) item(key = "web-only") { OnTheWebRows() }
+    }
+}
+
+/** The web-only pages an admin may still want from the phone: they open in the browser. */
+@Composable
+private fun OnTheWebRows() {
+    val context = LocalContext.current
+    val t = LocalTokens.current
+    val session = context.graph.store.current ?: return
+    val rows = WebOnly.rows(session.user.role)
+    if (rows.isEmpty()) return
+    GroupedList(title = stringResource(R.string.settings_on_the_web)) {
+        rows.forEach { destination ->
+            Item(
+                term(destination), icon = if (destination == "terminal") Lucide.Terminal else Lucide.Globe, iconTint = t.textMuted,
+                subtitle = stringResource(R.string.settings_on_the_web_hint), tag = "settings.web.$destination",
+                trailing = { hub.core.android.ui.kit.LucideIcon(Lucide.ExternalLink, null, size = 16.dp, tint = t.textFaint) },
+                onClick = {
+                    AppPaths.webUrl(session.hub, destination)?.let { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(it))) }
+                },
+            )
+        }
+    }
+}
+
+/** Which web-only pages a role sees (navigation.json: the terminal is the owner's, linked hubs an admin's). */
+object WebOnly {
+    fun rows(role: String): List<String> = when (role) {
+        "owner" -> listOf("linked_hubs", "terminal")
+        "admin" -> listOf("linked_hubs")
+        else -> emptyList()
     }
 }
 
 /** One page under Settings; «Back to Settings» is the top bar's back arrow. */
 @Composable
 fun SettingsPageScreen(destination: String, shell: ShellViewModel, onOpen: (Route) -> Unit, thisDevice: @Composable () -> Unit) {
+    val session by shell.session.collectAsState()
+    val s = session ?: return
     when (destination) {
+        // Native on the phone since phone parity (owner: «why are sections missing»).
+        "models" -> ModelsPage(s.profile, shell.profileName(s.profile), s.user.isAdmin)
+        "device_connections" -> DevicesPage(s.profile)
+        "usage" -> UsagePage(s.profile, s.user.isAdmin)
         "account" -> AccountPage(shell)
         "display", "theme" -> DisplayPage(showLanguage = destination == "display")
-        "notifications" -> NotificationsPage(onOpen)
+        "notifications" -> NotificationsPage(onOpen, s.profile)
         "about" -> AboutPage()
         "workspaces" -> ProfilesPage()
-        "users" -> UsersPage()
+        "users" -> PeoplePage(s.profile, s.user.id)
         "privacy" -> PrivacyPage()
         "this_device" -> thisDevice()
         "logs" -> LogsPage()
@@ -114,16 +192,22 @@ fun SettingsPageScreen(destination: String, shell: ShellViewModel, onOpen: (Rout
     }
 }
 
-private fun LazyListScope.header(text: String) = item { Text(text, style = MaterialTheme.typography.titleSmall, modifier = Modifier.padding(top = 8.dp)) }
+private val pagePadding = PaddingValues(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 24.dp)
 
 @Composable
 private fun AccountPage(shell: ShellViewModel) {
     val session by shell.session.collectAsState()
     val s = session ?: return
-    LazyColumn(contentPadding = PaddingValues(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-        item { ListRow(s.user.displayName, "@${s.user.username}", trailing = { StatusBadge(s.user.role) }) }
-        item { ListRow(stringResource(R.string.account_profiles), s.user.profiles.joinToString(" · ") { shell.profileName(it) }) }
-        item { OutlinedButton(onClick = shell::signOut, modifier = Modifier.fillMaxWidth()) { Text(term("sign_out")) } }
+    LazyColumn(contentPadding = pagePadding, verticalArrangement = Arrangement.spacedBy(16.dp)) {
+        item {
+            GroupedList {
+                Item(s.user.displayName, subtitle = "@${s.user.username}", icon = Lucide.CircleUserRound, trailing = { Badge(s.user.role) })
+                Item(stringResource(R.string.account_profiles), subtitle = s.user.profiles.joinToString(" · ") { shell.profileName(it) }, icon = Lucide.LayoutGrid)
+            }
+        }
+        item {
+            HubButton(term("sign_out"), shell::signOut, kind = ButtonKind.Danger, icon = Lucide.LogOut, fill = true, modifier = Modifier.fillMaxWidth())
+        }
     }
 }
 
@@ -132,67 +216,93 @@ private fun DisplayPage(showLanguage: Boolean) {
     val context = LocalContext.current
     val prefs = context.graph.prefs
     val theme by prefs.theme.collectAsState()
-    val languageTitle = stringResource(R.string.display_language)
-    val themeTitle = term("theme")
-    LazyColumn(contentPadding = PaddingValues(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+    LazyColumn(contentPadding = pagePadding, verticalArrangement = Arrangement.spacedBy(4.dp)) {
         if (showLanguage) {
-            header(languageTitle)
+            item { SectionTitle(stringResource(R.string.display_language)) }
             item {
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    listOf(null to R.string.display_language_system, AppLanguage.AR to R.string.display_language_ar, AppLanguage.EN to R.string.display_language_en)
-                        .forEach { (lang, label) ->
-                            FilterChip(selected = prefs.language == lang, onClick = {
-                                prefs.language = lang
-                                (context as? Activity)?.recreate()
-                            }, label = { Text(stringResource(label)) })
-                        }
-                }
+                Segmented(
+                    listOf(
+                        Segment<AppLanguage?>(null, stringResource(R.string.display_language_system)),
+                        Segment<AppLanguage?>(AppLanguage.AR, stringResource(R.string.display_language_ar)),
+                        Segment<AppLanguage?>(AppLanguage.EN, stringResource(R.string.display_language_en)),
+                    ),
+                    prefs.language,
+                    { lang -> prefs.language = lang; (context as? Activity)?.recreate() },
+                    Modifier.fillMaxWidth(), size = ControlSize.Lg,
+                )
             }
         }
-        header(themeTitle)
+        item { SectionTitle(term("theme")) }
         item {
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                ThemeChoice.entries.forEach { choice ->
-                    FilterChip(selected = theme == choice, onClick = { prefs.setTheme(choice) }, label = {
-                        Text(stringResource(when (choice) { ThemeChoice.LIGHT -> R.string.theme_light; ThemeChoice.DARK -> R.string.theme_dark; ThemeChoice.SYSTEM -> R.string.theme_system }))
-                    })
-                }
-            }
+            Segmented(
+                listOf(
+                    Segment(ThemeChoice.SYSTEM, stringResource(R.string.theme_system), Lucide.Contrast),
+                    Segment(ThemeChoice.LIGHT, stringResource(R.string.theme_light), Lucide.Sun),
+                    Segment(ThemeChoice.DARK, stringResource(R.string.theme_dark), Lucide.Moon),
+                ),
+                theme, { prefs.setTheme(it) }, Modifier.fillMaxWidth(), size = ControlSize.Lg,
+            )
         }
     }
 }
 
-/** The notifications inbox: newest first, a tap marks one read and opens what it is about. */
+/** The notifications inbox: newest first, unread ones marked with a dot; a tap marks one read and opens what it is about. */
 @Composable
-private fun NotificationsPage(onOpen: (Route) -> Unit) {
+private fun NotificationsPage(onOpen: (Route) -> Unit, profile: String) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
+    val t = LocalTokens.current
+    // The inbox, and the settings table beside it (which notice comes in the app and as a push).
+    var settings by androidx.compose.runtime.saveable.rememberSaveable { androidx.compose.runtime.mutableStateOf(false) }
     val notices = rememberLoad { context.graph.apis(context.graph.store.current!!).notify.notifyListNotices(limit = 100).items }
-    Column(Modifier.fillMaxSize()) {
+    LazyColumn(Modifier.fillMaxSize().testTag("notices.list"), contentPadding = pagePadding, verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        item {
+            Segmented(
+                listOf(Segment(false, stringResource(R.string.notify_inbox), tag = "notices.tab.inbox"), Segment(true, stringResource(R.string.notify_settings), tag = "notices.tab.settings")),
+                settings, { settings = it }, Modifier.fillMaxWidth(), size = ControlSize.Sm,
+            )
+        }
+        if (settings) {
+            item { NotificationSettings(profile) }
+            return@LazyColumn
+        }
         // Whether this phone can show them at all comes first.
-        Column(Modifier.padding(horizontal = 12.dp, vertical = 6.dp)) { hub.core.android.phone.NotificationRows() }
-        TextButton(onClick = {
-            scope.launch {
-                hubCall { context.graph.apis(context.graph.store.current!!).notify.notifyMarkAllRead(NotifyMarkAllReadRequest()) }
-                notices.reload()
+        item { Column(verticalArrangement = Arrangement.spacedBy(8.dp)) { hub.core.android.phone.NotificationRows() } }
+        item {
+            SectionTitle(term("notifications")) {
+                HubButton(
+                    stringResource(R.string.notices_mark_all), {
+                        scope.launch {
+                            hubCall { context.graph.apis(context.graph.store.current!!).notify.notifyMarkAllRead(NotifyMarkAllReadRequest()) }
+                            notices.reload()
+                        }
+                    },
+                    kind = ButtonKind.Ghost, size = ControlSize.Sm, icon = Lucide.Check,
+                )
             }
-        }, modifier = Modifier.padding(horizontal = 8.dp)) { Text(stringResource(R.string.notices_mark_all)) }
-        LoadView(notices) { list ->
-            if (list.isEmpty()) EmptyState(stringResource(R.string.notices_empty))
-            LazyColumn(contentPadding = PaddingValues(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                items(list, key = { it.id }) { notice ->
-                    ListRow(
-                        notice.title,
-                        listOfNotNull(notice.body, localTime(notice.createdAt)).joinToString(" · "),
-                        trailing = { if (notice.readAt == null) StatusBadge(stringResource(R.string.notices_new), Tone.INFO) },
-                        onClick = {
-                            scope.launch {
-                                hubCall { context.graph.apis(context.graph.store.current!!).notify.notifyUpdateNotice(notice.id, NotifyUpdateNoticeRequest(read = true)) }
-                                notices.reload()
-                            }
-                            NoticeLinks.route(notice.resource, notice.profile)?.let(onOpen)
-                        },
-                    )
+        }
+        item {
+            LoadView(notices) { list ->
+                if (list.isEmpty()) EmptyState(stringResource(R.string.notices_empty), icon = Lucide.BellOff)
+                else GroupedList {
+                    list.forEach { notice ->
+                        Item(
+                            notice.title,
+                            subtitle = listOfNotNull(notice.body, localTime(notice.createdAt)).joinToString(" · "),
+                            tag = "notice.${notice.id}",
+                            trailing = {
+                                // Unread is a dot, not a word (its word is for TalkBack).
+                                if (notice.readAt == null) StatusDot(t.accent, stringResource(R.string.notices_new))
+                            },
+                            onClick = {
+                                scope.launch {
+                                    hubCall { context.graph.apis(context.graph.store.current!!).notify.notifyUpdateNotice(notice.id, NotifyUpdateNoticeRequest(read = true)) }
+                                    notices.reload()
+                                }
+                                NoticeLinks.route(notice.resource, notice.profile)?.let(onOpen)
+                            },
+                        )
+                    }
                 }
             }
         }
@@ -213,17 +323,23 @@ object NoticeLinks {
 private fun AboutPage() {
     val context = LocalContext.current
     val meta = rememberLoad { context.graph.apis(context.graph.store.current!!).meta.metaGet() }
-    LazyColumn(contentPadding = PaddingValues(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-        item { ListRow(stringResource(R.string.app_name), stringResource(R.string.about_app, BuildConfig.VERSION_NAME)) }
+    LazyColumn(contentPadding = pagePadding, verticalArrangement = Arrangement.spacedBy(16.dp)) {
+        item {
+            Column(Modifier.fillMaxWidth().padding(vertical = 8.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                hub.core.android.ui.components.BrandMark(48)
+                Text(stringResource(R.string.app_name), fontSize = FontTokens.sizeXl.sp, fontWeight = FontWeight.SemiBold)
+                Text(stringResource(R.string.about_app, BuildConfig.VERSION_NAME), fontSize = FontTokens.sizeSm.sp, color = LocalTokens.current.textMuted)
+            }
+        }
         item {
             LoadView(meta) { m ->
-                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                    ListRow(m.name, stringResource(R.string.about_hub, m.serverVersion, m.contractVersion))
-                    ListRow(stringResource(R.string.about_address), context.graph.store.current?.hub)
+                GroupedList {
+                    Item(m.name, subtitle = stringResource(R.string.about_hub, m.serverVersion, m.contractVersion), icon = Lucide.Server)
+                    Item(stringResource(R.string.about_address), subtitle = context.graph.store.current?.hub, icon = Lucide.Link)
                 }
             }
         }
-        item { Text(stringResource(R.string.about_license, Product.NAME), style = MaterialTheme.typography.bodySmall, color = LocalTokens.current.textMuted) }
+        item { Text(stringResource(R.string.about_license, Product.NAME), fontSize = FontTokens.sizeXs.sp, color = LocalTokens.current.textMuted) }
     }
 }
 
@@ -232,9 +348,11 @@ private fun ProfilesPage() {
     val context = LocalContext.current
     val profiles = rememberLoad { context.graph.apis(context.graph.store.current!!).auth.authListProfiles().items }
     LoadView(profiles) { list ->
-        LazyColumn(contentPadding = PaddingValues(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-            items(list, key = { it.id }) { p ->
-                ListRow(p.name, stringResource(R.string.profiles_counts, p.slug, p.agentCount, p.sessionCount))
+        LazyColumn(contentPadding = pagePadding) {
+            item {
+                GroupedList {
+                    list.forEach { p -> Item(p.name, subtitle = stringResource(R.string.profiles_counts, p.slug, p.agentCount, p.sessionCount), icon = Lucide.LayoutGrid) }
+                }
             }
         }
     }
@@ -245,8 +363,12 @@ private fun UsersPage() {
     val context = LocalContext.current
     val users = rememberLoad { context.graph.apis(context.graph.store.current!!).auth.authListUsers(limit = 200).items }
     LoadView(users) { list ->
-        LazyColumn(contentPadding = PaddingValues(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-            items(list, key = { it.id }) { u -> ListRow(u.displayName, "@${u.username}", trailing = { StatusBadge(u.role.value) }) }
+        LazyColumn(contentPadding = pagePadding) {
+            item {
+                GroupedList {
+                    list.forEach { u -> Item(u.displayName, subtitle = "@${u.username}", icon = Lucide.CircleUserRound, trailing = { Badge(u.role.value) }) }
+                }
+            }
         }
     }
 }
@@ -257,10 +379,14 @@ private fun PrivacyPage() {
     val context = LocalContext.current
     val tokens = rememberLoad { context.graph.apis(context.graph.store.current!!).auth.authListAppTokens().items }
     LoadView(tokens) { list ->
-        LazyColumn(contentPadding = PaddingValues(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-            item { Text(stringResource(R.string.privacy_tokens), color = LocalTokens.current.textMuted, style = MaterialTheme.typography.bodySmall) }
-            if (list.isEmpty()) item { Text(stringResource(R.string.privacy_none), color = LocalTokens.current.textMuted) }
-            items(list, key = { it.id }) { token -> ListRow(token.name, token.lastUsedAt?.let(::localTime)) }
+        LazyColumn(contentPadding = pagePadding, verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            item { NoticeBox(stringResource(R.string.privacy_tokens), BadgeTone.Info) }
+            if (list.isEmpty()) item { EmptyState(stringResource(R.string.privacy_none), icon = Lucide.Shield) }
+            else item {
+                GroupedList {
+                    list.forEach { token -> Item(token.name, subtitle = token.lastUsedAt?.let(::localTime), icon = Lucide.KeyRound) }
+                }
+            }
         }
     }
 }
@@ -271,12 +397,13 @@ private fun OnTheWebPage(destination: String) {
     val context = LocalContext.current
     val hub = context.graph.store.current?.hub
     val url = hub?.let { AppPaths.webUrl(it, destination) }
-    Column(Modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        EmptyState(term(destination), stringResource(R.string.on_the_web_body))
+    Column(Modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+        EmptyState(term(destination), body = stringResource(R.string.on_the_web_body), icon = settingsIcon(destination))
         if (url != null) {
-            Button(onClick = { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url))) }, modifier = Modifier.fillMaxWidth()) {
-                Text(stringResource(R.string.on_the_web_open))
-            }
+            HubButton(
+                stringResource(R.string.on_the_web_open), { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url))) },
+                icon = Lucide.ExternalLink, fill = true, modifier = Modifier.fillMaxWidth(),
+            )
         }
     }
 }
