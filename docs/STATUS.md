@@ -4,7 +4,7 @@ Measured on this branch by asking a booted hub which contract operations are
 still the built-in 501 stub. Regenerate it the same way after a phase:
 every operation that answers `501 not_implemented` is not built yet.
 
-**320 of 329 contract operations are implemented.** Nothing fakes a success:
+**328 of 337 contract operations are implemented.** Nothing fakes a success:
 an unbuilt operation answers `501` with its operation id. Measured on this
 branch, 2026-09-26, by asking a booted hub which operations are still the
 built-in stub — and `packages/server/tests/unit/status.test.ts` keeps this
