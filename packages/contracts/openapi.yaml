@@ -21101,9 +21101,8 @@ components:
           description: The listener's HTTP status.
         body:
           description: The listener's JSON answer; `null` when it was not JSON.
-          oneOf:
-            - type: object
-            - type: 'null'
+          type: [object, 'null']
+          additionalProperties: true
     HermesWebhookReceipt:
       type: object
       description: The listener's answer to a delivery it took.

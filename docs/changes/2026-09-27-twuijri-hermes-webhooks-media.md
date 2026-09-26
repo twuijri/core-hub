@@ -129,7 +129,14 @@ $ PLAYWRIGHT_CHANNEL=chrome playwright test e2e/zzzzz-channels-discord.spec.ts e
 ثم `net::ERR_CONNECTION_REFUSED` لكل طلب بعده. بعده نجحت أربع مرات متتالية، واختبار الخادم «a player that stops
 reading half-way» يفشل على الشيفرة القديمة بخمسة أخطاء غير ملتقطة ويمر الآن.
 
-CI على #165: يُضاف بعد الدفع.
+CI على #165 عند `2b03bb18`: فشل فحصان من هذه المهمة وأُصلحا —
+- `status.test.ts` («the contract grew or shrank … expected 329 to be 337»): العدد في رأس STATUS صار
+  **328 of 337**؛ محليًا `vitest run tests/unit/status.test.ts` → `Tests  1 passed (1)`.
+- Android `ContractExamplesTest` («POST /agents/{agent_id}/webhooks/{route_name}/test (HermesWebhookTestResult):
+  Serializer for class 'Any' is not found»): `HermesWebhookTestResult.body` صار `type: [object, 'null']` مع
+  `additionalProperties: true` كبقية الكائنات الحرة في العقد. محليًا (JDK 17، `generate:native` ثم
+  `./gradlew :app:testDebugUnitTest --tests hub.core.android.contract.ContractExamplesTest`):
+  `BUILD SUCCESSFUL`، `tests="1" skipped="0" failures="0"`، `contract examples decoded: 271`.
 
 ## المخاطر والرجوع
 - **الباب العام بلا رمز دخول**: الحماية سر المسار الذي يتحقق منه هرمز (HMAC)، مع حد ١ م.ب وحد المعدل عند هرمز. المستقبِل
