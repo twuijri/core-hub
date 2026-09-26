@@ -1,5 +1,5 @@
 # الجوال: الأقسام الناقصة في التطبيقين
-المسؤول: twuijri · الفرع: feat/phone-parity · الحالة: in-progress
+المسؤول: twuijri · الفرع: feat/phone-parity · الحالة: review
 
 ## المشكلة والهدف
 المالك: «تطبيق الجوال ينقصه أقسام كثيرة لم تكتمل». المطلوب في الآيفون والأندرويد معًا (B8، B12–B15 من قائمة الفجوات):
@@ -113,35 +113,62 @@
 
 ## الفحوص (الأوامر ونواتجها الفعلية)
 ```
-$ ./gradlew --no-daemon --max-workers=2 testDebugUnitTest      (apps/android، بعد المجموعات ١ و٣)
-tests 163 skipped 2 failures 0 errors 0          # منها ScreenShots (لقطة المهام صارت اللوح)
+$ ./gradlew --no-daemon --max-workers=2 testDebugUnitTest lintDebug      (apps/android، بعد دمج الفرع الليلي)
+tests 184 skipped 2 failures 0 errors 0          # منها ScreenShots (لقطة المهام صارت اللوح) وUiKitPolicyTest وStringsParityTest
+lint: 0 errors, 47 warnings
 
 $ ./gradlew testDebugUnitTest --tests 'hub.core.android.parity.*' …
-TEST-hub.core.android.parity.WorkflowsTest.xml   tests="7" failures="0" errors="0"
-TEST-hub.core.android.parity.BoardTest.xml       tests="5" failures="0" errors="0"
-TEST-hub.core.android.parity.AgentPagesTest.xml  tests="6" failures="0" errors="0"
-TEST-hub.core.android.parity.ShareFilesTest.xml  tests="3" failures="0" errors="0"
-TEST-hub.core.android.parity.ModelsAdminTest.xml tests="6" failures="0" errors="0"
-TEST-hub.core.android.phone.PhoneTest.xml        tests="6" failures="0" errors="0"
+TEST-hub.core.android.parity.WorkflowsTest.xml     tests="7" failures="0" errors="0"
+TEST-hub.core.android.parity.BoardTest.xml         tests="5" failures="0" errors="0"
+TEST-hub.core.android.parity.AgentPagesTest.xml    tests="6" failures="0" errors="0"
+TEST-hub.core.android.parity.ShareFilesTest.xml    tests="3" failures="0" errors="0"
+TEST-hub.core.android.parity.ModelsAdminTest.xml   tests="7" failures="0" errors="0"
+TEST-hub.core.android.parity.LocateTest.xml        tests="5" failures="0" errors="0"
 TEST-hub.core.android.nav.NavigationParityTest.xml tests="8" failures="0" errors="0"
 
+$ vitest run --project unit src/modules/agents/hub-tools/hub-tools.test.ts tests/unit/device-helper.test.ts tests/unit/device-requests.test.ts
+ Test Files  3 passed (3)
+      Tests  26 passed (26)
+# على الشيفرة القديمة: device-helper يتوقع 202 لطلب location من رمز التشغيل وكان 403، وdevices.locate غير موجودة.
+
+$ pnpm lint
+All matched files use Prettier code style!
+$ pnpm contracts:lint
+contracts:lint  OK
 $ pnpm contracts:check-clients
-check-clients  OK — 752 client file(s) scanned, 250 contract path(s) known.
+check-clients  OK — 766 client file(s) scanned, 252 contract path(s) known.
 $ pnpm i18n:check
-i18n:check  ios: 667 keys, ar/en in parity
 i18n:check  OK
 $ pnpm nav:check
 nav:check  OK — 39 destinations, 2 pre-auth screens (login, setup), 44 terms, ar/en complete, routes for web, ios, android, desktop
-$ prettier --check <الملفات المتغيرة>
-All matched files use Prettier code style!
+$ pnpm change-record:check
+change-record  OK — 24 record(s) valid
+$ node --test apps/ios/scripts/*.test.mjs
+ℹ fail 0
 ```
-CI على الفرع (`workflow_dispatch`):
+CI على الفرع (`workflow_dispatch`)، والآيفون لا يُبنى إلا هناك:
 ```
-Android  36218420165  success   (المجموعات ١–٣)
-iOS      36217446781  failure   # بنى الكود؛ فشل L10nTests على nav.linked_hubs — أُصلح في الفرع الليلي (bc4b4f14) ودُمج
-iOS      36218418410  failure   # Tone.statusReview غير موجود في الآيفون → Color.token(\.statusReview)
-iOS      36218641339  failure   # FamilyTests: أيقونة agentConfigFiles → أضيفت file-cog إلى جدول الاختبار
+iOS      36217446781  failure   # بنى الكود؛ L10nTests على nav.linked_hubs — أُصلح في الفرع الليلي (bc4b4f14)
+iOS      36218418410  failure   # Tone.statusReview غير موجود → Color.token(\.statusReview)
+iOS      36218641339  failure   # FamilyTests: أيقونة agentConfigFiles → file-cog في جدول الاختبار
 iOS      36219113898  success   (المجموعات ١–٤)
+iOS      36219573377  failure   # Voice في التطبيق يتعارض مع CoreHubClient.Voice → الاسم الكامل
+Android  36219574725  failure   # lint NonObservableLocale → LocalConfiguration
+CI       36219999681  failure   # prettier على ملفات الخادم (والاختبارات كلها نجحت)
+iOS      36220362932  success   (المجموعات ١–٦)
+iOS      36220877269  success   (بعد دمج الفرع الليلي، آخر شيفرة)
+Android  36220831203  success
+CI       36220832824  success   (lint، typecheck، العقد، الخادم بشرائحه الثلاث، رحلات الويب، سطح المكتب، Docker)
+```
+دُمج في `night/2026-09-27` عند `35f78e28`. CI على #165 عند `35f78e28`:
+```
+Build and test on the iOS simulator                     pass  5m6s
+Android build, unit tests, lint                         pass  6m47s
+Lint, typecheck, contracts, client tests, build         pass  6m46s
+Server unit tests (shard 1/3, 2/3, 3/3)                 pass
+Web smoke journeys (Playwright against the real hub)    pass  9m24s
+Desktop app smoke, Docker image, db:generate + migrate  pass
+PR adds or updates a change record                      pass
 ```
 
 ## المخاطر والرجوع
@@ -151,4 +178,6 @@ iOS      36219113898  success   (المجموعات ١–٤)
 - الرجوع: استرجاع دمج هذا الفرع من الفرع الليلي.
 
 ## التسليم والخطوة التالية
-المجموعات الست مبنية في الجهازين؛ الدمج في `night/2026-09-27` وCI على #165.
+المجموعات الست مبنية في الجهازين ومدموجة في `night/2026-09-27`، وCI على #165 أخضر. الخطوة التالية للمالك: تجربتها على
+جواليه (الآيفون عبر TestFlight، وأندرويد بتحديث التطبيق)، وتأكيد ما عُلّم «مقترح» (§105، ملفات الإعداد على الجوال، الأنماط
+المضغوطة). ما لم يُبنَ: لقطات Robolectric للصفحات الجديدة، والسحب على أندرويد لم يُجرَّب بإصبع على جهاز حقيقي.
