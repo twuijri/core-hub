@@ -97,7 +97,9 @@ export class ProgramHost {
   }
 
   /** Programs switched on for this profile, with their tools as last listed. */
-  available(profile: string | null): Array<{ program: DiscoveredProgram; tools: ProgramToolSnapshot[] }> {
+  available(
+    profile: string | null,
+  ): Array<{ program: DiscoveredProgram; tools: ProgramToolSnapshot[] }> {
     const settings = this.options.settings();
     return this.options
       .catalogue()
@@ -273,7 +275,8 @@ export class ProgramHost {
   private sweep(): void {
     const at = Date.now();
     for (const [id, call] of this.calls) {
-      if (call.finishedAt !== null && at - call.finishedAt > KEEP_FINISHED_MS) this.calls.delete(id);
+      if (call.finishedAt !== null && at - call.finishedAt > KEEP_FINISHED_MS)
+        this.calls.delete(id);
     }
     while (this.calls.size > MAX_CALLS) {
       const oldest = this.calls.keys().next().value;

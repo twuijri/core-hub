@@ -546,7 +546,10 @@ export class DesktopController {
       cancelId: 2,
       noLink: true,
       message: t('helper.consent.question', params),
-      detail: t(question.via === 'hub' ? 'helper.consent.detail_hub' : 'helper.consent.detail_local', params),
+      detail: t(
+        question.via === 'hub' ? 'helper.consent.detail_hub' : 'helper.consent.detail_local',
+        params,
+      ),
     };
     const window = this.appWindow && this.appWindow.isVisible() ? this.appWindow : null;
     const answer = window
@@ -967,7 +970,8 @@ function sealText(text: string): string {
 }
 
 function unsealText(sealed: string): string {
-  if (sealed.startsWith('v1:')) return safeStorage.decryptString(Buffer.from(sealed.slice(3), 'base64'));
+  if (sealed.startsWith('v1:'))
+    return safeStorage.decryptString(Buffer.from(sealed.slice(3), 'base64'));
   if (sealed.startsWith('plain:')) return sealed.slice(6);
   return sealed;
 }

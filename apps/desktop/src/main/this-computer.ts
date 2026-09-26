@@ -165,7 +165,9 @@ export class ThisComputerService {
     const values = Object.fromEntries(
       Object.entries(settings?.values ?? {}).map(([k, v]) => [k, v ? 'set' : '']),
     );
-    return missingFields(program, values).length > 0 ? ('needs_setup' as const) : ('ready' as const);
+    return missingFields(program, values).length > 0
+      ? ('needs_setup' as const)
+      : ('ready' as const);
   }
 
   programsState(): DesktopProgramsState {

@@ -290,7 +290,7 @@ export function programToolsFor(host: ProgramHost | undefined, profile: string |
     tools.push({
       name: PROGRAM_STATUS_TOOL,
       description:
-        "How a long program call stands (a tool answered state: running with a call_id), and its result once it is done.",
+        'How a long program call stands (a tool answered state: running with a call_id), and its result once it is done.',
       inputSchema: obj({ call_id: { type: 'string' } }, ['call_id']),
     });
   return tools;

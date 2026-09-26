@@ -319,8 +319,16 @@ interface DeviceView {
   } | null;
 }
 
-const DEVICE_ID = { type: 'string', minLength: 1, description: "The computer's id (devices.list)." };
-const DEVICE_PATH = { type: 'string', minLength: 1, description: 'Absolute path on that computer.' };
+const DEVICE_ID = {
+  type: 'string',
+  minLength: 1,
+  description: "The computer's id (devices.list).",
+};
+const DEVICE_PATH = {
+  type: 'string',
+  minLength: 1,
+  description: 'Absolute path on that computer.',
+};
 
 function deviceTools(): HubToolDefinition[] {
   const files = (
@@ -373,8 +381,8 @@ function deviceTools(): HubToolDefinition[] {
             online: d.online,
             folders: d.helper!.folders,
             can_open: d.helper!.allow_open,
-            programs: d.helper!.programs
-              .filter((p) => p.profiles.includes(ctx.profile))
+            programs: d
+              .helper!.programs.filter((p) => p.profiles.includes(ctx.profile))
               .map((p) => ({ id: p.id, name: p.name, tools: p.tools })),
           })),
         };
@@ -405,7 +413,11 @@ function deviceTools(): HubToolDefinition[] {
       { path: DEVICE_PATH, content: { type: 'string' }, overwrite: { type: 'boolean' } },
       ['path', 'content'],
       'write_text_file',
-      (a) => ({ path: need(a, 'path'), content: str(a, 'content') ?? '', overwrite: a.overwrite === true }),
+      (a) => ({
+        path: need(a, 'path'),
+        content: str(a, 'content') ?? '',
+        overwrite: a.overwrite === true,
+      }),
     ),
     files(
       'devices.open',
@@ -468,14 +480,22 @@ function deviceTools(): HubToolDefinition[] {
       },
       async run(ctx, a) {
         const args = a.arguments;
-        if (args !== undefined && (typeof args !== 'object' || args === null || Array.isArray(args))) {
+        if (
+          args !== undefined &&
+          (typeof args !== 'object' || args === null || Array.isArray(args))
+        ) {
           throw new ToolRefusal('validation_failed', 'arguments must be an object');
         }
         const result = await askDevice(ctx, {
           deviceId: need(a, 'device_id'),
           capability: 'apps',
           purpose: `${need(a, 'program')}.${need(a, 'tool')}`,
-          params: { op: 'call', program: need(a, 'program'), tool: need(a, 'tool'), arguments: args ?? {} },
+          params: {
+            op: 'call',
+            program: need(a, 'program'),
+            tool: need(a, 'tool'),
+            arguments: args ?? {},
+          },
           timeoutMs: PROGRAM_TIMEOUT_MS,
         });
         return programResult(result);
@@ -485,7 +505,8 @@ function deviceTools(): HubToolDefinition[] {
       name: 'devices.run_status',
       group: 'devices',
       access: 'read',
-      description: 'How a long program call (devices.run answered state: running) stands, and its result when it is done.',
+      description:
+        'How a long program call (devices.run answered state: running) stands, and its result when it is done.',
       inputSchema: {
         type: 'object',
         required: ['device_id', 'call_id'],
@@ -515,7 +536,8 @@ function programResult(result: Record<string, unknown>): Record<string, unknown>
     };
   }
   const text = contentText(result.content);
-  if (result.is_error === true) throw new ToolRefusal('program_error', text || 'the program failed');
+  if (result.is_error === true)
+    throw new ToolRefusal('program_error', text || 'the program failed');
   return { state: 'done', result: text };
 }
 

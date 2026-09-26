@@ -215,7 +215,7 @@ export class DeviceLink {
           query: { status: 'pending', device_id: this.options.deviceId, limit: 50 },
           headers: { 'X-Hub-Profile': profile },
         });
-        for (const request of ((data as { items?: DeviceRequestView[] })?.items ?? []))
+        for (const request of (data as { items?: DeviceRequestView[] })?.items ?? [])
           void this.handle(request);
       } catch {
         // That profile is not the person's any more, or the hub is busy: the next connect tries.
@@ -262,7 +262,13 @@ export class DeviceLink {
   async upload(
     profile: string,
     file: string,
-  ): Promise<{ attachment_id: string; name: string; mime: string; size_bytes: number; kind: string }> {
+  ): Promise<{
+    attachment_id: string;
+    name: string;
+    mime: string;
+    size_bytes: number;
+    kind: string;
+  }> {
     const size = statSync(file).size;
     if (size === 0) throw new RequestRefusal('failed', 'That file is empty.');
     if (size > MAX_SEND_BYTES)

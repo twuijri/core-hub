@@ -8,6 +8,8 @@
  * render in progress). Progress notifications for a call are passed to whoever asked.
  */
 import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process';
+import { existsSync } from 'node:fs';
+import { windowsLaunch } from '../shared/windows-command.js';
 
 export const CLIENT_PROTOCOL_VERSION = '2025-06-18';
 const LOG_LINES = 40;
@@ -70,6 +72,8 @@ export class StdioMcpClient {
       /** The environment the program inherits (the app's own, PATH above all). */
       baseEnv?: NodeJS.ProcessEnv;
       spawnImpl?: typeof spawn;
+      /** Windows finds `npx` and friends itself (`shared/windows-command.ts`). */
+      platform?: NodeJS.Platform;
     },
   ) {}
 
@@ -84,12 +88,18 @@ export class StdioMcpClient {
 
   async start(timeoutMs = 30_000): Promise<void> {
     const run = this.options.spawnImpl ?? spawn;
-    const child = run(this.launch.command, this.launch.args, {
+    const env = { ...(this.options.baseEnv ?? process.env), ...this.launch.env };
+    const target =
+      (this.options.platform ?? process.platform) === 'win32'
+        ? windowsLaunch(this.launch.command, this.launch.args, env, (file) => existsSync(file))
+        : { file: this.launch.command, args: this.launch.args, verbatim: false };
+    const child = run(target.file, target.args, {
       cwd: this.launch.cwd ?? undefined,
-      env: { ...(this.options.baseEnv ?? process.env), ...this.launch.env },
+      env,
       stdio: ['pipe', 'pipe', 'pipe'],
       shell: false,
       windowsHide: true,
+      windowsVerbatimArguments: target.verbatim,
     }) as ChildProcessWithoutNullStreams;
     this.child = child;
     child.stdout.setEncoding('utf8');
@@ -218,7 +228,9 @@ export class StdioMcpClient {
       const timer = extra.timeoutMs
         ? setTimeout(() => {
             this.pending.delete(id);
-            reject(new McpProgramError(`the program did not answer ${method} in time`, this.recentLog()));
+            reject(
+              new McpProgramError(`the program did not answer ${method} in time`, this.recentLog()),
+            );
           }, extra.timeoutMs)
         : null;
       this.pending.set(id, {

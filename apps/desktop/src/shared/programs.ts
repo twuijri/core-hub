@@ -97,8 +97,11 @@ function envOf(value: unknown): Record<string, string> {
   return out;
 }
 
+/** The path rules of the computer described (a test may describe Windows from Linux). */
+const pathOf = (platform: NodeJS.Platform) => (platform === 'win32' ? path.win32 : path.posix);
+
 function userFolder(ctx: PlaceholderContext, name: 'Desktop' | 'Documents' | 'Downloads'): string {
-  return path.join(ctx.home, name);
+  return pathOf(ctx.platform).join(ctx.home, name);
 }
 
 /**
@@ -284,7 +287,7 @@ export function fromExtension(
       ? manifest.display_name
       : typeof manifest.name === 'string'
         ? manifest.name
-        : path.basename(folder);
+        : pathOf(ctx.platform).basename(folder);
   const description =
     typeof manifest.description === 'string' ? manifest.description.slice(0, 500) : null;
   const command = typeof merged.command === 'string' ? merged.command : null;
@@ -292,7 +295,7 @@ export function fromExtension(
     id: slug(name),
     name,
     source: 'claude_desktop_extension' as const,
-    origin: path.join(folder, 'manifest.json'),
+    origin: pathOf(ctx.platform).join(folder, 'manifest.json'),
     description,
   };
   if (!command)

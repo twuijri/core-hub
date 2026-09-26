@@ -31,10 +31,7 @@ function outcomeBody(outcome: CallOutcome): Record<string, unknown> {
 }
 
 export function deviceAnswers(deps: AnswerDeps) {
-  return async (
-    request: DeviceRequestView,
-    link: DeviceLink,
-  ): Promise<Record<string, unknown>> => {
+  return async (request: DeviceRequestView, link: DeviceLink): Promise<Record<string, unknown>> => {
     const config = deps.config();
     if (!config.enabled)
       throw new RequestRefusal('unavailable', 'The helper is switched off on this computer.');
@@ -57,7 +54,14 @@ export function deviceAnswers(deps: AnswerDeps) {
           throw new RequestRefusal('failed', detail);
         }
         if (!statSync(resolved.path).isFile()) {
-          deps.record({ at, tool, target: resolved.path, ok: false, detail: 'not a file', via: 'hub' });
+          deps.record({
+            at,
+            tool,
+            target: resolved.path,
+            ok: false,
+            detail: 'not a file',
+            via: 'hub',
+          });
           throw new RequestRefusal('failed', 'That path is not a file.');
         }
         try {
@@ -81,7 +85,11 @@ export function deviceAnswers(deps: AnswerDeps) {
       } catch (error) {
         const detail = error instanceof Error ? error.message : String(error);
         const target =
-          typeof args.path === 'string' ? args.path : typeof args.url === 'string' ? args.url : null;
+          typeof args.path === 'string'
+            ? args.path
+            : typeof args.url === 'string'
+              ? args.url
+              : null;
         deps.record({ at, tool, target, ok: false, detail, via: 'hub' });
         return { content: [{ type: 'text', text: detail }], is_error: true };
       }
@@ -107,7 +115,10 @@ export function deviceAnswers(deps: AnswerDeps) {
       }
     }
 
-    throw new RequestRefusal('unavailable', `This computer does not answer "${request.capability}".`);
+    throw new RequestRefusal(
+      'unavailable',
+      `This computer does not answer "${request.capability}".`,
+    );
   };
 }
 

@@ -531,7 +531,8 @@ export class RunEngine {
   handOver(workspace: string, runId: string, attachment: { id: string; kind: string }): boolean {
     const run = this.active.get(runId);
     if (!run || run.scope.workspace !== workspace) return false;
-    if (!run.handedOver.some((known) => known.id === attachment.id)) run.handedOver.push(attachment);
+    if (!run.handedOver.some((known) => known.id === attachment.id))
+      run.handedOver.push(attachment);
     return true;
   }
 

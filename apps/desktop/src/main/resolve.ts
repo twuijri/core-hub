@@ -22,11 +22,7 @@ import { isResolve, type DiscoveredProgram } from '../shared/programs.js';
 import type { ProgramSettings } from '../shared/helper.js';
 
 export type ResolveStep =
-  | 'install_integration'
-  | 'share_program'
-  | 'start_resolve'
-  | 'enable_scripting'
-  | 'needs_studio';
+  'install_integration' | 'share_program' | 'start_resolve' | 'enable_scripting' | 'needs_studio';
 
 export interface ResolveReadiness {
   checkedAt: string;
@@ -81,10 +77,18 @@ export function scriptingEnv(
   let lib: string;
   if (platform === 'darwin') {
     api = '/Library/Application Support/Blackmagic Design/DaVinci Resolve/Developer/Scripting';
-    lib = '/Applications/DaVinci Resolve/DaVinci Resolve.app/Contents/Libraries/Fusion/fusionscript.so';
+    lib =
+      '/Applications/DaVinci Resolve/DaVinci Resolve.app/Contents/Libraries/Fusion/fusionscript.so';
   } else if (platform === 'win32') {
     const data = env.PROGRAMDATA ?? 'C:\\ProgramData';
-    api = path.win32.join(data, 'Blackmagic Design', 'DaVinci Resolve', 'Support', 'Developer', 'Scripting');
+    api = path.win32.join(
+      data,
+      'Blackmagic Design',
+      'DaVinci Resolve',
+      'Support',
+      'Developer',
+      'Scripting',
+    );
     lib = 'C:\\Program Files\\Blackmagic Design\\DaVinci Resolve\\fusionscript.dll';
   } else {
     api = '/opt/resolve/Developer/Scripting';
@@ -136,7 +140,12 @@ async function probe(
   exec: Exec,
 ): Promise<{ ok: boolean; product: string | null; version: string | null } | null> {
   const pythons: Array<[string, string[]]> =
-    platform === 'win32' ? [['py', ['-3']], ['python', []]] : [['python3', []]];
+    platform === 'win32'
+      ? [
+          ['py', ['-3']],
+          ['python', []],
+        ]
+      : [['python3', []]];
   for (const [command, prefix] of pythons) {
     const out = await exec(command, [...prefix, '-c', PROBE], {
       env: { ...env, ...scriptingEnv(platform, env) },

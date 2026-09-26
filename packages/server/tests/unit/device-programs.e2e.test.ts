@@ -27,7 +27,10 @@ import { defaultConfig, type DesktopConfig } from '../../../../apps/desktop/src/
 import type { ConsentQuestion } from '../../../../apps/desktop/src/main/consent.js';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
-const FAKE_RESOLVE = path.resolve(here, '../../../../apps/desktop/tests/fixtures/fake-resolve-mcp.mjs');
+const FAKE_RESOLVE = path.resolve(
+  here,
+  '../../../../apps/desktop/tests/fixtures/fake-resolve-mcp.mjs',
+);
 const healthy: typeof fetch = async () =>
   new Response('{"status":"ok"}', { status: 200, headers: { 'content-type': 'application/json' } });
 
@@ -97,7 +100,10 @@ describe('device programs: a hub on a server drives a program on the person’s 
           call_id: render.body.call_id,
         });
       }
-      await mcp('devices.fetch_file', { device_id: device.id, path: path.join(folder, 'trip.mp4') });
+      await mcp('devices.fetch_file', {
+        device_id: device.id,
+        path: path.join(folder, 'trip.mp4'),
+      });
       yield { event: 'message.delta', delta: 'Your cut is rendered.' } as HermesRunEvent;
       yield {
         event: 'run.completed',

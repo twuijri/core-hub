@@ -153,12 +153,7 @@ export interface DesktopProgramField {
 }
 
 export type DesktopProgramSource =
-  | 'claude_desktop'
-  | 'claude_desktop_extension'
-  | 'claude_code'
-  | 'codex'
-  | 'cursor'
-  | 'windsurf';
+  'claude_desktop' | 'claude_desktop_extension' | 'claude_code' | 'codex' | 'cursor' | 'windsurf';
 
 export interface DesktopProgram {
   id: string;
@@ -185,11 +180,7 @@ export interface DesktopProgram {
 }
 
 export type DesktopResolveStep =
-  | 'install_integration'
-  | 'share_program'
-  | 'start_resolve'
-  | 'enable_scripting'
-  | 'needs_studio';
+  'install_integration' | 'share_program' | 'start_resolve' | 'enable_scripting' | 'needs_studio';
 
 export interface DesktopResolveReadiness {
   checkedAt: string;
@@ -223,12 +214,7 @@ export interface DesktopProgramsBridge {
 }
 
 export type DesktopDeviceStatus =
-  | 'unlinked'
-  | 'connecting'
-  | 'connected'
-  | 'offline'
-  | 'refused'
-  | 'stopped';
+  'unlinked' | 'connecting' | 'connected' | 'offline' | 'refused' | 'stopped';
 
 export interface DesktopDeviceState {
   /** The hub this window talks to (remote mode), or null in local mode. */

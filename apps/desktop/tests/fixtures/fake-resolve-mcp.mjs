@@ -86,7 +86,9 @@ async function call(name, args, progressToken) {
     case 'create_timeline':
       if (state.media.length === 0) return fail('The media pool is empty.');
       state.timeline = { name: String(args.name ?? 'Timeline 1'), clips: state.media.length };
-      return text(`Created timeline "${state.timeline.name}" with ${state.timeline.clips} clip(s).`);
+      return text(
+        `Created timeline "${state.timeline.name}" with ${state.timeline.clips} clip(s).`,
+      );
     case 'render': {
       if (!state.timeline) return fail('There is no timeline to render.');
       const out = path.join(String(args.output_dir), String(args.file_name));
@@ -97,7 +99,12 @@ async function call(name, args, progressToken) {
           send({
             jsonrpc: '2.0',
             method: 'notifications/progress',
-            params: { progressToken, progress: i * 20, total: 100, message: `Rendering ${i * 20}%` },
+            params: {
+              progressToken,
+              progress: i * 20,
+              total: 100,
+              message: `Rendering ${i * 20}%`,
+            },
           });
       }
       mkdirSync(path.dirname(out), { recursive: true });

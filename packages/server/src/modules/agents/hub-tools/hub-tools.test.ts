@@ -86,6 +86,7 @@ describe('hub tools: the protocol', () => {
       'notifications',
       'workflows',
       'files',
+      'devices',
     ]);
     expect(HUB_TOOLS.map((tool) => tool.name)).toEqual([
       'tasks.list',
@@ -106,6 +107,14 @@ describe('hub tools: the protocol', () => {
       'files.list',
       'files.read',
       'files.write',
+      'devices.list',
+      'devices.list_folder',
+      'devices.read_file',
+      'devices.write_file',
+      'devices.open',
+      'devices.fetch_file',
+      'devices.run',
+      'devices.run_status',
     ]);
     for (const tool of HUB_TOOLS) {
       expect(tool.name.startsWith(`${tool.group}.`)).toBe(true);

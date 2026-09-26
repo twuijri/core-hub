@@ -40,27 +40,55 @@ const listDir = (dir: string): string[] => {
   }
 };
 
+/** The path module of the platform looked at (a test on Linux reads a Windows layout). */
+const pathFor = (env: DiscoveryEnv) => (env.platform === 'win32' ? path.win32 : path.posix);
+
 /** Claude Desktop's own folder: Application Support, Roaming app data, or the XDG config. */
 export function claudeDesktopDir(env: DiscoveryEnv): string {
+  const p = pathFor(env);
   if (env.platform === 'darwin')
-    return path.join(env.home, 'Library', 'Application Support', 'Claude');
+    return p.join(env.home, 'Library', 'Application Support', 'Claude');
   if (env.platform === 'win32')
-    return path.join(env.env.APPDATA ?? path.join(env.home, 'AppData', 'Roaming'), 'Claude');
-  return path.join(env.env.XDG_CONFIG_HOME ?? path.join(env.home, '.config'), 'Claude');
+    return p.join(env.env.APPDATA ?? p.join(env.home, 'AppData', 'Roaming'), 'Claude');
+  return p.join(env.env.XDG_CONFIG_HOME ?? p.join(env.home, '.config'), 'Claude');
+}
+
+/**
+ * Every folder Claude Desktop may keep its files in. On Windows the Store (MSIX) build writes
+ * its app data into its package's own copy of Roaming
+ * (`%LOCALAPPDATA%\Packages\Claude_<id>\LocalCache\Roaming\Claude`), so that is looked in too.
+ */
+export function claudeDesktopDirs(env: DiscoveryEnv): string[] {
+  const dirs = [claudeDesktopDir(env)];
+  if (env.platform === 'win32') {
+    const p = path.win32;
+    const packages = p.join(
+      env.env.LOCALAPPDATA ?? p.join(env.home, 'AppData', 'Local'),
+      'Packages',
+    );
+    for (const name of (env.listDir ?? listDir)(packages)) {
+      if (/^Claude_/i.test(name))
+        dirs.push(p.join(packages, name, 'LocalCache', 'Roaming', 'Claude'));
+    }
+  }
+  return dirs;
 }
 
 /** Every file this looks in, with the source each one is. */
 export function discoveryFiles(env: DiscoveryEnv): Array<{ source: ProgramSource; file: string }> {
-  const claude = claudeDesktopDir(env);
+  const p = pathFor(env);
   return [
-    { source: 'claude_desktop', file: path.join(claude, 'claude_desktop_config.json') },
-    { source: 'claude_code', file: path.join(env.home, '.claude.json') },
+    ...claudeDesktopDirs(env).map((dir) => ({
+      source: 'claude_desktop' as const,
+      file: p.join(dir, 'claude_desktop_config.json'),
+    })),
+    { source: 'claude_code', file: p.join(env.home, '.claude.json') },
     {
       source: 'codex',
-      file: path.join(env.env.CODEX_HOME ?? path.join(env.home, '.codex'), 'config.toml'),
+      file: p.join(env.env.CODEX_HOME ?? p.join(env.home, '.codex'), 'config.toml'),
     },
-    { source: 'cursor', file: path.join(env.home, '.cursor', 'mcp.json') },
-    { source: 'windsurf', file: path.join(env.home, '.codeium', 'windsurf', 'mcp_config.json') },
+    { source: 'cursor', file: p.join(env.home, '.cursor', 'mcp.json') },
+    { source: 'windsurf', file: p.join(env.home, '.codeium', 'windsurf', 'mcp_config.json') },
   ];
 }
 
@@ -98,21 +126,23 @@ function programsIn(
 function extensions(env: DiscoveryEnv, ctx: PlaceholderContext): DiscoveredProgram[] {
   const read = env.readText ?? readText;
   const list = env.listDir ?? listDir;
-  const claude = claudeDesktopDir(env);
-  const root = path.join(claude, 'Claude Extensions');
+  const p = pathFor(env);
   const found: DiscoveredProgram[] = [];
-  for (const name of list(root)) {
-    const folder = path.join(root, name);
-    const manifest = read(path.join(folder, 'manifest.json'));
-    if (manifest === null) continue;
-    const settingsText = read(path.join(claude, 'Claude Extensions Settings', `${name}.json`));
-    const program = fromExtension(
-      parse('manifest.json', manifest),
-      folder,
-      settingsText === null ? null : parse('settings.json', settingsText),
-      ctx,
-    );
-    if (program) found.push(program);
+  for (const claude of claudeDesktopDirs(env)) {
+    const root = p.join(claude, 'Claude Extensions');
+    for (const name of list(root)) {
+      const folder = p.join(root, name);
+      const manifest = read(p.join(folder, 'manifest.json'));
+      if (manifest === null) continue;
+      const settingsText = read(p.join(claude, 'Claude Extensions Settings', `${name}.json`));
+      const program = fromExtension(
+        parse('manifest.json', manifest),
+        folder,
+        settingsText === null ? null : parse('settings.json', settingsText),
+        ctx,
+      );
+      if (program) found.push(program);
+    }
   }
   return found;
 }
@@ -124,15 +154,18 @@ export function discoverPrograms(env: DiscoveryEnv): DiscoveredProgram[] {
   const found: DiscoveredProgram[] = [];
   const files = discoveryFiles(env);
   // Claude Desktop's own config first, then its extensions, then the others.
-  const [desktop, ...others] = files;
-  for (const entry of [desktop!]) {
+  const desktop = files.filter((f) => f.source === 'claude_desktop');
+  const others = files.filter((f) => f.source !== 'claude_desktop');
+  for (const entry of desktop) {
     const text = read(entry.file);
-    if (text !== null) found.push(...programsIn(entry.source, entry.file, parse(entry.file, text), ctx));
+    if (text !== null)
+      found.push(...programsIn(entry.source, entry.file, parse(entry.file, text), ctx));
   }
   found.push(...extensions(env, ctx));
   for (const entry of others) {
     const text = read(entry.file);
-    if (text !== null) found.push(...programsIn(entry.source, entry.file, parse(entry.file, text), ctx));
+    if (text !== null)
+      found.push(...programsIn(entry.source, entry.file, parse(entry.file, text), ctx));
   }
   return dedupe(found);
 }

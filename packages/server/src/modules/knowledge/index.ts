@@ -40,13 +40,7 @@ import { requireSqlite } from '../../lib/db.js';
 import { HubError, notFound } from '../../lib/errors.js';
 import { defineModule } from '../../lib/module.js';
 import { defineRoute } from '../../lib/route.js';
-import {
-  canEnter,
-  findUser,
-  requireRole,
-  requireUser,
-  requireWorkspace,
-} from '../auth/index.js';
+import { canEnter, findUser, requireRole, requireUser, requireWorkspace } from '../auth/index.js';
 import { StreamTickets } from './streams.js';
 import { MAX_UPLOAD_BYTES } from './limits.js';
 import { sanitiseFilename } from './media.js';

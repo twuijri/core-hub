@@ -107,11 +107,18 @@ export function parseHelper(raw: unknown, makeToken: () => string): HelperConfig
 function parsePrograms(raw: unknown): Record<string, ProgramSettings> {
   if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return {};
   const out: Record<string, ProgramSettings> = {};
-  for (const [id, value] of Object.entries(raw as Record<string, unknown>).slice(0, PROGRAM_LIMIT)) {
+  for (const [id, value] of Object.entries(raw as Record<string, unknown>).slice(
+    0,
+    PROGRAM_LIMIT,
+  )) {
     if (!/^[a-z0-9][a-z0-9_-]{0,47}$/.test(id) || !value || typeof value !== 'object') continue;
     const v = value as Record<string, unknown>;
     const profiles = Array.isArray(v.profiles)
-      ? [...new Set(v.profiles.filter((p): p is string => typeof p === 'string' && PROFILE_SLUG.test(p)))]
+      ? [
+          ...new Set(
+            v.profiles.filter((p): p is string => typeof p === 'string' && PROFILE_SLUG.test(p)),
+          ),
+        ]
       : [];
     const values: Record<string, string> = {};
     if (v.values && typeof v.values === 'object' && !Array.isArray(v.values)) {

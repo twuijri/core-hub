@@ -121,12 +121,20 @@ describe("the hub's own tools: the card and the profile's Hermes config", () => 
       available: true,
       server_name: 'corehub',
     });
-    // Switched on, every group reads and none writes until someone says so.
+    // Switched on, every group reads and none writes until someone says so — except the
+    // person's own computers, which wait for an admin to switch that group on (§86).
+    const groups = before.json().groups as Array<{
+      id: string;
+      enabled: boolean;
+      allow_writes: boolean;
+    }>;
     expect(
-      (before.json().groups as Array<{ enabled: boolean; allow_writes: boolean }>).every(
-        (g) => g.enabled && !g.allow_writes,
-      ),
+      groups.filter((g) => g.id !== 'devices').every((g) => g.enabled && !g.allow_writes),
     ).toBe(true);
+    expect(groups.find((g) => g.id === 'devices')).toMatchObject({
+      enabled: false,
+      allow_writes: false,
+    });
     writeFileSync(path.join(root, 'config.yaml'), '# mine\nmodel:\n  default: x\n');
 
     const on = await enable(h, agent, 'default');
