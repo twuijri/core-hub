@@ -19,6 +19,7 @@ import {
   toMessage,
   toRun,
   toRunChanges,
+  toLiveRunChanges,
   toRunFileDiff,
   toSession,
   type ApprovalRow,
@@ -833,10 +834,21 @@ export class SessionsService {
     };
   }
 
-  /** One run's changed files (contract `sessions.getRunChanges`); 404 when none were recorded. */
-  runChanges(scope: EngineScope, sessionId: string, runId: string): Record<string, unknown> {
+  /**
+   * One run's changed files (contract `sessions.getRunChanges`). A run still going answers
+   * what it has changed so far, `live: true` (decision §102); 404 when none were recorded.
+   */
+  async runChanges(
+    scope: EngineScope,
+    sessionId: string,
+    runId: string,
+  ): Promise<Record<string, unknown>> {
     const run = this.requireRun(scope, sessionId, runId);
-    if (!run.changes) throw notFound({ resource: 'run_changes', id: runId });
+    if (!run.changes) {
+      const live = await this.engine.liveChanges(run.id);
+      if (live) return toLiveRunChanges(run.id, live.record, live.at);
+      throw notFound({ resource: 'run_changes', id: runId });
+    }
     const files = this.store.runFileChangesOf(scope.workspace, [run.id]).get(run.id) ?? [];
     return toRunChanges(run, files);
   }
@@ -1346,6 +1358,33 @@ export class SessionsService {
           }
         : null,
       message: result.message,
+    };
+  }
+
+  /**
+   * `sessions.getContextBreakdown` (decision §102): what fills the window, by category, as the
+   * agent counts it — asked of the conversation it already has open, never opening one.
+   * `available: false` when there is nothing to ask or it could not tell.
+   */
+  async contextBreakdown(scope: EngineScope, sessionId: string): Promise<Record<string, unknown>> {
+    const session = this.requireSession(scope, sessionId);
+    const runner = this.ports.runner;
+    const breakdown = runner.contextBreakdown ? await runner.contextBreakdown(session.id) : null;
+    if (!breakdown) {
+      return {
+        available: false,
+        used_tokens: 0,
+        window_tokens: null,
+        estimated: false,
+        categories: [],
+      };
+    }
+    return {
+      available: breakdown.categories.length > 0,
+      used_tokens: breakdown.usedTokens,
+      window_tokens: breakdown.windowTokens,
+      estimated: breakdown.estimated,
+      categories: breakdown.categories,
     };
   }
 

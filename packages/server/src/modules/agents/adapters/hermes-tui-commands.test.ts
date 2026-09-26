@@ -12,6 +12,7 @@ import {
   HermesTuiSession,
   agentCommandOf,
   compressOutcomeOf,
+  contextBreakdownOf,
   stdioTuiChannel,
   type Spawned,
 } from './hermes-tui.js';
@@ -282,6 +283,64 @@ describe('compression', () => {
       windowTokens: 128_000,
       estimated: false,
     });
+  });
+});
+
+describe('the window by category (decision §102)', () => {
+  it('asks session.context_breakdown and keeps what the hub shows, not Hermes CSS', async () => {
+    // The answer's shape, as observed in Hermes v0.21.3 (`agent/context_breakdown.py`).
+    const gateway = conversation((method) =>
+      method === 'session.context_breakdown'
+        ? {
+            categories: [
+              {
+                id: 'system_prompt',
+                label: 'System prompt',
+                color: 'var(--context-usage-system)',
+                tokens: 3120,
+              },
+              { id: 'tool_definitions', label: 'Tool definitions', color: 'x', tokens: 14_800 },
+              { id: 'memory', label: 'Memory', color: 'x', tokens: 410 },
+              { id: 'conversation', label: 'Conversation', color: 'x', tokens: 29_500 },
+            ],
+            context_max: 200_000,
+            context_percent: 24,
+            context_used: 48_210,
+            estimated_total: 47_830,
+            context_estimated: false,
+            context_source: 'provider_usage',
+            model: 'claude-sonnet',
+          }
+        : {},
+    );
+    const session = await HermesTuiSession.open(gateway.channel, null);
+    const breakdown = await session.contextBreakdown();
+    const call = gateway.calls.find((c) => c.method === 'session.context_breakdown');
+    expect(call?.params).toEqual({ session_id: 'live1' });
+    expect(breakdown).toEqual({
+      usedTokens: 48_210,
+      windowTokens: 200_000,
+      estimated: false,
+      categories: [
+        { id: 'system_prompt', label: 'System prompt', tokens: 3120 },
+        { id: 'tool_definitions', label: 'Tool definitions', tokens: 14_800 },
+        { id: 'memory', label: 'Memory', tokens: 410 },
+        { id: 'conversation', label: 'Conversation', tokens: 29_500 },
+      ],
+    });
+  });
+
+  it('reads an agent not built yet as no categories, and junk as nothing', () => {
+    expect(
+      contextBreakdownOf({ categories: [], context_max: 0, context_used: 0, context_estimated: true }),
+    ).toEqual({ usedTokens: 0, windowTokens: null, estimated: true, categories: [] });
+    expect(contextBreakdownOf({ categories: 'no' })).toBeNull();
+    expect(
+      contextBreakdownOf({
+        context_used: 10,
+        categories: [{ id: '', tokens: 3 }, { id: 'skills', tokens: 0 }, { id: 'mcp', tokens: 7 }],
+      })?.categories,
+    ).toEqual([{ id: 'mcp', label: 'mcp', tokens: 7 }]);
   });
 });
 

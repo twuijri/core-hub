@@ -97,4 +97,23 @@ describe('the Memory page, where Hermes reads', () => {
     });
     expect(existsSync(path.join(root, 'memories', 'USER.md'))).toBe(false);
   });
+
+  it('lists each entry on its own with the budget it counts against (decision §102)', async () => {
+    const { hub: h, agent, root } = await boot();
+    writeFileSync(path.join(root, 'config.yaml'), 'memory:\n  user_char_limit: 500\n');
+    mkdirSync(path.join(root, 'memories'), { recursive: true });
+    // Hermes's separator with stray spaces and an empty entry: listed as Hermes reads it.
+    writeFileSync(path.join(root, 'memories', 'USER.md'), ' Prefers short answers. \n§\n\n§\nيحب القهوة.');
+    const items = await memoryOf(h, agent, 'default');
+    expect(items.user).toMatchObject({
+      entries: ['Prefers short answers.', 'يحب القهوة.'],
+      char_limit: 500,
+      // "Prefers short answers." (22) + "\n§\n" (3) + "يحب القهوة." (11), in code points.
+      char_count: 36,
+    });
+    // MEMORY.md is not there yet: no entries, Hermes's default budget.
+    expect(items.memory).toMatchObject({ entries: [], char_limit: 2200, char_count: 0 });
+    // SOUL.md is one text with no budget.
+    expect(items.soul).toMatchObject({ entries: null, char_limit: null, char_count: null });
+  });
 });

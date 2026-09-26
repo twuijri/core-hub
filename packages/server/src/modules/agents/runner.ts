@@ -46,6 +46,7 @@ import type {
   RunnerChoice,
   RunnerCompressRequest,
   RunnerCompressResult,
+  RunnerContextBreakdown,
   RunnerDecision,
   RunnerEvent,
   RunnerFileExchange,
@@ -260,6 +261,22 @@ export class AgentRunner implements AgentRunnerPort {
     if (!live.session.compress) throw commandUnsupported('compress', row.id);
     const outcome = await live.session.compress(request.focus);
     return { agentSessionRef: live.session.id, ...outcome };
+  }
+
+  /**
+   * What fills the window of a conversation the agent already has open (decision §102). It
+   * never opens one: starting an agent process to draw a popover would cost more than the
+   * answer is worth, so a conversation not open here answers `null`.
+   */
+  async contextBreakdown(sessionId: string): Promise<RunnerContextBreakdown | null> {
+    const live = this.sessions.get(sessionId);
+    if (!live || isClosed(live.session) || !live.session.contextBreakdown) return null;
+    try {
+      return await live.session.contextBreakdown();
+    } catch (error) {
+      this.deps.log.warn({ err: error, sessionId }, 'agents: the context breakdown failed');
+      return null;
+    }
   }
 
   /** Guidance into the run in flight (`sessions.steerRun`); the run is not interrupted. */

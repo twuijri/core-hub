@@ -1812,6 +1812,10 @@ export const agentsModule = defineModule({
       // for something a person can also edit with an editor.
       revision: 0,
       updated_at: item.updatedAt?.toISOString() ?? null,
+      // Decision §102: the entries as Hermes reads them, and the budget they count against.
+      entries: item.entries,
+      char_limit: item.limit,
+      char_count: item.length,
     });
 
     defineRoute(app, deps, {
