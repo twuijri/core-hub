@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Phone parity (docs/changes/2026-09-27-twuijri-phone-parity.md): workflows, the board, agent pages, share, models, admin, location. -->
+<resources>
+    <string name="schedules_tab_jobs">الجدولة</string>
+    <string name="schedules_tab_workflows">سير العمل</string>
+    <string name="workflows_started">بدأ التشغيل.</string>
+    <string name="workflow_idle">متوقف</string>
+    <string name="workflow_running">يعمل</string>
+    <string name="workflow_waiting">ينتظرك</string>
+    <string name="workflow_error">فشل آخر مرة</string>
+    <string name="step_pending">لم يصل بعد</string>
+    <string name="step_waiting_approval">ينتظر الموافقة</string>
+    <string name="step_skipped">تُخطّي</string>
+    <string name="step_rejected">مرفوض</string>
+    <string name="workflow_limit_duration">%1$d د</string>
+    <string name="workflow_limit_cost">%1$s$</string>
+    <string name="workflow_limit_step">%1$d د للخطوة</string>
+    <string name="workflow_counts">%1$d خطوات · %2$d تشغيلات</string>
+    <string name="workflows_empty">لا سير عمل بعد</string>
+    <string name="workflows_empty_body">يُرسم سير العمل على الويب، ويُشغَّل ويُتابَع من هنا.</string>
+    <string name="workflows_input">المدخل</string>
+    <string name="workflows_input_hint">اختياري: ما يعمل عليه هذا التشغيل</string>
+    <string name="workflows_run_limits">حدود هذا التشغيل</string>
+    <string name="workflows_limit_minutes">أطول مدة للتشغيل (دقائق)</string>
+    <string name="workflows_limit_minutes_bad">بين دقيقة وأسبوع.</string>
+    <string name="workflows_limit_cost">أعلى تكلفة (دولار)</string>
+    <string name="workflows_limit_cost_bad">مبلغ موجب بخانتين عشريتين على الأكثر.</string>
+    <string name="workflows_limit_step">أطول مدة للخطوة (دقائق)</string>
+    <string name="workflows_limit_step_bad">بين دقيقة ويوم.</string>
+    <string name="workflows_run">شغّل</string>
+    <string name="workflows_runs">آخر التشغيلات</string>
+    <string name="workflows_edit_on_web">الخطوات والروابط تُعدَّل على الويب.</string>
+    <string name="workflows_waiting_step">«%1$s» تنتظر موافقتك.</string>
+    <string name="workflows_approve">وافق</string>
+    <string name="workflows_deny">ارفض</string>
+    <string name="workflows_deny_reason">السبب (اختياري)</string>
+    <string name="workflows_steps">الخطوات</string>
+    <string name="workflows_seconds">%1$d ث</string>
+    <string name="workflows_stopped_duration">توقف: تجاوز حد الوقت.</string>
+    <string name="workflows_stopped_cost">توقف: تجاوز حد التكلفة.</string>
+    <string name="workflows_stopped_step">توقف: نفد وقت إحدى الخطوات.</string>
+    <string name="workflows_cancel_run">أوقف التشغيل</string>
+    <string name="workflows_finished">انتهى هذا التشغيل.</string>
+</resources>

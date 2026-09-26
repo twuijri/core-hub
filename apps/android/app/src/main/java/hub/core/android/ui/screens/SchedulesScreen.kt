@@ -165,6 +165,27 @@ private fun StateBadge(schedule: Schedule) {
  */
 @Composable
 fun SchedulesScreen(shell: ShellViewModel, onOpenChat: (String, String) -> Unit) {
+    // Schedules and workflows share the page, as on the web: one segmented switch above them.
+    var half by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf(SchedulesHalf.SCHEDULES) }
+    Column(Modifier.fillMaxSize()) {
+        hub.core.android.ui.kit.Segmented(
+            listOf(
+                hub.core.android.ui.kit.Segment(SchedulesHalf.SCHEDULES, stringResource(R.string.schedules_tab_jobs), Lucide.CalendarClock, "schedules.tab.jobs"),
+                hub.core.android.ui.kit.Segment(SchedulesHalf.WORKFLOWS, stringResource(R.string.schedules_tab_workflows), Lucide.Workflow, "schedules.tab.workflows"),
+            ),
+            half, { half = it }, Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
+        )
+        when (half) {
+            SchedulesHalf.SCHEDULES -> SchedulesList(shell, onOpenChat)
+            SchedulesHalf.WORKFLOWS -> WorkflowsList(shell, onOpenChat)
+        }
+    }
+}
+
+enum class SchedulesHalf { SCHEDULES, WORKFLOWS }
+
+@Composable
+private fun SchedulesList(shell: ShellViewModel, onOpenChat: (String, String) -> Unit) {
     val context = LocalContext.current
     val vm: SchedulesViewModel = viewModel { SchedulesViewModel(context.graph) }
     val ui by vm.ui.collectAsState()

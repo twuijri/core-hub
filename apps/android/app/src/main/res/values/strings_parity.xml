@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Phone parity (docs/changes/2026-09-27-twuijri-phone-parity.md): workflows, the board, agent pages, share, models, admin, location. -->
+<resources>
+    <string name="schedules_tab_jobs">Schedules</string>
+    <string name="schedules_tab_workflows">Workflows</string>
+    <string name="workflows_started">The run started.</string>
+    <string name="workflow_idle">Idle</string>
+    <string name="workflow_running">Running</string>
+    <string name="workflow_waiting">Waiting for you</string>
+    <string name="workflow_error">Failed last time</string>
+    <string name="step_pending">Not reached yet</string>
+    <string name="step_waiting_approval">Waiting for approval</string>
+    <string name="step_skipped">Skipped</string>
+    <string name="step_rejected">Denied</string>
+    <string name="workflow_limit_duration">%1$d min</string>
+    <string name="workflow_limit_cost">$%1$s</string>
+    <string name="workflow_limit_step">%1$d min a step</string>
+    <string name="workflow_counts">%1$d steps · %2$d runs</string>
+    <string name="workflows_empty">No workflows yet</string>
+    <string name="workflows_empty_body">Workflows are drawn on the web; they run and are followed here.</string>
+    <string name="workflows_input">Input</string>
+    <string name="workflows_input_hint">Optional: what this run should work on</string>
+    <string name="workflows_run_limits">Limits for this run</string>
+    <string name="workflows_limit_minutes">Longest run (minutes)</string>
+    <string name="workflows_limit_minutes_bad">Between 1 minute and a week.</string>
+    <string name="workflows_limit_cost">Most it may cost (USD)</string>
+    <string name="workflows_limit_cost_bad">A positive amount, up to two decimals.</string>
+    <string name="workflows_limit_step">Longest step (minutes)</string>
+    <string name="workflows_limit_step_bad">Between 1 minute and a day.</string>
+    <string name="workflows_run">Run</string>
+    <string name="workflows_runs">Recent runs</string>
+    <string name="workflows_edit_on_web">Steps and links are edited on the web.</string>
+    <string name="workflows_waiting_step">«%1$s» waits for your approval.</string>
+    <string name="workflows_approve">Approve</string>
+    <string name="workflows_deny">Deny</string>
+    <string name="workflows_deny_reason">Why (optional)</string>
+    <string name="workflows_steps">Steps</string>
+    <string name="workflows_seconds">%1$d s</string>
+    <string name="workflows_stopped_duration">Stopped: it ran past its time limit.</string>
+    <string name="workflows_stopped_cost">Stopped: it went past its cost limit.</string>
+    <string name="workflows_stopped_step">Stopped: a step ran out of time.</string>
+    <string name="workflows_cancel_run">Stop the run</string>
+    <string name="workflows_finished">This run has finished.</string>
+</resources>

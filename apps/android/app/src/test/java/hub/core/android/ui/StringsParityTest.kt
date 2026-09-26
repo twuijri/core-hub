@@ -10,13 +10,20 @@ import org.junit.Test
 class StringsParityTest {
     private val res = File(System.getProperty("user.dir"), "src/main/res")
 
-    private fun strings(dir: String): Map<String, String> {
-        val doc = DocumentBuilderFactory.newInstance().newDocumentBuilder().parse(File(res, "$dir/strings.xml"))
-        val nodes = doc.getElementsByTagName("string")
-        return (0 until nodes.length).associate { i ->
-            val n = nodes.item(i)
-            n.attributes.getNamedItem("name").nodeValue to n.textContent
-        }
+    /** Every `strings*.xml` of a folder (a task may keep its strings in a file of its own). */
+    private fun strings(dir: String): Map<String, String> =
+        File(res, dir).listFiles { f -> f.name.startsWith("strings") && f.name.endsWith(".xml") }!!.sorted().flatMap { file ->
+            val doc = DocumentBuilderFactory.newInstance().newDocumentBuilder().parse(file)
+            val nodes = doc.getElementsByTagName("string")
+            (0 until nodes.length).map { i ->
+                val n = nodes.item(i)
+                n.attributes.getNamedItem("name").nodeValue to n.textContent
+            }
+        }.toMap()
+
+    @Test fun `the phone-parity strings are read too`() {
+        assertTrue(strings("values").containsKey("workflows_run"))
+        assertTrue(strings("values-ar").containsKey("workflows_run"))
     }
 
     private fun placeholders(text: String) = Regex("%\\d+\\$(\\.\\d+)?[sdf]").findAll(text).map { it.value }.sorted().toList()

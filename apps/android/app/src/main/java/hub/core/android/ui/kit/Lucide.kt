@@ -45,11 +45,13 @@ object Lucide {
     val EllipsisVertical = R.drawable.lucide_ellipsis_vertical
     val ExternalLink = R.drawable.lucide_external_link
     val Eye = R.drawable.lucide_eye
+    val FileCog = R.drawable.lucide_file_cog
     val FileSearch = R.drawable.lucide_file_search
     val FileText = R.drawable.lucide_file_text
     val Folder = R.drawable.lucide_folder
     val Gauge = R.drawable.lucide_gauge
     val Globe = R.drawable.lucide_globe
+    val GripVertical = R.drawable.lucide_grip_vertical
     val Hammer = R.drawable.lucide_hammer
     val Hand = R.drawable.lucide_hand
     val Hash = R.drawable.lucide_hash
@@ -65,6 +67,8 @@ object Lucide {
     val ListFilter = R.drawable.lucide_list_filter
     val LoaderCircle = R.drawable.lucide_loader_circle
     val LogOut = R.drawable.lucide_log_out
+    val Mail = R.drawable.lucide_mail
+    val MapPin = R.drawable.lucide_map_pin
     val Menu = R.drawable.lucide_menu
     val MessageSquareText = R.drawable.lucide_message_square_text
     val MessagesSquare = R.drawable.lucide_messages_square
@@ -108,8 +112,10 @@ object Lucide {
     val UserPlus = R.drawable.lucide_user_plus
     val UserRound = R.drawable.lucide_user_round
     val Users = R.drawable.lucide_users
+    val Volume2 = R.drawable.lucide_volume_2
     val WandSparkles = R.drawable.lucide_wand_sparkles
     val Webhook = R.drawable.lucide_webhook
+    val Workflow = R.drawable.lucide_workflow
     val Wrench = R.drawable.lucide_wrench
     val X = R.drawable.lucide_x
 }
