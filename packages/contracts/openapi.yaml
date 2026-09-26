@@ -1364,6 +1364,12 @@ paths:
       description: |
         Returns a one-time code and the exact JSON to encode in a QR. The phone scans it, then calls
         `claim` with the code. The pairing expires after `ttl_seconds` (default 300, max 900).
+
+        `hub_url` in the QR is the address the phone will use. On a hub the desktop app runs
+        (local mode) with its way in from outside open (`devices.getRelay`), it is the way in's
+        `relay_url` and the pairing is `relay`, whatever was asked: that hub listens on its own
+        computer only, so no other address would reach it. Asking for `relay` when no way in is
+        open answers `409` `relay_not_connected` (DECISIONS §92).
       x-scope: global
       x-rt-events: []
       requestBody:
@@ -1395,6 +1401,8 @@ paths:
           $ref: '#/components/responses/BadRequest'
         '401':
           $ref: '#/components/responses/Unauthorized'
+        '409':
+          $ref: '#/components/responses/Conflict'
         '429':
           $ref: '#/components/responses/RateLimited'
   /auth/pairings/{pairing_id}:
@@ -13599,25 +13607,43 @@ paths:
     get:
       operationId: devices.getRelay
       tags: [devices]
-      summary: State of the message relay that lets phones reach the hub from outside the LAN (admin)
+      summary: The way in from outside for a hub the desktop app runs on this computer (admin)
+      description: |
+        A hub the desktop app runs on a person's own computer (local mode) listens on that
+        computer only. To let their phone reach it from outside the house, the person opens a way
+        in on an account of their own: a Cloudflare Tunnel (the desktop app runs `cloudflared`
+        with the tunnel's token) or their Tailscale network (the app listens on this computer's
+        tailnet address too). Nothing is run for them by anyone else (DECISIONS §80, §92).
+        A hub on a server has no way in to open (`available: false`): phones reach it at its
+        own address.
       x-scope: global
       x-roles: [owner, admin]
       x-rt-events: []
       responses:
         '200':
-          description: Relay state.
+          description: The way in.
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/Relay'
               example:
+                available: true
                 enabled: true
                 connected: true
                 route: cloudflare
-                relay_url: https://relay.example/h/abc123
-                hub_id: hub_7f3a
+                relay_url: https://hub.example.com
+                hub_port: 47113
+                token_set: true
+                tunnel_id: 6ff42ae2-765d-4adf-8112-31c55c1551ef
+                hostname: hub.example.com
+                hostnames:
+                  - hostname: hub.example.com
+                    service: http://localhost:47113
+                    matches: true
+                tailnet: null
                 error: null
-                connected_at: '2026-09-21T08:00:00Z'
+                error_detail: null
+                connected_at: '2026-09-27T08:00:00Z'
         '401':
           $ref: '#/components/responses/Unauthorized'
         '403':
@@ -13625,7 +13651,12 @@ paths:
     put:
       operationId: devices.setRelay
       tags: [devices]
-      summary: Enable, disable or re-route the relay (admin)
+      summary: Open, close or change the way in from outside (admin)
+      description: |
+        Only a hub the desktop app runs (local mode) can open one; any other hub answers `409`
+        `relay_unavailable`. `token` is written once and kept by the computer's keychain; it is
+        never returned and never logged. The answer is the state right after the change: the
+        connection itself follows in the background (read again for `connected`).
       x-scope: global
       x-roles: [owner, admin]
       requestBody:
@@ -13633,31 +13664,34 @@ paths:
         content:
           application/json:
             schema:
-              type: object
-              properties:
-                enabled:
-                  type: boolean
-                route:
-                  type: string
-                  enum: [official, cloudflare]
+              $ref: '#/components/schemas/RelayUpdate'
             example:
               enabled: true
-              route: official
-      x-rt-events: [job.queued]
+              route: cloudflare
+              token: eyJhIjoiYWNjb3VudCIsInQiOiJ0dW5uZWwiLCJzIjoic2VjcmV0In0=
+              hostname: hub.example.com
+      x-rt-events: []
       responses:
         '200':
-          description: Relay state (connection happens in the background).
+          description: The way in after the change (connecting happens in the background).
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/Relay'
               example:
+                available: true
                 enabled: true
                 connected: false
-                route: official
-                relay_url: null
-                hub_id: hub_7f3a
+                route: cloudflare
+                relay_url: https://hub.example.com
+                hub_port: 47113
+                token_set: true
+                tunnel_id: 6ff42ae2-765d-4adf-8112-31c55c1551ef
+                hostname: hub.example.com
+                hostnames: []
+                tailnet: null
                 error: null
+                error_detail: null
                 connected_at: null
         '400':
           $ref: '#/components/responses/BadRequest'
@@ -13665,6 +13699,10 @@ paths:
           $ref: '#/components/responses/Unauthorized'
         '403':
           $ref: '#/components/responses/Forbidden'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
   /peers:
     get:
       operationId: devices.listPeers
@@ -17165,7 +17203,7 @@ components:
     PairingConnection:
       type: string
       enum: [lan, relay]
-      description: '`lan` when the device reaches the hub directly; `relay` when it goes through the message relay.'
+      description: '`lan` when the device reaches the hub directly; `relay` when it goes through the way in from outside of a hub the desktop app runs (`devices.getRelay`, DECISIONS §92).'
     PairingCreate:
       type: object
       properties:
@@ -23936,25 +23974,120 @@ components:
             - type: 'null'
     Relay:
       type: object
-      required: [enabled, connected, route, relay_url, hub_id, error, connected_at]
+      description: |
+        The way in from outside for a hub the desktop app runs on a person's computer
+        (DECISIONS §92). `relay_url` is the address a phone pairs with while it is open.
+      required:
+        [
+          available,
+          enabled,
+          connected,
+          route,
+          relay_url,
+          hub_port,
+          token_set,
+          tunnel_id,
+          hostname,
+          hostnames,
+          tailnet,
+          error,
+          error_detail,
+          connected_at,
+        ]
       properties:
+        available:
+          type: boolean
+          description: Whether this hub can open a way in at all (a hub the desktop app runs in local mode).
         enabled:
           type: boolean
         connected:
           type: boolean
+          description: 'Cloudflare: the tunnel holds at least one connection to Cloudflare. Tailscale: the app listens on the tailnet address.'
         route:
-          type: string
-          enum: [official, cloudflare]
+          type: [string, 'null']
+          enum: [cloudflare, tailscale, null]
         relay_url:
           type: [string, 'null']
-        hub_id:
+          description: The address a phone pairs with (`https://<hostname>` or `http://<tailnet address>:<port>`), or null.
+        hub_port:
+          type: [integer, 'null']
+          description: The port the hub listens on, on this computer; a tunnel's service is `http://localhost:<hub_port>`.
+        token_set:
+          type: boolean
+          description: A Cloudflare tunnel token is kept (sealed by the computer's keychain; never returned).
+        tunnel_id:
           type: [string, 'null']
+          description: The tunnel the kept token belongs to (read from the token; not a secret).
+        hostname:
+          type: [string, 'null']
+          description: The public hostname the person gave the tunnel in Cloudflare.
+        hostnames:
+          type: array
+          description: What Cloudflare routes to this tunnel, as `cloudflared` reports it; `matches` is false when a route points anywhere but the hub's port.
+          items:
+            type: object
+            required: [hostname, service, matches]
+            properties:
+              hostname:
+                type: string
+              service:
+                type: string
+              matches:
+                type: boolean
+        tailnet:
+          description: This computer on a Tailscale network, when it is on one.
+          oneOf:
+            - type: object
+              required: [address, dns_name]
+              properties:
+                address:
+                  type: string
+                dns_name:
+                  type: [string, 'null']
+            - type: 'null'
         error:
           type: [string, 'null']
+          enum:
+            [
+              token_invalid,
+              download_failed,
+              checksum_mismatch,
+              unsupported_platform,
+              start_failed,
+              tunnel_exited,
+              not_on_tailnet,
+              listen_failed,
+              null,
+            ]
+          description: Why the way in is not open, when it should be.
+        error_detail:
+          type: [string, 'null']
+          description: The program's own words for the error (never the token).
         connected_at:
           oneOf:
             - $ref: '#/components/schemas/Timestamp'
             - type: 'null'
+    RelayUpdate:
+      type: object
+      properties:
+        enabled:
+          type: boolean
+        route:
+          type: string
+          enum: [cloudflare, tailscale]
+        token:
+          type: string
+          minLength: 20
+          maxLength: 4096
+          writeOnly: true
+          description: The Cloudflare tunnel token (Zero Trust › Networks › Tunnels). Kept by the computer's keychain, never returned or logged.
+        forget_token:
+          type: boolean
+          description: Forget the kept token (and close the tunnel).
+        hostname:
+          type: [string, 'null']
+          maxLength: 253
+          description: The public hostname given to the tunnel in Cloudflare, without `https://`.
     Peer:
       type: object
       required:

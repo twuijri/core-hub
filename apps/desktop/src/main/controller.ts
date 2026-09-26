@@ -21,6 +21,7 @@ import {
   safeStorage,
   screen,
   shell,
+  systemPreferences,
   type IpcMainEvent,
   type IpcMainInvokeEvent,
   type WebContents,
@@ -28,6 +29,7 @@ import {
 import { PRODUCT } from '@corehub/contracts';
 import type {
   DesktopHelperState,
+  DesktopMicState,
   DesktopUpdatesState,
   DesktopNotice,
   DesktopState,
@@ -66,6 +68,17 @@ import { RELEASES_PAGE, appChannel, checkForUpdate, type UpdateCheck } from './u
 import { STORE_PAGE, checkIsDue, checksGitHub, type UpdateChannel } from '../shared/updates.js';
 import { appMenuTemplate, trayMenuTemplate, type MenuActions } from './menu.js';
 import { startProxy, type ProxyServer } from './proxy.js';
+import { isHubToApp } from '../shared/hub-ipc.js';
+import { RelayManager, RelayRefusal } from './relay.js';
+import {
+  answerPermission,
+  checkPermission,
+  micSettingsUrl,
+  microphoneAllowed,
+  type MicAccess,
+  type MicHooks,
+} from './microphone.js';
+import { findLegacyApp } from './legacy-mac-app.js';
 
 export interface ControllerPaths {
   /** The built web client. */
@@ -101,6 +114,8 @@ export class DesktopController {
   private readonly channel: UpdateChannel = appChannel(app.getAppPath());
   /** Programs, the default folder, consent, the activity list and the hub's device connection. */
   private readonly computer: ThisComputerService;
+  /** The way in from outside for the local hub (DECISIONS §92). */
+  private readonly relay: RelayManager;
 
   constructor(
     private readonly paths: ControllerPaths,
@@ -136,6 +151,17 @@ export class DesktopController {
         appVersion: app.getVersion(),
         model: `${os.type()} ${os.release()}`.slice(0, 80),
       }),
+    });
+    this.relay = new RelayManager({
+      load: () => this.config.get().relay,
+      save: (relay) => this.config.update((c) => ({ ...c, relay })),
+      seal: (text) => sealText(text),
+      unseal: (text) => unsealText(text),
+      hubPort: () => this.localHub?.port ?? null,
+      toolsDir: path.join(app.getPath('userData'), 'tools'),
+      platform: process.platform,
+      arch: process.arch,
+      onChange: (state) => this.localHub?.send({ type: 'relay-state', state }),
     });
   }
 
@@ -174,6 +200,9 @@ export class DesktopController {
         this.openWelcome();
       }
     } else this.openWelcome();
+    // macOS, once: the old `corehub.app` beside this `Core Hub.app`.
+    if (app.isPackaged && process.platform === 'darwin' && !this.config.get().legacyAppAsked)
+      setTimeout(() => void this.offerLegacyAppToTrash(), 5_000);
   }
 
   prepareToQuit(): void {
@@ -331,9 +360,14 @@ export class DesktopController {
           dataDir: this.localDataDir(),
           pathEnv: pathWithHermes(process.platform, this.hermes.cli, process.env.PATH),
           env: process.env,
+          preferredPort: this.config.get().localHubPort,
+          onMessage: (message) => void this.answerHub(message),
           onExit: (code, signal) => this.localHubExited(code, signal),
         });
         this.localHub = hub;
+        if (this.config.get().localHubPort !== hub.port)
+          this.config.update((c) => ({ ...c, localHubPort: hub.port }));
+        void this.relay.resume();
       } catch (error) {
         const message =
           error instanceof LocalHubError
@@ -353,6 +387,7 @@ export class DesktopController {
   private localHubExited(code: number | null, signal: NodeJS.Signals | null): void {
     if (!this.localHub) return; // stopped on purpose
     this.localHub = null;
+    void this.relay.suspend();
     if (this.quitting || this.config.get().mode !== 'local') return;
     this.welcomeNotice = {
       key: 'errors.local_stopped',
@@ -365,8 +400,64 @@ export class DesktopController {
   private async stopLocal(): Promise<void> {
     const hub = this.localHub;
     if (!hub) return;
+    await this.relay.suspend();
     this.localHub = null;
     await hub.stop();
+  }
+
+  /** The hub asks about the way in from outside (`shared/hub-ipc.ts`). */
+  private async answerHub(message: unknown): Promise<void> {
+    if (!isHubToApp(message)) return;
+    const hub = this.localHub;
+    const reply = (answer: Parameters<LocalHub['send']>[0]) => (this.localHub ?? hub)?.send(answer);
+    try {
+      const state =
+        message.op === 'set' && message.change
+          ? await this.relay.set(message.change)
+          : await this.relay.state();
+      reply({ type: 'relay-answer', id: message.id, ok: true, state });
+    } catch (error) {
+      reply({
+        type: 'relay-answer',
+        id: message.id,
+        ok: false,
+        reason: error instanceof RelayRefusal ? error.reason : null,
+        message: error instanceof Error ? error.message : String(error),
+      });
+    }
+  }
+
+  // ---------------------------------------------------------------- old macOS bundle
+
+  private async offerLegacyAppToTrash(): Promise<void> {
+    const found = findLegacyApp({ exePath: app.getPath('exe'), platform: process.platform });
+    if (!found || this.config.get().legacyAppAsked) return;
+    // Asked once, whatever the answer: never again, and never silently.
+    this.config.update((c) => ({ ...c, legacyAppAsked: true }));
+    const options = {
+      type: 'question' as const,
+      buttons: [this.t('legacy_app.trash'), this.t('legacy_app.keep')],
+      defaultId: 0,
+      cancelId: 1,
+      noLink: true,
+      message: this.t('legacy_app.question'),
+      detail: this.t('legacy_app.detail', { path: isolate(found) }),
+    };
+    const window = this.appWindow ?? this.welcomeWindow;
+    const answer = window
+      ? await dialog.showMessageBox(window, options)
+      : await dialog.showMessageBox(options);
+    if (answer.response !== 0) return;
+    try {
+      await shell.trashItem(found);
+    } catch (error) {
+      dialog.showErrorBox(
+        this.t('app.name'),
+        this.t('legacy_app.failed', {
+          message: error instanceof Error ? error.message : String(error),
+        }),
+      );
+    }
   }
 
   private openAppWindow(partition: string): void {
@@ -459,16 +550,37 @@ export class DesktopController {
     contents.on('will-attach-webview', (event) => event.preventDefault());
   }
 
-  /** What the page may ask the OS for: notifications and the clipboard, nothing else. */
+  /**
+   * What the page may ask the OS for: notifications, the clipboard, and the microphone for
+   * dictation (sound only; `microphone.ts`), nothing else.
+   */
   private guardSession(target: Electron.Session, origin: string): void {
-    const allowed = new Set(['notifications', 'clipboard-sanitized-write', 'clipboard-read']);
-    target.setPermissionRequestHandler((contents, permission, callback) => {
-      callback(allowed.has(permission) && contents.getURL().startsWith(`${origin}/`));
+    const hooks = this.micHooks();
+    target.setPermissionRequestHandler((contents, permission, callback, details) => {
+      const mediaTypes = (details as { mediaTypes?: string[] }).mediaTypes;
+      void answerPermission(
+        { permission, url: contents.getURL(), ...(mediaTypes ? { mediaTypes } : {}) },
+        origin,
+        hooks,
+      ).then(callback, () => callback(false));
     });
-    target.setPermissionCheckHandler(
-      (_contents, permission, requestingOrigin) =>
-        allowed.has(permission) && requestingOrigin === origin,
+    target.setPermissionCheckHandler((_contents, permission, requestingOrigin, details) =>
+      checkPermission(
+        permission,
+        requestingOrigin,
+        origin,
+        details as { mediaType?: string },
+        hooks.status(),
+      ),
     );
+  }
+
+  private micHooks(): MicHooks {
+    return {
+      platform: process.platform,
+      status: () => micStatus(),
+      ask: () => systemPreferences.askForMediaAccess('microphone'),
+    };
   }
 
   private scheduleSaveBounds(window: BrowserWindow): void {
@@ -789,6 +901,13 @@ export class DesktopController {
     );
   }
 
+  private micState(): DesktopMicState {
+    return {
+      status: micStatus(),
+      canOpenSettings: micSettingsUrl(process.platform) !== null,
+    };
+  }
+
   private state(): DesktopState {
     const config = this.config.get();
     return {
@@ -813,6 +932,17 @@ export class DesktopController {
     this.registerHelperIpc();
     this.registerProgramsIpc();
     this.registerUpdatesIpc();
+    ipcMain.handle(CHANNELS.voiceMic, (event) => (this.fromApp(event) ? this.micState() : null));
+    ipcMain.handle(CHANNELS.voiceMicAsk, async (event) => {
+      if (!this.fromApp(event)) return null;
+      await microphoneAllowed(this.micHooks());
+      return this.micState();
+    });
+    ipcMain.handle(CHANNELS.voiceMicSettings, async (event) => {
+      if (!this.fromApp(event)) return;
+      const url = micSettingsUrl(process.platform);
+      if (url) await shell.openExternal(url);
+    });
     ipcMain.handle(CHANNELS.state, (event) => (this.fromApp(event) ? this.state() : null));
     ipcMain.handle(CHANNELS.takeSession, (event) => {
       if (!this.fromApp(event)) return null;
@@ -985,4 +1115,14 @@ function unsealText(sealed: string): string {
     return safeStorage.decryptString(Buffer.from(sealed.slice(3), 'base64'));
   if (sealed.startsWith('plain:')) return sealed.slice(6);
   return sealed;
+}
+
+/** The OS's microphone answer for this app: macOS and Windows keep one; Linux has none. */
+function micStatus(): MicAccess {
+  if (process.platform !== 'darwin' && process.platform !== 'win32') return 'unknown';
+  try {
+    return systemPreferences.getMediaAccessStatus('microphone') as MicAccess;
+  } catch {
+    return 'unknown';
+  }
 }

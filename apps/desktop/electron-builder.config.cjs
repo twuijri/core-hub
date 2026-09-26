@@ -71,6 +71,16 @@ module.exports = {
     // falling back to unsigned.
     identity: signed ? undefined : null,
     hardenedRuntime: true,
+    // Dictation through the hub (B11): the hardened runtime gives a signed app no microphone
+    // without `com.apple.security.device.audio-input`, and macOS asks the person with these words
+    // (Arabic in assets/mac/ar.lproj/InfoPlist.strings). Both are used only when a page records.
+    entitlements: 'assets/entitlements.mac.plist',
+    entitlementsInherit: 'assets/entitlements.mac.plist',
+    extendInfo: {
+      NSMicrophoneUsageDescription:
+        'Core Hub uses the microphone when you dictate a message; the sound goes to your hub to be written out.',
+    },
+    extraResources: [{ from: 'assets/mac/ar.lproj', to: 'ar.lproj', filter: ['**/*'] }],
   },
   win: {
     target: [{ target: 'nsis', arch: ['x64'] }],

@@ -9,8 +9,33 @@
  * IPC channel `fork` opens. Configuration is the hub's own (`DATA_DIR`, `PORT`, …).
  */
 import { buildServer } from '../../../../packages/server/src/app/server.js';
+import { RelayHostRefusal } from '../../../../packages/server/src/modules/devices/index.js';
+import { createServer } from 'node:net';
+import { ipcRelayHost } from '../shared/hub-ipc.js';
 
-const app = await buildServer({ webDir: null });
+function portFree(port: number): Promise<boolean> {
+  return new Promise((resolve) => {
+    const probe = createServer();
+    probe.once('error', () => resolve(false));
+    probe.listen(port, '127.0.0.1', () => probe.close(() => resolve(true)));
+  });
+}
+
+// The way in from outside (DECISIONS §92) is the app's to open: the hub asks it over IPC.
+const relayHost = process.send
+  ? ipcRelayHost({
+      send: (message) => process.send?.(message),
+      listen: (listener) => process.on('message', listener),
+      refusal: (reason, message) => new RelayHostRefusal(reason, message),
+    })
+  : null;
+
+// The app asks for the port it used last (`COREHUB_DESKTOP_PORT`), so a tunnel pointed at it
+// keeps working after a restart; when another program has taken it, any free port will do.
+const preferred = Number(process.env.COREHUB_DESKTOP_PORT) || 0;
+if (preferred && (await portFree(preferred))) process.env.PORT = String(preferred);
+
+const app = await buildServer({ webDir: null, relayHost });
 
 try {
   await app.listen({ port: app.hub.config.port, host: '127.0.0.1' });

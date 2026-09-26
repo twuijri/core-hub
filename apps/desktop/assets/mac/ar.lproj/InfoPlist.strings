@@ -1,0 +1,2 @@
+/* The macOS microphone question, in Arabic (the English one is NSMicrophoneUsageDescription in electron-builder.config.cjs). */
+"NSMicrophoneUsageDescription" = "يستخدم كور هب الميكروفون حين تُملي رسالة؛ يُرسَل الصوت إلى مركزك ليُكتب نصًّا.";

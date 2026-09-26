@@ -11,6 +11,7 @@ import { LogRing } from '../lib/log-ring.js';
 import type { HubModule } from '../lib/module.js';
 import { modules as allModules } from '../modules/index.js';
 import { ownerUser, setupMetaFor } from '../modules/auth/index.js';
+import type { RelayHost } from '../modules/devices/index.js';
 import { requireSqlite } from '../lib/db.js';
 import { loadConfig, type HubConfig } from './config.js';
 import { createDatabase, packageRoot, type HubDatabase } from './db.js';
@@ -30,6 +31,11 @@ export interface HubState {
   web: boolean;
   /** The recent log lines the Logs screen reads (`lib/log-ring.ts`). */
   logs: LogRing;
+  /**
+   * The desktop app that started this hub (local mode), which opens the way in from outside
+   * (`devices.getRelay`, DECISIONS §92); null for every other hub.
+   */
+  relayHost?: RelayHost | null;
 }
 
 declare module 'fastify' {
@@ -47,6 +53,8 @@ export interface BuildOptions {
   migrate?: boolean;
   /** Directory of the built web client; `null` never serves it (tests), undefined = packages/web/dist. */
   webDir?: string | null;
+  /** The desktop app's side of the way in from outside (`apps/desktop/src/hub/entry.ts`). */
+  relayHost?: RelayHost | null;
 }
 
 /**
@@ -124,6 +132,7 @@ export async function buildServer(options: BuildOptions = {}): Promise<FastifyIn
     // The logger's own ring when it made one; a logger from elsewhere writes to no ring,
     // and Hermes's TUI gateway, which writes to this one directly, still has somewhere to.
     logs: logRingOf(logger) ?? new LogRing(),
+    relayHost: options.relayHost ?? null,
   };
   app.decorate('hub', hub);
   const events = await registerModuleEvents(io, modules);

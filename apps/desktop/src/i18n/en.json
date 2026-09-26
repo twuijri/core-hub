@@ -113,5 +113,12 @@
   "updates": {
     "available_title": "Core Hub {version} is available",
     "available_body": "Open the download page to install it."
+  },
+  "legacy_app": {
+    "question": "Move the old copy of Core Hub to the Trash?",
+    "detail": "An older copy named “corehub.app” is still in this folder: {path}\nThis app is “Core Hub.app” now, and both use the same data, so nothing is lost. You can take it out of the Trash if you change your mind. Core Hub will not ask again.",
+    "trash": "Move to Trash",
+    "keep": "Keep it",
+    "failed": "The old copy could not be moved to the Trash: {message}"
   }
 }
