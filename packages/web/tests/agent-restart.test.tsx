@@ -268,7 +268,7 @@ describe('the Runtime card: settings changed after Hermes last started', () => {
     };
     mount(script, <RuntimeCardFromHub />, 'member', 'ar');
     expect(
-      await screen.findByText('غيّرت الإعدادات بعد آخر تشغيل لـ Hermes — أعد تشغيله لتطبيقها.'),
+      await screen.findByText('تغيّرت الإعدادات بعد آخر تشغيل لهرمز. أعد تشغيله لتطبيقها.'),
     ).toBeTruthy();
     expect(screen.queryByTestId('runtime-restart-now')).toBeNull();
   });

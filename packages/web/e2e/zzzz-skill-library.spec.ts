@@ -56,7 +56,7 @@ test('31. Core Hub’s skill library: installed, badged, an edit restored, switc
   const row = page.locator('[data-testid="skill-row"][data-skill="summarize"]');
   await expect(row).toHaveAttribute('data-library', 'edited');
   await expect(row).toContainText('معدّلة');
-  await expect(card).toContainText('1 معدّلة');
+  await expect(card).toContainText('المعدّلة: 1');
   await shot(page, 'agent-skills-library-ar-light');
 
   // Restore asks first, then puts the library's version back.

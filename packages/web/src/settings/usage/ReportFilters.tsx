@@ -48,7 +48,7 @@ export function ReportFilters({
         onChange={(days) => onChange({ ...value, days: Number(days) })}
         options={PERIODS.map((count) => ({
           value: String(count),
-          label: t('audit.days', { count }),
+          label: t(`audit.period_${count}`),
           itemProps: { 'data-testid': `report-days-${count}` },
         }))}
       />

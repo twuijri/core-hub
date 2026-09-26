@@ -212,15 +212,15 @@ test("30. a schedule's run options: set when it is made, changed from its card, 
   await page.getByRole('option', { name: /Direct|مباشر/ }).click();
   const options = page.getByTestId('schedule-new-options');
   await expect(options).toBeVisible();
-  const missed = options.getByRole('checkbox', { name: /^شغّله لو فات وقته \(خلال ٢٤ ساعة\)/ });
+  const missed = options.getByRole('checkbox', { name: /^تشغيل الموعد الفائت خلال ٢٤ ساعة/ });
   await expect(missed).not.toBeChecked();
-  await expect(options.getByRole('radio', { name: /^انتظر ثم شغّل/ })).toBeChecked();
+  await expect(options.getByRole('radio', { name: /^انتظار انتهاء السابق/ })).toBeChecked();
 
   await page.getByTestId('schedule-name').fill('تذكير بالموعد');
   await page.getByTestId('schedule-value').fill('30 7 * * *');
   await page.getByTestId('schedule-prompt').fill('ذكّرني بموعد اليوم');
   await missed.click();
-  await options.getByRole('radio', { name: /^أوقف السابق/ }).click();
+  await options.getByRole('radio', { name: /^إيقاف السابق وبدء الجديد/ }).click();
   await shot(page, 'schedule-run-options-ar-light');
   await page.getByTestId('schedule-save').click();
 
@@ -228,12 +228,14 @@ test("30. a schedule's run options: set when it is made, changed from its card, 
   await expect(card).toBeVisible();
   await card.getByTestId('schedule-options-toggle').click();
   const panel = card.getByTestId('schedule-options');
-  await expect(panel.getByRole('checkbox', { name: /^شغّله لو فات وقته/ })).toBeChecked();
-  await expect(panel.getByRole('radio', { name: /^أوقف السابق/ })).toBeChecked();
+  await expect(
+    panel.getByRole('checkbox', { name: /^تشغيل الموعد الفائت خلال ٢٤ ساعة/ }),
+  ).toBeChecked();
+  await expect(panel.getByRole('radio', { name: /^إيقاف السابق وبدء الجديد/ })).toBeChecked();
 
   // Changed from the card, saved at once.
-  await panel.getByRole('radio', { name: /^شغّل معه/ }).click();
-  await expect(panel.getByRole('radio', { name: /^شغّل معه/ })).toBeChecked();
+  await panel.getByRole('radio', { name: /^تشغيلهما معًا/ }).click();
+  await expect(panel.getByRole('radio', { name: /^تشغيلهما معًا/ })).toBeChecked();
 
   // What the hub now holds.
   const owner = await request.post('/api/v1/auth/login', {

@@ -110,11 +110,9 @@ export function NewChatScreen() {
               {t('new_chat.none_installed')}{' '}
               {canOpen('agent_manager', user?.role ?? 'member') ? (
                 <Link to={routeOf('agent_manager')} className="link underline">
-                  {t('nav.agent_manager')}
+                  {t('new_chat.open_agents')}
                 </Link>
-              ) : (
-                t('nav.agent_manager')
-              )}
+              ) : null}
             </Notice>
           )}
           {(error || create.isError) && (

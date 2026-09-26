@@ -81,7 +81,7 @@ test.describe('the Tasks board, in colour', () => {
     // Blocked: waiting on a person, with the reason the hub asks for.
     const blocked = await newTask(page, 'اربط الدفع');
     await quick(blocked, 'queue', 'todo');
-    await menu(page, blocked, 'موقوفة');
+    await menu(page, blocked, 'وضعها في حالة تعثّر');
     await page.getByRole('textbox').fill('ننتظر مفاتيح البوابة');
     await page.getByRole('button', { name: 'حفظ' }).click();
     await expect(blocked).toHaveAttribute('data-status', 'blocked');
@@ -97,7 +97,7 @@ test.describe('the Tasks board, in colour', () => {
     const archived = await newTask(page, 'نظّف المستودع');
     await quick(archived, 'queue', 'todo');
     await quick(archived, 'promote', 'ready');
-    await menu(page, archived, 'تمّت');
+    await menu(page, archived, 'إكمال المهمة');
     await expect(archived).toHaveAttribute('data-status', 'done');
     await archived.getByTestId('task-quick').click();
     const confirm = page.getByTestId('confirm-dialog');
@@ -119,7 +119,7 @@ test.describe('the Tasks board, in colour', () => {
     // Each stage has its own frame, and its word beside it.
     const frames: Array<[ReturnType<Page['getByTestId']>, string, string]> = [
       [running, 'running', 'تعمل'],
-      [blocked, 'blocked', 'متوقّفة'],
+      [blocked, 'blocked', 'متعثّرة'],
       [scheduled, 'scheduled', 'مجدولة'],
       [review, 'review', 'للمراجعة'],
       [ready, 'ready', 'جاهزة'],

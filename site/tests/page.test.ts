@@ -39,7 +39,7 @@ describe('languages', () => {
   });
 
   it('fills placeholders', () => {
-    expect(t('ar', 'hero.for', { platform: 'Windows' })).toBe('حمّل لـ Windows');
+    expect(t('ar', 'hero.for', { platform: 'Windows' })).toBe('حمّل كور هب على Windows');
     expect(t('en', 'release.version', { version: '1.1.1' })).toBe('Version 1.1.1');
   });
 });

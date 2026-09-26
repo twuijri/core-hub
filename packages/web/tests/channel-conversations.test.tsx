@@ -349,7 +349,7 @@ describe('the chats list shows them in their channel group', () => {
         <SessionList />
       </Providers>,
     );
-    expect(await screen.findByTestId('channel-unreachable')).toHaveTextContent('Hermes');
+    expect(await screen.findByTestId('channel-unreachable')).toHaveTextContent('هرمز');
   });
 });
 

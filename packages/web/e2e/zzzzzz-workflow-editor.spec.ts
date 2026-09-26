@@ -128,5 +128,5 @@ test('32. a two-step workflow drawn on the canvas runs, and its run is read on t
   await page.getByTestId('workflow-back').click();
   await expect(
     page.getByTestId('workflow-card').filter({ hasText: 'مراجعة ثم إشعار' }),
-  ).toContainText('التشغيلات: 1');
+  ).toContainText('عدد مرات التشغيل: 1');
 });
