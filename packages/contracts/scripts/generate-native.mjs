@@ -5,7 +5,12 @@ import { execFileSync } from 'node:child_process';
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { stringify } from 'yaml';
-import { KOTLIN_JSON_ANCHOR, KOTLIN_JSON_OPTIONS, prepareForKotlin } from './kotlin-openapi.mjs';
+import {
+  KOTLIN_JSON_ANCHOR,
+  KOTLIN_JSON_OPTIONS,
+  prepareForKotlin,
+  withoutPartContentType,
+} from './kotlin-openapi.mjs';
 import { bin, contractsRoot, generatedDir, loadDocument, openapiPath } from './lib.mjs';
 import { prepareForSwift } from './swift-openapi.mjs';
 
@@ -87,4 +92,17 @@ if (!source.includes(KOTLIN_JSON_ANCHOR)) {
   process.exit(1);
 }
 writeFileSync(serializer, source.replace(KOTLIN_JSON_ANCHOR, KOTLIN_JSON_OPTIONS));
+// A multipart part must not carry its own Content-Type header for OkHttp (kotlin-openapi.mjs).
+const apiClient = path.join(
+  generatedDir,
+  'kotlin/src/main/kotlin/hub/core/client/infrastructure/ApiClient.kt',
+);
+try {
+  writeFileSync(apiClient, withoutPartContentType(readFileSync(apiClient, 'utf8')));
+} catch (error) {
+  console.error(
+    `contracts:generate:native  ${String(error instanceof Error ? error.message : error)}`,
+  );
+  process.exit(1);
+}
 console.log('contracts:generate:native  OK');
