@@ -73,6 +73,13 @@ test('32. a category is made, a chat moved into it, and its collapse survives a 
   await expect(dialog).toHaveCount(0);
   await expect(group.getByTestId('session-row')).toHaveCount(1);
   await expect(group.locator(`a[href*="${sessionId}"]`)).toHaveCount(1);
+
+  // Coloured from its menu (decision §102): a dot before its name.
+  await group.getByTestId('session-group-head').hover();
+  await group.getByTestId('session-group-more').click();
+  await page.getByRole('menuitem', { name: 'اللون' }).click();
+  await page.getByTestId('category-colour').getByRole('button', { name: 'أخضر' }).click();
+  await expect(group.getByTestId('session-group-dot')).toHaveAttribute('data-color', '#22a06b');
   await list.screenshot({ path: path.join(shots, 'session-categories-ar-light.png') });
 
   // Collapse it: the chat is out of sight, the header says how many it holds.

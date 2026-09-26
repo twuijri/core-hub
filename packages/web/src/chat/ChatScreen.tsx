@@ -68,6 +68,7 @@ import { ConversationBar } from './ConversationBar.js';
 import { SessionFilesProvider } from '../files/context.js';
 import { filesRevisionOf } from '../files/kinds.js';
 import { changesRevisionOf } from '../files/changes.js';
+import { useContextBreakdown } from './contextBreakdown.js';
 import { VoiceProvider, useAutoRead, useVoicePreferences } from '../voice/context.js';
 import { VoiceStage } from '../voice/VoiceStage.js';
 import { useProfileInLink } from '../shell/profiles.js';
@@ -429,6 +430,9 @@ function OpenSessionBody({ sessionId, title: pageTitle, intro }: OpenSessionProp
       null,
     state.context,
   );
+  // What fills the window, read only while the meter's details are open (decision §102).
+  const [meterOpen, setMeterOpen] = useState(false);
+  const breakdown = useContextBreakdown(sessionId, meterOpen, contextRing?.used ?? 0);
 
   // Voice (contract decision §63): the full-screen stage, and reading replies aloud as
   // they finish when the person asked for it — not while the stage speaks them itself.
@@ -689,6 +693,8 @@ function OpenSessionBody({ sessionId, title: pageTitle, intro }: OpenSessionProp
                           compression={state.compression}
                           onCompress={slash.compress}
                           compressBlocked={slash.compressBlocked}
+                          breakdown={breakdown.isError ? null : breakdown.data}
+                          onOpenChange={setMeterOpen}
                         />
                       ),
                     }

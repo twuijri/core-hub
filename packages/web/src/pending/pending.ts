@@ -4,12 +4,15 @@
  *
  * Waiting things are the approvals and questions of every profile the person may enter
  * (`sessions.listApprovals`, one call per profile — conversations, rooms and workflow gates
- * alike), and, for an admin, the senders waiting to pair with a channel of the profile they
- * are in (`agents.listPairing`).
+ * alike), and, for an admin, in the profile they are in: the senders waiting to pair with a
+ * channel (`agents.listPairing`) and the memory and skill writes Hermes's agent staged for
+ * review (`agents.listPendingWrites`, decision §102).
  */
 import { chatHref, globalAgentHref, PROFILE_PARAM } from '../chat/anchor.js';
 import { agentRoute, routeOf } from '../navigation/manifest.js';
-import type { Approval } from '../types.js';
+import type { Approval, Schemas } from '../types.js';
+
+export type PendingWrite = Schemas['PendingWrite'];
 
 export interface PendingPairing {
   platform: string;
@@ -28,6 +31,15 @@ export type PendingItem =
       at: string;
       agentId: string;
       request: PendingPairing;
+    }
+  | {
+      /** A memory or skill write the agent staged for review (§58), counted since §102. */
+      kind: 'write';
+      key: string;
+      profile: string;
+      at: string;
+      agentId: string;
+      write: PendingWrite;
     };
 
 /**
@@ -38,6 +50,7 @@ export type PendingItem =
 export function mergePending(
   approvals: ReadonlyArray<{ profile: string; items: readonly Approval[] }>,
   pairing: ReadonlyArray<{ profile: string; agentId: string; items: readonly PendingPairing[] }>,
+  writes: ReadonlyArray<{ profile: string; agentId: string; items: readonly PendingWrite[] }> = [],
 ): PendingItem[] {
   const seen = new Map<string, PendingItem>();
   for (const group of approvals) {
@@ -66,6 +79,20 @@ export function mergePending(
       });
     }
   }
+  for (const group of writes) {
+    for (const write of group.items) {
+      const key = `write:${group.profile}:${write.kind}:${write.id}`;
+      seen.set(key, {
+        kind: 'write',
+        key,
+        profile: group.profile,
+        // A write Hermes did not date waits from the start of time: first in the list.
+        at: write.created_at ?? '',
+        agentId: group.agentId,
+        write,
+      });
+    }
+  }
   return [...seen.values()].sort((a, b) => a.at.localeCompare(b.at));
 }
 
@@ -73,7 +100,9 @@ export function mergePending(
  * Where a waiting thing is handled. `inLink` is the profile a link carries (only once the
  * person has more than one); `globalAgent` names, per profile, the person's global-agent
  * conversation when it is known, so its approvals open its own page rather than a chat.
- * `null` when there is no page for it (a room, until rooms exist on the web).
+ * A room's question opens the room it was asked in (`/rooms/<id>`, in its profile); a staged
+ * write opens the agent's settings, where the list of writes waiting for review is. `null`
+ * when there is no page for it.
  */
 export function pendingHref(
   item: PendingItem,
@@ -82,11 +111,17 @@ export function pendingHref(
 ): string | null {
   // Pairing is read in the profile the person is in, which is where the agent's page opens.
   if (item.kind === 'pairing') return agentRoute('agent_channels', item.agentId);
+  // Staged writes are read in the profile the person is in too, like pairing.
+  if (item.kind === 'write') return agentRoute('agent_settings', item.agentId);
   const profile = inLink(item.profile);
   const { approval } = item;
   if (approval.session_id) {
     if (approval.session_id === globalAgent(item.profile)) return globalAgentHref(profile);
     return chatHref(approval.session_id, null, undefined, profile);
+  }
+  if (approval.room_id) {
+    const room = `${routeOf('rooms').split('/:')[0]}/${approval.room_id}`;
+    return profile ? `${room}?${PROFILE_PARAM}=${encodeURIComponent(profile)}` : room;
   }
   if (approval.workflow_run_id) {
     // The Schedules page opens a run named in its address, in that run's profile.

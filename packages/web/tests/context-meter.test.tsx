@@ -140,6 +140,59 @@ describe('the meter', () => {
   });
 });
 
+describe('what fills the window (decision §102)', () => {
+  const breakdown = {
+    available: true,
+    used_tokens: 48_210,
+    window_tokens: 200_000,
+    estimated: false,
+    categories: [
+      { id: 'system_prompt', label: 'System prompt', tokens: 3120 },
+      { id: 'tool_definitions', label: 'Tool definitions', tokens: 14_800 },
+      { id: 'conversation', label: 'Conversation', tokens: 29_500 },
+      { id: 'future_thing', label: 'Future thing', tokens: 790 },
+    ],
+  };
+
+  it('asks for the breakdown only when opened, and lists each category in the person’s words', async () => {
+    const user = userEvent.setup();
+    const onOpenChange = vi.fn();
+    const use = { used: 48_210, window: 200_000, ratio: 0.241, source: 'reported' as const };
+    const view = renderRing({ use, onOpenChange, breakdown: undefined }, 'ar');
+    expect(onOpenChange).not.toHaveBeenCalled();
+    await openDetails(user);
+    expect(onOpenChange).toHaveBeenLastCalledWith(true);
+    // Not read yet: no breakdown, no error.
+    expect(screen.queryByTestId('context-breakdown')).toBeNull();
+    view.rerender(
+      <I18nProvider language="ar">
+        <ContextRing use={use} onOpenChange={onOpenChange} breakdown={breakdown} />
+      </I18nProvider>,
+    );
+    const rows = await screen.findAllByTestId('context-category');
+    expect(rows.map((row) => row.getAttribute('data-category'))).toEqual([
+      'system_prompt',
+      'tool_definitions',
+      'conversation',
+      'future_thing',
+    ]);
+    expect(rows[0]?.textContent).toContain('تعليمات النظام');
+    // A category the client does not know is named by the agent.
+    expect(rows[3]?.textContent).toContain('Future thing');
+    expect(screen.getByTestId('context-breakdown').textContent).toContain('تقريبًا');
+  });
+
+  it('shows no breakdown when the agent cannot tell', async () => {
+    const user = userEvent.setup();
+    renderRing({
+      use: { used: 1_000, window: 100_000, ratio: 0.01, source: 'reported' },
+      breakdown: { ...breakdown, available: false, categories: [] },
+    });
+    await openDetails(user);
+    expect(screen.queryByTestId('context-breakdown')).toBeNull();
+  });
+});
+
 describe('compression in the chat', () => {
   it('follows context.compression: running, then the outcome', () => {
     let state = reduce(

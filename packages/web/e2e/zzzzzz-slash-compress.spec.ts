@@ -8,9 +8,13 @@
  * The agent is the e2e hub's scripted runner (`e2e/hub.ts`, "املأ السياق" and `compress`).
  * Runs after the other journeys (`zzzzzz-`), which count the rows of the session list.
  */
+import { mkdirSync } from 'node:fs';
+import path from 'node:path';
 import { expect, test, type Page } from '@playwright/test';
 
 const PASSWORD = 'e2e-owner-password';
+const shots = process.env.COREHUB_SHOTS ?? path.resolve('e2e/shots');
+mkdirSync(shots, { recursive: true });
 
 async function login(page: Page) {
   await page.goto('/');
@@ -72,4 +76,11 @@ test('32. / opens the commands, /compress shows its progress, and the meter drop
   await expect(page.getByTestId('context-percent')).toContainText('12');
   await expect(page.getByTestId('context-last-compression')).toContainText('Compressed: 40 → 6');
   await expect(page.getByTestId('context-compress')).toBeEnabled();
+
+  // What fills the window, by category, as the agent counts it (decision §102).
+  const breakdown = page.getByTestId('context-breakdown');
+  await expect(breakdown).toBeVisible();
+  await expect(breakdown.getByTestId('context-category')).toHaveCount(5);
+  await expect(breakdown.getByTestId('context-category').nth(1)).toContainText('تعريفات الأدوات');
+  await details.screenshot({ path: path.join(shots, 'context-breakdown-ar-light.png') });
 });

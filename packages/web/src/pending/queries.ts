@@ -10,6 +10,7 @@
 import { useQueries, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect } from 'react';
 import { useAuth } from '../auth/context.js';
+import { usePendingWrites } from '../agents/PendingWritesCard.js';
 import { installedAgents } from '../chat/AgentChips.js';
 import { useAgents, useProfiles } from '../hub/queries.js';
 import { canOpen } from '../navigation/manifest.js';
@@ -79,6 +80,13 @@ export function usePendingActions(): {
     retry: false,
   });
 
+  // Writes the agent staged for review (§58): an admin's, for Hermes, in the profile they are
+  // in — shared with the list on the agent's settings page, so answering either updates both.
+  const hermes = isAdmin
+    ? installedAgents(agents.data ?? []).find((agent) => agent.kind === 'hermes')
+    : undefined;
+  const writes = usePendingWrites(hermes?.id ?? '', !!hermes);
+
   useEffect(() => {
     if (!session) return;
     const socket = realtime.socket('sessions');
@@ -97,6 +105,7 @@ export function usePendingActions(): {
     channelAgent && pairing.data
       ? [{ profile, agentId: channelAgent.id, items: pairing.data.pending ?? [] }]
       : [],
+    hermes && writes.data ? [{ profile, agentId: hermes.id, items: writes.data.items ?? [] }] : [],
   );
   return {
     items,

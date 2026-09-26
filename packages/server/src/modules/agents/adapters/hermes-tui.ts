@@ -43,6 +43,7 @@ import type {
   AgentEvent,
   AgentSession,
   CompressOutcome,
+  ContextBreakdown,
   FallbackModel,
   OneshotRequest,
   PromptInput,
@@ -696,6 +697,19 @@ export class HermesTuiSession implements AgentSession {
     return compressOutcomeOf(result);
   }
 
+  /**
+   * Hermes's `session.context_breakdown` (decision §102): the window split by what fills it,
+   * counted by Hermes without a provider call. Before Hermes has built the agent it answers
+   * no categories, which is what the hub passes on.
+   */
+  async contextBreakdown(): Promise<ContextBreakdown | null> {
+    if (this.closed) return null;
+    const result = await this.channel.request('session.context_breakdown', {
+      session_id: this.liveId,
+    });
+    return contextBreakdownOf(result);
+  }
+
   /** Hermes's `session.steer`: read after the next tool call; the turn is not interrupted. */
   async steer(guidance: string): Promise<'queued' | 'rejected'> {
     if (this.closed || !this.turn) return 'rejected';
@@ -1187,6 +1201,39 @@ function contextOf(
     usedTokens: Math.round(used),
     windowTokens: typeof max === 'number' && max > 0 ? Math.round(max) : null,
     estimated: usage.context_estimated === true,
+  };
+}
+
+/**
+ * Hermes's `session.context_breakdown` answer in the hub's terms (decision §102): its
+ * `categories` (`id`, `label`, `tokens`; the `color` is Hermes's own CSS and is dropped),
+ * `context_used` of `context_max`, and `context_estimated`. `null` when it is not that shape.
+ */
+export function contextBreakdownOf(result: Json): ContextBreakdown | null {
+  const count = (value: unknown) =>
+    typeof value === 'number' && Number.isFinite(value) && value >= 0 ? Math.round(value) : null;
+  const used = count(result.context_used);
+  if (used === null || !Array.isArray(result.categories)) return null;
+  const max = count(result.context_max);
+  const categories: ContextBreakdown['categories'] = [];
+  for (const entry of result.categories as unknown[]) {
+    if (!entry || typeof entry !== 'object') continue;
+    const category = entry as Json;
+    const id = text(category.id)?.trim();
+    const tokens = count(category.tokens);
+    if (!id || tokens === null || tokens === 0) continue;
+    categories.push({
+      id: id.slice(0, 60),
+      label: (text(category.label)?.trim() || id).slice(0, 120),
+      tokens,
+    });
+    if (categories.length === 32) break;
+  }
+  return {
+    usedTokens: used,
+    windowTokens: max && max > 0 ? max : null,
+    estimated: result.context_estimated === true,
+    categories,
   };
 }
 

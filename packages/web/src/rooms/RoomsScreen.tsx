@@ -7,9 +7,10 @@
  * side" is several speakers (owner to confirm, DECISIONS §69). While a seat works the strip
  * above the composer says who, and what tool it is using; people typing are said there too.
  */
-import { useEffect, useMemo, useRef, useState } from 'react';
-import { Link, useNavigate, useParams } from 'react-router';
-import { useAuth } from '../auth/context.js';
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { Link, useNavigate, useParams, useSearchParams } from 'react-router';
+import { ProfileScope, useAuth } from '../auth/context.js';
+import { readProfileParam } from '../chat/anchor.js';
 import { describeError } from '../auth/client.js';
 import { AgentFace, useAgentIdentities } from '../agents/identity.js';
 import { Markdown } from '../chat/Markdown.js';
@@ -87,7 +88,19 @@ export function RoomsScreen() {
       </AppShell>
     );
   }
-  return <RoomView key={roomId} roomId={roomId} />;
+  // A room opened from another profile (the pending-actions sheet, §102) names it in the
+  // address: the room is read and answered there, without moving the top selector.
+  return (
+    <InLinkedProfile>
+      <RoomView key={roomId} roomId={roomId} />
+    </InLinkedProfile>
+  );
+}
+
+function InLinkedProfile({ children }: { children: ReactNode }) {
+  const [params] = useSearchParams();
+  const profile = readProfileParam(params);
+  return profile ? <ProfileScope profile={profile}>{children}</ProfileScope> : <>{children}</>;
 }
 
 function RoomView({ roomId }: { roomId: string }) {

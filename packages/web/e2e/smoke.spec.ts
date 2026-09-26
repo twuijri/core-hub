@@ -1128,7 +1128,9 @@ test.describe('web smoke journeys', () => {
 
     // Always the same three documents, including the ones nothing has written yet.
     const docs = page.getByTestId('memory-list');
-    await expect(docs.getByRole('listitem')).toHaveCount(3);
+    // Each document is one row; a list's own entries are rows inside it (decision §102).
+    const documents = docs.locator('[data-testid^="memory-doc-"]');
+    await expect(documents).toHaveCount(3);
     await expect(docs).toContainText('SOUL.md');
     await expect(docs).toContainText('لم يكتب عنك شيئًا بعد.');
 
@@ -1136,8 +1138,11 @@ test.describe('web smoke journeys', () => {
     await page.getByTestId('memory-content').fill('أفضّل الردود القصيرة.');
     await page.getByTestId('save-memory').click();
     await expect(docs).toContainText('أفضّل الردود القصيرة.');
-    // Still three: writing one does not add a row, and there is no delete to offer.
-    await expect(docs.getByRole('listitem')).toHaveCount(3);
+    // Still three: writing one does not add a document, and there is no delete to offer.
+    await expect(documents).toHaveCount(3);
+    await expect(page.getByTestId('memory-entries-user').getByTestId('memory-entry')).toHaveCount(
+      1,
+    );
     await shot(page, 'agent-memory-ar-light');
 
     // Channels: nothing linked yet — a short explanation and the one «ربط منصة» button.

@@ -3039,8 +3039,10 @@ paths:
       description: |
         The files this run changed in the session's working folder, with their line counts
         (contract decision §49). A run that ended with nothing changed answers an empty `files`.
-        `404` when the run is not this conversation's, is still going, or recorded no changes
-        (no working folder, or it ran before the hub recorded them).
+        While the run is still going the answer is the folder compared with the run's start
+        **now**, with `live: true` (decision §102): it can grow or shrink until the run ends,
+        and is recorded only then. `404` when the run is not this conversation's, or recorded
+        no changes and is not going (no working folder, or it ran before the hub recorded them).
       x-rt-events: []
       responses:
         '200':
@@ -3243,6 +3245,53 @@ paths:
           $ref: '#/components/responses/Conflict'
         '422':
           $ref: '#/components/responses/AgentUnavailable'
+  /sessions/{session_id}/context:
+    parameters:
+      - $ref: '#/components/parameters/Profile'
+      - $ref: '#/components/parameters/SessionId'
+    get:
+      operationId: sessions.getContextBreakdown
+      tags: [sessions]
+      summary: The conversation's context window, split by what fills it
+      description: |
+        What takes the model's window in this conversation, by category — the system prompt,
+        tool definitions, rules, skills, MCP, subagent definitions, memory and the
+        conversation itself — as the agent counts it (Hermes `session.context_breakdown`,
+        decision §102). The hub asks the conversation the agent already has open and never
+        opens one for this: `available: false` with no categories when none is open (after the
+        hub restarted, before the first turn) or the agent cannot tell. The category counts
+        are the agent's rough estimate and need not add up to `used_tokens`, which is its
+        best figure for the whole window.
+      x-rt-events: []
+      responses:
+        '200':
+          description: 'The breakdown, or `available: false`.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SessionContextBreakdown'
+              example:
+                available: true
+                used_tokens: 48210
+                window_tokens: 200000
+                estimated: false
+                categories:
+                  - id: system_prompt
+                    label: System prompt
+                    tokens: 3120
+                  - id: tool_definitions
+                    label: Tool definitions
+                    tokens: 14800
+                  - id: memory
+                    label: Memory
+                    tokens: 410
+                  - id: conversation
+                    label: Conversation
+                    tokens: 29500
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
   /sessions/{session_id}/runs/{run_id}/steer:
     parameters:
       - $ref: '#/components/parameters/Profile'
@@ -6628,10 +6677,13 @@ paths:
                   - id: memory
                     kind: document
                     title: MEMORY.md
-                    content: "- يفضّل المستخدم الردود المختصرة\n"
+                    content: "يفضّل المستخدم الردود المختصرة\n§\nيكتب الالتزامات بالإنجليزية"
                     tags: []
                     revision: 7
                     updated_at: '2026-09-20T09:00:00Z'
+                    entries: ['يفضّل المستخدم الردود المختصرة', 'يكتب الالتزامات بالإنجليزية']
+                    char_limit: 2200
+                    char_count: 60
                   - id: 01J8QK3ZR2W7M5N4P6T8V9X0ME
                     kind: entry
                     title: 'تفضيلات الكتابة'
@@ -18637,6 +18689,49 @@ components:
           description: |
             `true` when the agent counted `used_tokens` roughly rather than taking it from
             the provider's own report of the last request. Absent is `false`.
+    SessionContextCategory:
+      type: object
+      required: [id, label, tokens]
+      properties:
+        id:
+          type: string
+          maxLength: 60
+          description: |
+            The agent's name for the category. Hermes's today: `system_prompt`,
+            `tool_definitions`, `rules`, `skills`, `mcp`, `subagent_definitions`, `memory`,
+            `conversation`. A client names the ones it knows in the person's language and shows
+            `label` for any other.
+        label:
+          type: string
+          maxLength: 120
+          description: The agent's own English name for it.
+        tokens:
+          type: integer
+          minimum: 0
+    SessionContextBreakdown:
+      type: object
+      required: [available, used_tokens, window_tokens, estimated, categories]
+      properties:
+        available:
+          type: boolean
+          description: |
+            `false` when the agent had no open conversation to ask, or cannot split its window;
+            then `categories` is empty and the counts are `0` / `null`.
+        used_tokens:
+          type: integer
+          minimum: 0
+        window_tokens:
+          type: [integer, 'null']
+          minimum: 1
+        estimated:
+          type: boolean
+          description: "`true` when `used_tokens` is the agent's rough count rather than the provider's report."
+        categories:
+          type: array
+          maxItems: 32
+          description: Only the categories that take something, in the agent's order.
+          items:
+            $ref: '#/components/schemas/SessionContextCategory'
     SessionMatch:
       type: object
       description: Present only on search results.
@@ -20072,6 +20167,12 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/RunFileChange'
+        live:
+          type: boolean
+          description: |
+            `true` while the run is still going: what it has changed so far, read at
+            `recorded_at` (decision §102). Not recorded, so its files have no diff to fetch yet
+            (`sessions.getRunChangeDiff` answers `404` until the run ends). Absent is `false`.
     RunChangesList:
       allOf:
         - $ref: '#/components/schemas/Page'
@@ -21276,6 +21377,29 @@ components:
           oneOf:
             - $ref: '#/components/schemas/Timestamp'
             - type: 'null'
+        entries:
+          type: [array, 'null']
+          items:
+            type: string
+          description: |
+            A list document's entries as the agent reads them (Hermes: split on a line holding
+            only `§`, each trimmed, empty ones dropped), so every client draws them one by one
+            the same way. `null` for a document that is one text (`soul`) and for entries.
+            Absent from older hubs: split `content` then.
+        char_limit:
+          type: [integer, 'null']
+          minimum: 1
+          description: |
+            The agent's budget for this document in characters (Hermes:
+            `memory.memory_char_limit` / `memory.user_char_limit` in the profile's `config.yaml`,
+            else its defaults). A write that would grow the document past it is refused
+            (`400`, `details.reason: memory_too_long`). `null` when there is no budget.
+        char_count:
+          type: [integer, 'null']
+          minimum: 0
+          description: |
+            What this document counts against `char_limit`: characters (code points, not
+            UTF-16 units) of its entries joined by the separator. `null` when `char_limit` is.
     MemoryItemWrite:
       type: object
       required: [content]

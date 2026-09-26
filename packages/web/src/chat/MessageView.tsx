@@ -26,7 +26,7 @@ import { agentMark } from '../ui/brand/marks.js';
 import { MessageActions } from './MessageActions.js';
 import { useOpenFile, useSessionFilesOptional } from '../files/context.js';
 import { lastReplyOfRuns } from '../files/changes.js';
-import { RunChangesCard } from '../files/RunChangesCard.js';
+import { LiveRunChanges, RunChangesCard } from '../files/RunChangesCard.js';
 import { InlineMedia, isPlayable } from './InlineMedia.js';
 import { Markdown } from './Markdown.js';
 import { Reasoning } from './Reasoning.js';
@@ -254,10 +254,13 @@ export function MessageView({
   mark = null,
   notice = null,
   changes,
+  liveSessionId,
   onReply,
   onFork,
 }: {
   message: Message;
+  /** The conversation, when this reply may be live: its run's changes so far are drawn under it. */
+  liveSessionId?: string | undefined;
   /** The files this reply's run changed, when it is the run's last reply (decision §49). */
   changes?: RunChanges | undefined;
   /** Continues the turn above it: no name, no avatar, the tighter gap. */
@@ -393,6 +396,14 @@ export function MessageView({
         {/* The files the reply carries: what the agent left in the run's output folder. */}
         {!streaming && <Attachments message={message} />}
         {changes && !streaming && <RunChangesCard changes={changes} />}
+        {/* While the run works: what it has changed so far (decision §102). */}
+        {streaming && liveSessionId && message.run_id && (
+          <LiveRunChanges
+            sessionId={liveSessionId}
+            runId={message.run_id}
+            revision={message.tool_calls?.filter((call) => call.status !== 'running').length ?? 0}
+          />
+        )}
         {!streaming && <FallbackNote run={message.run_id ? runs[message.run_id] : undefined} />}
         {message.usage && !streaming && (
           <p className="msg-usage" dir="auto">
@@ -466,6 +477,7 @@ export function Transcript({
           mark={turn.message.id === anchor?.messageId ? anchor.query : null}
           notice={noticeFor?.(turn.message) ?? null}
           changes={changesOf(turn.message)}
+          liveSessionId={files?.sessionId}
           onReply={onReply}
           onFork={onFork}
         />

@@ -121,4 +121,22 @@ describe('ProfileGate', () => {
     expect(await screen.findByTestId('app')).toBeTruthy();
     await waitFor(() => expect(store.read()?.profile).toBe('work'));
   });
+
+  it('moves a member whose remembered profile was taken to the first one they still have', async () => {
+    // The device remembers `default`; the admin has since given this member `work` and `lab` only.
+    const store = mount('member', hub([['work', 'lab']]));
+    await waitFor(() => expect(store.read()?.profile).toBe('work'));
+    expect(await screen.findByTestId('app')).toBeTruthy();
+    expect(screen.queryByTestId('no-profile')).toBeNull();
+  });
+
+  it('leaves a member in a profile they still have, and never moves an admin', async () => {
+    const member = mount('member', hub([['lab', 'default']]));
+    expect(await screen.findByTestId('app')).toBeTruthy();
+    expect(member.read()?.profile).toBe('default');
+    cleanup();
+    const admin = mount('admin', hub([['work']]));
+    expect(await screen.findByTestId('app')).toBeTruthy();
+    expect(admin.read()?.profile).toBe('default');
+  });
 });

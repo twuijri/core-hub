@@ -54,6 +54,7 @@ import {
   IconGlobe,
   IconGrip,
   IconMore,
+  IconPalette,
   IconPin,
   IconSearch,
   IconSelect,
@@ -97,6 +98,7 @@ import {
   type ChannelConversation,
 } from './channels.js';
 import { useChannelActions } from './ChannelActions.js';
+import { CategoryColourDialog, CategoryDot } from './CategoryColour.js';
 import {
   categoryKeys,
   useCategories,
@@ -182,6 +184,7 @@ export function SessionList({ onOpen }: { onOpen?: () => void }) {
   const [params, setParams] = useSearchParams();
   const { ask, dialog } = useConfirm();
   const { ask: askName, dialog: nameDialog } = usePrompt();
+  const [colouring, setColouring] = useState<SessionCategory | null>(null);
   const scope = scopeFromParams(params);
   // Live, not polled: a session that names itself after its first reply (contract
   // decision §26) changes this list with nothing on this screen having been clicked.
@@ -676,6 +679,13 @@ export function SessionList({ onOpen }: { onOpen?: () => void }) {
                       >
                         {t('sessions.categories.rename')}
                       </MenuItem>
+                      <MenuItem
+                        icon={<IconPalette size={14} />}
+                        onSelect={() => setColouring(category)}
+                        data-testid="session-group-colour"
+                      >
+                        {t('sessions.categories.colour')}
+                      </MenuItem>
                       {category.position > 0 && (
                         <MenuItem
                           icon={<IconChevron size={14} className="session-group-up" />}
@@ -753,6 +763,20 @@ export function SessionList({ onOpen }: { onOpen?: () => void }) {
         </button>
       )}
       {channelActions.dialog}
+      {colouring && (
+        <CategoryColourDialog
+          name={colouring.name}
+          color={colouring.color}
+          onClose={() => setColouring(null)}
+          onChoose={(color) =>
+            updateCategory.mutate({
+              id: colouring.id,
+              patch: { color },
+              profile: colouring.profile,
+            })
+          }
+        />
+      )}
       <MoveDialog
         session={moving}
         categories={moving ? categoryList.filter((c) => c.profile === moving.profile) : []}
@@ -828,6 +852,7 @@ function GroupHeader({
         data-testid="session-group-toggle"
       >
         <IconChevron size={12} className="session-group-chevron" />
+        <CategoryDot color={group.category?.color} />
         <span className="min-w-0 truncate" dir="auto">
           {name}
         </span>

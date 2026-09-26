@@ -17,12 +17,15 @@
  */
 import { useState } from 'react';
 import { useI18n } from '../i18n/context.js';
-import type { Run, Session } from '../types.js';
+import type { Run, Schemas, Session } from '../types.js';
 import { Button } from '../ui/Button.js';
 import { Popover } from '../ui/Popover.js';
 import type { Compression } from './transcript.js';
 
 export type ContextSource = 'reported' | 'agent_estimate' | 'estimate';
+
+/** `sessions.getContextBreakdown`'s answer (decision §102). */
+export type ContextBreakdown = Schemas['SessionContextBreakdown'];
 
 export interface ContextUse {
   used: number;
@@ -76,11 +79,25 @@ export function toneOf(use: ContextUse): 'normal' | 'warning' | 'danger' {
   return use.ratio >= 0.9 ? 'danger' : use.ratio >= 0.7 ? 'warning' : 'normal';
 }
 
+/** Categories the client names in the person's language (Hermes's today, decision §102). */
+export const KNOWN_CATEGORIES = [
+  'system_prompt',
+  'tool_definitions',
+  'rules',
+  'skills',
+  'mcp',
+  'subagent_definitions',
+  'memory',
+  'conversation',
+] as const;
+
 export function ContextRing({
   use,
   compression = null,
   onCompress,
   compressBlocked = null,
+  breakdown,
+  onOpenChange,
 }: {
   use: ContextUse;
   compression?: Compression | null;
@@ -88,9 +105,20 @@ export function ContextRing({
   onCompress?: (() => Promise<void>) | undefined;
   /** Why compressing is not possible right now (a run in flight); shown, never implied. */
   compressBlocked?: string | null;
+  /**
+   * What fills the window, by category (decision §102): `undefined` while it is read, `null`
+   * when the agent cannot tell — then the details simply have no breakdown.
+   */
+  breakdown?: ContextBreakdown | null | undefined;
+  /** Told when the details open, so the breakdown is read only when someone looks. */
+  onOpenChange?: ((open: boolean) => void) | undefined;
 }) {
   const { t, language } = useI18n();
-  const [open, setOpen] = useState(false);
+  const [open, setOpenState] = useState(false);
+  const setOpen = (next: boolean) => {
+    setOpenState(next);
+    onOpenChange?.(next);
+  };
   const [error, setError] = useState<string | null>(null);
   const format = (value: number) =>
     new Intl.NumberFormat(language === 'ar' ? 'ar' : 'en').format(value);
@@ -163,6 +191,9 @@ export function ContextRing({
         <p className="context-meter-source" data-testid="context-source">
           {t(`context_meter.source.${use.source}`)}
         </p>
+        {breakdown?.available && breakdown.categories.length > 0 && (
+          <Breakdown breakdown={breakdown} window={use.window} format={format} />
+        )}
         {compression && compression.phase !== 'running' && (
           <p
             className="context-meter-result"
@@ -210,6 +241,60 @@ export function ContextRing({
         )}
       </div>
     </Popover>
+  );
+}
+
+/**
+ * The window split by what fills it (decision §102): one bar of segments over the whole window
+ * — the free part is the track showing through — and a line per category with its count. The
+ * agent's per-category counts are rough and need not sum to the figure above, so the note says
+ * they are its estimate.
+ */
+function Breakdown({
+  breakdown,
+  window,
+  format,
+}: {
+  breakdown: ContextBreakdown;
+  window: number;
+  format: (value: number) => string;
+}) {
+  const { t } = useI18n();
+  const whole = Math.max(
+    window,
+    breakdown.categories.reduce((sum, category) => sum + category.tokens, 0),
+  );
+  const nameOf = (category: ContextBreakdown['categories'][number]) =>
+    (KNOWN_CATEGORIES as readonly string[]).includes(category.id)
+      ? t(`context_meter.category.${category.id}`)
+      : category.label;
+  return (
+    <div className="context-breakdown" data-testid="context-breakdown">
+      <p className="context-meter-title">{t('context_meter.breakdown_title')}</p>
+      <div className="context-breakdown-bar" aria-hidden>
+        {breakdown.categories.map((category) => (
+          <span
+            key={category.id}
+            data-category={category.id}
+            style={{ inlineSize: `${(category.tokens / whole) * 100}%` }}
+          />
+        ))}
+      </div>
+      <ul className="context-breakdown-list">
+        {breakdown.categories.map((category) => (
+          <li key={category.id} data-testid="context-category" data-category={category.id}>
+            <span className="context-breakdown-swatch" data-category={category.id} aria-hidden />
+            <span className="context-breakdown-name" dir="auto">
+              {nameOf(category)}
+            </span>
+            <span className="context-breakdown-tokens" dir="ltr">
+              {format(category.tokens)}
+            </span>
+          </li>
+        ))}
+      </ul>
+      <p className="context-meter-source">{t('context_meter.breakdown_note')}</p>
+    </div>
   );
 }
 

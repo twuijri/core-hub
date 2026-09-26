@@ -16,6 +16,7 @@ import type {
   AgentAskRequest,
   AgentCompressRequest,
   AgentCompressResult,
+  AgentContextBreakdown,
   AgentDirectory,
   AgentEvent,
   AgentInfo,
@@ -91,6 +92,11 @@ export interface FakeRunnerOptions {
     | ((request: AgentCompressRequest) => AgentCompressResult | Promise<AgentCompressResult>);
   /** What `steer` answers; `undefined` leaves the runner without `steer`. */
   steer?: 'queued' | 'rejected';
+  /**
+   * What `contextBreakdown` answers (decision §102); `undefined` leaves the runner without it,
+   * as an agent that cannot split its window.
+   */
+  contextBreakdown?: AgentContextBreakdown | null;
 }
 
 interface RunChannel {
@@ -126,6 +132,7 @@ export class FakeAgentRunner implements AgentRunner {
   readonly ask?: (request: AgentAskRequest) => Promise<string | null>;
   readonly compress?: (request: AgentCompressRequest) => Promise<AgentCompressResult>;
   readonly steer?: (runId: string, text: string) => Promise<'queued' | 'rejected'>;
+  readonly contextBreakdown?: (sessionId: string) => Promise<AgentContextBreakdown | null>;
   /** Every compression asked for, and every piece of guidance sent, in order. */
   readonly compressed: AgentCompressRequest[] = [];
   readonly steered: Array<{ runId: string; text: string }> = [];
@@ -146,6 +153,8 @@ export class FakeAgentRunner implements AgentRunner {
         return typeof compress === 'function' ? compress(request) : compress;
       };
     }
+    const breakdown = options.contextBreakdown;
+    if (breakdown !== undefined) this.contextBreakdown = async () => breakdown;
     const steer = options.steer;
     if (steer !== undefined) {
       this.steer = async (runId: string, text: string) => {

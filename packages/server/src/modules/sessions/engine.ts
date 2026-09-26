@@ -58,7 +58,10 @@ import type {
 } from './ports.js';
 import { SessionNamer } from './naming.js';
 import { OutputWatcher, ensureRunFolders, type ProducedRefusal } from './run-files.js';
-import { startChangeTracking, type ChangeTracker } from './run-changes.js';
+import { startChangeTracking, type ChangeTracker, type RunChangesRecord } from './run-changes.js';
+
+/** How long one live look at a run's folder answers every asker (decision §102). */
+const LIVE_CHANGES_MS = 2_000;
 import { fileRefsOf } from './files.js';
 import {
   initialRunState,
@@ -172,6 +175,43 @@ export class RunEngine {
 
   isActive(runId: string): boolean {
     return this.active.has(runId);
+  }
+
+  /** The last look at each live run's folder, kept briefly so a card on every screen asks once. */
+  private readonly peeks = new Map<
+    string,
+    { at: number; record: Promise<RunChangesRecord | null> }
+  >();
+
+  /**
+   * What a live run has changed in its folder so far (decision §102): the folder now against
+   * the run's start, the same comparison the run's end records, but kept nowhere. `null` when
+   * the run is not live or has no folder to compare. Looks are shared for `LIVE_CHANGES_MS`,
+   * so several people watching one run cost one comparison.
+   */
+  async liveChanges(runId: string): Promise<{ record: RunChangesRecord; at: Date } | null> {
+    const run = this.active.get(runId);
+    if (!run?.changes) return null;
+    const now = Date.now();
+    let peek = this.peeks.get(runId);
+    if (!peek || now - peek.at > LIVE_CHANGES_MS) {
+      const tracker = run.changes;
+      peek = {
+        at: now,
+        record: tracker.finish().catch((error: unknown) => {
+          this.deps.log.warn(
+            { err: error, runId },
+            'sessions: a live look at the run folder failed',
+          );
+          return null;
+        }),
+      };
+      this.peeks.set(runId, peek);
+    }
+    const record = await peek.record;
+    // The run may have ended meanwhile: its recorded answer is the one to read now.
+    if (!record || !this.active.has(runId)) return null;
+    return { record, at: new Date(peek.at) };
   }
 
   /** The run going on in a session right now, if any. */
@@ -397,6 +437,7 @@ export class RunEngine {
       }
     } catch (error) {
       this.active.delete(runRow.id);
+      this.peeks.delete(runRow.id);
       active.outputs?.stop();
       store.updateMessage(scope.workspace, shell.id, { content: '' });
       this.failBeforeStart(scope, runRow, {
@@ -441,6 +482,7 @@ export class RunEngine {
       });
     } finally {
       this.active.delete(runRow.id);
+      this.peeks.delete(runRow.id);
       await this.finalise(active, shell.id);
     }
   }
