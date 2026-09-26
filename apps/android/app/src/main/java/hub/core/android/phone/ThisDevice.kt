@@ -1,22 +1,15 @@
 package hub.core.android.phone
 
-import androidx.compose.foundation.layout.Row
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.unit.sp
 import hub.core.android.generated.FontTokens
-import hub.core.android.ui.kit.BadgeTone
-import hub.core.android.ui.kit.ButtonKind
 import hub.core.android.ui.kit.Custom
 import hub.core.android.ui.kit.GroupedList
-import hub.core.android.ui.kit.HubButton
 import hub.core.android.ui.kit.HubSwitch
 import hub.core.android.ui.kit.Item
 import hub.core.android.ui.kit.Lucide
-import hub.core.android.ui.kit.NoticeBox
 import hub.core.android.ui.kit.SectionTitle
 import hub.core.android.ui.kit.Segment
 import hub.core.android.ui.kit.Segmented
-import hub.core.android.ui.kit.Spinner
 import hub.core.android.ui.kit.StatusDot
 import android.speech.SpeechRecognizer
 import androidx.compose.foundation.layout.Arrangement
@@ -31,34 +24,25 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
-import hub.core.android.AppLanguage
-import hub.core.android.BuildConfig
 import hub.core.android.R
-import hub.core.android.data.HubError
 import hub.core.android.data.TokenKind
-import hub.core.android.data.hubCall
 import hub.core.android.graph
-import hub.core.android.ui.components.ErrorNotice
-import hub.core.android.ui.components.Notice
 import hub.core.android.ui.screens.ShellViewModel
 import hub.core.android.ui.screens.localTime
 import hub.core.android.ui.screens.term
 import hub.core.android.ui.theme.LocalTokens
-import hub.core.client.model.Release
 import java.time.Instant
 import java.time.ZoneOffset
-import kotlinx.coroutines.launch
 
 /**
  * This device (NAVIGATION.md §2), as inset groups: the hub connection, voice input and its
- * language, spoken replies, notifications, and self-update where Android allows it. Everything
+ * language, spoken replies, notifications, and self-update from GitHub releases (SelfUpdate.kt). Everything
  * here is this phone's own and stays on it.
  */
 @Composable
@@ -143,84 +127,13 @@ fun ThisDevicePage(shell: ShellViewModel) {
         item { SectionTitle(stringResource(R.string.locate_heading)) }
         item { LocationChoiceRow() }
         item { SectionTitle(stringResource(R.string.update_heading)) }
-        item { UpdateSection() }
+        item { SelfUpdateSection() }
     }
     if (choosing) {
         DictationLanguageDialog(
             choice = choices.dictation,
             onChoose = { tag -> graph.device.update { it.copy(dictation = tag) }; choosing = false },
             onDismiss = { choosing = false },
-        )
-    }
-}
-
-private sealed interface UpdateState {
-    data object Idle : UpdateState
-    data object Checking : UpdateState
-    data class UpToDate(val reason: String?) : UpdateState
-    data class Available(val release: Release) : UpdateState
-    data object Downloading : UpdateState
-    data class Failed(val error: HubError?) : UpdateState
-}
-
-@Composable
-private fun UpdateSection() {
-    val context = LocalContext.current
-    val graph = context.graph
-    val scope = rememberCoroutineScope()
-    var state by remember { mutableStateOf<UpdateState>(UpdateState.Idle) }
-    val t = LocalTokens.current
-    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        GroupedList {
-            Item(stringResource(R.string.update_installed, BuildConfig.VERSION_NAME), icon = Lucide.Smartphone)
-            (state as? UpdateState.Available)?.let { st ->
-                val notes = if (graph.prefs.effectiveLanguage == AppLanguage.AR) st.release.notes.ar else st.release.notes.en
-                Item(stringResource(R.string.update_available, st.release.version), subtitle = notes, icon = Lucide.CircleArrowDown)
-            }
-        }
-        when (val st = state) {
-            UpdateState.Checking, UpdateState.Downloading -> Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Spinner(16.dp, t.textMuted)
-                Text(stringResource(R.string.loading), fontSize = FontTokens.sizeSm.sp, color = t.textMuted)
-            }
-            is UpdateState.UpToDate -> NoticeBox(
-                stringResource(if (st.reason == "not_configured") R.string.update_not_configured else R.string.update_none),
-                if (st.reason == "not_configured") BadgeTone.Info else BadgeTone.Success,
-            )
-            is UpdateState.Failed -> if (st.error != null) ErrorNotice(st.error) else Notice(stringResource(R.string.update_bad_file))
-            is UpdateState.Available -> {
-                HubButton(stringResource(R.string.update_install), {
-                    state = UpdateState.Downloading
-                    scope.launch {
-                        val session = graph.store.current ?: return@launch
-                        try {
-                            val apk = Updates.download(context, graph.apis(session), st.release)
-                            context.startActivity(Updates.installIntent(context, apk))
-                            state = UpdateState.Idle
-                        } catch (e: SecurityException) {
-                            state = UpdateState.Failed(null)
-                        } catch (e: Exception) {
-                            state = UpdateState.Failed(HubError.from(e))
-                        }
-                    }
-                }, icon = Lucide.Download, fill = true, modifier = Modifier.fillMaxWidth())
-            }
-            UpdateState.Idle -> Unit
-        }
-        HubButton(
-            stringResource(R.string.update_check),
-            {
-                state = UpdateState.Checking
-                scope.launch {
-                    val session = graph.store.current ?: return@launch
-                    hubCall { Updates.check(graph.apis(session)) }
-                        .onSuccess { check -> state = if (check.available && check.release != null) UpdateState.Available(check.release!!) else UpdateState.UpToDate(check.reason?.value) }
-                        .onFailure { state = UpdateState.Failed(it as HubError) }
-                }
-            },
-            kind = ButtonKind.Secondary, icon = Lucide.RefreshCw, fill = true,
-            enabled = state != UpdateState.Checking && state != UpdateState.Downloading,
-            modifier = Modifier.fillMaxWidth(),
         )
     }
 }
