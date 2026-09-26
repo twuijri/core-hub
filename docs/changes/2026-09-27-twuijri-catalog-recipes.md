@@ -48,6 +48,7 @@ DECISIONS §106 — **مقترح — للمالك أن يؤكد**:
 - `packages/web/src/agents/AgentSignInCard.tsx` (جديد)، `AgentSettingsScreen.tsx`، `i18n/ar.json`، `i18n/en.json`.
 - الاختبارات: `download-install.test.ts`، `agent-sign-in.test.ts`، `config-files.routes.test.ts`، `agents.test.ts`،
   `packages/web/tests/agent-sign-in.test.tsx`.
+- `packages/web/e2e/smoke.spec.ts` (الرحلة 6: أحد عشر وكيلًا) ولقطات `e2e/shots/agents-*`.
 - `docs/contracts/DECISIONS.md` (§106)، `docs/STATUS.md`.
 
 ## الفحوص (الأوامر ونواتجها الفعلية)
@@ -91,7 +92,13 @@ ddbcd9679841b62e9285bb9c57c76570cc7f9ccbbc2b5070f3d5bd5cad2d5c63  grok-1.0.41-li
 00cbf7af8f4df204668177a8149f4d222024ab98895220972009d55e417139ff  grok-1.0.41-macos-x86_64.gz
 d6c9b5d1dfe3be5b01758b24e11acad377ee22aa7426ad5eb65332cf3a363447  grok-1.0.41-macos-aarch64.gz
 ```
-CI على طلب الليلة #165: يُضاف بعد الدفع.
+أول تشغيل لـCI على #165 (الالتزام `2d9d6c84`): كل الفحوص نجحت ما عدا «Web smoke journeys»: الرحلة 6 كانت تعدّ تسعة وكلاء
+في صف الاختيار، والكتالوج صار أحد عشر. عُدّل العدد (والتعليق) وأُعيدت لقطات الصف؛ ثم محليًا:
+```
+PLAYWRIGHT_CHANNEL=chrome pnpm --filter @corehub/web exec playwright test e2e/smoke.spec.ts -g "agent row" --workers=1
+  ✓  1 [chromium] › e2e/smoke.spec.ts:211:3 › web smoke journeys › 6. the agent row gives up labels before options, then overflows into More (1.6s)
+  1 passed (11.8s)
+```
 
 ## المخاطر والرجوع
 - ملف Grok Build بلا مجموع رسمي: المجموع المثبّت من تنزيلنا للملف الرسمي؛ إن غيّر xAI الملف تحت الرقم نفسه يفشل

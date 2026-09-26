@@ -18,6 +18,10 @@
  * published (`update-policy.ts`, DECISIONS §68); the pin stays the tested baseline. Every command is an argv array (AGENTS.md hard rules), and a
  * failure is thrown carrying npm's own message so the job ends `job.failed` — never a
  * success with an empty result.
+ *
+ * An entry that ships as a release file rather than an npm package (`install.kind =
+ * download`, DECISIONS §106) goes through `download-install.ts`: the file for this platform,
+ * refused unless its SHA-256 is the pinned one, only its executable unpacked.
  */
 import { existsSync, readdirSync, rmSync } from 'node:fs';
 import path from 'node:path';

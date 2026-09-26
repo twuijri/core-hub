@@ -214,10 +214,11 @@ test.describe('web smoke journeys', () => {
     await login(page);
     await newChat(page);
     const row = page.getByTestId('agent-chips');
-    // Nine agents from the catalog — Hermes, the hub's own `direct` agent
-    // (ADOPTION-BACKLOG §2.15) and the seven coding CLIs (Qwen Code, Kimi Code and Pi since
-    // 2026-09-25) — and a trailing "+" that goes to the Agents page.
-    await expect(page.getByTestId('agent-chip')).toHaveCount(9);
+    // Eleven agents from the catalog — Hermes, the hub's own `direct` agent
+    // (ADOPTION-BACKLOG §2.15) and the nine coding CLIs (Qwen Code, Kimi Code and Pi since
+    // 2026-09-25, Goose and Grok Build since 2026-09-27) — and a trailing "+" that goes to
+    // the Agents page.
+    await expect(page.getByTestId('agent-chip')).toHaveCount(11);
     await expect(page.getByTestId('agent-add')).toBeVisible();
     // Pages take the whole width (owner, 2026-09-23), so on a wide screen the row is at the
     // top of the ladder or one rung down — which one depends on the machine's fonts (CI's
