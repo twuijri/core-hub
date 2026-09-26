@@ -6,7 +6,6 @@ import { STORES } from '../src/config.js';
 import {
   ASSET_KEYS,
   ASSET_PATTERNS,
-  CACHE_MS,
   detectPlatform,
   formatSize,
   loadLatest,
@@ -130,13 +129,6 @@ describe('reading a release', () => {
 });
 
 describe('loading the latest release', () => {
-  const memory = () => {
-    const data = new Map<string, string>();
-    return {
-      getItem: (k: string) => data.get(k) ?? null,
-      setItem: (k: string, v: string) => void data.set(k, v),
-    };
-  };
   const ok = (json: unknown) =>
     Promise.resolve(new Response(JSON.stringify(json), { status: 200 }));
 
@@ -162,28 +154,16 @@ describe('loading the latest release', () => {
     expect(await loadLatest({ repo: REPO, fetch: garbage })).toBeNull();
   });
 
-  it('reuses a fresh answer instead of calling again, and asks again once it is old', async () => {
-    const storage = memory();
-    const fetch = vi.fn(() => ok(apiRelease('1.1.1')));
-    const first = await loadLatest({ repo: REPO, fetch, storage, now: 1000 });
-    const again = await loadLatest({ repo: REPO, fetch, storage, now: 1000 + CACHE_MS - 1 });
-    expect(fetch).toHaveBeenCalledTimes(1);
-    expect(again).toEqual(first);
-    await loadLatest({ repo: REPO, fetch, storage, now: 1000 + CACHE_MS });
+  it('asks GitHub on every visit, so a new release shows at once and an older one never comes back', async () => {
+    const versions = ['1.1.1', '1.1.2'];
+    const fetch = vi.fn((_url: string, _init?: RequestInit) =>
+      ok(apiRelease(versions.shift() ?? '0.0.0')),
+    );
+    expect((await loadLatest({ repo: REPO, fetch }))?.version).toBe('1.1.1');
+    expect((await loadLatest({ repo: REPO, fetch }))?.version).toBe('1.1.2');
     expect(fetch).toHaveBeenCalledTimes(2);
-  });
-
-  it('works when storage throws', async () => {
-    const storage = {
-      getItem: () => {
-        throw new Error('blocked');
-      },
-      setItem: () => {
-        throw new Error('blocked');
-      },
-    };
-    const release = await loadLatest({ repo: REPO, fetch: () => ok(apiRelease('1.1.1')), storage });
-    expect(release?.version).toBe('1.1.1');
+    // The browser revalidates with GitHub instead of answering from its own copy.
+    expect(fetch.mock.calls[0]?.[1]?.cache).toBe('no-cache');
   });
 });
 
