@@ -453,7 +453,8 @@
     "earlier": "{count} earlier",
     "hide_earlier": "Hide {count} earlier",
     "arguments": "Arguments",
-    "result": "Result"
+    "result": "Result",
+    "count_one": "1 tool"
   },
   "agents": {
     "empty": "The registry is empty.",

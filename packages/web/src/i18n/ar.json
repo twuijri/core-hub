@@ -453,7 +453,8 @@
     "earlier": "{count} قبلها",
     "hide_earlier": "إخفاء {count} السابقة",
     "arguments": "المدخلات",
-    "result": "الناتج"
+    "result": "الناتج",
+    "count_one": "أداة واحدة"
   },
   "agents": {
     "empty": "السجلّ فارغ.",
