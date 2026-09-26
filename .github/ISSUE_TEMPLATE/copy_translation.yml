@@ -1,0 +1,61 @@
+name: Wording or translation / النصوص والترجمة
+description: A text that reads badly, is wrong, or is missing in a language. / نص ركيك أو خاطئ أو ناقص في لغة ما.
+title: 'copy: '
+labels: [documentation]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        One issue can list several texts. For each one, say where it is, what it says now and what you suggest.
+        يمكن أن يضم البلاغ الواحد عدة نصوص. لكل نص: أين هو، وماذا يقول الآن، وماذا تقترح.
+  - type: dropdown
+    id: language
+    attributes:
+      label: Language / اللغة
+      multiple: true
+      options:
+        - Arabic / العربية
+        - English / الإنجليزية
+        - Other / أخرى
+    validations:
+      required: true
+  - type: dropdown
+    id: where
+    attributes:
+      label: Where / أين
+      multiple: true
+      options:
+        - Web / الويب
+        - Desktop apps / تطبيقات سطح المكتب
+        - iPhone / iPad app / تطبيق الآيفون والآيباد
+        - Android app / تطبيق أندرويد
+        - Download page / صفحة التحميل
+        - Store listing / صفحة المتجر
+        - Docs / التوثيق
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Version you looked at / الإصدار الذي راجعته
+      placeholder: '1.1.2'
+    validations:
+      required: true
+  - type: textarea
+    id: texts
+    attributes:
+      label: The texts / النصوص
+      description: Screen or page, the current text, your suggestion, and why. A screenshot helps. / الشاشة أو الصفحة، النص الحالي، اقتراحك، والسبب. الصورة تساعد.
+      value: |
+        1. Screen / الشاشة:
+           Now / الحالي:
+           Suggested / المقترح:
+           Why / السبب:
+    validations:
+      required: true
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Before sending / قبل الإرسال
+      options:
+        - label: I would like to send a pull request for these texts. / أرغب في إرسال طلب دمج لهذه النصوص.
