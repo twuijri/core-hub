@@ -778,7 +778,7 @@ export class SessionsService {
     const row = this.requireSession(scope, sessionId);
     if (!row.workingDir) throw notFound({ resource: 'file', id: requested });
     return openInside(row.workingDir, requested, (type) =>
-      // A video or a sound is read a range at a time, whichever way it is asked for (§92).
+      // A video or a sound is read a range at a time, whichever way it is asked for (§97).
       download
         ? Math.max(DOWNLOAD_MAX_BYTES, PREVIEW_MAX_BYTES[type.kind])
         : PREVIEW_MAX_BYTES[type.kind],
@@ -787,7 +787,7 @@ export class SessionsService {
 
   /**
    * A stream ticket for one file of the working folder (`sessions.createFileStream`, decision
-   * §92), after the same checks `openFile` makes; the ticket opens the file again on every read.
+   * §97), after the same checks `openFile` makes; the ticket opens the file again on every read.
    */
   createFileStream(
     scope: EngineScope,

@@ -118,7 +118,7 @@ export interface AttachmentsPort {
   ): Promise<Omit<AttachmentSummary, 'url'>>;
   /**
    * A one-hour address a media element plays one file of the working folder from, byte range
-   * by byte range (contract `sessions.createFileStream`, decision §92). Absent where no
+   * by byte range (contract `sessions.createFileStream`, decision §97). Absent where no
    * `knowledge` is wired: the operation is then `503`.
    */
   streamFile?(

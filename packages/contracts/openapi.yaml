@@ -3698,7 +3698,7 @@ paths:
         One `Range: bytes=…` is honoured (`Accept-Ranges: bytes`): `206` with `Content-Range`
         and only those bytes. A range that starts past the end is `416` with
         `Content-Range: bytes */<size>`; a header that is not one byte range is ignored and the
-        whole file sent (DECISIONS §92).
+        whole file sent (DECISIONS §97).
       parameters:
         - name: path
           in: query
@@ -3756,7 +3756,7 @@ paths:
       summary: A short-lived address a media element can play one file of the working folder from
       description: >-
         What `sessions.createAttachmentStream` is for an attachment (DECISIONS §90), for a file of
-        the session's working folder (DECISIONS §92): a random one-hour ticket in the path of
+        the session's working folder (DECISIONS §97): a random one-hour ticket in the path of
         `knowledge.streamFile`, for this one file only, read-only, answered with byte ranges.
         The path is checked now as `sessions.readFile` checks it (outside the folder, a link, not
         a file: `400`; not there: `404`) and again on every read. It stops when the person who
@@ -7707,7 +7707,7 @@ paths:
       summary: The agent's incoming webhook routes in the selected profile, with their secrets (admin)
       description: >-
         Hermes's webhook receiver (its `webhook` platform, observed in its MIT source and described
-        in our words in DECISIONS §91): a named route lets an outside service — GitHub, a form, a
+        in our words in DECISIONS §96): a named route lets an outside service — GitHub, a form, a
         script — start a run of the agent by POSTing to the route's address, signed with the
         route's secret; the route's prompt says what the agent is asked, with `{dot.path}` values
         taken from the posted JSON. Routes the hub or `hermes webhook subscribe` made live in the
@@ -15424,7 +15424,7 @@ paths:
         client show an image, a PDF, a video or a sound; `attachment` (the default) saves it
         under its name. A folder is `400 validation_failed` (`details.reason = not_a_file`); use
         `knowledge.downloadWorkspaceFolder` for a folder. One `Range: bytes=…` is honoured as
-        `sessions.readFile` honours it (`206`, or `416` past the end; DECISIONS §92).
+        `sessions.readFile` honours it (`206`, or `416` past the end; DECISIONS §97).
       parameters:
         - $ref: '#/components/parameters/Profile'
         - $ref: '#/components/parameters/WorkspaceFilePath'
@@ -15479,7 +15479,7 @@ paths:
       summary: A short-lived address a media element can play one working file from (owner and admin)
       description: >-
         A one-hour ticket for this one file of the profile's working files, served by
-        `knowledge.streamFile` with byte ranges and no bearer (DECISIONS §92, after §90). The path
+        `knowledge.streamFile` with byte ranges and no bearer (DECISIONS §97, after §90). The path
         is checked now and on every read; the ticket stops when the person who asked may no
         longer enter the profile or is no longer an owner or admin.
       parameters:
@@ -19232,7 +19232,7 @@ components:
         only. `html` is rendered in a sandboxed frame, never in the client's own origin.
         `video` and `audio` are played by the client's own player from a stream address
         (`sessions.createFileStream`, `sessions.createAttachmentStream`), asking for byte ranges
-        as it plays, so a long file starts at once and seeks (DECISIONS §92); a client that
+        as it plays, so a long file starts at once and seeks (DECISIONS §97); a client that
         cannot play the format offers the file for download.
     SessionFileSource:
       type: string
@@ -21003,7 +21003,7 @@ components:
     HermesWebhook:
       type: object
       description: >-
-        One incoming webhook route of Hermes (DECISIONS §91). A POST to `path` on this hub, signed
+        One incoming webhook route of Hermes (DECISIONS §96). A POST to `path` on this hub, signed
         with `secret`, starts a run of the agent asked `prompt` with the posted values filled in.
       required: [name, description, prompt, events, deliver, secret, path, static, created_at]
       properties:

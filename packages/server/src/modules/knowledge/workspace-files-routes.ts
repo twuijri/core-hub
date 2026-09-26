@@ -42,7 +42,7 @@ const INLINE_TYPES = new Set([
   'image/x-icon',
   'application/pdf',
   'text/plain',
-  // Played in place, a range at a time (decision §92); a media type never runs as a page.
+  // Played in place, a range at a time (decision §97); a media type never runs as a page.
   'video/mp4',
   'video/webm',
   'video/ogg',
@@ -142,7 +142,7 @@ export function registerWorkspaceFileRoutes(
     },
   });
 
-  // A media element cannot send the bearer: one file, one hour, a ticket in the path (§92).
+  // A media element cannot send the bearer: one file, one hour, a ticket in the path (§97).
   defineRoute(app, deps, {
     operationId: 'knowledge.createWorkspaceFileStream',
     status: 201,

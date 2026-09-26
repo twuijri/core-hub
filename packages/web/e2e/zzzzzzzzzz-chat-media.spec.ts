@@ -1,5 +1,5 @@
 /**
- * 36. Media in chat (decision §92): a scripted run records a two-minute tone in the session's
+ * 36. Media in chat (decision §97): a scripted run records a two-minute tone in the session's
  *     folder and leaves a short one for its reply. The short one plays in the reply; the long one
  *     opens in the file panel as a player that reads the hub a byte range at a time (`206` from a
  *     one-file stream address, no bearer in it) — so it knows its length at once and seeks to
@@ -27,8 +27,12 @@ async function login(page: Page) {
 test('36. a recording plays in the reply and seeks in the file panel, a byte range at a time', async ({
   page,
 }) => {
-  const ranges: Array<{ url: string; status: number; range: string | null; contentRange: string | null }> =
-    [];
+  const ranges: Array<{
+    url: string;
+    status: number;
+    range: string | null;
+    contentRange: string | null;
+  }> = [];
   page.on('response', (response) => {
     const url = response.url();
     if (!/\/api\/v1\/(file|attachment)-streams\//.test(url)) return;

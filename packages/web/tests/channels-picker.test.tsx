@@ -148,7 +148,7 @@ const WHATSAPP_UNPAIRED: Row = {
 
 /**
  * Written into the file by hand, outside the catalog: it is set up — and it is Hermes's webhook
- * receiver, which has its own «ويب هوك» section under the list (§91), not a card in it.
+ * receiver, which has its own «ويب هوك» section under the list (§96), not a card in it.
  */
 const WEBHOOK_BY_HAND: Row = {
   platform: 'webhook',

@@ -1,5 +1,5 @@
 /**
- * An agent's incoming webhook routes (contract `agents.*Webhook*`, decision §91): the list, making
+ * An agent's incoming webhook routes (contract `agents.*Webhook*`, decision §96): the list, making
  * one, deleting one, and the local test. Plus the small rules the section draws from.
  */
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';

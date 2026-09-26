@@ -1,5 +1,5 @@
 /**
- * Hermes's incoming webhooks, as the hub manages them (contract decision §91).
+ * Hermes's incoming webhooks, as the hub manages them (contract decision §96).
  *
  * What Hermes does, observed in its MIT source at `v2026.9.14` (`gateway/platforms/webhook.py`,
  * `hermes_cli/webhook.py`) and said in our words:
@@ -32,14 +32,7 @@
  * (a Docker upgrade keeps working by replacing the image alone).
  */
 import { createHmac, randomBytes } from 'node:crypto';
-import {
-  chmodSync,
-  existsSync,
-  mkdirSync,
-  readFileSync,
-  renameSync,
-  writeFileSync,
-} from 'node:fs';
+import { chmodSync, existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
 import { createServer } from 'node:net';
 import path from 'node:path';
 import { isMap, parseDocument, type Document } from 'yaml';
@@ -121,7 +114,9 @@ function portOf(raw: unknown): number | null {
 /** `webhook_subscriptions.json`, or `{}` when there is none or it cannot be read (as Hermes). */
 export function readSubscriptions(home: string): Record<string, Json> {
   try {
-    const data = JSON.parse(readFileSync(path.join(home, WEBHOOK_SUBSCRIPTIONS), 'utf8')) as unknown;
+    const data = JSON.parse(
+      readFileSync(path.join(home, WEBHOOK_SUBSCRIPTIONS), 'utf8'),
+    ) as unknown;
     if (!data || typeof data !== 'object' || Array.isArray(data)) return {};
     const out: Record<string, Json> = {};
     for (const [name, route] of Object.entries(data as Json)) {
@@ -159,7 +154,10 @@ export function webhookListener(home: string): WebhookListener {
   const configured = typeof extra.host === 'string' ? extra.host.trim() : '';
   // A wildcard bind is reached on loopback like any other.
   const host =
-    configured === '' || configured === '0.0.0.0' || configured === '::' || configured === 'localhost'
+    configured === '' ||
+    configured === '0.0.0.0' ||
+    configured === '::' ||
+    configured === 'localhost'
       ? '127.0.0.1'
       : configured;
   const port = portOf(env.WEBHOOK_PORT) ?? portOf(extra.port) ?? HERMES_WEBHOOK_PORT;
@@ -256,7 +254,7 @@ export async function ensureWebhookListener(
   const doc = loadConfig(home);
   const current = portOf(extraOf(webhookNode(home)).port);
   let port = current !== null && !taken.has(current) ? current : null;
-  for (let candidate = WEBHOOK_PORTS.first; port === null && candidate <= WEBHOOK_PORTS.last; ) {
+  for (let candidate = WEBHOOK_PORTS.first; port === null && candidate <= WEBHOOK_PORTS.last;) {
     if (!taken.has(candidate) && (await isFree(candidate))) port = candidate;
     else candidate += 1;
   }
@@ -302,7 +300,11 @@ export interface WebhookInput {
  * with a new random secret. A name that is taken — by a subscription or a static route — is
  * refused.
  */
-export function addWebhook(home: string, input: WebhookInput, now = new Date()): HermesWebhookRoute {
+export function addWebhook(
+  home: string,
+  input: WebhookInput,
+  now = new Date(),
+): HermesWebhookRoute {
   const name = input.name.trim();
   if (!WEBHOOK_NAME.test(name)) throw new WebhookError('invalid_name');
   if (findWebhook(home, name) || name in readSubscriptions(home)) {
@@ -380,12 +382,15 @@ export async function postToListener(
   const host = listener.host.includes(':') ? `[${listener.host}]` : listener.host;
   let response: Response;
   try {
-    response = await fetchImpl(`http://${host}:${listener.port}/webhooks/${encodeURIComponent(name)}`, {
-      method: 'POST',
-      headers,
-      body: new Uint8Array(body),
-      signal: AbortSignal.timeout(timeoutMs),
-    });
+    response = await fetchImpl(
+      `http://${host}:${listener.port}/webhooks/${encodeURIComponent(name)}`,
+      {
+        method: 'POST',
+        headers,
+        body: new Uint8Array(body),
+        signal: AbortSignal.timeout(timeoutMs),
+      },
+    );
   } catch {
     throw new WebhookError('listener_down');
   }

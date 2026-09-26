@@ -1,6 +1,6 @@
 /**
  * One `Range: bytes=…` over a file of a known size (RFC 9110 §14), for the reads a media element
- * makes as it plays and seeks (DECISIONS §92).
+ * makes as it plays and seeks (DECISIONS §97).
  *
  * - `bytes=a-b`, `bytes=a-` and `bytes=-n` (the last n bytes) are one range; `b` past the end is
  *   cut to the end.
@@ -12,9 +12,7 @@
 import { HubError } from './errors.js';
 
 export type ByteRangeAnswer =
-  | { kind: 'all' }
-  | { kind: 'part'; start: number; end: number }
-  | { kind: 'unsatisfiable' };
+  { kind: 'all' } | { kind: 'part'; start: number; end: number } | { kind: 'unsatisfiable' };
 
 export function byteRangeOf(header: unknown, size: number): ByteRangeAnswer {
   const raw = Array.isArray(header) ? header[0] : header;

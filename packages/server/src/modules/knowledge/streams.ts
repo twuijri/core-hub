@@ -9,7 +9,7 @@
  * the moment the person who asked may no longer read the attachment (checked on every read).
  *
  * The same tickets name one file of a conversation's working folder or of the profile's
- * working files (decision §92): what the ticket carries is the caller's (`T`).
+ * working files (decision §97): what the ticket carries is the caller's (`T`).
  */
 import { randomBytes } from 'node:crypto';
 

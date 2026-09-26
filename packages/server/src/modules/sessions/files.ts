@@ -48,7 +48,7 @@ export type PreviewKind =
 
 const MiB = 1024 * 1024;
 /**
- * A video or a sound is played from a stream address, a range at a time (decision §92): nothing
+ * A video or a sound is played from a stream address, a range at a time (decision §97): nothing
  * holds the whole file, so its size is not what stops it. The cap only keeps the number honest.
  */
 export const MEDIA_MAX_BYTES = 64 * 1024 * MiB;
@@ -109,7 +109,7 @@ const BY_EXTENSION: Record<string, { kind: PreviewKind; mime: string }> = {
   log: { kind: 'text', mime: 'text/plain' },
   text: { kind: 'text', mime: 'text/plain' },
   rst: { kind: 'text', mime: 'text/plain' },
-  // Played by the client's own player; whether it can decode the format is its call (§92).
+  // Played by the client's own player; whether it can decode the format is its call (§97).
   mp4: { kind: 'video', mime: 'video/mp4' },
   m4v: { kind: 'video', mime: 'video/mp4' },
   webm: { kind: 'video', mime: 'video/webm' },

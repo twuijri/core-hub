@@ -324,7 +324,7 @@ export function registerSessionRoutes(app: FastifyInstance, deps: RouteDeps): vo
     );
     const file = deps.service(request).openFile(scope, session_id, query.path, query.download);
     const name = file.relative.split('/').at(-1) ?? 'file';
-    // One byte range, for a player that seeks (decision §92); past the end is `416`.
+    // One byte range, for a player that seeks (decision §97); past the end is `416`.
     let window: ReturnType<typeof rangeReply>;
     try {
       window = rangeReply(request.headers.range, file.size);

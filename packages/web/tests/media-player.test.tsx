@@ -1,5 +1,5 @@
 /**
- * Media in chat (decision §92): a video or a sound plays in the side file panel and in a reply,
+ * Media in chat (decision §97): a video or a sound plays in the side file panel and in a reply,
  * from a one-hour stream address, so the player asks the hub for byte ranges and can seek — the
  * page never reads the whole file into itself first.
  *
@@ -104,7 +104,10 @@ function mount(files: SessionFile[], children: ReactNode) {
     }
     if (url.pathname.endsWith('/stream')) {
       return json(
-        { url: `/api/v1/attachment-streams/${ATTACHMENT_TICKET}`, expires_at: '2026-09-27T02:00:00Z' },
+        {
+          url: `/api/v1/attachment-streams/${ATTACHMENT_TICKET}`,
+          expires_at: '2026-09-27T02:00:00Z',
+        },
         201,
       );
     }
@@ -132,7 +135,7 @@ afterEach(() => {
   requests.length = 0;
 });
 
-describe('which files play (§92)', () => {
+describe('which files play (§97)', () => {
   it('knows a video or a sound by its type, or by its name when the type says nothing', () => {
     expect(isPlayable('video/webm')).toBe('video');
     expect(isPlayable('audio/ogg')).toBe('audio');
@@ -145,7 +148,10 @@ describe('which files play (§92)', () => {
 
 describe('the side file panel plays media from a stream address', () => {
   it('plays a working-folder video from its ticket, without reading the bytes', async () => {
-    mount([file({ name: 'renders/final.mp4', path: 'renders/final.mp4' })], <Opener fileKey="path:renders/final.mp4" />);
+    mount(
+      [file({ name: 'renders/final.mp4', path: 'renders/final.mp4' })],
+      <Opener fileKey="path:renders/final.mp4" />,
+    );
     fireEvent.click(screen.getByText('open it'));
     const video = await screen.findByTestId('file-video');
     expect(video.tagName).toBe('VIDEO');

@@ -1,5 +1,5 @@
 /**
- * «ويب هوك» on the agent's Channels page (decision §91): Hermes's incoming webhooks.
+ * «ويب هوك» on the agent's Channels page (decision §96): Hermes's incoming webhooks.
  *
  * - the section lists each route with its full address on this hub and its secret (hidden until
  *   shown), each with a copy button; a route from `config.yaml` cannot be deleted here;
@@ -226,7 +226,11 @@ describe('the rules the section draws from', () => {
     expect(webhookUrl('https://hub.example.com/', ISSUES as never)).toBe(
       'https://hub.example.com/api/v1/hermes-webhooks/default/github-issues',
     );
-    expect(eventsOf('issues, push  issues،pull_request')).toEqual(['issues', 'push', 'pull_request']);
+    expect(eventsOf('issues, push  issues،pull_request')).toEqual([
+      'issues',
+      'push',
+      'pull_request',
+    ]);
   });
 });
 
@@ -250,7 +254,9 @@ describe('«ويب هوك» on the Channels page', () => {
     expect(secret.textContent).toBe(SECRET);
     fireEvent.click(within(row).getByTestId('webhook-copy-url-github-issues'));
     fireEvent.click(within(row).getByTestId('webhook-copy-secret-github-issues'));
-    expect(writeText).toHaveBeenCalledWith(`${origin}/api/v1/hermes-webhooks/default/github-issues`);
+    expect(writeText).toHaveBeenCalledWith(
+      `${origin}/api/v1/hermes-webhooks/default/github-issues`,
+    );
     expect(writeText).toHaveBeenCalledWith(SECRET);
     // A route from config.yaml: listed, marked, not deletable here.
     const statik = screen.getByTestId('webhook-from-config');

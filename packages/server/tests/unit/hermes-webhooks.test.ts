@@ -1,5 +1,5 @@
 /**
- * Hermes's incoming webhooks on the agent's Channels page (decision §91), over the real routes,
+ * Hermes's incoming webhooks on the agent's Channels page (decision §96), over the real routes,
  * with a fake listener standing where the profile's gateway listens:
  *
  * - a route is written where Hermes reads it (`webhook_subscriptions.json`, 0600, Hermes's shape)
@@ -118,7 +118,7 @@ async function create(h: Hub, agent: string, payload: Record<string, unknown>) {
   return authed(h, h.token, { method: 'POST', url: `/api/v1/agents/${agent}/webhooks`, payload });
 }
 
-describe('Hermes incoming webhooks (§91)', () => {
+describe('Hermes incoming webhooks (§96)', () => {
   it('writes a route where Hermes reads it and switches the listener on, on this machine', async () => {
     const { h, agent, home } = await setup();
     const made = await create(h, agent, {
@@ -156,9 +156,15 @@ describe('Hermes incoming webhooks (§91)', () => {
     expect(webhook.enabled).toBe(true);
     expect(webhook.extra.host).toBe('127.0.0.1');
 
-    const list = await authed(h, h.token, { method: 'GET', url: `/api/v1/agents/${agent}/webhooks` });
+    const list = await authed(h, h.token, {
+      method: 'GET',
+      url: `/api/v1/agents/${agent}/webhooks`,
+    });
     expect(list.statusCode).toBe(200);
-    const body = list.json() as { listener: Record<string, unknown>; items: Array<Record<string, unknown>> };
+    const body = list.json() as {
+      listener: Record<string, unknown>;
+      items: Array<Record<string, unknown>>;
+    };
     expect(body.listener).toMatchObject({ enabled: true, port: webhook.extra.port });
     expect(body.items.map((item) => [item.name, item.static])).toEqual([
       ['from-config', true],
@@ -173,7 +179,11 @@ describe('Hermes incoming webhooks (§91)', () => {
     }
     // Not Hermes's name rule; a channel the profile does not have.
     expect((await create(h, agent, { name: 'Bad Name', prompt: 'x' })).statusCode).toBe(400);
-    const deliver = await create(h, agent, { name: 'to-telegram', prompt: 'x', deliver: 'telegram' });
+    const deliver = await create(h, agent, {
+      name: 'to-telegram',
+      prompt: 'x',
+      deliver: 'telegram',
+    });
     expect(deliver.statusCode).toBe(400);
     expect(deliver.json()).toMatchObject({ details: { field: 'deliver' } });
   });
@@ -251,7 +261,10 @@ describe('Hermes incoming webhooks (§91)', () => {
     expect(test.json()).toMatchObject({ status: 202, body: { status: 'accepted' } });
     const last = fake.received.at(-1)!;
     expect(last.url).toBe('/webhooks/form');
-    expect(JSON.parse(last.body.toString('utf8'))).toMatchObject({ test: true, event_type: 'test' });
+    expect(JSON.parse(last.body.toString('utf8'))).toMatchObject({
+      test: true,
+      event_type: 'test',
+    });
     const expected = `sha256=${createHmac('sha256', made.secret).update(last.body).digest('hex')}`;
     expect(last.headers['x-hub-signature-256']).toBe(expected);
     expect(last.headers['x-github-event']).toBe('test');
@@ -275,15 +288,18 @@ describe('Hermes incoming webhooks (§91)', () => {
     const gone = await authed(h, h.token, { method: 'DELETE', url: `${url}/one` });
     expect(gone.statusCode).toBe(204);
     expect(listWebhooks(home).map((route) => route.name)).toEqual(['from-config']);
-    expect((await authed(h, h.token, { method: 'DELETE', url: `${url}/one` })).statusCode).toBe(404);
+    expect((await authed(h, h.token, { method: 'DELETE', url: `${url}/one` })).statusCode).toBe(
+      404,
+    );
 
     // With only the hand-written route left the listener stays on; drop it and it goes off.
     const config = path.join(home, 'config.yaml');
     writeFileSync(config, readFileSync(config, 'utf8').replace(/\n {6}routes:[\s\S]*$/, '\n'));
     await create(h, agent, { name: 'two', prompt: 'x' });
     await authed(h, h.token, { method: 'DELETE', url: `${url}/two` });
-    const webhook = (parse(readFileSync(config, 'utf8')) as { platforms: { webhook: { enabled: boolean } } })
-      .platforms.webhook;
+    const webhook = (
+      parse(readFileSync(config, 'utf8')) as { platforms: { webhook: { enabled: boolean } } }
+    ).platforms.webhook;
     expect(webhook.enabled).toBe(false);
   });
 

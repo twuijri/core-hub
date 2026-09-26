@@ -1,5 +1,5 @@
 /**
- * «ويب هوك» on the agent's Channels page (decision §91): Hermes's incoming webhooks. A route is a
+ * «ويب هوك» on the agent's Channels page (decision §96): Hermes's incoming webhooks. A route is a
  * name, a prompt and a secret; an outside service — GitHub, a form, a script — POSTs to the route's
  * address signed with the secret, and the agent runs with the prompt, the posted values filled in.
  *
@@ -56,7 +56,11 @@ export function WebhooksSection({
   const privateAddress = isPrivateOrigin(origin);
 
   return (
-    <section className="flex flex-col gap-3" aria-labelledby="webhooks-heading" data-testid="webhooks">
+    <section
+      className="flex flex-col gap-3"
+      aria-labelledby="webhooks-heading"
+      data-testid="webhooks"
+    >
       <div className="flex flex-wrap items-center gap-2">
         <h2 id="webhooks-heading" className="text-base font-semibold">
           {t('channels.webhooks.title')}
@@ -168,7 +172,8 @@ function WebhookRow({
   const test = useTestWebhook(agentId);
   const url = webhookUrl(origin, route);
   const accepted = test.data && test.data.status >= 200 && test.data.status < 300;
-  const said = test.data?.body && typeof test.data.body.error === 'string' ? test.data.body.error : '';
+  const said =
+    test.data?.body && typeof test.data.body.error === 'string' ? test.data.body.error : '';
 
   return (
     <div className="channel-card gap-2 p-3" data-enabled data-testid={`webhook-${route.name}`}>
@@ -225,7 +230,11 @@ function WebhookRow({
       </p>
       <div className="flex flex-wrap items-center gap-2">
         <span className="text-xs text-muted">{t('channels.webhooks.url')}</span>
-        <code className="min-w-0 flex-1 truncate text-xs" dir="ltr" data-testid={`webhook-url-${route.name}`}>
+        <code
+          className="min-w-0 flex-1 truncate text-xs"
+          dir="ltr"
+          data-testid={`webhook-url-${route.name}`}
+        >
           {url}
         </code>
         <CopyButton
@@ -352,7 +361,11 @@ function CreateWebhookDialog({
       }
     >
       <div className="flex flex-col gap-3">
-        <Field label={t('channels.webhooks.name')} hint={t('channels.webhooks.name_hint')} error={nameError}>
+        <Field
+          label={t('channels.webhooks.name')}
+          hint={t('channels.webhooks.name_hint')}
+          error={nameError}
+        >
           {(props) => (
             <Input
               {...props}

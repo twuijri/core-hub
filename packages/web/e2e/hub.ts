@@ -364,7 +364,7 @@ function scriptFor(prompt: string, workspace = ''): Step[] {
     ];
   }
   if (/نغمة طويلة|a long tone/i.test(prompt)) {
-    // Media in chat (journey 36, decision §92): a two-minute recording written in the session's
+    // Media in chat (journey 36, decision §97): a two-minute recording written in the session's
     // folder, played and sought in the file panel; and a short one left for the reply, played in it.
     return [
       { type: 'message_delta', text: 'أسجّل النغمة.\n\n' },

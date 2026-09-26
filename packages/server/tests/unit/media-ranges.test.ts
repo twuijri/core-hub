@@ -1,5 +1,5 @@
 /**
- * Media in chat (decision §92): a video or a sound of a conversation's working folder, or of the
+ * Media in chat (decision §97): a video or a sound of a conversation's working folder, or of the
  * profile's working files, plays and seeks — the reads a player makes are byte ranges.
  *
  * - `sessions.readFile` and `knowledge.downloadWorkspaceFile` answer one `Range` with `206` and
@@ -68,7 +68,7 @@ async function session(h: Hub): Promise<{ id: string; dir: string }> {
   return { id: body.id, dir: body.working_dir };
 }
 
-describe('one byte range (§92)', () => {
+describe('one byte range (§97)', () => {
   it('reads a range, a suffix and an open end; past the end cannot be satisfied', () => {
     expect(byteRangeOf(undefined, 100)).toEqual({ kind: 'all' });
     expect(byteRangeOf('bytes=0-9', 100)).toEqual({ kind: 'part', start: 0, end: 9 });
@@ -105,7 +105,11 @@ describe('a conversation’s working folder (sessions.readFile, sessions.createF
     const h = await hub();
     const { id } = await session(h);
     const url = `/api/v1/sessions/${id}/files/content?path=clip.mp4`;
-    const part = await authed(h, h.token, { method: 'GET', url, headers: { range: 'bytes=1000-1999' } });
+    const part = await authed(h, h.token, {
+      method: 'GET',
+      url,
+      headers: { range: 'bytes=1000-1999' },
+    });
     expect(part.statusCode).toBe(206);
     expect(part.headers['content-range']).toBe(`bytes 1000-1999/${VIDEO.length}`);
     expect(part.headers['content-length']).toBe('1000');
@@ -134,7 +138,11 @@ describe('a conversation’s working folder (sessions.readFile, sessions.createF
       details: { reason: 'range_not_satisfiable', size_bytes: VIDEO.length },
     });
 
-    const garbage = await authed(h, h.token, { method: 'GET', url, headers: { range: 'lines=1-2' } });
+    const garbage = await authed(h, h.token, {
+      method: 'GET',
+      url,
+      headers: { range: 'lines=1-2' },
+    });
     expect(garbage.statusCode).toBe(200);
     expect(garbage.rawPayload.length).toBe(VIDEO.length);
   });
@@ -152,7 +160,11 @@ describe('a conversation’s working folder (sessions.readFile, sessions.createF
     expect(url).toMatch(/^\/api\/v1\/file-streams\/[0-9a-f]{64}$/);
     expect(Date.parse(expires_at) - Date.now()).toBeGreaterThan(55 * 60_000);
 
-    const seek = await h.app.inject({ method: 'GET', url, headers: { range: 'bytes=50000-50099' } });
+    const seek = await h.app.inject({
+      method: 'GET',
+      url,
+      headers: { range: 'bytes=50000-50099' },
+    });
     expect(seek.statusCode, seek.body).toBe(206);
     expect(seek.headers['content-range']).toBe(`bytes 50000-50099/${VIDEO.length}`);
     expect(seek.headers['content-type']).toBe('video/mp4');
@@ -168,7 +180,10 @@ describe('a conversation’s working folder (sessions.readFile, sessions.createF
     expect(past.statusCode).toBe(416);
 
     // The ticket names that one file and nothing else.
-    const other = await h.app.inject({ method: 'GET', url: `/api/v1/file-streams/${'0'.repeat(64)}` });
+    const other = await h.app.inject({
+      method: 'GET',
+      url: `/api/v1/file-streams/${'0'.repeat(64)}`,
+    });
     expect(other.statusCode).toBe(404);
 
     // A text file is offered to save, never shown as a page from a ticket.
@@ -200,7 +215,7 @@ describe('a conversation’s working folder (sessions.readFile, sessions.createF
   });
 });
 
-describe('a player that stops reading half-way (§92)', () => {
+describe('a player that stops reading half-way (§97)', () => {
   it('is not an error: the hub keeps answering after a reader drops a long range', async () => {
     const h = await hub();
     const { id, dir } = await session(h);
