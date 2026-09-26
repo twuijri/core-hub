@@ -9,6 +9,11 @@
 ; empties its folder: it points the install at the `Core Hub` folder beside the old one. The data
 ; folder (`%APPDATA%\Core Hub`) is not touched.
 
+; electron-builder leaves these out when customCheckAppRunning is defined; its default check,
+; which customCheckAppRunning runs, needs them.
+!include "getProcessInfo.nsh"
+Var pid
+
 !macro coreHubInstallFolder
   Push $R0
   StrCpy $R0 $INSTDIR "" -17
