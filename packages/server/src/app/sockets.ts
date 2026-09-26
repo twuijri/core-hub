@@ -2,19 +2,35 @@
 // (ARCHITECTURE §Realtime). Events are `<entity>.<verb>` and declared in packages/contracts/events.
 import type { FastifyInstance } from 'fastify';
 import { Server as SocketServer } from 'socket.io';
+import { clientAddressFrom, setSocketAddress, type TrustFn } from '../lib/client-address.js';
 import type { HubModule } from '../lib/module.js';
 import { REALTIME_NAMESPACES, SOCKET_PATH } from '../lib/module.js';
 
 export { SOCKET_PATH };
 
-export function createSockets(app: FastifyInstance): SocketServer {
+/**
+ * `trust` is the hub's `COREHUB_TRUST_PROXY` rule, the one `request.ip` uses: the first
+ * handshake middleware on every namespace records the client address by it, before any
+ * module's middleware counts a failure against that address.
+ */
+export function createSockets(app: FastifyInstance, trust: TrustFn = () => false): SocketServer {
   const io = new SocketServer(app.server, {
     path: SOCKET_PATH,
     serveClient: false,
     cors: { origin: false },
   });
-  for (const namespace of Object.values(REALTIME_NAMESPACES)) {
-    io.of(namespace);
+  for (const namespace of ['/', ...Object.values(REALTIME_NAMESPACES)]) {
+    io.of(namespace).use((socket, next) => {
+      setSocketAddress(
+        socket,
+        clientAddressFrom(
+          socket.handshake.address,
+          socket.handshake.headers['x-forwarded-for'],
+          trust,
+        ),
+      );
+      next();
+    });
   }
   app.addHook('onClose', async () => {
     await io.close();
