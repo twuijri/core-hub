@@ -299,7 +299,7 @@
   },
   "composer": {
     "label": "Message composer",
-    "placeholder": "Message the agent… (Enter to send, Shift+Enter for a new line)",
+    "placeholder": "Message the agent…",
     "disabled": "The session is not ready.",
     "send": "Send",
     "stop": "Stop the run",
@@ -349,7 +349,8 @@
       "high": "High",
       "max": "Max"
     },
-    "context_ring": "Context: {percent}% — {used} of {window} tokens"
+    "context_ring": "Context: {percent}% — {used} of {window} tokens",
+    "placeholder_agent": "Message {agent}…"
   },
   "slash": {
     "title": "Commands",
@@ -418,7 +419,7 @@
     "send": "Answer",
     "skip": "Skip (deny)",
     "waiting": "Waiting on you",
-    "answer_hint": "Type your answer… (Enter to send, Shift+Enter for a new line)"
+    "answer_hint": "Type your answer…"
   },
   "pending": {
     "open": "Waiting for you",
@@ -1200,7 +1201,8 @@
         "removed": "Removed",
         "error": "Git refused"
       }
-    }
+    },
+    "count_one": "1 task"
   },
   "schedules": {
     "new": "New schedule",

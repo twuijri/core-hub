@@ -230,7 +230,7 @@ function AgentCard({ agent, jobs }: { agent: Agent; jobs: Record<string, Job> })
             {t('agents.restart')}
           </Button>
         ) : installed && managed ? (
-          <Button variant="danger" disabled={running} onClick={() => void act('uninstall')}>
+          <Button variant="danger-quiet" disabled={running} onClick={() => void act('uninstall')}>
             {t('agents.remove')}
           </Button>
         ) : !installed ? (

@@ -237,7 +237,7 @@ export function StepPanel({
         </Button>
         <Button
           size="sm"
-          variant="danger"
+          variant="danger-quiet"
           className="ms-auto"
           onClick={() => dispatch({ type: 'remove_node', id: node.id })}
           data-testid="workflow-step-delete"
@@ -703,7 +703,7 @@ function EdgeForm({
       </Field>
       <Button
         size="sm"
-        variant="danger"
+        variant="danger-quiet"
         className="self-start"
         onClick={() => dispatch({ type: 'remove_edge', id: edge.id })}
         data-testid="workflow-edge-delete"

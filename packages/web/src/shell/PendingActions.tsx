@@ -35,7 +35,9 @@ export function PendingActions() {
       <Tooltip label={label}>
         <button
           type="button"
-          className="btn btn-ghost relative px-1.5"
+          // On a phone an empty tray steps aside for the title; it returns with its count
+          // (docs/design/family.md, "Phone adaptations").
+          className={`btn btn-ghost relative px-1.5 ${count === 0 ? 'max-sm:hidden' : ''}`}
           onClick={() => setOpen(true)}
           aria-label={label}
           data-testid="pending-actions"

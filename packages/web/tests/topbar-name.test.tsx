@@ -1,5 +1,5 @@
-// The product's name in the top bar reads in the person's language: the hub answers
-// "Core Hub", an Arabic screen says «كور هب», and a name the owner set is kept as written.
+// The top bar names the hub only when the owner gave it a name of its own, kept as written: the
+// product's own name is already the sidebar's brand (docs/design/family.md, "One bar").
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { cleanup, render, screen } from '@testing-library/react';
 import { MemoryRouter } from 'react-router';
@@ -81,16 +81,22 @@ function mount(language: 'ar' | 'en', fetchImpl: typeof fetch) {
   );
 }
 
-describe('the product name in the top bar', () => {
-  it('is «كور هب» on an Arabic screen when the hub answers its own name', async () => {
-    mount('ar', hub('Core Hub'));
-    expect(await screen.findByText('كور هب')).toBeTruthy();
+describe('the hub name in the top bar', () => {
+  it('is left out when the hub answers the product name, in Arabic', async () => {
+    const view = mount('ar', hub('Core Hub'));
+    await screen.findByText('x');
+    await new Promise((r) => setTimeout(r, 20));
+    expect(screen.queryByText('كور هب')).toBeNull();
     expect(screen.queryByText('Core Hub')).toBeNull();
+    expect(view.container.querySelector('.topbar-hub')).toBeNull();
   });
 
-  it('is Core Hub on an English screen', async () => {
-    mount('en', hub('Core Hub'));
-    expect(await screen.findByText('Core Hub')).toBeTruthy();
+  it('is left out on an English screen too', async () => {
+    const view = mount('en', hub('Core Hub'));
+    await screen.findByText('x');
+    await new Promise((r) => setTimeout(r, 20));
+    expect(screen.queryByText('Core Hub')).toBeNull();
+    expect(view.container.querySelector('.topbar-hub')).toBeNull();
   });
 
   it('is the name the owner set, as written, in either language', async () => {

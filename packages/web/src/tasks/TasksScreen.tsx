@@ -122,6 +122,11 @@ export interface CardActions {
   onUnassign(): void;
 }
 
+/** "1 task", never "1 tasks". */
+function taskCount(t: (key: string, params?: Record<string, number>) => string, count: number) {
+  return count === 1 ? t('tasks.count_one') : t('tasks.count', { count });
+}
+
 export function TasksScreen() {
   const { t } = useI18n();
   const title = t(termKey('tasks'));
@@ -336,7 +341,7 @@ export function TasksScreen() {
             {t('tasks.project_settings.open')}
           </Button>
         )}
-        <Badge>{t('tasks.count', { count: board.data?.counts.total ?? 0 })}</Badge>
+        <Badge>{taskCount(t, board.data?.counts.total ?? 0)}</Badge>
         <span className="ms-auto flex items-center gap-2">
           <Input
             inputSize="sm"

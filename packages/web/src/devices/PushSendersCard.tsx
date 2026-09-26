@@ -388,7 +388,7 @@ function SenderDialog({
         <>
           {stored && (
             <Button
-              variant="danger"
+              variant="danger-quiet"
               disabled={forget.isPending}
               onClick={() => forget.mutate(sender.provider, { onSuccess: onClose })}
             >

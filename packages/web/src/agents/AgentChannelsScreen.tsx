@@ -503,7 +503,7 @@ function ChannelRow({
           {link?.linked && (
             <Button
               size="sm"
-              variant="danger"
+              variant="danger-quiet"
               data-testid={`channel-unlink-${channel.platform}`}
               disabled={unlinking}
               onClick={() => {

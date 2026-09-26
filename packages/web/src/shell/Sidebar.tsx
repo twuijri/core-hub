@@ -222,7 +222,9 @@ export function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
         <div className="flex items-center gap-2">
           <Tooltip label={t(`shell.connection.${realtime.state}`)}>
             <span tabIndex={0} role="status" aria-label={t(`shell.connection.${realtime.state}`)}>
-              <Badge tone={connectionTone} dot>
+              {/* On a phone (the drawer) the state is the dot alone; its words stay the
+                  status's accessible name (docs/design/family.md, "Phone adaptations"). */}
+              <Badge tone={connectionTone} dot narrow="dot">
                 {t(`shell.connection.${realtime.state}`)}
               </Badge>
             </span>
