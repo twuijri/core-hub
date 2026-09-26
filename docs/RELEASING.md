@@ -15,7 +15,8 @@ Partner Center.
 | macOS | notarised `.dmg` on the GitHub release (`desktop-signed.yml`) | Developer ID | updates itself from the signed `-mac.zip` (from 1.1.3) |
 | Linux | AppImage on the GitHub release | no | updates itself (from 1.1.3) |
 | Linux | `.deb` on the GitHub release | no | says a new version is out, links the download page |
-| Android | signed `.apk` on the GitHub release; Google Play later | test key | — |
+| Android | signed `.apk` on the GitHub release | test key | the app's own GitHub check, then download and Android's installer |
+| Android | Google Play (later) | Play upload key | Play; the app's check is off (`-Pcorehub.selfUpdate=false`) |
 | iOS | TestFlight / App Store only, no file on the release | App Store | the App Store |
 
 The Mac App Store is not planned.
@@ -109,6 +110,32 @@ with that file has push: after sign-in the app takes an FCM token and registers 
 (`devices.registerPush`), and a tapped push opens the page its notice is about. Any other build
 (a pull request, a fork, a local debug build) links Firebase Messaging but never starts it, says
 on This device that it has no push, and keeps the 15-minute background check.
+
+**How the APK updates itself** (`apps/android/app/src/main/java/hub/core/android/phone/SelfUpdate.kt`,
+DECISIONS §108). When the app comes to the front — at most once every six hours, the last check kept
+on the phone — and whenever the person presses *Check for updates* on This device, it reads
+`GET https://api.github.com/repos/twuijri/core-hub/releases/latest` with no token (only
+`CoreHub-Android/<version>` in the User-Agent). A release counts when it is not a draft or a
+pre-release, its tag is a plain `X.Y.Z` newer than the app's `versionName`, and it carries
+`Core-Hub-X.Y.Z-android.apk` under this repository's release downloads — the name
+`release-assets.mjs` gives it and the pattern the download page uses (a unit test reads both files).
+The newer version shows as a card on New chat (*Update* / *Later*; Later hides that version until a
+newer one), a row in Settings and a part of This device. *Update* downloads the APK into the app's
+cache with a progress bar, keeps it only when its size equals the release's (and its SHA-256 equals
+GitHub's `digest`, when GitHub lists one), then hands it to Android's installer through the
+FileProvider. The first time, Android asks for *Install unknown apps* for Core Hub: the card opens
+that setting and says so in one line. A rate limit (403/429), no network or an answer that is not a
+release is quiet: nothing is shown, and This device says *try again later* only when asked by hand.
+The update installs over the old app only because both are signed with the same key: keep
+`ANDROID_TEST_*` (or move every user once, by hand, when the key changes). Copies of **1.1.2 or
+older** have no updater: their users install the first version with it by hand, once.
+
+**A build for Google Play** must turn it off (Play updates the app and forbids an app installing its
+own updates): `./gradlew bundleRelease -Pcorehub.selfUpdate=false` (or
+`COREHUB_ANDROID_SELF_UPDATE=false`). That build sets `BuildConfig.SELF_UPDATE = false` — the app
+never asks GitHub, shows no card and says on This device that Google Play keeps it up to date — and
+merges `app/src/noSelfUpdate/AndroidManifest.xml`, which removes `REQUEST_INSTALL_PACKAGES`. Any other
+value than `true`/`false` stops the build. The GitHub APK keeps the default (`true`).
 
 A developer who wants the same locally: put `google-services.json` in `apps/android/app/`, and
 export `COREHUB_ANDROID_KEYSTORE` (a path), `COREHUB_ANDROID_KEYSTORE_PASSWORD`,

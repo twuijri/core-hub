@@ -377,8 +377,19 @@ its approval.
   2026-09-26 when the build and the hub have it, above); «Share to Core Hub» turns shared text into a new chat's draft (files
   and pictures are a follow-up); the composer's microphone uses the phone's own speech recognizer;
   spoken replies; and This device in full: the hub connection, voice input and dictation language,
-  spoken replies, notifications, and self-update from the hub's `updates` channel (SHA-256 checked,
-  handed to Android's installer).
+  spoken replies, notifications, and self-update (since 2026-09-26 from GitHub, below).
+  Since 2026-09-26 **the APK finds its own updates** (DECISIONS §108, proposed — owner to confirm;
+  `docs/changes/2026-09-26-twuijri-android-updates.md`): coming to the front, at most every six
+  hours, and by *Check for updates* on This device, the app reads the repository's latest GitHub
+  release (no token); a newer version shows as a card on New chat (*Update* / *Later*, Later hides
+  that version), a row in Settings and on This device; *Update* downloads the APK with a progress
+  bar, checks its size (and GitHub's SHA-256 when listed) and hands it to Android's installer,
+  sending the person to *Install unknown apps* first when needed. A Play build turns it off
+  (`-Pcorehub.selfUpdate=false`: no check, no install permission). The phone no longer asks the
+  hub's `updates` shelf. Unit-tested (versions, the APK's name, six hours, Later, the switch, GitHub
+  answers and the download against a scripted server) and Robolectric-rendered; **not yet tried on a
+  real phone or a real release** — copies of 1.1.2 or older have no updater and are updated by hand
+  once.
 - **iOS** (`apps/ios`, SwiftUI, iOS 17+; parts 1–3 since 2026-09-25): pairing by the web's
   QR code, its pasted text or a `corehub://pair` link, or the hub's address with a username and
   password, and first-run setup when the hub has no owner; tokens in the Keychain, refreshed once

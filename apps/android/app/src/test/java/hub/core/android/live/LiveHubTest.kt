@@ -1,5 +1,8 @@
 package hub.core.android.live
 
+import hub.core.android.BuildConfig
+import hub.core.client.model.ClientPlatform
+import hub.core.client.model.ReleaseChannel
 import hub.core.android.chat.ChatReducer
 import hub.core.android.chat.ChatState
 import hub.core.android.data.AuthInterceptor
@@ -9,7 +12,6 @@ import hub.core.android.data.StoredUser
 import hub.core.android.data.TokenKind
 import hub.core.android.data.TokenRefresher
 import hub.core.android.memoryStore
-import hub.core.android.phone.Updates
 import hub.core.android.realtime.Envelope
 import hub.core.android.realtime.Realtime
 import hub.core.android.ui.screens.ChatAgents
@@ -125,7 +127,8 @@ class LiveHubTest {
         val meta = apis.meta.metaGet()
         val direct = apis.agents.agentsList(profile).items.first { it.slug == "direct" }
         val settings = apis.agents.agentsGetSettings(profile, direct.id)
-        val update = Updates.check(apis)
+        // The hub's own updates shelf (the phone itself reads GitHub releases, SelfUpdate.kt).
+        val update = apis.updates.updatesCheck(ClientPlatform.ANDROID, ReleaseChannel.STABLE, BuildConfig.VERSION_NAME)
         println("live: update check available=${update.available} reason=${update.reason}")
         val search = apis.sessions.sessionsList(profile, profiles = SessionsApi.ProfilesSessionsList.ALL, archived = SessionsApi.ArchivedSessionsList.ALL, q = "مرحبا")
         println(
