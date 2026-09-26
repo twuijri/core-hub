@@ -122,7 +122,19 @@ Claude Desktop ويحتاج مفتاحه؛ تشغيل المساعد يصنع `~
 (`206`, `ftypisom`).
 
 لم يُشغَّل محليًا: مجموعة الخادم كاملة، ومجموعة الويب كاملة، وPlaywright للويب، واختبار دخان سطح المكتب (Electron غير
-منزّل هنا) — كلها في CI على #165.
+منزّل هنا). بعد دمج فرع الليلة أُعيد تشغيل: lint وtypecheck وفحوص العقد وi18n وnav وcontract:test (377 ناجحة)
+واختبارات الخادم المتأثرة (37) وسطح المكتب كله (145) والويب المتأثر (27)، كلها ناجحة، و`db:generate` لا يولّد شيئًا.
+
+**CI على الفرع** (`workflow_dispatch` لـ`ci.yml`، التشغيل 36206163131، بعد دمج فرع الليلة) — كله أخضر:
+```
+✓ Lint, typecheck, contracts, client tests, build in 6m5s
+✓ db:generate + db:migrate (SQLite and PostgreSQL) in 1m18s
+✓ Server unit tests (shard 1/3) in 4m16s · (2/3) in 4m10s · (3/3) in 1m54s
+✓ Desktop app smoke (Electron under Xvfb against the real hub) in 1m20s
+✓ Web smoke journeys (Playwright against the real hub) in 6m28s
+✓ Docker image builds and answers /health in 4m22s
+✓ Lint, typecheck, contracts, tests, build in 3s
+```
 
 ## المخاطر والرجوع
 - **البرنامج يعمل بصلاحيات حساب الشخص**: ما يقف بين الوكيل وبينه هو نافذة الموافقة وسجل الاستعمال ومجموعة `devices`
