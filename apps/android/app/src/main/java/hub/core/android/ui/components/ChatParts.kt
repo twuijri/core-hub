@@ -100,7 +100,7 @@ private val contentStyle = TextStyle(textDirection = TextDirection.Content)
  * the content inside keeps deciding its own.
  */
 @Composable
-fun TurnView(turn: Turn, youLabel: String, profile: String = "") {
+fun TurnView(turn: Turn, youLabel: String, profile: String = "", mine: Boolean = turn.fromPerson) {
     val t = LocalTokens.current
     val uiDirection = LocalLayoutDirection.current
     CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Ltr) {
@@ -108,17 +108,18 @@ fun TurnView(turn: Turn, youLabel: String, profile: String = "") {
             val maxBubble = maxWidth * LayoutTokens.bubbleMaxFraction
             Column(
                 Modifier.fillMaxWidth(),
-                horizontalAlignment = if (turn.fromPerson) Alignment.End else Alignment.Start,
+                horizontalAlignment = if (mine) Alignment.End else Alignment.Start,
                 verticalArrangement = Arrangement.spacedBy(LayoutTokens.groupGap.dp),
             ) {
+                // In a room another person is on the left under their own name, like the agents.
                 Text(
-                    if (turn.fromPerson) youLabel else turn.authorName,
+                    if (mine) youLabel else turn.authorName,
                     style = MaterialTheme.typography.labelMedium,
                     color = t.textMuted,
                 )
                 turn.messages.forEach { message ->
                     CompositionLocalProvider(LocalLayoutDirection provides uiDirection) {
-                        if (turn.fromPerson) PersonBubble(message, Modifier.widthIn(max = maxBubble), profile) else AgentMessage(message, profile)
+                        if (mine) PersonBubble(message, Modifier.widthIn(max = maxBubble), profile) else AgentMessage(message, profile)
                     }
                 }
             }
