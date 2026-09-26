@@ -125,6 +125,10 @@ targets:
             NSExtensionActivationRule:
               NSExtensionActivationSupportsText: true
               NSExtensionActivationSupportsWebURLWithMaxCount: 1
+              # Pictures, videos and files too (phone parity, B14): they become a new chat's attachments.
+              NSExtensionActivationSupportsImageWithMaxCount: 10
+              NSExtensionActivationSupportsMovieWithMaxCount: 5
+              NSExtensionActivationSupportsFileWithMaxCount: 10
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.twuijri.corehub.share

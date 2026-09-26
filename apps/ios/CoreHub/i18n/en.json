@@ -455,7 +455,7 @@
   },
   "share": {
     "saved": "Saved for Core Hub. Open Core Hub to send it in a new chat.",
-    "nothing": "There is no text or link here to share.",
+    "nothing": "Nothing here that Core Hub takes: it takes text, links, pictures and files.",
     "done": "Done"
   },
   "voice": {

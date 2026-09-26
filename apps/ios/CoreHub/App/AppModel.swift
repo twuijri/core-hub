@@ -53,6 +53,8 @@ final class AppModel {
     let agentDirectory = AgentDirectory()
     /// Text shared from another app, waiting to become a new chat.
     var pendingDraft: String?
+    /// Pictures and files shared from another app, waiting to become a new chat's attachments.
+    var pendingFiles: [URL] = []
     private let defaults: UserDefaults
     @ObservationIgnored private var sessionsNamespace: RealtimeNamespace?
     @ObservationIgnored private var roomsNamespace: RealtimeNamespace?
@@ -274,9 +276,17 @@ final class AppModel {
         takeShared()
     }
 
-    /// Text the share extension left for the app becomes a new chat's draft.
+    /// Text the share extension left for the app becomes a new chat's draft; its files, the
+    /// new chat's attachments.
     func takeShared() {
-        if let text = ShareInbox.take(from: ShareInbox.defaults()) { pendingDraft = text }
+        let files = ShareInbox.takeFiles(from: ShareInbox.defaults(), folder: ShareInbox.folder())
+        if !files.isEmpty { pendingFiles += files }
+        if let text = ShareInbox.take(from: ShareInbox.defaults()) {
+            pendingDraft = text
+        } else if !files.isEmpty {
+            // Files alone still open a new chat.
+            pendingDraft = pendingDraft ?? ""
+        }
     }
 
     /// The profile the app opens on: the one used last if still allowed, else the person's

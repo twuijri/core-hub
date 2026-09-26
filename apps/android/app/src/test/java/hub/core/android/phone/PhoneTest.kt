@@ -43,7 +43,9 @@ class PhoneTest {
         assertEquals("https://example.com", Share.textOf(Intent.ACTION_SEND, "text/plain", null, " https://example.com "))
         assertEquals("مقال\n\nhttps://example.com", Share.textOf(Intent.ACTION_SEND, "text/plain", "مقال", "https://example.com"))
         assertEquals("a title in a body", Share.textOf(Intent.ACTION_SEND, "text/plain", "title", "a title in a body"))
-        assertNull(Share.textOf(Intent.ACTION_SEND, "image/png", null, "x"))
+        // A picture's caption comes along as the draft; its subject (often the file name) does not.
+        assertEquals("x", Share.textOf(Intent.ACTION_SEND, "image/png", null, " x "))
+        assertNull(Share.textOf(Intent.ACTION_SEND, "image/png", "IMG_0001.jpg", null))
         assertNull(Share.textOf(Intent.ACTION_VIEW, "text/plain", null, "x"))
         assertNull(Share.textOf(Intent.ACTION_SEND, "text/plain", " ", ""))
     }

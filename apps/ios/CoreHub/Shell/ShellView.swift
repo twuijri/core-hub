@@ -27,6 +27,8 @@ struct ShellView: View {
     @State private var searching = false
     /// A shared text waiting in the new chat's composer.
     @State private var seed: String?
+    /// Shared pictures and files waiting to be attached in the new chat.
+    @State private var seedFiles: [URL] = []
     @State private var pending: PendingModel?
     @State private var showingPending = false
 
@@ -84,6 +86,8 @@ struct ShellView: View {
         guard let draft = app.pendingDraft else { return }
         app.pendingDraft = nil
         seed = draft
+        seedFiles = app.pendingFiles
+        app.pendingFiles = []
         navigate(.newChat)
     }
 
@@ -142,9 +146,10 @@ struct ShellView: View {
             NewChatScreen(opened: { sessionID, profile, message in
                 firstMessages.put(sessionID, message)
                 seed = nil
+                seedFiles = []
                 main = .chat(sessionID: sessionID, profile: profile)
-            }, seed: seed)
-            .id(seed ?? "")
+            }, seed: seed, seedFiles: seedFiles)
+            .id((seed ?? "") + seedFiles.map(\.lastPathComponent).joined())
         case .chat(let sessionID, let profile):
             ChatScreen(model: ChatModel(
                 app: app,

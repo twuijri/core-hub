@@ -157,6 +157,9 @@ class AppGraph(context: Context, sealer: hub.core.android.data.Sealer = Keystore
     /** Text another app shared to Core Hub, waiting to become a new chat's draft. */
     val sharedText = MutableStateFlow<String?>(null)
 
+    /** Pictures and files another app shared, copied into the cache, waiting for the new chat's tray. */
+    val sharedFiles = MutableStateFlow<List<hub.core.android.phone.Share.SharedFile>>(emptyList())
+
     private var apisFor: String? = null
     private var cachedApis: HubApis? = null
 

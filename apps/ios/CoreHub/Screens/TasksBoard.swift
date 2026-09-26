@@ -297,7 +297,7 @@ struct TaskBoardView: View {
         switch status {
         case .running: return Tone.statusRunning
         case .blocked, .scheduled: return Tone.statusBlocked
-        case .review: return Tone.statusReview
+        case .review: return Color.token(\.statusReview)
         case .done: return Tone.successSoftText
         default: return Tone.textFaint
         }

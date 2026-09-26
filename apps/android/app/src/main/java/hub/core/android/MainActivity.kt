@@ -12,6 +12,10 @@ import hub.core.android.ui.kit.MenuItem
 import androidx.compose.foundation.layout.fillMaxWidth
 import android.content.Context
 import android.content.Intent
+import androidx.lifecycle.lifecycleScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import android.content.res.Configuration
 import android.os.Bundle
 import androidx.activity.ComponentActivity
@@ -55,7 +59,6 @@ import hub.core.android.ui.screens.SettingsPageScreen
 import hub.core.android.ui.screens.SettingsScreen
 import hub.core.android.ui.screens.TasksScreen
 import hub.core.android.phone.PushPayload
-import kotlinx.coroutines.launch
 import hub.core.android.phone.Share
 import hub.core.android.phone.ThisDevicePage
 import hub.core.android.ui.screens.ShellViewModel
@@ -110,8 +113,18 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun handle(intent: Intent?) {
-        // «Share to Core Hub»: the shared text becomes a new chat's draft.
+        // «Share to Core Hub»: the shared text becomes a new chat's draft, pictures and files its
+        // attachments. The streams are read now, while this activity holds the permission to.
         Share.textOf(intent)?.let { graph.sharedText.value = it }
+        val streams = Share.streamsOf(intent)
+        if (streams.isNotEmpty()) {
+            lifecycleScope.launch {
+                val files = withContext(Dispatchers.IO) { streams.mapNotNull { copyShared(it) } }
+                if (files.isNotEmpty()) graph.sharedFiles.value = graph.sharedFiles.value + files
+                // The chat opens for files alone too.
+                if (graph.sharedText.value == null) graph.sharedText.value = ""
+            }
+        }
         // A push the system showed (the app was in the background): FCM opens this activity with
         // the push's `data` as extras; the tap leads where the notice is about.
         pushExtras(intent)?.let(PushPayload::path)?.let {
@@ -124,6 +137,17 @@ class MainActivity : ComponentActivity() {
             is DeepLink.Open -> pendingPath = link.path
             else -> Unit
         }
+    }
+
+    /** A shared stream as a file the tray can upload: a picture as the + menu would take it (smaller, or its original). */
+    private fun copyShared(uri: android.net.Uri): Share.SharedFile? {
+        val name = hub.core.android.ui.components.PickedFiles.displayName(this, uri)
+        val image = Share.isImage(contentResolver.getType(uri), name)
+        if (image && !graph.device.choices.value.photoOriginal) {
+            hub.core.android.ui.components.PickedFiles.photo(this, uri)?.let { (file, thumb) -> return Share.SharedFile(file, true, thumb) }
+        }
+        val file = hub.core.android.ui.components.PickedFiles.copy(this, uri) ?: return null
+        return Share.SharedFile(file, image, if (image) hub.core.android.ui.components.PickedFiles.thumbnail(file) else null)
     }
 
     private fun pushExtras(intent: Intent?): Map<String, String?>? {
