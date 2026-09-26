@@ -91,6 +91,8 @@ import {
   conversationTitle,
   isChannelAddress,
   matchesConversation,
+  CHANNEL_MAX,
+  CHANNEL_PAGE,
   useChannelConversations,
   type ChannelConversation,
 } from './channels.js';
@@ -219,10 +221,13 @@ export function SessionList({ onOpen }: { onOpen?: () => void }) {
   const needle = filter.trim().toLowerCase();
   // Telegram, WhatsApp… as Hermes keeps them. Hermes archives nothing the hub can show, so the
   // archive has none; the rest of the time they are polled while the list is on screen.
+  // Hermes's most recent 100 per profile first; "older" reads a hundred more (§102).
+  const [channelLimit, setChannelLimit] = useState(CHANNEL_PAGE);
   const channelList = useChannelConversations({
     allProfiles,
     profile: narrowed,
     enabled: scope !== 'archived',
+    limit: channelLimit,
   });
   const unreachable = (channelList.data?.unavailable ?? []).some(
     (entry) => entry.reason === 'hermes_unreachable',
@@ -719,6 +724,18 @@ export function SessionList({ onOpen }: { onOpen?: () => void }) {
           );
         })}
       </DndContext>
+      {scope !== 'archived' && channelList.data?.has_more && (
+        <button
+          type="button"
+          className="session-hidden-toggle"
+          disabled={channelList.isFetching}
+          onClick={() => setChannelLimit((limit) => Math.min(limit + CHANNEL_PAGE, CHANNEL_MAX))}
+          data-testid="channel-show-older"
+        >
+          <IconChevron size={14} />
+          <span>{t('sessions.channels.show_older')}</span>
+        </button>
+      )}
       {hiddenCount > 0 && (
         <button
           type="button"

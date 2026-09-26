@@ -132,9 +132,7 @@ export function toHermesHistory(detail: Pick<HermesCardDetail, 'events' | 'runs'
           profile: typeof run.profile === 'string' && run.profile !== '' ? run.profile : null,
           status: wordOf(run.status, 'unknown'),
           outcome:
-            typeof run.outcome === 'string' && run.outcome !== ''
-              ? run.outcome.slice(0, 64)
-              : null,
+            typeof run.outcome === 'string' && run.outcome !== '' ? run.outcome.slice(0, 64) : null,
           summary: shortText(run.summary),
           error: shortText(run.error),
           started_at: started,

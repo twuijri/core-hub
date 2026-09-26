@@ -54,13 +54,7 @@ import {
   requireUser,
   requireWorkspace,
 } from '../auth/index.js';
-import {
-  TasksService,
-  checkItems,
-  type Actor,
-  type Scope,
-  type TaskStatus,
-} from './service.js';
+import { TasksService, checkItems, type Actor, type Scope, type TaskStatus } from './service.js';
 import { TaskRuns, checkListsBrief, type TaskRunPort, type TaskRunScope } from './runs.js';
 import {
   toComment,
@@ -1357,8 +1351,7 @@ export const tasksModule = defineModule({
         const input = body as Record<string, unknown>;
         const mirror = mirrorOf(request.server);
         const toHermes =
-          mirror?.isHermesAgent(scope.workspace, input.assignee_agent_id as string | null) ===
-          true;
+          mirror?.isHermesAgent(scope.workspace, input.assignee_agent_id as string | null) === true;
         // Hermes briefs its own worker: lists it would never see are refused (decision §103).
         if (
           toHermes &&

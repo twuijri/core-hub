@@ -694,30 +694,33 @@ export function registerSessionRoutes(app: FastifyInstance, deps: RouteDeps): vo
   });
 
   // A picture the person sent on the channel (§102), from Hermes's image cache only.
-  app.get('/channel-conversations/:conversation_id/pictures/:picture_id', async (request, reply) => {
-    const scope = await scopeOf(request);
-    const params = request.params as { conversation_id?: unknown; picture_id?: unknown };
-    const file = deps
-      .channels(request)
-      .picture(
-        { workspace: scope.workspace, profile: scope.profile },
-        typeof params.conversation_id === 'string' ? params.conversation_id : '',
-        typeof params.picture_id === 'string' ? params.picture_id : '',
-      );
-    let bytes: Buffer;
-    try {
-      if (statSync(file).size > PICTURE_MAX_BYTES) throw new Error('too large');
-      bytes = readFileSync(file);
-    } catch {
-      throw notFound({ resource: 'channel_picture' });
-    }
-    return reply
-      .header('Content-Type', pictureType(file))
-      .header('Cache-Control', 'private, no-store')
-      .header('X-Content-Type-Options', 'nosniff')
-      .header('Content-Security-Policy', "default-src 'none'; sandbox")
-      .send(bytes);
-  });
+  app.get(
+    '/channel-conversations/:conversation_id/pictures/:picture_id',
+    async (request, reply) => {
+      const scope = await scopeOf(request);
+      const params = request.params as { conversation_id?: unknown; picture_id?: unknown };
+      const file = deps
+        .channels(request)
+        .picture(
+          { workspace: scope.workspace, profile: scope.profile },
+          typeof params.conversation_id === 'string' ? params.conversation_id : '',
+          typeof params.picture_id === 'string' ? params.picture_id : '',
+        );
+      let bytes: Buffer;
+      try {
+        if (statSync(file).size > PICTURE_MAX_BYTES) throw new Error('too large');
+        bytes = readFileSync(file);
+      } catch {
+        throw notFound({ resource: 'channel_picture' });
+      }
+      return reply
+        .header('Content-Type', pictureType(file))
+        .header('Cache-Control', 'private, no-store')
+        .header('X-Content-Type-Options', 'nosniff')
+        .header('Content-Security-Policy', "default-src 'none'; sandbox")
+        .send(bytes);
+    },
+  );
 
   // "Continue in Core Hub" (§62): read the conversation as above, then make the chat.
   app.post('/channel-conversations/:conversation_id/continue', async (request, reply) => {

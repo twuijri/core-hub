@@ -245,7 +245,8 @@ function SkillRow({
   const { ask, dialog } = useConfirm();
   // The server marks an unreadable file by putting the reason where the description goes.
   const broken = (skill.description ?? '').startsWith('[');
-  // Hermes's own: readable and pinnable, never switched, rewritten or deleted from here.
+  // Hermes's own: readable, pinnable and switchable — the switch is Hermes's own list, which
+  // leaves its files alone (§102) — never rewritten or deleted from here.
   const builtin = skill.source === 'builtin';
   // Core Hub's own: kept up to date by the hub until the person edits it.
   const library = skill.source === 'library';
@@ -262,11 +263,16 @@ function SkillRow({
     >
       <Switch
         checked={skill.enabled}
-        disabled={builtin}
+        disabled={patch.isPending}
         label={t('skills.enabled')}
         labelHidden
         testId={`skill-toggle-${skill.key}`}
-        onChange={(next) => patch.mutate({ key: skill.key, enabled: next })}
+        onChange={(next) =>
+          patch.mutate(
+            { key: skill.key, enabled: next },
+            { onError: (error) => toast({ title: describeToolError(error, t), tone: 'danger' }) },
+          )
+        }
       />
       <button type="button" className="skill-open" onClick={onEdit}>
         <span className="flex items-center gap-2">

@@ -1437,7 +1437,10 @@ export function checkItems(value: unknown): TaskCheckItem[] {
     if (!entry || typeof entry !== 'object') continue;
     const text = String((entry as { text?: unknown }).text ?? '').trim();
     if (text === '') continue;
-    out.push({ text: text.slice(0, 500), checked: (entry as { checked?: unknown }).checked === true });
+    out.push({
+      text: text.slice(0, 500),
+      checked: (entry as { checked?: unknown }).checked === true,
+    });
   }
   return out.slice(0, 30);
 }

@@ -440,7 +440,13 @@ describe('tasks: Hermes cards edited through Hermes', () => {
     board.events.set(card.id, [
       { id: 1, kind: 'created', payload: { assignee: 'default' }, created_at: 1_790_000_000 },
       { id: 2, kind: 'claimed', payload: null, created_at: 1_790_000_060, run_id: 4 },
-      { id: 3, kind: 'review_requested', payload: { summary: 'done' }, created_at: 1_790_000_600, run_id: 4 },
+      {
+        id: 3,
+        kind: 'review_requested',
+        payload: { summary: 'done' },
+        created_at: 1_790_000_600,
+        run_id: 4,
+      },
       // Hermes wrote no time: it is left out rather than dated now.
       { id: 4, kind: 'broken', payload: null, created_at: 0 },
     ]);
@@ -472,7 +478,13 @@ describe('tasks: Hermes cards edited through Hermes', () => {
             payload: { summary: 'done' },
             created_at: '2026-09-21T14:23:20.000Z',
           },
-          { id: 2, kind: 'claimed', run_id: 4, payload: null, created_at: '2026-09-21T14:14:20.000Z' },
+          {
+            id: 2,
+            kind: 'claimed',
+            run_id: 4,
+            payload: null,
+            created_at: '2026-09-21T14:14:20.000Z',
+          },
           {
             id: 1,
             kind: 'created',

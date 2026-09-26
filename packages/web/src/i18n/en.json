@@ -236,7 +236,11 @@
       "show_hidden": "Show hidden chats ({count})",
       "hide_hidden": "Stop showing hidden chats",
       "actions": "Conversation actions",
-      "action_failed": "Couldn't change the conversation"
+      "action_failed": "Couldn't change the conversation",
+      "show_older": "Older channel conversations",
+      "load_older": "Load older messages",
+      "picture": "Picture sent on the channel",
+      "picture_gone": "A picture was sent here. Hermes keeps channel pictures for a day, and this one is gone."
     }
   },
   "search": {
@@ -1115,7 +1119,49 @@
       "owns_card": "This card is on Hermes's board, and this hub does not run Hermes here, so Hermes decides what happens to it.",
       "writes_through": "This card is on Hermes's board: changes are made on Hermes first.",
       "api_unavailable": "Hermes's API is not available right now, so nothing was changed: {message}",
-      "confirm_delete_body": "It is deleted from Hermes's board too. This cannot be undone."
+      "confirm_delete_body": "It is deleted from Hermes's board too. This cannot be undone.",
+      "history": {
+        "title": "On Hermes",
+        "runs": "Attempts",
+        "events": "What happened",
+        "no_runs": "Hermes has not worked on it yet.",
+        "no_events": "Nothing recorded yet.",
+        "attempt": "attempt {id}",
+        "event": {
+          "created": "Created",
+          "assigned": "Assigned",
+          "claimed": "Picked up by a worker",
+          "completed": "Completed",
+          "blocked": "Blocked",
+          "unblocked": "Unblocked",
+          "commented": "Comment",
+          "edited": "Edited",
+          "priority": "Priority changed",
+          "status": "Moved",
+          "archived": "Archived",
+          "reclaimed": "Taken back from its worker",
+          "crashed": "Worker crashed",
+          "timed_out": "Timed out",
+          "review_requested": "Sent for review",
+          "scheduled": "Scheduled",
+          "promoted": "Promoted",
+          "spawn_failed": "Worker could not start",
+          "gave_up": "Given up"
+        },
+        "run": {
+          "running": "Running",
+          "done": "Done",
+          "completed": "Completed",
+          "blocked": "Blocked",
+          "review": "In review",
+          "review_requested": "Sent for review",
+          "reclaimed": "Taken back",
+          "crashed": "Crashed",
+          "timed_out": "Timed out",
+          "scheduled": "Scheduled",
+          "changes_requested": "Changes requested"
+        }
+      }
     },
     "assign": {
       "open": "Assign to an agent…",
@@ -1204,7 +1250,36 @@
         "error": "Git refused"
       }
     },
-    "count_one": "1 task"
+    "count_one": "1 task",
+    "dod": {
+      "title": "Definition of done",
+      "hint": "What must be true for the task to count as done. The agent is given these with every run.",
+      "review_hint": "In review: tick each line that holds, then Save.",
+      "ticked": "{done} of {total} ticked",
+      "tick": "Holds: {text}",
+      "remove": "Remove “{text}”",
+      "line": "Line {number}",
+      "placeholder": "e.g. The tests pass",
+      "add": "Add a line",
+      "card": "Definition of done: {done} of {total} ticked",
+      "hermes_card": "This card is on Hermes's board, and Hermes briefs its own worker from the card, so it takes no definition of done or constraints here."
+    },
+    "constraints": {
+      "title": "Constraints",
+      "hint": "What the agent must keep to while it works — a file not to touch, a library not to add. Given with every run.",
+      "line": "Constraint {number}",
+      "placeholder": "e.g. Do not add new libraries",
+      "add": "Add a constraint"
+    },
+    "bulk": {
+      "select": "Select",
+      "count": "{count} selected",
+      "priority": "Set priority",
+      "comment": "Comment on all",
+      "comment_title": "One comment on {count} tasks",
+      "refused": "Not changed: {count} (Hermes refused, or they are gone). Changed: {done}.",
+      "tick": "Select “{title}”"
+    }
   },
   "schedules": {
     "new": "New schedule",
@@ -1955,7 +2030,7 @@
       }
     },
     "builtin": "Built into Hermes",
-    "builtin_hint": "One of Hermes's own skills. Hermes keeps it in step with its bundle, so it can be read and pinned here but not edited, switched off or deleted.",
+    "builtin_hint": "One of Hermes's own skills. Hermes keeps it in step with its bundle, so it can be read, pinned and switched on or off here (Hermes's own switch) but not edited or deleted.",
     "bundled_refused": "This is one of Hermes's own skills; it is read-only here.",
     "close": "Close",
     "library": {
@@ -1979,7 +2054,8 @@
       "editor_note": "One of Core Hub's own skills. Once you save a change it is yours: Core Hub stops updating it, and Restore brings its version back.",
       "not_library": "This skill is not one of Core Hub's own.",
       "off_refused": "The Core Hub library is off in this profile; switch it on first."
-    }
+    },
+    "essential_refused": "Hermes's own manual (hermes-agent) is always on: Hermes does not let it be switched off."
   },
   "mcp": {
     "title_of": "{name} MCP servers",

@@ -224,18 +224,21 @@ describe('turning one off', () => {
     write(dir, 'linux-block', '---\nname: linux-block\nplatforms:\n  - linux # here\n---\nb\n');
     write(dir, 'win-lone', '---\nname: win-lone\nplatforms: windows\n---\nbody\n');
     write(dir, 'everywhere', PACK_SKILL);
-    expect(listSkills(dir, 'linux').map((skill) => skill.key).sort()).toEqual([
-      'everywhere',
-      'linux-block',
-    ]);
-    expect(listSkills(dir, 'darwin').map((skill) => skill.key).sort()).toEqual([
-      'everywhere',
-      'mac-only',
-    ]);
-    expect(listSkills(dir, 'win32').map((skill) => skill.key).sort()).toEqual([
-      'everywhere',
-      'win-lone',
-    ]);
+    expect(
+      listSkills(dir, 'linux')
+        .map((skill) => skill.key)
+        .sort(),
+    ).toEqual(['everywhere', 'linux-block']);
+    expect(
+      listSkills(dir, 'darwin')
+        .map((skill) => skill.key)
+        .sort(),
+    ).toEqual(['everywhere', 'mac-only']);
+    expect(
+      listSkills(dir, 'win32')
+        .map((skill) => skill.key)
+        .sort(),
+    ).toEqual(['everywhere', 'win-lone']);
     expect(platformsOf('---\nname: x\nplatforms: ["macos", \'linux\']\n---\n')).toEqual([
       'macos',
       'linux',

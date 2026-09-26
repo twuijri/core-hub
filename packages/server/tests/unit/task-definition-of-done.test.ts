@@ -47,7 +47,10 @@ describe('tasks: definition of done and constraints (§103)', () => {
         url: '/api/v1/tasks',
         payload: {
           title: 'صفحة الإعدادات',
-          definition_of_done: [{ text: '  الاختبارات تمر  ' }, { text: 'لقطة للصفحة', checked: true }],
+          definition_of_done: [
+            { text: '  الاختبارات تمر  ' },
+            { text: 'لقطة للصفحة', checked: true },
+          ],
           constraints: [{ text: 'لا مكتبات جديدة' }],
         },
       });

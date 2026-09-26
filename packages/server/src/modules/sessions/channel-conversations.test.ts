@@ -287,9 +287,7 @@ describe('channel conversations: the reader', () => {
       '20260925_091500_aa11bb22',
       500,
     );
-    expect(older.items.map((m) => m.text)).toEqual(
-      Array.from({ length: 20 }, (_, i) => `m${i}`),
-    );
+    expect(older.items.map((m) => m.text)).toEqual(Array.from({ length: 20 }, (_, i) => `m${i}`));
     expect(older.has_more).toBe(false);
     expect(older.next_offset).toBeNull();
     expect(hermes.calls.at(-1)).toContain('order=latest&limit=500&offset=500');

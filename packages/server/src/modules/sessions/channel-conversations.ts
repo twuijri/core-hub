@@ -320,7 +320,7 @@ export function picturesOf(text: string): { text: string; names: string[] } {
   );
   // Could not be described: one note that points at it.
   rest = rest.replace(
-    /\[The user sent an image but [^\[\]]*?image_url: ([^\s\]]+)\]/g,
+    /\[The user sent an image but [^[\]]*?image_url: ([^\s\]]+)\]/g,
     (_all, found: string) => (take(found), ''),
   );
   // Handed to the model as a picture (`build_native_content_parts`), or still waiting.
@@ -334,9 +334,7 @@ export function picturesOf(text: string): { text: string; names: string[] } {
   });
   if (names.length > 0) {
     // The stored projection of an image part, and Hermes's words for a picture without any.
-    rest = rest
-      .replace(/^\[screenshot\]$/gm, '')
-      .replace(/^What do you see in this image\?$/m, '');
+    rest = rest.replace(/^\[screenshot\]$/gm, '').replace(/^What do you see in this image\?$/m, '');
   }
   return { text: names.length > 0 ? rest.replace(/\n{3,}/g, '\n\n').trim() : text, names };
 }

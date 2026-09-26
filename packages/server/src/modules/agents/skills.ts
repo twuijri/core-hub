@@ -361,15 +361,13 @@ export function platformsOf(content: string): string[] {
   const lines = raw.split('\n');
   const at = lines.findIndex((line) => /^platforms:/.test(line));
   if (at === -1) return [];
-  const value = (lines[at] ?? '').replace(/^platforms:/, '').replace(/\s#.*$/, '').trim();
+  const value = (lines[at] ?? '')
+    .replace(/^platforms:/, '')
+    .replace(/\s#.*$/, '')
+    .trim();
   const clean = (entry: string) => unquote(entry.trim()).trim().toLowerCase();
   if (value.startsWith('[')) {
-    return value
-      .replace(/^\[/, '')
-      .replace(/\].*$/, '')
-      .split(',')
-      .map(clean)
-      .filter(Boolean);
+    return value.replace(/^\[/, '').replace(/\].*$/, '').split(',').map(clean).filter(Boolean);
   }
   if (value !== '') return [clean(value)].filter(Boolean);
   const out: string[] = [];
