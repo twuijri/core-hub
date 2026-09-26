@@ -154,7 +154,21 @@ $ pnpm exec vitest run <18 web files>   (packages/web)
  Test Files  18 passed (18)   Tests  441 passed (441)
 ```
 
-CI على طلب الليلة #165: يُضاف بعد الدفع.
+CI على طلب الليلة #165، الالتزام `3a158ea` (رأس `night/2026-09-27` بعد دمج هذا الفرع) — كله أخضر:
+```
+Lint, typecheck, contracts, tests, build | pass
+Server unit tests (shard 1/3, 2/3, 3/3) | pass
+Web smoke journeys (Playwright against the real hub) | pass
+db:generate + db:migrate (SQLite and PostgreSQL) | pass
+Docker image builds and answers /health | pass
+Desktop app smoke (Electron under Xvfb against the real hub) | pass
+Android build, unit tests, lint | pass
+Build and test on the iOS simulator | pass
+Installers (macos, ubuntu, windows) | pass
+PR adds or updates a change record | pass
+PR leaves graphify-out/ to the code-map bot | pass
+```
+الدفعة التالية تضيف هذا الدليل إلى السجل فقط.
 
 ## المخاطر والرجوع
 - **سلوك الإطفاء تغيّر**: صار يكتب قائمة هرمز بدل إعادة تسمية `SKILL.md`. المهارات التي أطفأها مركز
