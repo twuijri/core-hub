@@ -98,6 +98,16 @@ fail	Android build, unit tests, lint — ContractExamplesTest > every response e
 الفشلان من تغيير العقد في مهمة أخرى دُمجت بعدي (webhooks/media، §97–§98)، لا من هذه المهمة: لم تغيّر هذه المهمة العقد ولا
 أعداد العمليات في STATUS.
 
+بعد إضافة مُمرِّر Tailscale ودمجها في `3ad1bf6f` (رأس #165): كل الفحوص خضراء (19 نجاح، رفع App Store متخطّى كالمعتاد)، ومنها:
+```
+ ✓  unit  tests/unit/trust-proxy.test.ts (9 tests) 15353ms
+ ✓ tests/unit/tailnet-forwarder.test.ts (2 tests) 115ms
+pass	Server unit tests (shard 2/3)
+pass	Android build, unit tests, lint
+pass	Desktop app smoke (Electron under Xvfb against the real hub)
+pass	Web smoke journeys (Playwright against the real hub)
+```
+
 ## المخاطر والرجوع
 - حزمة تنشر منفذ الخادم مباشرة بلا بروكسي: جهاز في الشبكة الخاصة نفسها ما زال يستطيع كتابة عنوانه؛ الحل
   `COREHUB_TRUST_PROXY=false` (موثّق في DEPLOY §3d).
