@@ -2,21 +2,26 @@
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import {
   appChannel,
+  appPackaging,
   checkForUpdate,
   RELEASES_URL,
   STORE_UPDATES_MESSAGE,
 } from '../../src/main/updates.js';
 import {
+  AUTO_CHECK_INTERVAL_MS,
+  FIRST_CHECK_DELAY_MS,
   assetFor,
-  checkIsDue,
   checksGitHub,
   compareVersions,
+  packagingOf,
   pickUpdate,
+  scheduleUpdateChecks,
   STORE_PAGE,
   updateChannel,
+  updateMode,
   type GitHubRelease,
 } from '../../src/shared/updates.js';
 
@@ -53,13 +58,91 @@ describe('versions', () => {
     expect(compareVersions('0.1.0-alpha.16', '0.1.0-beta.1')).toBeLessThan(0);
     expect(compareVersions('v1.0.0', '1.0.0')).toBe(0);
   });
+});
 
-  it('checks on its own at most once a day', () => {
-    const now = Date.parse('2026-09-25T12:00:00Z');
-    expect(checkIsDue(null, now)).toBe(true);
-    expect(checkIsDue('2026-09-25T01:00:00Z', now)).toBe(false);
-    expect(checkIsDue('2026-09-24T11:00:00Z', now)).toBe(true);
-    expect(checkIsDue('garbage', now)).toBe(true);
+describe('what each copy does about a new version (DECISIONS §109)', () => {
+  const base = { channel: 'github' as const, packaged: true };
+
+  it.each([
+    // platform, channel, packaged, APPIMAGE, package-type → packaging → mode
+    ['win32', 'github', true, undefined, null, 'nsis', 'install'],
+    ['win32', 'store', true, undefined, null, 'msix', 'off'],
+    ['darwin', 'github', true, undefined, null, 'dmg', 'install'],
+    ['linux', 'github', true, '/home/a/Core-Hub.AppImage', null, 'appimage', 'install'],
+    // The AppImage may carry the .deb's package-type file; APPIMAGE decides.
+    ['linux', 'github', true, '/home/a/Core-Hub.AppImage', 'deb', 'appimage', 'install'],
+    ['linux', 'github', true, undefined, 'deb', 'deb', 'notify'],
+    ['linux', 'github', true, '', 'deb', 'deb', 'notify'],
+    ['linux', 'github', true, undefined, null, 'unpacked', 'notify'],
+    ['win32', 'github', false, undefined, null, 'development', 'notify'],
+    ['darwin', 'github', false, undefined, null, 'development', 'notify'],
+    ['linux', 'github', false, '/x.AppImage', null, 'development', 'notify'],
+    // The Store build never looks, even in a development run that asks to behave like it.
+    ['win32', 'store', false, undefined, null, 'msix', 'off'],
+    ['freebsd', 'github', true, undefined, null, 'unpacked', 'notify'],
+  ] as const)(
+    '%s, %s channel, packaged %s, APPIMAGE %s, package-type %s → %s → %s',
+    (platform, channel, packaged, appImage, packageType, packaging, mode) => {
+      const got = packagingOf({ platform, channel, packaged, appImage, packageType });
+      expect(got).toBe(packaging);
+      expect(updateMode(got)).toBe(mode);
+    },
+  );
+
+  it('reads the .deb marker electron-builder leaves in resources/', () => {
+    const dir = mkdtempSync(path.join(os.tmpdir(), 'corehub-packaging-'));
+    try {
+      const at = (env: NodeJS.ProcessEnv) =>
+        appPackaging({ ...base, resourcesPath: dir, platform: 'linux', env });
+      expect(at({})).toBe('unpacked');
+      writeFileSync(path.join(dir, 'package-type'), 'deb\n');
+      expect(at({})).toBe('deb');
+      expect(at({ APPIMAGE: '/tmp/Core-Hub-1.1.3-x86_64.AppImage' })).toBe('appimage');
+      expect(
+        appPackaging({ ...base, channel: 'store', resourcesPath: dir, platform: 'win32', env: {} }),
+      ).toBe('msix');
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+});
+
+describe('when the app looks on its own', () => {
+  it('about ten seconds after start, then every six hours, until stopped', () => {
+    vi.useFakeTimers();
+    try {
+      expect(FIRST_CHECK_DELAY_MS).toBe(10_000);
+      expect(AUTO_CHECK_INTERVAL_MS).toBe(6 * 60 * 60 * 1000);
+      const run = vi.fn();
+      const stop = scheduleUpdateChecks(run);
+      vi.advanceTimersByTime(9_999);
+      expect(run).not.toHaveBeenCalled();
+      vi.advanceTimersByTime(1);
+      expect(run).toHaveBeenCalledTimes(1);
+      vi.advanceTimersByTime(AUTO_CHECK_INTERVAL_MS - 1);
+      expect(run).toHaveBeenCalledTimes(1);
+      vi.advanceTimersByTime(1);
+      expect(run).toHaveBeenCalledTimes(2);
+      vi.advanceTimersByTime(2 * AUTO_CHECK_INTERVAL_MS);
+      expect(run).toHaveBeenCalledTimes(4);
+      stop();
+      vi.advanceTimersByTime(10 * AUTO_CHECK_INTERVAL_MS);
+      expect(run).toHaveBeenCalledTimes(4);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('never starts when stopped before the first look', () => {
+    vi.useFakeTimers();
+    try {
+      const run = vi.fn();
+      scheduleUpdateChecks(run)();
+      vi.advanceTimersByTime(AUTO_CHECK_INTERVAL_MS * 2);
+      expect(run).not.toHaveBeenCalled();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });
 

@@ -12,6 +12,7 @@ import type {
   DesktopHelperState,
   DesktopNotice,
   DesktopState,
+  DesktopUpdatesState,
 } from '../../../../packages/web/src/desktop/bridge-types.js';
 import type { Language } from '../shared/config.js';
 import { CHANNELS, type WelcomeApi } from '../shared/ipc.js';
@@ -79,6 +80,9 @@ const bridge: DesktopBridge = {
     get: () => ipcRenderer.invoke(CHANNELS.updatesGet),
     check: () => ipcRenderer.invoke(CHANNELS.updatesCheck),
     setAuto: (value) => ipcRenderer.invoke(CHANNELS.updatesAuto, value === true),
+    restart: () => ipcRenderer.invoke(CHANNELS.updatesRestart) as Promise<void>,
+    dismiss: (version) => ipcRenderer.invoke(CHANNELS.updatesDismiss, String(version)),
+    onChange: (listener) => listen<DesktopUpdatesState>(CHANNELS.updatesChanged, listener),
   },
   voice: {
     mic: () => ipcRenderer.invoke(CHANNELS.voiceMic),

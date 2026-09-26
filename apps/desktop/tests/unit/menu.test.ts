@@ -8,6 +8,8 @@ const actions = (): MenuActions => ({
   changeConnection: vi.fn(),
   openWebsite: vi.fn(),
   quit: vi.fn(),
+  checkForUpdates: vi.fn(),
+  restartToUpdate: vi.fn(),
 });
 
 describe('menus', () => {
@@ -60,5 +62,68 @@ describe('menus', () => {
     expect(a.showWindow).toHaveBeenCalledOnce();
     expect(a.changeConnection).toHaveBeenCalledOnce();
     expect(a.quit).toHaveBeenCalledOnce();
+  });
+
+  it('offers "Check for updates…" where the app looks, and a restart once one is downloaded', () => {
+    const t = (key: string, params?: Record<string, string>) => translate('en', key, params);
+    const labels = (items: Array<{ label?: string; type?: string }>) =>
+      items.filter((item) => item.type !== 'separator').map((item) => item.label);
+    const submenu = (template: ReturnType<typeof appMenuTemplate>, label: string) =>
+      (template.find((top) => top.label === label)?.submenu ?? []) as Array<{
+        label?: string;
+        type?: string;
+        click?: () => void;
+      }>;
+
+    // The Store build never looks: no item.
+    const store = appMenuTemplate(t, actions(), {
+      platform: 'win32',
+      devTools: false,
+      updates: { check: false, ready: null },
+    });
+    expect(labels(submenu(store, 'Help'))).toEqual(['Core Hub on GitHub']);
+    expect(labels(trayMenuTemplate(t, actions(), { check: false, ready: null }))).toEqual([
+      'Open Core Hub',
+      'Change connection…',
+      'Quit Core Hub',
+    ]);
+
+    // Windows and Linux: in Help; macOS: in the app menu under About.
+    const a = actions();
+    const help = submenu(
+      appMenuTemplate(t, a, {
+        platform: 'linux',
+        devTools: false,
+        updates: { check: true, ready: '1.2.0' },
+      }),
+      'Help',
+    );
+    expect(labels(help)).toEqual([
+      'Core Hub on GitHub',
+      'Check for updates…',
+      'Restart to update to \u20681.2.0\u2069',
+    ]);
+    for (const item of help.slice(2)) item.click?.();
+    expect(a.checkForUpdates).toHaveBeenCalledOnce();
+    expect(a.restartToUpdate).toHaveBeenCalledOnce();
+    const mac = appMenuTemplate(t, actions(), {
+      platform: 'darwin',
+      devTools: false,
+      updates: { check: true, ready: null },
+    });
+    expect(labels(submenu(mac, 'Core Hub')).slice(0, 2)).toEqual([
+      'About Core Hub',
+      'Check for updates…',
+    ]);
+    expect(labels(submenu(mac, 'Help'))).toEqual(['Core Hub on GitHub']);
+
+    const tray = trayMenuTemplate(t, actions(), { check: true, ready: '1.2.0' });
+    expect(labels(tray)).toEqual([
+      'Open Core Hub',
+      'Change connection…',
+      'Check for updates…',
+      'Restart to update to \u20681.2.0\u2069',
+      'Quit Core Hub',
+    ]);
   });
 });

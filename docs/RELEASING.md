@@ -10,10 +10,11 @@ Partner Center.
 
 | Platform | Ships as | Signed | Updates |
 |---|---|---|---|
-| Windows | `.exe` (NSIS) on the GitHub release | no (SmartScreen: *More info → Run anyway*) | the app's own GitHub check |
-| Windows | Microsoft Store (MSIX) | by the Store | the Store; the app's check is off |
-| macOS | notarised `.dmg` on the GitHub release (`desktop-signed.yml`) | Developer ID | the app's own GitHub check |
-| Linux | AppImage and `.deb` on the GitHub release | no | the app's own GitHub check |
+| Windows | `.exe` (NSIS) on the GitHub release | no (SmartScreen: *More info → Run anyway*) | updates itself: downloads, asks to restart (from 1.1.3) |
+| Windows | Microsoft Store (MSIX) | by the Store | the Store; the app never looks |
+| macOS | notarised `.dmg` on the GitHub release (`desktop-signed.yml`) | Developer ID | updates itself from the signed `-mac.zip` (from 1.1.3) |
+| Linux | AppImage on the GitHub release | no | updates itself (from 1.1.3) |
+| Linux | `.deb` on the GitHub release | no | says a new version is out, links the download page |
 | Android | signed `.apk` on the GitHub release | test key | the app's own GitHub check, then download and Android's installer |
 | Android | Google Play (later) | Play upload key | Play; the app's check is off (`-Pcorehub.selfUpdate=false`) |
 | iOS | TestFlight / App Store only, no file on the release | App Store | the App Store |
@@ -262,16 +263,40 @@ or updates it if it exists — attaches the files and marks it **latest**:
 | `Core-Hub-Setup-X.Y.Z-x64.exe` | `desktop.yml` (Windows, NSIS, unsigned) |
 | `Core-Hub-X.Y.Z-x64.msix` | `desktop.yml` (Windows, the Store package, unsigned) |
 | `Core-Hub-X.Y.Z-arm64.dmg` | `desktop-signed.yml` (signed and notarised) |
+| `Core-Hub-X.Y.Z-arm64-mac.zip` | `desktop-signed.yml` (the same signed app, what macOS updates from) |
 | `Core-Hub-X.Y.Z-x86_64.AppImage`, `corehub_X.Y.Z_amd64.deb` | `desktop.yml` (Linux) |
+| `latest.yml`, `latest-mac.yml`, `latest-linux.yml` | electron-builder, beside the installers they name |
+| `*.exe.blockmap`, `*-mac.zip.blockmap`, `*.dmg.blockmap` (when the build made them) | electron-builder |
 | `Core-Hub-X.Y.Z-android.apk` | `android-signed.yml` (Gradle's `app-release.apk`, renamed) |
 
-The names are fixed in one place, `apps/desktop/scripts/release-assets.mjs`, and a unit test
+The names are fixed in one place, `apps/desktop/scripts/release-assets.mjs` (`releaseAssets` for
+the downloads, `updateAssets` for what the updater reads), and a unit test
 (`apps/desktop/tests/unit/release-assets.test.ts`) keeps them equal to electron-builder's
-`artifactName`s and to what the app's update check picks (`assetFor` in
-`apps/desktop/src/shared/updates.ts`: the `.exe` on Windows — never the `.msix` —, the dmg on
-macOS, the AppImage, else the `.deb`, on Linux). The app reads GitHub's release list, not
-electron-updater's `latest*.yml`, so no such file is made. The job refuses to publish when any
-file is missing.
+`artifactName`s and to what the `.deb`'s update check picks (`assetFor` in
+`apps/desktop/src/shared/updates.ts`). The job refuses to publish when any file is missing, and
+when an update feed names a file — in `path` or any `files[].url` — that the release does not carry
+under that very name (`feedProblems`); `desktop.yml` and `desktop-signed.yml` run the same check
+right after packaging (`release-assets.mjs check-feeds`), so a pull request that breaks a name fails
+there first.
+
+### How the apps update (DECISIONS §109, from 1.1.3)
+
+- **Windows `.exe`, macOS, Linux AppImage**: about ten seconds after start and then every six hours,
+  electron-updater reads the latest (non-pre-release) GitHub release's `latest*.yml` from
+  github.com without a token, downloads the new version in the background,
+  checks its SHA-512, and the page shows *Restart to update* / *Later*. It never restarts on its own;
+  a downloaded version is also installed when the app quits. macOS installs only a build signed with
+  the same Developer ID (Squirrel.Mac checks it); Windows builds are unsigned, so the `.exe` update is
+  checked by its SHA-512 only.
+- **Linux `.deb`**: the same schedule asks GitHub's releases API and says *Core Hub X is available*
+  with a button to the download page (https://twuijri.github.io/core-hub/). Nothing is downloaded.
+- **Microsoft Store**: the app never looks; the Store updates it.
+- A switch in Settings → This device turns the automatic looks off; *Check for updates…* in the
+  app menu (macOS), the Help menu (Windows, Linux) and the tray looks at once.
+- **Copies of 1.1.2 or older have no updater**: they only link the installer, so their owners
+  install 1.1.3 by hand once; from then on the app updates itself.
+- A release made before this change (`--without=updates`, detected from the tag's code) carries no
+  feeds; an app that finds none falls back to the releases API and links the download page.
 
 The notes are short and in English: the downloads, the SmartScreen step for the `.exe`, and the
 titles of the pull requests merged since the previous version tag (GitHub's own *generate release
@@ -344,8 +369,8 @@ works at `/core-hub/` and at a domain root alike.
 ### The `.exe` (unsigned)
 
 The NSIS installer is not code-signed, so Windows SmartScreen may say *Windows protected your PC*:
-**More info → Run anyway**. The release notes say so. It keeps the app's own update check
-(GitHub releases, ADR 0023). For later: [SignPath Foundation](https://signpath.org) signs open
+**More info → Run anyway**. The release notes say so. It updates itself from the GitHub releases
+(`latest.yml`, DECISIONS §109); the update installs silently into the folder chosen the first time. For later: [SignPath Foundation](https://signpath.org) signs open
 source projects for free; that would remove the warning.
 
 ### Microsoft Store (MSIX)
