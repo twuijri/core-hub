@@ -112,7 +112,7 @@ struct PairingMaker: View {
                 Button {
                     Task { await make() }
                 } label: {
-                    Label(pairing == nil ? l10n("devices.make_pairing") : l10n("devices.new_pairing"), systemImage: "qrcode")
+                    LucideLabel(pairing == nil ? l10n("devices.make_pairing") : l10n("devices.new_pairing"), icon: .qrCode)
                 }
                 .buttonStyle(.borderedProminent)
                 .disabled(busy)
@@ -209,7 +209,7 @@ struct ThemePage: View {
             Section {
                 Picker(l10n("nav.theme"), selection: Binding(get: { app.theme }, set: { app.theme = $0 })) {
                     ForEach(ThemeChoice.allCases) { choice in
-                        Label(l10n(choice.labelKey), systemImage: choice.symbol).tag(choice)
+                        Label { Text(l10n(choice.labelKey)) } icon: { Image(lucide: choice.icon) }.tag(choice)
                     }
                 }
                 .pickerStyle(.inline)

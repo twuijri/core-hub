@@ -76,11 +76,12 @@ enum ThemeChoice: String, CaseIterable, Identifiable {
         }
     }
 
-    var symbol: String {
+    /// The same pictures as the web's theme chip (docs/design/family.md).
+    var icon: Lucide {
         switch self {
-        case .system: return "circle.lefthalf.filled"
-        case .light: return "sun.max"
-        case .dark: return "moon"
+        case .system: return .sunMoon
+        case .light: return .sun
+        case .dark: return .moon
         }
     }
 

@@ -71,7 +71,7 @@ struct DictationLanguageList: View {
                     .foregroundStyle(Tone.text)
                 Spacer()
                 if selected(tag) {
-                    Image(systemName: "checkmark").foregroundStyle(Tone.accent)
+                    LucideIcon(.check, size: 18).foregroundStyle(Tone.accent)
                 }
             }
         }

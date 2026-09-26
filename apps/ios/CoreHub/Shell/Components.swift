@@ -9,7 +9,8 @@ struct NoticeView: View {
 
     var body: some View {
         HStack(alignment: .top, spacing: Space.s2) {
-            Image(systemName: symbol)
+            LucideIcon(icon, size: 16)
+                .padding(.top, 1)
             Text(text)
                 .fixedSize(horizontal: false, vertical: true)
                 .contentDirection(of: text)
@@ -21,12 +22,12 @@ struct NoticeView: View {
         .background(background, in: RoundedRectangle(cornerRadius: Radius.md, style: .continuous))
     }
 
-    private var symbol: String {
+    private var icon: Lucide {
         switch tone {
-        case .info: return "info.circle"
-        case .warning: return "exclamationmark.triangle"
-        case .danger: return "xmark.octagon"
-        case .success: return "checkmark.circle"
+        case .info: return .info
+        case .warning: return .triangleAlert
+        case .danger: return .octagonX
+        case .success: return .circleCheck
         }
     }
 
@@ -77,14 +78,14 @@ struct LanguageMenu: View {
                     app.language = language
                 } label: {
                     if language == app.language {
-                        Label(l10n("shell.language_\(language.rawValue)"), systemImage: "checkmark")
+                        Label { Text(l10n("shell.language_\(language.rawValue)")) } icon: { Image(lucide: .check) }
                     } else {
                         Text(l10n("shell.language_\(language.rawValue)"))
                     }
                 }
             }
         } label: {
-            Label(l10n("shell.language_\(app.language.rawValue)"), systemImage: "globe")
+            LucideLabel(l10n("shell.language_\(app.language.rawValue)"), icon: .globe, size: 16)
                 .labelStyle(.titleAndIcon)
                 .font(.system(size: FontSize.sizeSm))
         }
@@ -103,8 +104,7 @@ struct ThemeChips: View {
                 Button {
                     app.theme = choice
                 } label: {
-                    Image(systemName: choice.symbol)
-                        .font(.system(size: FontSize.sizeSm))
+                    LucideIcon(choice.icon, size: 16)
                         .frame(width: Control.heightSm, height: Control.heightSm)
                         .foregroundStyle(app.theme == choice ? Tone.text : Tone.textMuted)
                         .background {
@@ -162,8 +162,7 @@ struct PlaceholderScreen: View {
 
     var body: some View {
         VStack(spacing: Space.s3) {
-            Image(systemName: "hammer")
-                .font(.system(size: 32))
+            LucideIcon(.hammer, size: 32)
                 .foregroundStyle(Tone.textFaint)
             Text(l10n("placeholder.title"))
                 .font(.system(size: FontSize.sizeLg, weight: .semibold))

@@ -200,7 +200,32 @@
     "status_updating": "Updating",
     "status_error": "Error",
     "status_limited": "Limited",
-    "status_disabled": "Disabled"
+    "status_disabled": "Disabled",
+    "capability": {
+      "streaming": "Streaming",
+      "tools": "Tools",
+      "approvals": "Approvals",
+      "mcp": "MCP",
+      "skills": "Skills",
+      "memory": "Memory",
+      "channels": "Channels",
+      "worktrees": "Worktrees",
+      "resume": "Resume",
+      "plugins": "Plugins",
+      "jobs": "Jobs",
+      "tasks": "Tasks",
+      "vision": "Vision",
+      "audio": "Audio",
+      "presets": "Presets",
+      "journey": "Journey",
+      "compress": "Compress",
+      "steer": "Steer",
+      "goals": "Goals",
+      "plans": "Plans",
+      "learn": "Learn",
+      "skill_commands": "Skill commands",
+      "config_files": "Config files"
+    }
   },
   "audit": {
     "period": "Period"

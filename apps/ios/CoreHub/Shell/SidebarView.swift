@@ -56,10 +56,9 @@ struct SidebarView: View {
                     .foregroundStyle(Tone.text)
                 Spacer()
                 Button(action: close) {
-                    Image(systemName: "xmark")
-                        .font(.system(size: FontSize.sizeMd))
+                    LucideIcon(.x, size: 20)
                         .foregroundStyle(Tone.textMuted)
-                        .frame(width: Control.heightMd, height: Control.heightMd)
+                        .tapTarget()
                 }
                 .accessibilityLabel(l10n("shell.close_menu"))
             }
@@ -72,8 +71,8 @@ struct SidebarView: View {
             navigate(destination == .newChat ? .newChat : .destination(destination))
         } label: {
             HStack(spacing: Space.s3) {
-                Image(systemName: Icons.symbol(for: destination))
-                    .frame(width: 20)
+                LucideIcon(Icons.lucide(for: destination), size: 20)
+                    .frame(width: 24)
                     .foregroundStyle(Tone.textMuted)
                 Text(l10n(destination.titleKey))
                     .font(.system(size: FontSize.sizeMd))
@@ -81,7 +80,7 @@ struct SidebarView: View {
                 Spacer()
             }
             .padding(.horizontal, Space.s2)
-            .frame(height: Control.heightLg)
+            .frame(minHeight: 44)
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
@@ -112,9 +111,8 @@ struct SidebarView: View {
                     Button {
                         navigate(.settings)
                     } label: {
-                        Image(systemName: "gearshape")
-                            .font(.system(size: FontSize.sizeMd))
-                            .frame(width: Control.heightMd, height: Control.heightMd)
+                        LucideIcon(.settings, size: 20)
+                            .tapTarget()
                     }
                     .accessibilityLabel(l10n(destination.titleKey))
                     .accessibilityIdentifier("footer.\(destination.rawValue)")
@@ -129,7 +127,7 @@ struct SidebarView: View {
                 Button(role: .destructive) {
                     Task { await app.signOut() }
                 } label: {
-                    Label(l10n("nav.sign_out"), systemImage: "rectangle.portrait.and.arrow.right")
+                    LucideLabel(l10n("nav.sign_out"), icon: .logOut, size: 16)
                         .font(.system(size: FontSize.sizeSm))
                 }
                 .accessibilityIdentifier("footer.sign_out")
@@ -157,7 +155,7 @@ struct ProfileSelector: View {
                     app.switchProfile(slug)
                 } label: {
                     if slug == app.currentProfile {
-                        Label(app.profileName(slug), systemImage: "checkmark")
+                        Label { Text(app.profileName(slug)) } icon: { Image(lucide: .check) }
                     } else {
                         Text(app.profileName(slug))
                     }
@@ -165,12 +163,12 @@ struct ProfileSelector: View {
             }
         } label: {
             HStack(spacing: Space.s2) {
-                Image(systemName: "person.crop.square")
+                LucideIcon(.layoutGrid, size: 16)
                 Text(app.profileName(app.currentProfile))
                     .lineLimit(1)
                 Spacer(minLength: 0)
                 if app.enterableProfiles.count > 1 {
-                    Image(systemName: "chevron.up.chevron.down").font(.system(size: FontSize.sizeXs))
+                    LucideIcon(.chevronsUpDown, size: 14).foregroundStyle(Tone.textMuted)
                 }
             }
             .font(.system(size: FontSize.sizeSm, weight: .medium))
@@ -187,45 +185,47 @@ struct ProfileSelector: View {
     }
 }
 
+/// One picture per destination — the Lucide name the web (`destinationIcons`) and Android draw
+/// for the same place (docs/design/family.md, "Icons").
 enum Icons {
-    static func symbol(for destination: DestinationID) -> String {
+    static func lucide(for destination: DestinationID) -> Lucide {
         switch destination {
-        case .newChat: return "square.and.pencil"
-        case .search: return "magnifyingglass"
-        case .agentManager: return "cpu"
-        case .tasks: return "checklist"
-        case .schedules: return "calendar.badge.clock"
-        case .chat: return "bubble.left.and.bubble.right"
-        case .rooms: return "person.3"
-        case .settings: return "gearshape"
-        case .account: return "person.crop.circle"
-        case .users: return "person.2"
-        case .webhooks: return "link"
-        case .display: return "textformat.size"
-        case .notifications: return "bell"
-        case .privacy: return "hand.raised"
-        case .thisDevice: return "iphone"
-        case .about: return "info.circle"
-        case .models: return "square.stack.3d.up"
-        case .deviceConnections: return "qrcode"
-        case .knowledge: return "books.vertical"
-        case .logs: return "doc.text.magnifyingglass"
-        case .usage: return "chart.bar"
-        case .skillsUsage: return "wand.and.stars.inverse"
-        case .performance: return "speedometer"
-        case .theme: return "paintpalette"
-        case .workspaces: return "square.grid.2x2"
-        case .updates: return "arrow.down.circle"
-        case .plugins: return "puzzlepiece.extension"
-        case .files: return "folder"
-        case .agentSkills: return "wand.and.stars"
-        case .agentMcp: return "server.rack"
-        case .agentMemory: return "brain"
-        case .agentJobs: return "clock.arrow.circlepath"
-        case .agentChannels: return "bubble.left.and.text.bubble.right"
-        case .agentPlugins: return "puzzlepiece"
-        case .agentSettings: return "slider.horizontal.3"
-        case .globalAgent: return "globe"
+        case .newChat: return .squarePen
+        case .search: return .search
+        case .agentManager: return .bot
+        case .tasks: return .listChecks
+        case .schedules: return .calendarClock
+        case .chat: return .messagesSquare
+        case .rooms: return .users
+        case .settings: return .settings
+        case .account: return .circleUser
+        case .users: return .users
+        case .webhooks: return .webhook
+        case .display: return .type
+        case .notifications: return .bell
+        case .privacy: return .shieldCheck
+        case .thisDevice: return .smartphone
+        case .about: return .info
+        case .models: return .box
+        case .deviceConnections: return .qrCode
+        case .knowledge: return .bookOpen
+        case .logs: return .scrollText
+        case .usage: return .chartColumn
+        case .skillsUsage: return .activity
+        case .performance: return .gauge
+        case .theme: return .palette
+        case .workspaces: return .layoutGrid
+        case .updates: return .circleArrowDown
+        case .plugins: return .puzzle
+        case .files: return .folder
+        case .agentSkills: return .sparkles
+        case .agentMcp: return .server
+        case .agentMemory: return .brain
+        case .agentJobs: return .rotateCcwClock
+        case .agentChannels: return .radio
+        case .agentPlugins: return .puzzle
+        case .agentSettings: return .slidersHorizontal
+        case .globalAgent: return .globe
         }
     }
 }
