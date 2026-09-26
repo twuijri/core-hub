@@ -42,7 +42,8 @@
     "skills_usage": "Skills usage",
     "files": "Files",
     "terminal": "Terminal",
-    "config_files": "Config files"
+    "config_files": "Config files",
+    "linked_hubs": "Linked hubs"
   },
   "common": {
     "cancel": "Cancel",

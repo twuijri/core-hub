@@ -42,7 +42,8 @@
     "skills_usage": "استخدام المهارات",
     "files": "الملفات",
     "terminal": "الطرفية",
-    "config_files": "ملفات الإعداد"
+    "config_files": "ملفات الإعداد",
+    "linked_hubs": "المراكز المرتبطة"
   },
   "common": {
     "cancel": "إلغاء",
