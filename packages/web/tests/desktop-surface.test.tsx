@@ -63,7 +63,7 @@ function fakeHelper(over: Partial<DesktopHelperState> = {}) {
   const set = (patch: Partial<DesktopHelperState>) => (helper = { ...helper, ...patch });
   return {
     get: vi.fn(async () => helper),
-    // As the app does: on with nothing shared, its own folder is shared writable (§87).
+    // As the app does: on with nothing shared, its own folder is shared writable (§89).
     setEnabled: vi.fn(async (value: boolean) =>
       set({
         enabled: value,

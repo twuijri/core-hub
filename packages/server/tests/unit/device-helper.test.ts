@@ -1,5 +1,5 @@
 /**
- * A computer's local helper as the hub knows it (DECISIONS §87, ADR 0025), and the rules that
+ * A computer's local helper as the hub knows it (DECISIONS §89, ADR 0025), and the rules that
  * make a hub on a server safe to point at the person's own computer:
  *
  * - only the computer reports what its helper offers, and only its person narrows which
@@ -10,7 +10,7 @@
  * - how long a request waits depends on what it asks;
  * - a program's answer is one of its two shapes.
  *
- * Plus the media stream tickets of §88: a ticket plays one attachment with `Range`, and nothing
+ * Plus the media stream tickets of §90: a ticket plays one attachment with `Range`, and nothing
  * else answers to it.
  */
 import { io as connect, type Socket } from 'socket.io-client';
@@ -303,7 +303,7 @@ describe('devices: a computer’s helper and who may ask it', () => {
   });
 });
 
-describe('attachments: a media stream ticket (§88)', () => {
+describe('attachments: a media stream ticket (§90)', () => {
   it('plays one attachment with Range, without the bearer; an unknown ticket is nothing', async () => {
     const h = await hub();
     const bytes = Buffer.concat([

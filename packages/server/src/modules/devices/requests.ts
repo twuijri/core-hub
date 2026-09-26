@@ -63,7 +63,7 @@ export interface RequestJobs {
 
 export const DEFAULT_TIMEOUT_MS = 30_000;
 /**
- * What a request waits for when the asker does not say (§87): a computer's helper reads a file
+ * What a request waits for when the asker does not say (§89): a computer's helper reads a file
  * in a moment but may first ask the person; a program's call may ask and then run a while (a
  * long one answers "running" before this and is followed with `op: status`).
  */
@@ -71,11 +71,11 @@ const TIMEOUTS: Partial<Record<CapabilityKind, number>> = { files: 60_000, apps:
 export function defaultTimeoutFor(capability: CapabilityKind): number {
   return TIMEOUTS[capability] ?? DEFAULT_TIMEOUT_MS;
 }
-/** What an agent's run may ask the person's own computer for (§87). */
+/** What an agent's run may ask the person's own computer for (§89). */
 export const AGENT_CAPABILITIES: ReadonlySet<CapabilityKind> = new Set(['files', 'apps']);
 /**
  * Capabilities only a connected computer serves: asked of one that is offline, the answer is
- * "offline" at once instead of a wait for a device that cannot hear it (§87). A phone's
+ * "offline" at once instead of a wait for a device that cannot hear it (§89). A phone's
  * capabilities keep §74's catch-up on reconnect.
  */
 const LIVE_ONLY: ReadonlySet<CapabilityKind> = new Set(['files', 'apps', 'screen']);
@@ -152,7 +152,7 @@ export function checkResult(capability: CapabilityKind, result: unknown): Record
     };
   }
   if (capability === 'apps') {
-    // A program's call is either finished (its MCP result) or still running (§87).
+    // A program's call is either finished (its MCP result) or still running (§89).
     const running = value.state === 'running' && typeof value.call_id === 'string';
     const done = value.state === 'done' && Array.isArray(value.content);
     if (!running && !done) {
@@ -236,7 +236,7 @@ export class DeviceRequestService {
               input.capability,
             ),
           };
-    // Nobody would hear it: said at once, as a failure the asker can tell the person (§87).
+    // Nobody would hear it: said at once, as a failure the asker can tell the person (§89).
     const offline: DeviceError | null =
       !declined && input.online === false && LIVE_ONLY.has(input.capability)
         ? {

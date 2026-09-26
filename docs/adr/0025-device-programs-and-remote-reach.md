@@ -36,7 +36,7 @@ from its code (ADR 0004).
 2. **The hub asks through the device requests of §74, one request per tool call.** The
    desktop answers `files` (the helper's own tools, plus `send_file`) and `apps` (`call` one
    tool of a program, or `status` of a long call). A run token may make those two kinds only,
-   for the run's own person (§87). A program keeps running between calls, so an open project
+   for the run's own person (§89). A program keeps running between calls, so an open project
    survives from one call to the next.
 3. **Long work answers "running".** A program call that has not finished after a soft
    deadline (20 s after the person allowed it) answers `{state: running, call_id, progress}`;
@@ -53,7 +53,7 @@ from its code (ADR 0004).
    tools per profile and before any run names a person, so it cannot be told which person's
    programs to list; `devices.list` says what there is, per person, when asked.
 5. **Profiles.** A device serves every profile of its person until the person narrows it
-   (`Device.profiles`); a request from any other profile is refused (§87). A program is off
+   (`Device.profiles`); a request from any other profile is refused (§89). A program is off
    until the person picks the profiles it serves, on the computer; the hub lists and the device
    answers only for those.
 6. **Programs are found, never installed.** The app reads the MCP registrations of Claude
@@ -79,7 +79,7 @@ from its code (ADR 0004).
 9. **Files for the chat.** `devices.fetch_file` has the computer upload a file from a shared
    folder with the contract's resumable upload (≤ 50 MB), and the hub puts that attachment on
    the reply of the run that asked. A video in a reply plays in place from a one-attachment
-   stream ticket with byte ranges (§88).
+   stream ticket with byte ranges (§90).
 10. **DaVinci Resolve's readiness** is checked on the page: its integration found and switched
     on, Resolve running (`pgrep`, or `tasklist` on Windows), and Resolve itself asked through its
     documented scripting environment (`RESOLVE_SCRIPT_API`, `RESOLVE_SCRIPT_LIB`,

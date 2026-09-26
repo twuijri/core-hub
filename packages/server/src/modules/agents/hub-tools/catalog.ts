@@ -66,7 +66,7 @@ export interface ToolContext {
   sessionId?: string | null;
   /**
    * Put an attachment of the run's profile on the reply the run is writing (a file a device
-   * sent, §87); false when the run has no reply to put it on.
+   * sent, §89); false when the run has no reply to put it on.
    */
   handOver?(attachment: { id: string; kind: string }): boolean;
   /** Waits between looks at a device request; a test makes it instant. */
@@ -208,7 +208,7 @@ function relative(root: string, target: string): string {
   return path.relative(realpathSync(root), target) || '.';
 }
 
-// ------------------------------------------------------------------ devices (§87)
+// ------------------------------------------------------------------ devices (§89)
 
 /** A request past its deadline is looked at once more before the tool gives up. */
 const DEVICE_GRACE_MS = 5_000;

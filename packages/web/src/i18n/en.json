@@ -223,7 +223,19 @@
         "note": "What should the agent do with it? (optional)",
         "go": "Continue",
         "no_agent": "No agent in this profile can take it. Install one from Agents first."
-      }
+      },
+      "hide": "Hide from my list",
+      "unhide": "Show again",
+      "delete": "Delete from Hermes…",
+      "delete_title": "Delete “{title}” from Hermes?",
+      "delete_body": "The conversation and its messages are removed from Hermes for everyone, permanently. This cannot be undone. The chat in {channel} itself is not affected.",
+      "delete_confirm": "Delete permanently",
+      "hidden_toast": "“{title}” is hidden from your list",
+      "hidden_toast_body": "Only you stop seeing it. “Show hidden chats” at the end of the list brings it back.",
+      "show_hidden": "Show hidden chats ({count})",
+      "hide_hidden": "Stop showing hidden chats",
+      "actions": "Conversation actions",
+      "action_failed": "Couldn't change the conversation"
     }
   },
   "search": {
@@ -282,7 +294,8 @@
     "older_failed": "Couldn’t load older messages.",
     "answered_by": "Answered by {model}",
     "fallback_note": "{failed} failed, so {model} answered",
-    "fallback_reason": "Why: {reason}"
+    "fallback_reason": "Why: {reason}",
+    "bar_more": "More"
   },
   "composer": {
     "label": "Message composer",
@@ -795,8 +808,12 @@
       "fallbacks_empty": "No fallback models: if the chat model's provider fails, the turn fails.",
       "fallbacks_need_default": "Choose a chat model first; the fallbacks are tried after it.",
       "fallback_add": "Add a fallback model",
-      "fallback_up": "Move {model} up",
-      "fallback_down": "Move {model} down",
+      "fallback_reorder": "Drag to reorder {model} (Space to pick up, arrows to move)",
+      "fallback_instructions": "To reorder a fallback model, press Space or Enter on its handle, move it with the arrow keys, and press Space or Enter again to drop it. Escape puts it back.",
+      "fallback_picked": "Picked up {model}, place {position} of {total}.",
+      "fallback_moved": "{model} is now at place {position} of {total}.",
+      "fallback_dropped": "{model} dropped at place {position} of {total}.",
+      "fallback_cancelled": "Reordering cancelled; {model} is back at place {position} of {total}.",
       "fallback_remove": "Remove {model}"
     },
     "ensembles": {
@@ -964,7 +981,8 @@
     "new": "New folder",
     "new_placeholder": "New folder name",
     "create": "Create",
-    "locked": "The folder is fixed once the chat has run."
+    "locked": "The folder is fixed once the chat has run.",
+    "button": "Folder: {name}"
   },
   "combobox": {
     "search": "Search…",
@@ -974,7 +992,8 @@
     "none": "No models in this list.",
     "no_match": "Nothing matches “{query}”.",
     "error": "The list could not be fetched.",
-    "count": "{count} models"
+    "count": "{count} models",
+    "all": "All"
   },
   "ui": {
     "close": "Close",
@@ -1562,7 +1581,6 @@
       "update_available": "An update is available",
       "system": "System messages"
     },
-    "push_switch": "Push to devices",
     "test": "Send a test notification",
     "test_sent": "Sent. Check this browser and your devices.",
     "browser": {
@@ -1574,7 +1592,10 @@
       "denied": "The browser blocks notifications for this site. Allow them in the browser's site settings, then try again.",
       "unsupported": "This browser cannot receive push notifications.",
       "no_key": "Web Push is switched off on this hub. An admin can switch it on."
-    }
+    },
+    "col_event": "Event",
+    "col_in_hub": "In the hub",
+    "col_on_devices": "On devices"
   },
   "webhooks": {
     "intro": "Addresses this hub calls on its own, signed so the receiver can check the sender. Webhooks belong to the profile you are in.",

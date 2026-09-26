@@ -383,7 +383,7 @@ export const knowledgeModule = defineModule({
       },
     });
 
-    // A media element cannot send the bearer: it plays from a one-attachment ticket (§88).
+    // A media element cannot send the bearer: it plays from a one-attachment ticket (§90).
     const tickets = new StreamTickets();
     defineRoute(app, deps, {
       operationId: 'sessions.createAttachmentStream',

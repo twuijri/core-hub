@@ -30,7 +30,7 @@
 و`scriptapp("Resolve")` وتفضيل External scripting، واشتراط Studio).
 
 ## القرار والموافقات
-النطاق كله قرار المالك. ما لم يسمّه المالك **مقترح — ينتظر تأكيد المالك** (ADR 0025، DECISIONS §87 و§88):
+النطاق كله قرار المالك. ما لم يسمّه المالك **مقترح — ينتظر تأكيد المالك** (ADR 0025، DECISIONS §89 و§90):
 
 1. **اتصال صادر من العملية الرئيسية** بـ`/rt/devices` برمز الجهاز الذي أعطاه الإقران، مختومًا بسلسلة مفاتيح النظام
    (Keychain / DPAPI / libsecret؛ لينكس بلا حلقة مفاتيح يحفظه كما هو كما تفعل التطبيقات هناك). إعادة المحاولة من ثانية
@@ -58,7 +58,7 @@
 8. **الموافقة** مرة في الجلسة في الوضعين (بخلاف التطبيق القديم الذي لم يسأل محليًا)؛ «الجلسة» حتى إغلاق التطبيق أو
    إطفاء البرنامج أو تغيير إعداده. كل استدعاء (برنامج أو ملف، محلي أو من المركز) في «آخر استعمال».
 9. **ملفات للمحادثة**: `devices.fetch_file` يرفع الملف من مجلد مشارك بالرفع المستأنف (٥٠ م.ب حدًا) ويضعه المركز على
-   رد الدور. **تذكرة بث** (§88): مسار عشوائي لمرفق واحد لمدة ساعة يُشغَّل منه `<video>` بالمدى دون رمز الحامل.
+   رد الدور. **تذكرة بث** (§90): مسار عشوائي لمرفق واحد لمدة ساعة يُشغَّل منه `<video>` بالمدى دون رمز الحامل.
 10. **جاهزية Resolve** على الأنظمة الثلاثة: التكامل موجود ومشغّل، Resolve يعمل (`pgrep` أو `tasklist`)، وResolve نفسه
     يُسأل عبر بيئة برمجته الموثّقة عن اسمه (Studio أو لا)؛ إن لم يجب وهو يعمل فالخطوتان «External scripting: Local»
     و«Studio».
@@ -79,7 +79,7 @@
 ## الملفات والتأثير
 - **العقد**: `packages/contracts/openapi.yaml`، `events/common.schema.json` و`events/devices/*`.
 - **الخادم**: `modules/devices` (`schema.ts` عمودان، `index.ts` التقرير والبروفايلات ورمز الدور، `requests.ts`
-  المهل وغير المتصل ونتائج `files`/`apps`)، `drizzle/0028_device_helper.sql`؛ `modules/agents/hub-tools/catalog.ts`
+  المهل وغير المتصل ونتائج `files`/`apps`)، `drizzle/0029_device_helper.sql`؛ `modules/agents/hub-tools/catalog.ts`
   (مجموعة `devices`) و`service.ts` (مطفأة افتراضيًا، `handOver`)، `agents/index.ts`؛ `modules/sessions/engine.ts`
   (`handOver` على الرد) و`index.ts`؛ `modules/knowledge/streams.ts` (جديد) و`index.ts`؛ `modules/index.ts`؛
   `i18n` (جملة «غير متصل»).
@@ -92,7 +92,7 @@
   وتحديث `hub-tools.test.ts` و`hub-tools.routes.test.ts`؛ سطح المكتب `tests/unit/programs.test.ts`
   و`tests/unit/program-host.test.ts` و`tests/fixtures/fake-resolve-mcp.mjs` وتحديث `hub.test.ts` و`tests/smoke/desktop.spec.ts`
   (بيت اختباري `COREHUB_DESKTOP_HOME`)؛ الويب `desktop-surface.test.tsx` و`reply-files.test.tsx`.
-- **التوثيق**: `docs/adr/0025-device-programs-and-remote-reach.md` (جديد)، رأس `0022`، `DECISIONS` §87 و§88،
+- **التوثيق**: `docs/adr/0025-device-programs-and-remote-reach.md` (جديد)، رأس `0022`، `DECISIONS` §89 و§90،
   `docs/domain/devices.md`، `docs/STATUS.md`.
 
 ## الفحوص (الأوامر ونواتجها الفعلية)
@@ -143,7 +143,7 @@ Claude Desktop ويحتاج مفتاحه؛ تشغيل المساعد يصنع `~
 - طلب معلّق يموت إن انقطع الاتصال؛ لا إيقاظ لجهاز غير متصل.
 - فحص Studio يعتمد على اسم المنتج الذي يعطيه Resolve نفسه؛ إن لم يجب Resolve تُعرض الخطوتان معًا.
 - لم يُجرَّب مع Resolve حقيقي ولا على ويندوز حقيقي (منطق ويندوز مختبر بمسارات مصطنعة).
-- الرجوع: التراجع عن الدمج؛ الهجرة `0028` تضيف عمودين قابلين لـnull فقط.
+- الرجوع: التراجع عن الدمج؛ الهجرة `0029` تضيف عمودين قابلين لـnull فقط.
 
 ## التسليم والخطوة التالية
 **فحص المالك على ماك حقيقي، خطوة بخطوة:**

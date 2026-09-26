@@ -4103,6 +4103,9 @@ paths:
         Where the hub cannot read them — it does not supervise Hermes, a profile has no Hermes
         profile, or Hermes did not answer — the answer is still `200`: `items` holds what could
         be read and `unavailable` says, per profile, why the rest is missing.
+
+        A conversation the caller hid (`sessions.hideChannelConversation`) is left out unless
+        `hidden=include` is asked (contract decision §88).
       parameters:
         - $ref: '#/components/parameters/Profile'
         - name: profiles
@@ -4118,6 +4121,14 @@ paths:
           schema:
             type: string
             pattern: '^[a-z][a-z0-9_]{0,31}$'
+        - name: hidden
+          in: query
+          description: >-
+            `include` lists the conversations the caller hid too, each with `hidden: true`
+            (contract decision §88). Without it they are left out.
+          schema:
+            type: string
+            enum: [include]
       x-rt-events: []
       responses:
         '200':
@@ -4160,6 +4171,85 @@ paths:
           $ref: '#/components/responses/Unauthorized'
         '404':
           $ref: '#/components/responses/NotFound'
+  /channel-conversations/{conversation_id}:
+    delete:
+      operationId: sessions.deleteChannelConversation
+      tags: [sessions]
+      summary: Delete a channel conversation from Hermes (admin, permanent)
+      description: |
+        Removes the conversation from Hermes's own session store, in the Hermes profile the
+        profile in `X-Hub-Profile` is (contract decision §88): its messages go with it and it
+        cannot be brought back. It is what `hermes sessions delete` does, asked through Hermes's
+        internal server (ADR 0015). Clients ask for a confirmation that says it is permanent.
+
+        Only a conversation from a messaging channel is deleted here, and only by its exact id:
+        the hub reads it first and answers `404` (`resource: channel_conversation`) for anything
+        else, including the hub's own chats, which Hermes keeps too. `503 service_unavailable`
+        when Hermes cannot be asked (`details.reason: hermes_api_unavailable`, or
+        `hermes_not_managed` where the hub does not supervise Hermes). Every person's "hidden"
+        mark on it goes too.
+      x-roles: [owner, admin]
+      parameters:
+        - $ref: '#/components/parameters/Profile'
+        - name: conversation_id
+          in: path
+          required: true
+          description: Hermes's own session id.
+          schema:
+            type: string
+            pattern: '^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$'
+      x-rt-events: []
+      responses:
+        '204':
+          description: Deleted from Hermes.
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
+  /channel-conversations/{conversation_id}/hidden:
+    parameters:
+      - $ref: '#/components/parameters/Profile'
+      - name: conversation_id
+        in: path
+        required: true
+        description: Hermes's own session id.
+        schema:
+          type: string
+          pattern: '^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$'
+    put:
+      operationId: sessions.hideChannelConversation
+      tags: [sessions]
+      summary: Hide a channel conversation from the caller's list
+      description: |
+        The caller's own list stops showing the conversation (contract decision §88). Only the
+        hub remembers it — per person, per profile — and Hermes, the channel and everyone
+        else's list are untouched. Hiding one that is already hidden, or one the hub cannot read
+        right now, is allowed; the conversation itself is not looked up.
+      x-rt-events: []
+      responses:
+        '204':
+          description: Hidden.
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+    delete:
+      operationId: sessions.unhideChannelConversation
+      tags: [sessions]
+      summary: Show a hidden channel conversation again
+      description: The reverse of `sessions.hideChannelConversation`; one not hidden is fine.
+      x-rt-events: []
+      responses:
+        '204':
+          description: Shown again.
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
   /channel-conversations/{conversation_id}/messages:
     get:
       operationId: sessions.listChannelMessages
@@ -4490,7 +4580,7 @@ paths:
       description: >-
         A `<video>` or `<audio>` element sends no header, so it cannot carry the bearer that
         `sessions.downloadAttachment` wants. This gives a one-attachment, read-only ticket in the
-        path instead (DECISIONS §88): valid for one hour, for this attachment only, and it stops
+        path instead (DECISIONS §90): valid for one hour, for this attachment only, and it stops
         when the person who asked may no longer read it. It is not the bearer token and grants
         nothing else. Supports `Range` like the download.
       x-rt-events: []
@@ -13335,7 +13425,7 @@ paths:
         carries only `{request_id, status}`: what the device sends stays in the request, which
         only its person and the device read. Only the device's own person may ask it — their web
         session, a token of theirs with the `device` scope, or the run token of one of their
-        agent runs for `files` and `apps` only (DECISIONS §87; the request then carries the
+        agent runs for `files` and `apps` only (DECISIONS §89; the request then carries the
         run's id) — else `403`; anyone else's device, an admin's included, is `404`. A device
         whose `profiles` leave out the profile asked in is `403` with `details.reason =
         device_not_in_profile`. A device that lacks the capability, or switched it off, is
@@ -17845,6 +17935,12 @@ components:
           $ref: '#/components/schemas/Timestamp'
         last_message_at:
           $ref: '#/components/schemas/Timestamp'
+        hidden:
+          type: boolean
+          description: >-
+            The caller hid it from their list (`sessions.hideChannelConversation`, contract
+            decision §88). Only a list asked with `hidden=include` carries hidden ones; absent
+            means `false`.
     ChannelMessagePreview:
       type: object
       required: [role, text]
@@ -22586,6 +22682,15 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/ModelCapability'
+        image_only:
+          type: boolean
+          description: >-
+            The model answers with images only (contract decision §87) — an Images-API model
+            such as `gpt-image-*`, DALL·E, Imagen or FLUX, or the ChatGPT subscription's image
+            model. It is offered as the profile's image model and never as a chat model: clients
+            leave it out of every chat-model picker (the composer, the defaults, the fallback
+            chain). A model that draws and also chats (`gemini-*-image`) is not image-only.
+            Absent from an older hub, which means `false`.
         pricing:
           oneOf:
             - $ref: '#/components/schemas/ModelPricing'
@@ -23398,7 +23503,7 @@ components:
           items:
             $ref: '#/components/schemas/ProfileSlug'
           description: |
-            The profiles whose agents may ask this device for something (DECISIONS §87). `null`, the
+            The profiles whose agents may ask this device for something (DECISIONS §89). `null`, the
             default, is every profile of the device's person; a list narrows it. Absent from a hub
             older than the field.
         helper:
@@ -23792,7 +23897,7 @@ components:
           maximum: 300000
           description: |
             How long the device has to answer. Absent, it depends on the capability (DECISIONS
-            §87): `files` 60 s and `apps` 120 s (the person may be asked first), everything else
+            §89): `files` 60 s and `apps` 120 s (the person may be asked first), everything else
             30 s.
     DeviceRequestResponse:
       type: object

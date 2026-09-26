@@ -142,7 +142,7 @@ export const devices = sqliteTable(
     renamedAt: timestampMs('renamed_at'),
     capabilities: json<DeviceCapability[]>('capabilities').notNull().default(EMPTY_ARRAY),
     /**
-     * The profiles (slugs) whose agents may ask this device (DECISIONS §87); null: every
+     * The profiles (slugs) whose agents may ask this device (DECISIONS §89); null: every
      * profile of the device's person, the default.
      */
     profiles: json<string[]>('profiles'),

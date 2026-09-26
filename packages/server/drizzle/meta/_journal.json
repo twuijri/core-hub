@@ -201,8 +201,15 @@
     {
       "idx": 28,
       "version": "6",
-      "when": 1790380933630,
-      "tag": "0028_device_helper",
+      "when": 1790382373682,
+      "tag": "0028_channel_conversation_hides",
+      "breakpoints": true
+    },
+    {
+      "idx": 29,
+      "version": "6",
+      "when": 1790384136879,
+      "tag": "0029_device_helper",
       "breakpoints": true
     }
   ]

@@ -285,6 +285,8 @@ describe('channel conversations: the routes', () => {
   let owner = '';
   let member = '';
   let previous: ReturnType<typeof registerChannelSource>;
+  let hermesStore: Record<string, ScriptedProfile> = {};
+  const hermesCalls: string[] = [];
 
   const get = (token: string, url: string, profile = 'default') =>
     hub.app.inject({
@@ -304,12 +306,12 @@ describe('channel conversations: the routes', () => {
     ).access_token;
 
   beforeAll(async () => {
-    const hermesStore = store();
+    hermesStore = store();
     hermesStore.designer = {
       sessions: [telegram('20260925_120000_99887766', T0 + 500, { display_name: 'سارة' })],
     };
-    previous = registerChannelSource((app) =>
-      scriptedChannels(hermesStore, {
+    previous = registerChannelSource((app) => {
+      const source = scriptedChannels(hermesStore, {
         // The hub's rule, as the composition root has it: the default workspace is Hermes's
         // `default`, any other its slug.
         profileOf: (workspace) => {
@@ -320,8 +322,20 @@ describe('channel conversations: the routes', () => {
           if (!row) return null;
           return row.isDefault ? 'default' : row.slug === 'designer' ? 'designer' : null;
         },
-      }),
-    );
+      });
+      // Every source made for a request writes what it asked into one list the tests read.
+      const ask = source.get.bind(source);
+      const remove = source.delete.bind(source);
+      source.get = <T>(path: string) => {
+        hermesCalls.push(`GET ${path}`);
+        return ask<T>(path);
+      };
+      source.delete = <T>(path: string) => {
+        hermesCalls.push(`DELETE ${path}`);
+        return remove<T>(path);
+      };
+      return source;
+    });
     const sessions = createSessionsModule({
       agents: new FakeAgentDirectory([fakeHermes(AGENT_ID)]),
       runner: new FakeAgentRunner({ script: [{ type: 'completed' }] }),
@@ -419,5 +433,93 @@ describe('channel conversations: the routes', () => {
       code: 'not_found',
       details: { resource: 'channel_conversation' },
     });
+  });
+
+  // ------------------------------------------------ hide and delete (§88)
+  const send = (method: 'PUT' | 'DELETE', token: string, url: string, profile = 'default') =>
+    hub.app.inject({
+      method,
+      url: `/api/v1${url}`,
+      headers: { authorization: `Bearer ${token}`, 'x-hub-profile': profile },
+    });
+  const ids = async (token: string, url: string, profile = 'default') =>
+    (
+      (await get(token, url, profile)).json() as {
+        items: Array<{ id: string; hidden?: boolean }>;
+      }
+    ).items;
+
+  it('hides one from the caller’s own list only, and shows it again', async () => {
+    const DESIGNER = '20260925_120000_99887766';
+    expect(
+      (await send('PUT', owner, `/channel-conversations/${DESIGNER}/hidden`, 'designer'))
+        .statusCode,
+    ).toBe(204);
+    // Hiding twice is fine.
+    expect(
+      (await send('PUT', owner, `/channel-conversations/${DESIGNER}/hidden`, 'designer'))
+        .statusCode,
+    ).toBe(204);
+    expect((await ids(owner, '/channel-conversations', 'designer')).map((c) => c.id)).toEqual([]);
+    expect(
+      (await ids(owner, '/channel-conversations?profiles=all')).map((c) => c.id),
+    ).not.toContain(DESIGNER);
+    // Asked for, it is there, and says so.
+    expect(await ids(owner, '/channel-conversations?hidden=include', 'designer')).toEqual([
+      expect.objectContaining({ id: DESIGNER, hidden: true }),
+    ]);
+    // Someone else's list is theirs: the member still sees it, and Hermes was never told.
+    expect((await ids(member, '/channel-conversations', 'designer')).map((c) => c.id)).toEqual([
+      DESIGNER,
+    ]);
+    expect(hermesStore.designer?.sessions.map((row) => row.id)).toEqual([DESIGNER]);
+    expect(hermesCalls.some((call) => call.startsWith('DELETE'))).toBe(false);
+
+    expect(
+      (await send('DELETE', owner, `/channel-conversations/${DESIGNER}/hidden`, 'designer'))
+        .statusCode,
+    ).toBe(204);
+    const back = await ids(owner, '/channel-conversations', 'designer');
+    expect(back.map((c) => c.id)).toEqual([DESIGNER]);
+    expect(back[0]?.hidden).toBeUndefined();
+    expect(
+      (await send('PUT', owner, '/channel-conversations/..%2Fetc/hidden', 'designer')).statusCode,
+    ).toBe(400);
+  });
+
+  it('deletes one from Hermes for an admin only, through Hermes’s own delete', async () => {
+    const WHATSAPP = '20260925_080000_cc33dd44';
+    const HUB_CHAT = '20260925_070000_ee55ff66';
+    // A member may not; nothing reached Hermes.
+    const refused = await send('DELETE', member, `/channel-conversations/${WHATSAPP}`, 'designer');
+    expect(refused.statusCode).toBe(403);
+    expect(hermesCalls.some((call) => call.startsWith('DELETE'))).toBe(false);
+
+    // The hub's own chat runs in Hermes too: not a channel conversation, never deleted here.
+    const hubChat = await send('DELETE', owner, `/channel-conversations/${HUB_CHAT}`);
+    expect(hubChat.statusCode).toBe(404);
+    expect(hubChat.json()).toMatchObject({ details: { resource: 'channel_conversation' } });
+    // Nor a prefix Hermes would resolve to one.
+    expect((await send('DELETE', owner, '/channel-conversations/20260925_08')).statusCode).toBe(
+      404,
+    );
+    expect(hermesCalls.some((call) => call.startsWith('DELETE'))).toBe(false);
+
+    // Hidden by the owner first: the mark goes with the conversation.
+    await send('PUT', owner, `/channel-conversations/${WHATSAPP}/hidden`);
+    const done = await send('DELETE', owner, `/channel-conversations/${WHATSAPP}`);
+    expect(done.statusCode).toBe(204);
+    expect(hermesCalls.filter((call) => call.startsWith('DELETE'))).toEqual([
+      `DELETE /api/sessions/${WHATSAPP}?profile=default`,
+    ]);
+    expect(hermesStore.default?.sessions.map((row) => row.id)).not.toContain(WHATSAPP);
+    // Gone from the list at once (what was read of the profile was dropped), hidden or not.
+    expect(
+      (await ids(owner, '/channel-conversations?hidden=include')).map((c) => c.id),
+    ).not.toContain(WHATSAPP);
+    // Deleted twice: it is not there any more.
+    expect((await send('DELETE', owner, `/channel-conversations/${WHATSAPP}`)).statusCode).toBe(
+      404,
+    );
   });
 });

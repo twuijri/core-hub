@@ -127,7 +127,7 @@ function mount(message: Message, files: SessionFile[]) {
       );
     }
     if (url.pathname.endsWith('/stream')) {
-      // A stream ticket (§88): the page plays the video from it, never with the bearer.
+      // A stream ticket (§90): the page plays the video from it, never with the bearer.
       return Promise.resolve(
         new Response(
           JSON.stringify({

@@ -47,7 +47,7 @@ test('32. files a run wrote open beside the chat from the Files list and the too
 
   // The Files list: the three files, newest first, each with its size.
   const button = page.getByTestId('chat-files');
-  await expect(button).toHaveText('الملفات (3)');
+  await expect(button).toHaveAccessibleName('الملفات (3)');
   await button.click();
   const sheet = page.getByTestId('files-sheet');
   await expect(sheet.getByTestId('file-row')).toHaveCount(3);
@@ -119,4 +119,17 @@ test('32. files a run wrote open beside the chat from the Files list and the too
   await page.screenshot({ path: path.join(shots, '32-chat-files-phone.png') });
   await page.getByRole('button', { name: 'إغلاق اللوحة الجانبية' }).click();
   await expect(pane).toHaveCount(0);
+
+  // On a phone the conversation's bar keeps the agent and folds the folder, Files and the
+  // Chat | Trajectory switch into one "More" panel: still one bar, pinned above the messages.
+  const bar = page.getByTestId('chat-header');
+  await expect(bar).toHaveAttribute('data-layout', 'menu');
+  await expect(bar.getByTestId('session-agent')).toBeVisible();
+  await bar.getByTestId('chat-more-button').click();
+  const more = page.getByTestId('chat-more');
+  await expect(more.getByTestId('chat-files')).toContainText('الملفات (3)');
+  await expect(more.getByTestId('chat-tabs')).toBeVisible();
+  await page.screenshot({ path: path.join(shots, '32-chat-bar-phone-more.png') });
+  await more.getByTestId('chat-files').click();
+  await expect(sheet.getByTestId('file-row')).toHaveCount(3);
 });

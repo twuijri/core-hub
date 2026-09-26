@@ -664,7 +664,7 @@ export function createDevicesModule(lent: DevicesPorts): HubModule {
             });
           }
           // Which profiles may ask the device is its person's choice, made from a sign-in of
-          // theirs: not the device's own token, not an agent's run, not an admin (§87).
+          // theirs: not the device's own token, not an agent's run, not an admin (§89).
           if (
             patch.profiles !== undefined &&
             (row.ownerId !== principal.user.id ||
@@ -915,7 +915,7 @@ export function createDevicesModule(lent: DevicesPorts): HubModule {
             timeout_ms?: number;
           };
           // An agent's run may ask the person's own computer for its helper's files and
-          // programs, and nothing else (§87); anyone else needs the `device` scope.
+          // programs, and nothing else (§89); anyone else needs the `device` scope.
           const run = isRunPrincipal(principal);
           const allowed = run
             ? AGENT_CAPABILITIES.has(input.capability)

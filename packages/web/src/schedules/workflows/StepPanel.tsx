@@ -27,6 +27,7 @@ import {
   type BadgeTone,
 } from '../../ui/index.js';
 import { Combobox } from '../../ui/Combobox.js';
+import { chatModels } from '../../models/queries.js';
 import { modelOption } from '../../models/useModelPicker.js';
 import type { Agent, Model } from '../../types.js';
 import {
@@ -262,8 +263,8 @@ function AgentForm({
   models: readonly Model[];
 }) {
   const { t } = useI18n();
-  const modelOptions = models
-    .filter((model) => model.visible && !model.disabled && model.kind === 'chat')
+  const modelOptions = chatModels(models)
+    .filter((model) => model.visible && !model.disabled)
     .map((model) => modelOption(model, model.key));
   return (
     <>

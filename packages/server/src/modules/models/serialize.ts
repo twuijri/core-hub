@@ -1,7 +1,7 @@
 // Rows -> the contract's `Provider`, `Model`, `ModelDefaults`, `Ensemble` and
 // `SpeechSettings`. Pure functions, unit-tested; the one rule they all obey is that a
 // secret leaves as `[stored]` or as `null`, never as itself.
-import { withImageCapability } from './images.js';
+import { isImageOnlyModel, withImageCapability } from './images.js';
 import { iso } from '../../lib/time.js';
 import { MASKED } from './crypto.js';
 import type {
@@ -35,6 +35,8 @@ export interface ContractModel {
   disabled: boolean;
   context_window: number | null;
   capabilities: string[];
+  /** Answers with images only: never offered as a chat model (decision §87). */
+  image_only: boolean;
   pricing: ContractModelPricing | null;
 }
 
@@ -120,6 +122,7 @@ export function serializeModel(row: ModelRow, providerSlug: string): ContractMod
     // `image_output` also when only the id says so: a catalogue refreshed before the hub
     // knew the capability still offers its image models to the Images tab (decision §72).
     capabilities: withImageCapability(row.modelKey, row.capabilities),
+    image_only: isImageOnlyModel(row.modelKey, row.capabilities),
     pricing: serializePricing(row.pricing),
   };
 }

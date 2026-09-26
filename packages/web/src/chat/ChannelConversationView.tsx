@@ -16,14 +16,26 @@ import {
   useChannelConversation,
   type ChannelMessage,
 } from '../sessions/channels.js';
-import { Avatar, Badge, EmptyState, Notice, SkeletonText } from '../ui/index.js';
-import { IconGlobe } from '../ui/icons.js';
+import { useChannelActions } from '../sessions/ChannelActions.js';
+import { TopBarActions } from '../shell/topBarSlot.js';
+import {
+  Avatar,
+  Badge,
+  EmptyState,
+  Menu,
+  MenuItem,
+  MenuSeparator,
+  Notice,
+  SkeletonText,
+} from '../ui/index.js';
+import { IconEyeOff, IconGlobe, IconMore, IconTrash } from '../ui/icons.js';
 import { Markdown } from './Markdown.js';
 import { ContinueChannel } from './ContinueChannel.js';
 
 export function ChannelConversationView({ id }: { id: string }) {
   const { t } = useI18n();
-  const { profile } = useAuth();
+  const { profile, homeProfile } = useAuth();
+  const actions = useChannelActions({ openId: id });
   const manyProfiles = useManyProfiles();
   const read = useChannelConversation(id);
   const conversation = read.data?.conversation;
@@ -39,20 +51,63 @@ export function ChannelConversationView({ id }: { id: string }) {
         data-testid="channel-screen"
         data-conversation-id={id}
       >
-        <div className="mb-3 flex flex-wrap items-center gap-2" data-testid="chat-header">
-          {conversation && (
-            <Badge tone="neutral" testId="channel-badge">
-              {channel}
-            </Badge>
-          )}
-          {manyProfiles && <ProfileBadge profile={profile} testId="chat-profile" />}
-          {/* Hermes's own title, beside the other party's name the page is called by. */}
-          {conversation?.title && conversation.title !== peer && (
-            <span className="min-w-0 truncate text-sm text-muted" dir="auto">
-              {conversation.title}
-            </span>
-          )}
-        </div>
+        {/* The conversation's controls, pinned in the top bar like a chat's (ConversationBar). */}
+        <TopBarActions>
+          <div className="convo-bar" data-testid="chat-header">
+            {conversation && (
+              <Badge tone="neutral" testId="channel-badge">
+                {channel}
+              </Badge>
+            )}
+            {manyProfiles && profile !== homeProfile && (
+              <ProfileBadge profile={profile} testId="chat-profile" />
+            )}
+            {conversation && (
+              <Menu
+                side="bottom"
+                align="end"
+                tooltip={t('sessions.channels.actions')}
+                testId="channel-actions-menu"
+                trigger={
+                  <button
+                    type="button"
+                    className="btn btn-ghost px-1.5"
+                    aria-label={t('sessions.channels.actions')}
+                    data-testid="channel-actions"
+                  >
+                    <IconMore />
+                  </button>
+                }
+              >
+                <MenuItem
+                  icon={<IconEyeOff size={14} />}
+                  onSelect={() => actions.hide(conversation)}
+                >
+                  {t('sessions.channels.hide')}
+                </MenuItem>
+                {actions.canDelete && (
+                  <>
+                    <MenuSeparator />
+                    <MenuItem
+                      icon={<IconTrash size={14} />}
+                      tone="danger"
+                      onSelect={() => void actions.remove(conversation)}
+                    >
+                      {t('sessions.channels.delete')}
+                    </MenuItem>
+                  </>
+                )}
+              </Menu>
+            )}
+          </div>
+        </TopBarActions>
+        {actions.dialog}
+        {/* Hermes's own title, beside the other party's name the page is called by. */}
+        {conversation?.title && conversation.title !== peer && (
+          <p className="mb-3 min-w-0 truncate text-sm text-muted" dir="auto">
+            {conversation.title}
+          </p>
+        )}
         {read.isPending && (
           <div className="flex flex-col gap-6 py-4">
             <SkeletonText lines={2} label={t('common.loading')} />

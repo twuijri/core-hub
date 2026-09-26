@@ -5,7 +5,7 @@
  * the outcome.
  */
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { cleanup, render, screen, waitFor, within } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { AuthProvider } from '../src/auth/context.js';
@@ -17,8 +17,15 @@ import { I18nProvider } from '../src/i18n/context.js';
 import type { Language } from '../src/i18n/index.js';
 import { FallbackList } from '../src/models/FallbackList.js';
 import { SignInPanel } from '../src/models/SignInPanel.js';
-import { addFallback, moveFallback, removeFallback } from '../src/models/fallbacks.js';
+import {
+  addFallback,
+  moveFallback,
+  removeFallback,
+  reorderFallback,
+} from '../src/models/fallbacks.js';
 import { PaneProvider } from '../src/shell/pane.js';
+import { chatModels } from '../src/models/queries.js';
+import { optionLabels, stubListViewport } from './helpers/ui.js';
 import type { Message, Model, Provider, Run } from '../src/types.js';
 
 afterEach(cleanup);
@@ -34,6 +41,17 @@ describe('the chain as the Defaults tab edits it', () => {
     chain = addFallback(chain, primary, primary);
     chain = addFallback(chain, ref('claude'), primary);
     expect(chain.map((each) => each.model)).toEqual(['gpt', 'claude']);
+  });
+
+  it('puts a dragged entry at its new place, the rest in order', () => {
+    const chain = [ref('a'), ref('b'), ref('c')];
+    const at = (value: string, index: number) =>
+      reorderFallback(chain, `${P}|${value}`, index).map((each) => each.model);
+    expect(at('a', 2)).toEqual(['b', 'c', 'a']);
+    expect(at('c', 0)).toEqual(['c', 'a', 'b']);
+    expect(at('b', 1)).toEqual(['a', 'b', 'c']);
+    expect(at('zzz', 0)).toEqual(['a', 'b', 'c']);
+    expect(at('a', 3)).toEqual(['a', 'b', 'c']);
   });
 
   it('moves one place at a time and keeps the ends where they are', () => {
@@ -83,18 +101,102 @@ describe('the fallback list', () => {
     return onChange;
   }
 
-  it('lists the chain in order and reorders and removes by its buttons', async () => {
+  it('lists the chain numbered, with a grip and a ✕ on each row and no ▲/▼ buttons', async () => {
     const onChange = mount([ref('gpt'), ref('claude')]);
     const items = screen.getAllByTestId('fallback-item');
     expect(items.map((item) => item.getAttribute('data-model'))).toEqual(['gpt', 'claude']);
-    // The first cannot move up, the last cannot move down.
-    expect(within(items[0] as HTMLElement).getByTestId('fallback-up')).toBeDisabled();
-    expect(within(items[1] as HTMLElement).getByTestId('fallback-down')).toBeDisabled();
-
-    await userEvent.click(screen.getByRole('button', { name: 'Move proxy/claude up' }));
-    expect(onChange).toHaveBeenLastCalledWith([ref('claude'), ref('gpt')]);
+    expect(screen.getAllByTestId('fallback-place').map((n) => n.textContent)).toEqual(['1', '2']);
+    // Dragging replaced the buttons (owner, 2026-09-26): «سحب وترتيب مهب كذا أزرار».
+    expect(screen.queryByTestId('fallback-up')).toBeNull();
+    expect(screen.queryByTestId('fallback-down')).toBeNull();
+    expect(
+      screen.getByRole('button', {
+        name: 'Drag to reorder proxy/claude (Space to pick up, arrows to move)',
+      }),
+    ).toBeTruthy();
     await userEvent.click(screen.getByRole('button', { name: 'Remove proxy/gpt' }));
     expect(onChange).toHaveBeenLastCalledWith([ref('claude')]);
+  });
+
+  it('reorders by dragging from the keyboard: the places follow, the drop saves once', async () => {
+    // jsdom lays nothing out: give each row a place on the page, one under the other.
+    const real = HTMLElement.prototype.getBoundingClientRect;
+    const spy = vi
+      .spyOn(HTMLElement.prototype, 'getBoundingClientRect')
+      .mockImplementation(function (this: HTMLElement) {
+        const row = this.closest<HTMLElement>('[data-testid="fallback-item"]');
+        if (!row) return real.call(this);
+        const rows = [...document.querySelectorAll('[data-testid="fallback-item"]')];
+        const top = rows.indexOf(row) * 40;
+        return {
+          x: 0,
+          y: top,
+          top,
+          left: 0,
+          right: 300,
+          bottom: top + 36,
+          width: 300,
+          height: 36,
+          toJSON: () => ({}),
+        } as DOMRect;
+      });
+    try {
+      const onChange = mount([ref('gpt'), ref('claude'), ref('llama')]);
+      const grip = screen.getByRole('button', {
+        name: 'Drag to reorder proxy/gpt (Space to pick up, arrows to move)',
+      });
+      grip.focus();
+      fireEvent.keyDown(grip, { key: ' ', code: 'Space' });
+      // The sensor listens for the arrows from the next tick on.
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      fireEvent.keyDown(document, { key: 'ArrowDown', code: 'ArrowDown' });
+      // Before the drop the numbers already say where it would land; nothing saved yet.
+      await waitFor(() =>
+        expect(
+          screen.getAllByTestId('fallback-item').map((item) => item.getAttribute('data-model')),
+        ).toEqual(['claude', 'gpt', 'llama']),
+      );
+      expect(onChange).not.toHaveBeenCalled();
+      fireEvent.keyDown(document, { key: ' ', code: 'Space' });
+      await waitFor(() =>
+        expect(onChange).toHaveBeenLastCalledWith([ref('claude'), ref('gpt'), ref('llama')]),
+      );
+      expect(onChange).toHaveBeenCalledTimes(1);
+    } finally {
+      spy.mockRestore();
+    }
+  });
+
+  it('never offers a model that only draws (§87): it would fail a chat turn', async () => {
+    const drawOnly = { ...model('gpt-image-2'), capabilities: ['image_output'], image_only: true };
+    const drawsAndChats = {
+      ...model('gemini-3.1-flash-image'),
+      capabilities: ['image_output'],
+      image_only: false,
+    };
+    expect(chatModels([...models, drawOnly, drawsAndChats] as Model[]).map((m) => m.model)).toEqual(
+      ['gemini', 'gpt', 'claude', 'gemini-3.1-flash-image'],
+    );
+    const user = userEvent.setup();
+    render(
+      <I18nProvider language="en">
+        <FallbackList
+          chain={[]}
+          primary={ref('gemini')}
+          models={[...models, drawOnly, drawsAndChats] as Model[]}
+          disabled={false}
+          onChange={vi.fn()}
+        />
+      </I18nProvider>,
+    );
+    const undo = stubListViewport();
+    try {
+      const offered = await optionLabels(user, screen.getByTestId('fallback-add'));
+      expect(offered.join(' ')).not.toContain('gpt-image-2');
+      expect(offered.join(' ')).toContain('gemini-3.1-flash-image');
+    } finally {
+      undo();
+    }
   });
 
   it('says what an empty chain means, in Arabic too', () => {

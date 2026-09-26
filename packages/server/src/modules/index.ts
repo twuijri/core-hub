@@ -319,6 +319,19 @@ export function hermesChannelSourceOver(
 ): ChannelSource {
   const homeOf = (profile: string) =>
     profile === RUNTIME_DEFAULT_PROFILE ? root : path.join(root, 'profiles', profile);
+  const call = async <T>(method: 'GET' | 'DELETE', apiPath: string): Promise<T> => {
+    try {
+      return await dashboard.request<T>(method, apiPath);
+    } catch (error) {
+      if (error instanceof HermesDashboardRefusal) {
+        throw new ChannelSourceRefusal(error.status, error.message);
+      }
+      if (error instanceof HermesDashboardUnavailable) {
+        throw new ChannelSourceUnavailable(error.message);
+      }
+      throw error;
+    }
+  };
   return {
     hermesProfile(workspace) {
       const profile = profileOf(workspace);
@@ -329,18 +342,11 @@ export function hermesChannelSourceOver(
         return null;
       }
     },
-    async get<T>(apiPath: string): Promise<T> {
-      try {
-        return await dashboard.request<T>('GET', apiPath);
-      } catch (error) {
-        if (error instanceof HermesDashboardRefusal) {
-          throw new ChannelSourceRefusal(error.status, error.message);
-        }
-        if (error instanceof HermesDashboardUnavailable) {
-          throw new ChannelSourceUnavailable(error.message);
-        }
-        throw error;
-      }
+    get<T>(apiPath: string): Promise<T> {
+      return call<T>('GET', apiPath);
+    },
+    delete<T>(apiPath: string): Promise<T> {
+      return call<T>('DELETE', apiPath);
     },
     stamp(profile) {
       const parts: string[] = [];

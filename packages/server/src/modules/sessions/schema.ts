@@ -452,3 +452,20 @@ export const sessionCategories = sqliteTable(
     index('session_categories_workspace_position_idx').on(t.workspace, t.position),
   ],
 );
+
+/**
+ * A channel conversation (Telegram, WhatsApp… read from Hermes, §61) one person hid from their
+ * own list (contract decision §88). The conversation is Hermes's; only this mark is the hub's —
+ * per person (`owner_id`) and per profile (`workspace`), keyed by Hermes's session id. Deleting
+ * the conversation from Hermes removes every mark on it.
+ */
+export const channelConversationHides = sqliteTable(
+  'channel_conversation_hides',
+  {
+    ...scopedColumns(),
+    conversationId: text('conversation_id', { length: 128 }).notNull(),
+  },
+  (t) => [
+    uniqueIndex('channel_conversation_hides_uq').on(t.workspace, t.ownerId, t.conversationId),
+  ],
+);

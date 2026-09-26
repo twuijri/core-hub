@@ -43,6 +43,7 @@ import {
 } from './files.js';
 import { SubagentBook, type SubagentRecord, type SubagentSupport } from './subagents.js';
 import { SessionCategories } from './categories.js';
+import { ChannelHides } from './channel-hides.js';
 import {
   continuationTitle,
   summaryOf,
@@ -149,6 +150,8 @@ export class SessionsService {
   readonly subagents: SubagentBook;
   /** The profile's categories (contract decision §60, `categories.ts`). */
   readonly categories: SessionCategories;
+  /** Channel conversations each person hid from their own list (§88, `channel-hides.ts`). */
+  readonly channelHides: ChannelHides;
 
   constructor(
     store: SessionsStore,
@@ -180,6 +183,7 @@ export class SessionsService {
     });
     ports.runner.onSubagent?.((sessionId, signal) => this.subagents.onSignal(sessionId, signal));
     this.categories = new SessionCategories(store.db);
+    this.channelHides = new ChannelHides(store.db);
   }
 
   // ------------------------------------------------------------ subagents (§56)

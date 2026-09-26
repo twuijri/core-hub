@@ -122,7 +122,7 @@ describe("the hub's own tools: the card and the profile's Hermes config", () => 
       server_name: 'corehub',
     });
     // Switched on, every group reads and none writes until someone says so — except the
-    // person's own computers, which wait for an admin to switch that group on (§87).
+    // person's own computers, which wait for an admin to switch that group on (§89).
     const groups = before.json().groups as Array<{
       id: string;
       enabled: boolean;

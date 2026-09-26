@@ -2673,7 +2673,60 @@ while the environment variable is also set, so it adds nothing; faking "no heade
 zero-width prefix (Hermes's own code notes WhatsApp renders those as stray characters) or a
 blank-line prefix.
 
-## 87. An agent's run may ask its person's own computer for files and programs; a computer says what its helper offers
+## 87. A model that only draws is never offered as a chat model
+
+The owner, testing hub 1.1.1 (2026-09-26): the ChatGPT subscription's `gpt-image-2`, OpenAI's
+`gpt-image-1` and the like appeared in the chat model pickers, and choosing one as a chat model
+failed the turn. Proposed, owner to confirm:
+
+- **`Model.image_only`** (optional boolean; absent from an older hub means `false`). The hub says
+  it for the families that answer only with pictures — the Images-API ones it already speaks to
+  through `/images/generations` (`gpt-image-*`, DALL·E, Imagen, FLUX, Stable Diffusion, Seedream,
+  Recraft, Ideogram …), the subscription's image model among them. A model that draws **and**
+  chats (`gemini-*-image`, `gpt-5-image`) keeps `image_output` and is not image-only.
+- **Clients leave image-only models out of every chat-model picker**: the composer, the chat and
+  auxiliary defaults, the fallback chain, a provider card's default and a workflow step. They stay
+  on the Images tab (§72), which lists `image_output` models as before.
+- The hub does not refuse an image-only model that a profile already chose as a chat model: a
+  refusal would break a saved setting without a way to see why. Hiding it is enough to stop new
+  mistakes.
+
+Rejected: a new `ModelKind` value (`image`), which widens an enum the native clients decode and
+changes what every existing row of the catalogue is; a capability "text output", whose absence
+would have made every older row image-only.
+
+## 88. A channel conversation is hidden per person, and deleted from Hermes by an admin
+
+The owner could neither hide nor delete a Telegram conversation in the chats list: they are
+Hermes's and read-only (§61), and he had to run `hermes sessions delete` inside the container.
+Proposed, owner to confirm:
+
+- **Hide** (`sessions.hideChannelConversation`, `PUT /channel-conversations/{id}/hidden`, and
+  `sessions.unhideChannelConversation`, its `DELETE`): the caller's own list stops showing it.
+  The hub keeps the mark — per person and per profile, keyed by Hermes's session id — and
+  touches nothing else: other people's lists, Hermes and the channel stay as they were.
+  `sessions.listChannelConversations` leaves hidden ones out unless `hidden=include`, which lists
+  them marked `hidden: true`, so a client can offer "Show hidden chats" and "Show again".
+- **Delete from Hermes** (`sessions.deleteChannelConversation`,
+  `DELETE /channel-conversations/{id}`, owners and admins): what `hermes sessions delete` does,
+  asked through Hermes's internal server (ADR 0015). What Hermes does, observed in its MIT source
+  at `v2026.9.14` (`hermes_cli/web_routers/sessions.py`, `hermes_state_sessions.py`) and said in
+  our words: `DELETE /api/sessions/{id}?profile=<p>` removes the session row and its messages,
+  deletes the delegate children with it and keeps branch children by clearing their parent, and
+  answers `{"ok": true}` — or `{"ok": true, "already_absent": true}` when there is nothing to
+  delete. It resolves an id it does not know as the one session that id is a prefix of. So the
+  hub first reads the row by the exact id (`GET /api/sessions/{id}`) and deletes only a
+  conversation from a messaging channel whose id is exactly the one asked for; anything else —
+  the hub's own chats, which Hermes keeps too, or a prefix — is `404`. The hub drops what it had
+  read of that profile, forgets every person's hidden mark on it, and writes an audit line
+  (`sessions.channel_conversation_deleted`). It is permanent; clients ask first and say so.
+
+Rejected: deleting through the `hermes` CLI from the hub process (the dashboard is already how
+the hub reads these, and it answers per profile); hiding for everyone (that is a different
+person's list); a soft delete in Hermes (Hermes has archive, but an archived conversation is
+still in its store, which is not what the owner asked for).
+
+## 89. An agent's run may ask its person's own computer for files and programs; a computer says what its helper offers
 
 A hub on a server could not reach the person's computer: a run token had no way to make a device
 request, and nothing described what the computer's helper offered (ADR 0025, the owner's scope of
@@ -2706,13 +2759,13 @@ request, and nothing described what the computer's helper offered (ADR 0025, the
 - **What a device sends for the chat goes on the reply** of the run that asked
   (`devices.fetch_file`); the file is an attachment of the profile like any other.
 
-Migration `0028` adds `devices.profiles` and `devices.helper`.
+Migration `0029` adds `devices.profiles` and `devices.helper`.
 
 Rejected: per-program tools in the hub's tool list (Hermes lists a profile's tools before a run
 names a person); a raw pipe per program through the hub (no per-call consent, logging or timeout,
 and it would not fit §74's one-answer request).
 
-## 88. A video plays from a one-attachment stream ticket
+## 90. A video plays from a one-attachment stream ticket
 
 A reply can now carry a video (a render from the person's computer). The web fetched every file
 with the bearer header into a blob, so a 40 MB video played only once all of it had arrived; a
