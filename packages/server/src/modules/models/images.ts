@@ -52,7 +52,7 @@ const IMAGES_API_MODEL =
   /(?:^|[/:._-])(?:gpt-image|chatgpt-image|dall-e|dalle|imagen|flux|stable-diffusion|sdxl|sd3|seedream|hidream|recraft|ideogram|kolors|qwen-image)/i;
 
 /**
- * True when the model answers with images only (contract decision §86): the Images-API families
+ * True when the model answers with images only (contract decision §87): the Images-API families
  * above — `gpt-image-*` (the ChatGPT subscription's too), DALL·E, Imagen, FLUX … — which take a
  * prompt and give back a picture, never a turn of conversation. Chosen as a chat model, such a
  * model fails the turn, so the clients keep it out of every chat-model picker. A chat model that

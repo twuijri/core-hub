@@ -1,5 +1,5 @@
 /**
- * Hiding a channel conversation from one's own list (contract decision §87).
+ * Hiding a channel conversation from one's own list (contract decision §88).
  *
  * A conversation on Telegram or WhatsApp is Hermes's (§61): the hub cannot change it, and
  * deleting it from Hermes is an admin's, permanent step. Hiding is the everyday one — a person

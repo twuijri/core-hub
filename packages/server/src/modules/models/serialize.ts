@@ -35,7 +35,7 @@ export interface ContractModel {
   disabled: boolean;
   context_window: number | null;
   capabilities: string[];
-  /** Answers with images only: never offered as a chat model (decision §86). */
+  /** Answers with images only: never offered as a chat model (decision §87). */
   image_only: boolean;
   pricing: ContractModelPricing | null;
 }

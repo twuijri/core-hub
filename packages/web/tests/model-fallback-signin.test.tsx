@@ -5,7 +5,7 @@
  * the outcome.
  */
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { AuthProvider } from '../src/auth/context.js';
@@ -167,7 +167,7 @@ describe('the fallback list', () => {
     }
   });
 
-  it('never offers a model that only draws (§86): it would fail a chat turn', async () => {
+  it('never offers a model that only draws (§87): it would fail a chat turn', async () => {
     const drawOnly = { ...model('gpt-image-2'), capabilities: ['image_output'], image_only: true };
     const drawsAndChats = {
       ...model('gemini-3.1-flash-image'),

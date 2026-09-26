@@ -226,7 +226,7 @@ export function SessionList({ onOpen }: { onOpen?: () => void }) {
   const unreachable = (channelList.data?.unavailable ?? []).some(
     (entry) => entry.reason === 'hermes_unreachable',
   );
-  // What this person hid stays out of the list until they ask to see it (§87).
+  // What this person hid stays out of the list until they ask to see it (§88).
   const [showHidden, setShowHidden] = useState(false);
   const hiddenCount =
     scope === 'archived' ? 0 : (channelList.data?.items ?? []).filter((c) => c.hidden).length;
@@ -1135,7 +1135,7 @@ function SessionRow({
 /**
  * A conversation Hermes keeps for a channel (contract decision §61): the other party (or
  * Hermes's title), its latest message, and its profile when several are shown. It opens as a
- * read-only transcript. Its menu (§87) hides it from this person's list — or shows it again —
+ * read-only transcript. Its menu (§88) hides it from this person's list — or shows it again —
  * and, for an admin, deletes it from Hermes after asking.
  */
 function ChannelRow({

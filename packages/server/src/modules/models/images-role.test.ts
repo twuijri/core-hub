@@ -24,12 +24,7 @@ import {
 } from '../../../tests/unit/helpers.js';
 import { parseEnv } from './dotenv.js';
 import { imagePluginDir, imagePluginFiles, writeHermesImagePlugin } from './hermes-image-plugin.js';
-import {
-  HERMES_IMAGE_PLUGIN,
-  imageProtocolOf,
-  isImageModel,
-  isImageOnlyModel,
-} from './images.js';
+import { HERMES_IMAGE_PLUGIN, imageProtocolOf, isImageModel, isImageOnlyModel } from './images.js';
 import { writeHermesProviders } from './propagation.js';
 
 type Hub = TestHub & { token: string };
@@ -165,7 +160,7 @@ describe('models: which models draw', () => {
     expect(imageProtocolOf('anthropic', 'claude-sonnet-4-5')).toBeNull();
   });
 
-  it('tells a model that only draws from one that draws and chats (§86)', () => {
+  it('tells a model that only draws from one that draws and chats (§87)', () => {
     // Image-only: the Images-API families, the subscription's gpt-image-2 among them. Chosen as
     // a chat model they fail the turn, so the clients leave them out of chat pickers.
     for (const id of [
@@ -199,7 +194,7 @@ describe('models: which models draw', () => {
       const chat = items.find((model) => model.model === 'gemini-2.5-pro');
       expect(image?.capabilities).toContain('image_output');
       expect(chat?.capabilities).not.toContain('image_output');
-      // Gemini's image model chats too; neither is image-only (§86).
+      // Gemini's image model chats too; neither is image-only (§87).
       expect(image?.image_only).toBe(false);
       expect(chat?.image_only).toBe(false);
       // OpenAI's gpt-image only draws: offered as the image model, never as a chat model.

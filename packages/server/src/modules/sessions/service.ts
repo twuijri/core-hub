@@ -150,7 +150,7 @@ export class SessionsService {
   readonly subagents: SubagentBook;
   /** The profile's categories (contract decision §60, `categories.ts`). */
   readonly categories: SessionCategories;
-  /** Channel conversations each person hid from their own list (§87, `channel-hides.ts`). */
+  /** Channel conversations each person hid from their own list (§88, `channel-hides.ts`). */
   readonly channelHides: ChannelHides;
 
   constructor(

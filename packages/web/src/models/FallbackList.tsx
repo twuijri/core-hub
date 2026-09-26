@@ -100,8 +100,7 @@ export function FallbackList({
     onDragStart: ({ active }) => t('models.defaults.fallback_picked', place(active.id, values)),
     onDragOver: ({ active }) => t('models.defaults.fallback_moved', place(active.id)),
     onDragEnd: ({ active }) => t('models.defaults.fallback_dropped', place(active.id)),
-    onDragCancel: ({ active }) =>
-      t('models.defaults.fallback_cancelled', place(active.id, values)),
+    onDragCancel: ({ active }) => t('models.defaults.fallback_cancelled', place(active.id, values)),
   };
 
   return (
@@ -137,7 +136,12 @@ export function FallbackList({
                   position={index + 1}
                   disabled={disabled}
                   onRemove={() =>
-                    onChange(removeFallback(chain, chain.findIndex((c) => c === ref)))
+                    onChange(
+                      removeFallback(
+                        chain,
+                        chain.findIndex((c) => c === ref),
+                      ),
+                    )
                   }
                 />
               ))}

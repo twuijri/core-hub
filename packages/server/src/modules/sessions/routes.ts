@@ -579,7 +579,7 @@ export function registerSessionRoutes(app: FastifyInstance, deps: RouteDeps): vo
           }))
         : [{ workspace: scope.workspace, profile: scope.profile }];
     const read = await deps.channels(request).list(scopes, query.channel);
-    // What this person hid stays out of their list unless asked for (§87).
+    // What this person hid stays out of their list unless asked for (§88).
     const workspaceOf = new Map(scopes.map((each) => [each.profile, each.workspace]));
     const hidden = deps.service(request).channelHides.hiddenIn(
       scopes.map((each) => each.workspace),
@@ -596,7 +596,7 @@ export function registerSessionRoutes(app: FastifyInstance, deps: RouteDeps): vo
     };
   });
 
-  // Hide one from the caller's own list, or show it again (§87): the hub's mark only.
+  // Hide one from the caller's own list, or show it again (§88): the hub's mark only.
   const conversationIdOf = (request: FastifyRequest): string => {
     const id = (request.params as { conversation_id?: unknown }).conversation_id;
     if (typeof id !== 'string' || !CONVERSATION_ID.test(id)) {
@@ -619,7 +619,7 @@ export function registerSessionRoutes(app: FastifyInstance, deps: RouteDeps): vo
     return reply.status(204).send();
   });
 
-  // Delete it from Hermes, for good (§87; admins, by the contract's `x-roles`).
+  // Delete it from Hermes, for good (§88; admins, by the contract's `x-roles`).
   app.delete('/channel-conversations/:conversation_id', async (request, reply) => {
     const role = request.principal?.user.role;
     if (role !== 'owner' && role !== 'admin') {

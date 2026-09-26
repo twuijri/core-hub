@@ -20,9 +20,9 @@
  *   row and its messages go, delegate children with it, branch children are kept and orphaned,
  *   and a session already gone is answered `{"ok": true, "already_absent": true}`. Hermes
  *   resolves an id it does not know as a unique prefix of one it does, so the hub reads the
- *   exact row first and deletes only that (contract decision §87).
+ *   exact row first and deletes only that (contract decision §88).
  *
- * The one write is that delete, for an admin (§87). What was read is kept per Hermes profile and asked for again
+ * The one write is that delete, for an admin (§88). What was read is kept per Hermes profile and asked for again
  * only when Hermes's store changed since (the port's `stamp`, the store file's size and time),
  * and never more often than every few seconds, so a list polled while it is open does not keep
  * Hermes's server awake when nothing happens: with no call for ten minutes it stops (ADR 0015).
@@ -455,7 +455,7 @@ export class ChannelConversations {
   }
 
   /**
-   * Deletes one channel conversation from Hermes, permanently (contract decision §87). The row
+   * Deletes one channel conversation from Hermes, permanently (contract decision §88). The row
    * is read first, by its exact id: anything that is not a channel conversation of this
    * profile — the hub's own chats run in Hermes too — is `404`, and so is an id Hermes would
    * only match as a prefix. What was read of the profile is dropped, so the next list reads

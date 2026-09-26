@@ -1,5 +1,5 @@
 /**
- * What a person can do with a channel conversation (contract decision §87), wherever it shows:
+ * What a person can do with a channel conversation (contract decision §88), wherever it shows:
  * its row in the chats list and the bar of its open transcript.
  *
  * - **Hide** takes it out of the person's own list — nobody else's, and Hermes keeps it. "Show

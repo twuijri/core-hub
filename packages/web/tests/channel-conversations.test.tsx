@@ -148,7 +148,7 @@ interface Seen {
 
 function fakeHub(options: { unreachable?: boolean } = {}) {
   const seen: Seen[] = [];
-  // The hub's per-person marks and Hermes's store, as the routes change them (§87).
+  // The hub's per-person marks and Hermes's store, as the routes change them (§88).
   const hidden = new Set<string>();
   const gone = new Set<string>();
   const json = (body: unknown, status = 200) =>
@@ -301,7 +301,7 @@ describe('the chats list shows them in their channel group', () => {
   });
 });
 
-describe('hiding one, and deleting one from Hermes (§87)', () => {
+describe('hiding one, and deleting one from Hermes (§88)', () => {
   const rowOf = async (id: string) =>
     (await screen.findAllByTestId('channel-row')).find((r) => r.dataset.conversationId === id)!;
   /** The row's own "More" menu, opened from the keyboard (see helpers/ui.ts). */

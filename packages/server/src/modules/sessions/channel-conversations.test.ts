@@ -435,7 +435,7 @@ describe('channel conversations: the routes', () => {
     });
   });
 
-  // ------------------------------------------------ hide and delete (§87)
+  // ------------------------------------------------ hide and delete (§88)
   const send = (method: 'PUT' | 'DELETE', token: string, url: string, profile = 'default') =>
     hub.app.inject({
       method,
@@ -460,9 +460,7 @@ describe('channel conversations: the routes', () => {
       (await send('PUT', owner, `/channel-conversations/${DESIGNER}/hidden`, 'designer'))
         .statusCode,
     ).toBe(204);
-    expect((await ids(owner, '/channel-conversations', 'designer')).map((c) => c.id)).toEqual(
-      [],
-    );
+    expect((await ids(owner, '/channel-conversations', 'designer')).map((c) => c.id)).toEqual([]);
     expect(
       (await ids(owner, '/channel-conversations?profiles=all')).map((c) => c.id),
     ).not.toContain(DESIGNER);

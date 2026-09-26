@@ -224,3 +224,10 @@ receives them and its own session store keeps them. This module stores nothing o
 them on demand through Hermes's internal server (`channel-conversations.ts`, contract decision
 §61) and keeps the last read in memory per Hermes profile, until that profile's `state.db`
 changes. They are `ChannelConversation` / `ChannelMessage` on the wire, never `session` rows.
+
+The one thing stored about them (decision §88) is `channel_conversation_hides`: a person's
+"hidden from my list" mark — `workspace`, `owner_id` (the person), `conversation_id` (Hermes's
+session id), unique together. The list leaves marked ones out unless `hidden=include`. Deleting a
+conversation (owners and admins) goes to Hermes's own `DELETE /api/sessions/{id}` after the hub
+reads the exact row, drops what it had read of that profile, removes every mark on the
+conversation and writes an audit line.

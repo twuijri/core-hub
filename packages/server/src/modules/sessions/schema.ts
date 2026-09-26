@@ -455,7 +455,7 @@ export const sessionCategories = sqliteTable(
 
 /**
  * A channel conversation (Telegram, WhatsApp… read from Hermes, §61) one person hid from their
- * own list (contract decision §87). The conversation is Hermes's; only this mark is the hub's —
+ * own list (contract decision §88). The conversation is Hermes's; only this mark is the hub's —
  * per person (`owner_id`) and per profile (`workspace`), keyed by Hermes's session id. Deleting
  * the conversation from Hermes removes every mark on it.
  */

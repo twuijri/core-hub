@@ -253,9 +253,7 @@ describe('the conversation bar', () => {
     expect(screen.getByTestId('chat-header')).not.toHaveTextContent(GENERATED);
     await user.click(button);
     const sheet = await screen.findByTestId('working-dir-sheet');
-    expect(within(sheet).getByTestId('working-dir-path')).toHaveTextContent(
-      `${ROOT}/${GENERATED}`,
-    );
+    expect(within(sheet).getByTestId('working-dir-path')).toHaveTextContent(`${ROOT}/${GENERATED}`);
     expect(within(sheet).getByTestId('working-dir-locked')).toHaveTextContent(
       'The folder is fixed once the chat has run.',
     );
@@ -290,8 +288,6 @@ describe('the conversation bar', () => {
     expect(within(more).getByTestId('working-dir-current')).toHaveTextContent('Automatic folder');
     expect(within(more).getByTestId('chat-files')).toHaveTextContent('Files');
     await user.click(within(more).getByTestId('chat-tabs-trajectory'));
-    await waitFor(() =>
-      expect(screen.getByTestId('chat-screen').dataset.view).toBe('trajectory'),
-    );
+    await waitFor(() => expect(screen.getByTestId('chat-screen').dataset.view).toBe('trajectory'));
   });
 });

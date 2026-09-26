@@ -49,7 +49,7 @@ export function useChannelConversations(
     queryFn: async () =>
       (
         await client.request('get', '/channel-conversations', {
-          // Hidden ones too, marked: the list leaves them out unless asked to show them (§87).
+          // Hidden ones too, marked: the list leaves them out unless asked to show them (§88).
           query: {
             hidden: 'include' as const,
             ...(filters.allProfiles ? { profiles: 'all' as const } : {}),
@@ -83,7 +83,7 @@ export function useChannelConversation(id: string) {
 
 /**
  * Hiding one from the person's own list, showing it again, and — for an admin — deleting it
- * from Hermes for good (contract decision §87). Each in the conversation's own profile; the
+ * from Hermes for good (contract decision §88). Each in the conversation's own profile; the
  * lists read again afterwards.
  */
 export function useChannelConversationWrites() {

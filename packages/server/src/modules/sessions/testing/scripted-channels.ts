@@ -1,5 +1,5 @@
 /**
- * A scripted Hermes for channel conversations (contract decisions §61, §87): answers the
+ * A scripted Hermes for channel conversations (contract decisions §61, §88): answers the
  * calls `channel-conversations.ts` makes to Hermes's server the way Hermes does
  * (`hermes_cli/web_routers/sessions.py`, `v2026.9.14`) — `GET /api/sessions` filtered by
  * `sources`, most recent first, capped by `limit`; one session's row, `404 {"detail":
