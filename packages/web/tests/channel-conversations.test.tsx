@@ -9,7 +9,7 @@
  * contract. The hub's half is `modules/sessions/channel-conversations.test.ts`.
  */
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { cleanup, render, screen, waitFor, within } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter, Route, Routes } from 'react-router';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -140,6 +140,7 @@ function memoryStorage(): Storage {
 }
 
 interface Seen {
+  method: string;
   path: string;
   query: URLSearchParams;
   profile: string | null;
@@ -147,6 +148,9 @@ interface Seen {
 
 function fakeHub(options: { unreachable?: boolean } = {}) {
   const seen: Seen[] = [];
+  // The hub's per-person marks and Hermes's store, as the routes change them (§87).
+  const hidden = new Set<string>();
+  const gone = new Set<string>();
   const json = (body: unknown, status = 200) =>
     Promise.resolve(
       new Response(JSON.stringify(body), {
@@ -158,12 +162,27 @@ function fakeHub(options: { unreachable?: boolean } = {}) {
     const url = new URL(String(input));
     const path = url.pathname.replace(/^\/api\/v1/, '');
     const profile = new Headers(init?.headers).get('X-Hub-Profile');
-    seen.push({ path, query: url.searchParams, profile });
+    const method = (init?.method ?? 'GET').toUpperCase();
+    seen.push({ method, path, query: url.searchParams, profile });
     if (path === '/profiles')
       return json({ items: [{ id: '01J8QK3ZR2W7M5N4P6T8V9X0P1', slug: 'default', name: 'D' }] });
+    const mark = /^\/channel-conversations\/([^/]+)\/hidden$/.exec(path);
+    if (mark) {
+      if (method === 'PUT') hidden.add(decodeURIComponent(mark[1]!));
+      else hidden.delete(decodeURIComponent(mark[1]!));
+      return Promise.resolve(new Response(null, { status: 204 }));
+    }
+    const one = /^\/channel-conversations\/([^/]+)$/.exec(path);
+    if (one && method === 'DELETE') {
+      gone.add(decodeURIComponent(one[1]!));
+      return Promise.resolve(new Response(null, { status: 204 }));
+    }
     if (path === '/channel-conversations')
       return json({
-        items: [TG, WA],
+        items: [TG, WA]
+          .filter((c) => !gone.has(c.id))
+          .filter((c) => url.searchParams.get('hidden') === 'include' || !hidden.has(c.id))
+          .map((c) => (hidden.has(c.id) ? { ...c, hidden: true } : c)),
         unavailable: options.unreachable
           ? [{ profile: 'default', reason: 'hermes_unreachable', message: 'down' }]
           : [],
@@ -187,10 +206,12 @@ function fakeHub(options: { unreachable?: boolean } = {}) {
 function Providers({
   fetchImpl,
   path,
+  role = 'owner',
   children,
 }: {
   fetchImpl: typeof fetch;
   path: string;
+  role?: 'owner' | 'member';
   children: React.ReactNode;
 }) {
   const store = new SessionStore(memoryStorage());
@@ -199,7 +220,7 @@ function Providers({
     token: 't',
     refresh_token: null,
     expires_at: null,
-    user: { id: 'u', username: 'admin', display_name: 'Admin', role: 'owner' },
+    user: { id: 'u', username: 'admin', display_name: 'Admin', role },
   });
   return (
     <ThemeProvider>
@@ -277,6 +298,135 @@ describe('the chats list shows them in their channel group', () => {
       </Providers>,
     );
     expect(await screen.findByTestId('channel-unreachable')).toHaveTextContent('Hermes');
+  });
+});
+
+describe('hiding one, and deleting one from Hermes (§87)', () => {
+  const rowOf = async (id: string) =>
+    (await screen.findAllByTestId('channel-row')).find((r) => r.dataset.conversationId === id)!;
+  /** The row's own "More" menu, opened from the keyboard (see helpers/ui.ts). */
+  const openMenu = async (user: ReturnType<typeof userEvent.setup>, id: string) => {
+    const more = within(await rowOf(id)).getByTestId('channel-more-button');
+    more.focus();
+    await user.keyboard('{Enter}');
+    await screen.findByTestId('channel-more');
+  };
+
+  it('hides one from the person’s own list, and brings it back from "Show hidden"', async () => {
+    const user = userEvent.setup();
+    const hub = fakeHub();
+    render(
+      <Providers fetchImpl={hub.fetchImpl} path="/chat">
+        <SessionList />
+      </Providers>,
+    );
+    await openMenu(user, TG.id);
+    await user.click(await screen.findByRole('menuitem', { name: 'إخفاء من قائمتي' }));
+    await waitFor(() =>
+      expect(
+        hub.seen.some(
+          (c) => c.method === 'PUT' && c.path === `/channel-conversations/${TG.id}/hidden`,
+        ),
+      ).toBe(true),
+    );
+    // Gone from the list; WhatsApp stays. Hermes was not asked to delete anything.
+    await waitFor(() =>
+      expect(screen.getAllByTestId('channel-row').map((r) => r.dataset.conversationId)).toEqual([
+        WA.id,
+      ]),
+    );
+    expect(hub.seen.some((c) => c.method === 'DELETE')).toBe(false);
+
+    const toggle = screen.getByTestId('channel-show-hidden');
+    expect(toggle).toHaveTextContent('إظهار المحادثات المخفية (1)');
+    await user.click(toggle);
+    const back = await rowOf(TG.id);
+    expect(back.dataset.hidden).toBe('true');
+    await openMenu(user, TG.id);
+    await user.click(await screen.findByRole('menuitem', { name: 'إظهار مرة أخرى' }));
+    await waitFor(() =>
+      expect(
+        hub.seen.some(
+          (c) => c.method === 'DELETE' && c.path === `/channel-conversations/${TG.id}/hidden`,
+        ),
+      ).toBe(true),
+    );
+    await waitFor(() => expect(screen.queryByTestId('channel-show-hidden')).toBeNull());
+  });
+
+  it('deletes one from Hermes for an admin, after a confirmation that says it is permanent', async () => {
+    const user = userEvent.setup();
+    const hub = fakeHub();
+    render(
+      <Providers fetchImpl={hub.fetchImpl} path="/chat">
+        <SessionList />
+      </Providers>,
+    );
+    await openMenu(user, WA.id);
+    await user.click(await screen.findByRole('menuitem', { name: 'حذف من هرمز…' }));
+    const dialog = await screen.findByTestId('confirm-dialog');
+    expect(dialog).toHaveTextContent('حذف «مجموعة العائلة» من هرمز؟');
+    expect(dialog).toHaveTextContent('نهائيًا');
+    expect(dialog).toHaveTextContent('لا يمكن استرجاعها');
+    // Nothing is sent before the answer.
+    expect(hub.seen.some((c) => c.method === 'DELETE')).toBe(false);
+    await user.click(within(dialog).getByRole('button', { name: 'حذف نهائي' }));
+    await waitFor(() =>
+      expect(
+        hub.seen.some((c) => c.method === 'DELETE' && c.path === `/channel-conversations/${WA.id}`),
+      ).toBe(true),
+    );
+    await waitFor(() =>
+      expect(screen.getAllByTestId('channel-row').map((r) => r.dataset.conversationId)).toEqual([
+        TG.id,
+      ]),
+    );
+  });
+
+  it('offers a member hiding only: deleting from Hermes is an admin’s', async () => {
+    const user = userEvent.setup();
+    const hub = fakeHub();
+    render(
+      <Providers fetchImpl={hub.fetchImpl} path="/chat" role="member">
+        <SessionList />
+      </Providers>,
+    );
+    await openMenu(user, TG.id);
+    expect(await screen.findByRole('menuitem', { name: 'إخفاء من قائمتي' })).toBeTruthy();
+    expect(screen.queryByRole('menuitem', { name: 'حذف من هرمز…' })).toBeNull();
+    await user.keyboard('{Escape}');
+    // The right-click offers the same, and no more.
+    fireEvent.contextMenu(await rowOf(TG.id));
+    const menu = await screen.findByTestId('channel-menu');
+    expect(menu).toHaveTextContent('إخفاء من قائمتي');
+    expect(menu).not.toHaveTextContent('حذف من هرمز');
+  });
+
+  it('puts the same actions in the open conversation’s bar', async () => {
+    const user = userEvent.setup();
+    const hub = fakeHub();
+    render(
+      <Providers fetchImpl={hub.fetchImpl} path={`/chat/${TG.id}?source=channel`}>
+        <Routes>
+          <Route path="/chat/:sessionId?" element={<ChatScreen />} />
+        </Routes>
+      </Providers>,
+    );
+    const bar = await screen.findByTestId('chat-header');
+    expect(screen.getByTestId('topbar-slot')).toContainElement(bar);
+    const actions = await within(bar).findByTestId('channel-actions');
+    actions.focus();
+    await user.keyboard('{Enter}');
+    expect(await screen.findByRole('menuitem', { name: 'إخفاء من قائمتي' })).toBeTruthy();
+    expect(screen.getByRole('menuitem', { name: 'حذف من هرمز…' })).toBeTruthy();
+    await user.click(screen.getByRole('menuitem', { name: 'إخفاء من قائمتي' }));
+    await waitFor(() =>
+      expect(
+        hub.seen.some(
+          (c) => c.method === 'PUT' && c.path === `/channel-conversations/${TG.id}/hidden`,
+        ),
+      ).toBe(true),
+    );
   });
 });
 

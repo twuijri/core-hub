@@ -223,7 +223,19 @@
         "note": "What should the agent do with it? (optional)",
         "go": "Continue",
         "no_agent": "No agent in this profile can take it. Install one from Agents first."
-      }
+      },
+      "hide": "Hide from my list",
+      "unhide": "Show again",
+      "delete": "Delete from Hermes…",
+      "delete_title": "Delete “{title}” from Hermes?",
+      "delete_body": "The conversation and its messages are removed from Hermes for everyone, permanently. This cannot be undone. The chat in {channel} itself is not affected.",
+      "delete_confirm": "Delete permanently",
+      "hidden_toast": "“{title}” is hidden from your list",
+      "hidden_toast_body": "Only you stop seeing it. “Show hidden chats” at the end of the list brings it back.",
+      "show_hidden": "Show hidden chats ({count})",
+      "hide_hidden": "Stop showing hidden chats",
+      "actions": "Conversation actions",
+      "action_failed": "Couldn't change the conversation"
     }
   },
   "search": {

@@ -1240,3 +1240,23 @@
   color: var(--ch-color-text-muted);
   text-align: center;
 }
+
+/* ------------------------------------ channel conversations a person hid (§87) */
+.session-row[data-hidden='true'] .session-link {
+  opacity: 0.6;
+}
+.session-hidden-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--ch-space-1);
+  align-self: flex-start;
+  margin-block-start: var(--ch-space-2);
+  padding: var(--ch-space-1) var(--ch-space-2);
+  border-radius: var(--ch-radius-sm);
+  font-size: var(--ch-font-size-xs);
+  color: var(--ch-color-text-muted);
+}
+.session-hidden-toggle:hover {
+  background: var(--ch-color-surface-2);
+  color: var(--ch-color-text);
+}
