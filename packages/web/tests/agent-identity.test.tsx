@@ -22,7 +22,7 @@ const custom = {
   id: 'AG-CUSTOM',
   slug: 'my-agent',
   name: 'Office helper',
-  avatar: { kind: 'image', url: '/api/v1/agents/AG-CUSTOM/avatar', seed: null },
+  avatar: { kind: 'image', url: null, seed: null },
 } as unknown as Agent;
 
 describe('agentIdentity', () => {
