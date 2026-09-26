@@ -16,9 +16,18 @@
 ## الملفات والتأثير
 ### المهام
 - دمج #176–#180 في الفرع (تعارض واحد في `ChatParts.kt` الأندرويد: `ToolActivityView` + `FileLinkHandler` معًا؛ و`DECISIONS.md` §111 ثم §112).
+- الأرقام الإنجليزية في كل العملاء + شريحة البروفايل في تذييل درج الجوال (§113) — `night/digits-profile` — `2026-09-27-twuijri-digits-profile-switcher.md`.
 
 ## الفحوص (الأوامر ونواتجها الفعلية)
 تُضاف مع كل مهمة، ونتيجة CI في النهاية.
+
+الأرقام والبروفايل (`night/digits-profile`)، والتفاصيل في سجلها:
+```
+$ pnpm i18n:check        → i18n:check  OK (android: Arabic resources use Latin digits)
+$ pnpm nav:check         → nav:check  OK — 39 destinations …
+$ gradlew :app:testDebugUnitTest DigitsTest/StringsParityTest/NavigationParityTest/ScreenShots → 0 failures
+$ vitest (web) 24 files  → all passed
+```
 
 ## المخاطر والرجوع
 كل مهمة لها سجلها. الرجوع بإرجاع الطلب أو المهمة.
