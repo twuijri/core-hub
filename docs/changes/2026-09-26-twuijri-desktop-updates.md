@@ -156,7 +156,19 @@ Error: Error: Cannot find latest-linux.yml in the latest release artifacts (http
 **لم يُجرَّب تحديث حقيقي**: لا يمكن محليًا، لأنه يحتاج إصدارين منشورين يحملان ملفات التحديث (1.1.3 ثم ما بعده)،
 وتوقيع الماك. لم يُشغَّل تغليف الماك ولا ويندوز محليًا — يُبنيان في CI (`desktop.yml` على هذا الطلب).
 
-CI على طلب الدمج: يُحدَّث بعد الدفع.
+CI على طلب الدمج #173 (الرأس `2f14624e`): كل الفحوص ناجحة — الخادم (٣ أجزاء)، الويب واختبارات Playwright، دخان
+سطح المكتب تحت Xvfb، صورة Docker، الترحيلات، والمثبّتات على الأنظمة الثلاثة. وخطوة «Check the update feed» الجديدة
+عملت فعلًا على كل نظام بملفات حقيقية بنت electron-builder:
+
+```
+Installers (macos-latest)   - url: Core-Hub-1.1.2-arm64-mac.zip / - url: Core-Hub-1.1.2-arm64.dmg
+                            update feed (macos): names only files the release carries
+Installers (ubuntu-latest)  - url: Core-Hub-1.1.2-x86_64.AppImage / - url: corehub_1.1.2_amd64.deb
+                            update feed (linux): names only files the release carries
+Installers (windows-latest) - url: Core-Hub-Setup-1.1.2-x64.exe
+                            update feed (windows): names only files the release carries
+```
+(خطوة zip الماك الموقّع في `desktop-signed.yml` لا تعمل على طلب دمج؛ أول تشغيل لها مع وسم 1.1.3.)
 
 ## المخاطر والرجوع
 - **نسخ 1.1.2 وما قبلها لا تملك المحدِّث**: يثبّت أصحابها 1.1.3 يدويًا مرة واحدة، ثم يتحدّث التطبيق بنفسه.
