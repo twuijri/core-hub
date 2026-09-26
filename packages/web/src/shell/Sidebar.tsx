@@ -239,7 +239,7 @@ export function Sidebar({
                 render={({ className, children }) => (
                   <button
                     type="button"
-                    className={`${className} ${selected === d.id ? 'active' : ''}`}
+                    className={`${className} ${segmentFromPath(location.pathname) === d.id ? 'active' : ''}`}
                     data-nav-id={d.id}
                     onClick={() => {
                       chooseSegment(d.id);
