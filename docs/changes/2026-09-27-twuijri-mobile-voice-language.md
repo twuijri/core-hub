@@ -144,6 +144,21 @@ $ pnpm contracts:check-clients   → check-clients  OK — 659 client file(s) sc
 $ vitest run adapters.test.ts speech-api.test.ts → Test Files  2 passed (2) · Tests  29 passed (29)
 ```
 
+CI على طلب الليلة #165 (الرأس `98d73b31`، بعد دمج هذه المهمة في `2e74323a` ثم مهام أخرى):
+
+```
+Android build, unit tests, lint          pass
+Build and test on the iOS simulator      pass
+Generate the Swift client (CoreHubClient) pass
+Lint, typecheck, contracts, client tests, build  pass
+Web smoke journeys                       pass
+Server unit tests (shard 1/3, 2/3)       pass
+Server unit tests (shard 3/3)            fail — tests/unit/profile-transfer-providers.test.ts
+                                         (expected 4 to be 2): ينجح على 2e74323a (هذه المهمة)
+                                         وعلى d09bd987، ويفشل بعد دمج feat/voice-providers
+                                         (41376ec3) — ليس من هذه المهمة؛ أُبلغ عنه.
+```
+
 اختبار المالك نفسه (`testAutoListensInTheKeyboardsLanguageNotTheAppsLanguage` / «Auto listens in the
 keyboard's language, not the app's») يفشل على الكود القديم: القديم لا يعرف لوحة المفاتيح ويعطي
 `en-US` لواجهة إنجليزية. ولم يُجرَّب شيء على جهاز حقيقي.
