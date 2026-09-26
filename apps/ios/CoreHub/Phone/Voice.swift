@@ -15,15 +15,6 @@ import Speech
 @MainActor
 @Observable
 final class DeviceSettings {
-    enum DictationLanguage: String, CaseIterable, Identifiable {
-        /// The app's own language.
-        case app
-        case ar
-        case en
-
-        var id: String { rawValue }
-    }
-
     /// How a photo from the library or the camera is sent (Telegram's choice).
     enum PhotoQuality: String, CaseIterable, Identifiable {
         /// ≤ 2048 px, JPEG 0.8, as an image.
@@ -45,7 +36,9 @@ final class DeviceSettings {
     }
 
     var voiceInput: Bool { didSet { defaults.set(voiceInput, forKey: Keys.voiceInput) } }
-    var dictationLanguage: DictationLanguage { didSet { defaults.set(dictationLanguage.rawValue, forKey: Keys.dictation) } }
+    /// `DictationLanguage.auto` (the default: the keyboard in use picks it), or a BCP-47 tag
+    /// the person chose from the microphone's menu or here.
+    var dictationLanguage: String { didSet { defaults.set(dictationLanguage, forKey: Keys.dictation) } }
     var spokenReplies: Bool { didSet { defaults.set(spokenReplies, forKey: Keys.spoken) } }
     /// Written only when the person picks it (`didSet` does not run in `init`), so an install
     /// that never chose takes whatever the default is now.
@@ -68,26 +61,47 @@ final class DeviceSettings {
     init(defaults: UserDefaults = .standard) {
         self.defaults = defaults
         voiceInput = defaults.object(forKey: Keys.voiceInput) as? Bool ?? true
-        dictationLanguage = defaults.string(forKey: Keys.dictation).flatMap(DictationLanguage.init(rawValue:)) ?? .app
+        dictationLanguage = Self.dictation(defaults.string(forKey: Keys.dictation))
         spokenReplies = defaults.bool(forKey: Keys.spoken)
         voiceSource = defaults.string(forKey: Keys.voiceSource).flatMap(VoiceSource.init(rawValue:)) ?? .phone
         photoQuality = defaults.string(forKey: Keys.photoQuality).flatMap(PhotoQuality.init(rawValue:)) ?? .compressed
         backgroundChecks = defaults.object(forKey: Keys.background) as? Bool ?? true
     }
 
-    /// The locale dictation listens in.
-    func dictationLocale(app language: AppLanguage) -> Locale {
-        switch dictationLanguage {
-        case .app: return Voice.locale(for: language.rawValue)
-        case .ar: return Voice.locale(for: "ar")
-        case .en: return Voice.locale(for: "en")
-        }
+    /// A stored dictation choice as it reads now. Up to 1.1.x the choices were `app` (the app's
+    /// language — what made an English app hear Arabic as English), `ar` and `en`: `app`
+    /// becomes Auto, the others stay chosen.
+    static func dictation(_ stored: String?) -> String {
+        guard let stored, stored != "app", stored != DictationLanguage.auto,
+              let tag = DictationLanguage.tag(stored) else { return DictationLanguage.auto }
+        return tag
+    }
+
+    /// The language to send the hub with a recording: none with Auto, so its speech-to-text
+    /// model detects it (`models.transcribe` `language` is a hint; a wrong one would force it),
+    /// else the chosen one.
+    var hubDictationLanguage: String? {
+        dictationLanguage == DictationLanguage.auto ? nil : DictationLanguage.base(dictationLanguage)
     }
 }
 
 enum Voice {
+    /// The audio the iPhone asks the hub to speak in (`SpeechRequest.format`, DECISIONS §87):
+    /// `AVAudioPlayer` plays MP3, not Ogg.
+    static let hubFormat = SpeechFormat.mp3
+
+    /// The phone's voice for a reply: the language it is written in (DictationLanguage.script),
+    /// in the phone's own variant of it when the phone has one.
     static func locale(for language: String) -> Locale {
-        Locale(identifier: language == "ar" ? "ar-SA" : "en-US")
+        let preferred = Locale.preferredLanguages.first { DictationLanguage.base($0) == DictationLanguage.base(language) }
+        return Locale(identifier: preferred ?? language)
+    }
+
+    /// The language a reply is written in, by its script, as the phone knows it (its own
+    /// languages first); English when it cannot tell.
+    static func language(of text: String) -> String {
+        guard let script = DictationLanguage.script(of: [text]) else { return "en" }
+        return DictationLanguage.base(DictationLanguage.language(for: script, known: Locale.preferredLanguages))
     }
 
     /// A reply in parts the hub speaks (`SpeechRequest.text` ≤ 2 000): cut at a sentence or a
@@ -183,7 +197,8 @@ final class Speaker {
         let text = Voice.speakable(markdown)
         guard !text.isEmpty else { return }
         stop()
-        let language = ContentDirection.of(text) == .rightToLeft ? "ar" : "en"
+        // The reply's own language, by its letters: Arabic, Russian, Hindi… not only Arabic or English.
+        let language = Voice.language(of: text)
         guard let app, let profile, app.device.voiceSource == .hub else {
             speakOnPhone(text, language: language)
             return
@@ -200,7 +215,8 @@ final class Speaker {
                 let file = try? await app.api.call {
                     try await ModelsAPI.modelsSynthesize(
                         xHubProfile: profile,
-                        speechRequest: SpeechRequest(text: part, language: language),
+                        // MP3: the iPhone cannot play the Ogg some providers send by default (§87).
+                        speechRequest: SpeechRequest(text: part, language: language, format: Voice.hubFormat),
                         apiConfiguration: $0
                     )
                 }
@@ -238,161 +254,3 @@ final class Speaker {
     }
 }
 
-/// Dictation into the composer: a recording the hub transcribes (`models.transcribe`) when the
-/// hub listens for this profile, else the phone's own speech recognition.
-@MainActor
-@Observable
-final class Dictation {
-    enum State: Equatable {
-        case idle
-        case listening
-        /// The recording is with the hub.
-        case transcribing
-        case failed(String)
-    }
-
-    /// Sends a recording to the hub; its words back.
-    typealias Transcribe = (_ audio: URL, _ durationMs: Int) async throws -> String
-
-    private(set) var state: State = .idle
-    /// What has been heard so far in this take.
-    private(set) var heard = ""
-
-    @ObservationIgnored private let engine = AVAudioEngine()
-    @ObservationIgnored private var request: SFSpeechAudioBufferRecognitionRequest?
-    @ObservationIgnored private var task: SFSpeechRecognitionTask?
-    @ObservationIgnored private var recorder: AVAudioRecorder?
-    @ObservationIgnored private var transcribe: Transcribe?
-    @ObservationIgnored private var l10n = L10n(.en)
-    @ObservationIgnored private var startedAt = Date()
-
-    /// Listens in `locale`: into a recording for `hub` when it is given, else with the phone.
-    func start(locale: Locale, l10n: L10n, hub: Transcribe? = nil) async {
-        guard state != .listening, state != .transcribing else { return }
-        self.l10n = l10n
-        if let hub {
-            await record(for: hub, l10n: l10n)
-            return
-        }
-        let speech = await withCheckedContinuation { (continuation: CheckedContinuation<SFSpeechRecognizerAuthorizationStatus, Never>) in
-            SFSpeechRecognizer.requestAuthorization { continuation.resume(returning: $0) }
-        }
-        guard speech == .authorized else {
-            state = .failed(l10n("voice.denied"))
-            return
-        }
-        let microphone = await AVAudioApplication.requestRecordPermission()
-        guard microphone else {
-            state = .failed(l10n("voice.denied"))
-            return
-        }
-        guard let recognizer = SFSpeechRecognizer(locale: locale), recognizer.isAvailable else {
-            state = .failed(l10n("voice.unavailable"))
-            return
-        }
-        do {
-            let session = AVAudioSession.sharedInstance()
-            try session.setCategory(.record, mode: .measurement, options: .duckOthers)
-            try session.setActive(true, options: .notifyOthersOnDeactivation)
-            let request = SFSpeechAudioBufferRecognitionRequest()
-            request.shouldReportPartialResults = true
-            self.request = request
-            let input = engine.inputNode
-            let format = input.outputFormat(forBus: 0)
-            input.removeTap(onBus: 0)
-            input.installTap(onBus: 0, bufferSize: 1024, format: format) { buffer, _ in
-                request.append(buffer)
-            }
-            engine.prepare()
-            try engine.start()
-            heard = ""
-            state = .listening
-            task = recognizer.recognitionTask(with: request) { [weak self] result, error in
-                let text = result?.bestTranscription.formattedString
-                let final = result?.isFinal ?? false
-                Task { @MainActor in
-                    guard let self else { return }
-                    if let text { self.heard = text }
-                    if error != nil || final { self.stop() }
-                }
-            }
-        } catch {
-            state = .failed(l10n("voice.unavailable"))
-            stop()
-        }
-    }
-
-    /// Records to a file (AAC, 16 kHz mono: small, and the hub takes m4a) until `stop()`.
-    private func record(for hub: @escaping Transcribe, l10n: L10n) async {
-        guard await AVAudioApplication.requestRecordPermission() else {
-            state = .failed(l10n("voice.denied"))
-            return
-        }
-        let file = FileManager.default.temporaryDirectory.appendingPathComponent("dictation-\(UUID().uuidString).m4a")
-        let settings: [String: Any] = [
-            AVFormatIDKey: kAudioFormatMPEG4AAC,
-            AVSampleRateKey: 16_000,
-            AVNumberOfChannelsKey: 1,
-            AVEncoderAudioQualityKey: AVAudioQuality.medium.rawValue,
-        ]
-        do {
-            let session = AVAudioSession.sharedInstance()
-            try session.setCategory(.record, mode: .measurement, options: .duckOthers)
-            try session.setActive(true, options: .notifyOthersOnDeactivation)
-            let recorder = try AVAudioRecorder(url: file, settings: settings)
-            guard recorder.record() else { throw CocoaError(.fileWriteUnknown) }
-            self.recorder = recorder
-            transcribe = hub
-            startedAt = Date()
-            heard = ""
-            state = .listening
-        } catch {
-            state = .failed(l10n("voice.unavailable"))
-            try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
-        }
-    }
-
-    /// Ends the take: the phone's recognizer stops; a recording goes to the hub for its words.
-    func stop() {
-        if let recorder {
-            finishRecording(recorder)
-            return
-        }
-        engine.stop()
-        engine.inputNode.removeTap(onBus: 0)
-        request?.endAudio()
-        task?.cancel()
-        request = nil
-        task = nil
-        if state == .listening { state = .idle }
-        try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
-    }
-
-    private func finishRecording(_ recorder: AVAudioRecorder) {
-        recorder.stop()
-        self.recorder = nil
-        try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
-        guard let transcribe else { state = .idle; return }
-        self.transcribe = nil
-        let file = recorder.url
-        let durationMs = Int(Date().timeIntervalSince(startedAt) * 1000)
-        state = .transcribing
-        Task {
-            defer { try? FileManager.default.removeItem(at: file) }
-            do {
-                let text = try await transcribe(file, durationMs)
-                heard = text
-                state = .idle
-            } catch {
-                state = .failed(Dictation.describe(error, l10n: l10n))
-            }
-        }
-    }
-
-    /// A silent take is a hint, not an error (`400` with `details.reason: no_speech`).
-    static func describe(_ error: Error, l10n: L10n) -> String {
-        let failure = HubFailure(error)
-        if failure.status == 400, failure.reason == "no_speech" { return l10n("voice.no_speech") }
-        return failure.describe(l10n)
-    }
-}
