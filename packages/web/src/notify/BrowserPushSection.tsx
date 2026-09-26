@@ -24,7 +24,8 @@ import { usePushConfig, useTestNotice } from '../devices/queries.js';
 
 export function BrowserPushSection({ environment }: { environment?: PushEnvironment }) {
   const { t, language } = useI18n();
-  const { client } = useAuth();
+  const { client, user } = useAuth();
+  const userId = user?.id ?? null;
   const env = useMemo(() => environment ?? browserEnvironment(), [environment]);
   const config = usePushConfig();
   const testNotice = useTestNotice();
@@ -33,10 +34,10 @@ export function BrowserPushSection({ environment }: { environment?: PushEnvironm
   const [error, setError] = useState<unknown>(null);
 
   const refresh = useCallback(() => {
-    void browserPushState(env)
+    void browserPushState(env, userId)
       .then(setState)
       .catch(() => setState('off'));
-  }, [env]);
+  }, [env, userId]);
   useEffect(refresh, [refresh]);
 
   const webPushKey = config.data?.webpush_public_key ?? null;
@@ -96,6 +97,7 @@ export function BrowserPushSection({ environment }: { environment?: PushEnvironm
                 enableBrowserPush(client, env, {
                   publicKey: webPushKey,
                   locale: language === 'en' ? 'en' : 'ar',
+                  userId,
                 }),
               )
             }
