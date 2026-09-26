@@ -65,6 +65,7 @@ export {
   SidebarFrame,
   SidebarGroup,
   SidebarRow,
+  useSidebarFolded,
 } from './SidebarShell.js';
 export { Skeleton, SkeletonGroup, SkeletonText } from './Skeleton.js';
 export { Switch } from './Switch.js';

@@ -324,6 +324,16 @@ export const lucideNodes = {
     ['circle', { cx: '6.5', cy: '12.5', r: '.5', fill: 'currentColor' }],
     ['circle', { cx: '8.5', cy: '7.5', r: '.5', fill: 'currentColor' }],
   ],
+  'panel-left-close': [
+    ['rect', { width: '18', height: '18', x: '3', y: '3', rx: '2' }],
+    ['path', { d: 'M9 3v18' }],
+    ['path', { d: 'm16 15-3-3 3-3' }],
+  ],
+  'panel-left-open': [
+    ['rect', { width: '18', height: '18', x: '3', y: '3', rx: '2' }],
+    ['path', { d: 'M9 3v18' }],
+    ['path', { d: 'm14 9 3 3-3 3' }],
+  ],
   'panel-right': [
     ['rect', { width: '18', height: '18', x: '3', y: '3', rx: '2' }],
     ['path', { d: 'M15 3v18' }],

@@ -30,12 +30,19 @@ import {
   IconGlobe,
   IconSearch,
   IconSettings,
+  IconSidebarFold,
+  IconSidebarUnfold,
   IconSignOut,
 } from '../ui/icons.js';
 import {
+  Avatar,
   Badge,
   CoreHubMark,
   Button,
+  Menu,
+  MenuItem,
+  MenuNote,
+  MenuSeparator,
   Segmented,
   SidebarBody,
   SidebarBrand,
@@ -47,6 +54,7 @@ import {
 } from '../ui/index.js';
 import { useNoticeStream } from '../notify/queries.js';
 import { useDesktopEffects } from '../desktop/effects.js';
+import { foldShortcutAria, foldShortcutLabel } from './sidebarFold.js';
 
 const SEGMENT_STORAGE = `${derived.storagePrefix}segment`;
 /** The last page outside Settings, for the sidebar's way back (per tab, not per device). */
@@ -60,7 +68,19 @@ export function segmentFromPath(pathname: string): string | null {
   return null;
 }
 
-export function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
+export function Sidebar({
+  onNavigate,
+  folded = false,
+  onToggleFold,
+}: {
+  onNavigate?: () => void;
+  /**
+   * Folded into the rail of icons (`sidebarFold.ts`). Only the sidebar beside the page folds;
+   * the phone drawer passes neither prop and stays as it is.
+   */
+  folded?: boolean;
+  onToggleFold?: () => void;
+}) {
   // The inbox is watched here rather than on its own page: the unread count rides in the
   // Settings list, which is on screen when that page is not.
   useNoticeStream();
@@ -129,10 +149,33 @@ export function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
       : realtime.state === 'connecting'
         ? 'warning'
         : 'danger';
+  const foldLabel = t(folded ? 'shell.unfold' : 'shell.fold');
+  const foldToggle = onToggleFold ? (
+    <Button
+      variant="ghost"
+      size="sm"
+      iconOnly
+      aria-label={foldLabel}
+      aria-expanded={!folded}
+      aria-keyshortcuts={foldShortcutAria()}
+      tooltip={
+        <span>
+          {foldLabel}{' '}
+          <kbd className="ch-kbd" dir="ltr">
+            {foldShortcutLabel()}
+          </kbd>
+        </span>
+      }
+      icon={folded ? <IconSidebarUnfold size={18} /> : <IconSidebarFold size={18} />}
+      onClick={onToggleFold}
+      data-testid="sidebar-fold"
+    />
+  ) : undefined;
+  const userName = user?.display_name ?? user?.username ?? '';
 
   return (
-    <SidebarFrame label={t('shell.sidebar')}>
-      <SidebarBrand mark={<CoreHubMark size={28} />} name={t('app.name')} />
+    <SidebarFrame label={t('shell.sidebar')} folded={folded}>
+      <SidebarBrand mark={<CoreHubMark size={28} />} name={t('app.name')} action={foldToggle} />
 
       {/* Slim by design (NAVIGATION §1): starting a chat, finding one, the agents, tasks,
           schedules, and the list. Everything configured once lives on a page inside
@@ -171,7 +214,7 @@ export function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
                     to={routeOf(d.id)}
                     onClick={onNavigate}
                     data-nav-id={d.id}
-                    className={({ isActive }) => `${className} ${isActive ? 'active' : ''}`}
+                    className={className}
                   >
                     {children}
                   </NavLink>
@@ -182,7 +225,37 @@ export function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
         </SidebarGroup>
       )}
 
-      {settingsId === null && agentPage === null && (
+      {settingsId === null && agentPage === null && folded && (
+        // Folded, the two lists are two icons. A list needs the room the rail gave up, so
+        // choosing one opens the sidebar on it.
+        <SidebarGroup testId="rail-segments">
+          {segments.map((d) => {
+            const Icon = destinationIcons[d.id] ?? IconSearch;
+            return (
+              <SidebarRow
+                key={d.id}
+                icon={<Icon size={18} />}
+                label={t(termKey(d.id))}
+                render={({ className, children }) => (
+                  <button
+                    type="button"
+                    className={`${className} ${selected === d.id ? 'active' : ''}`}
+                    data-nav-id={d.id}
+                    onClick={() => {
+                      chooseSegment(d.id);
+                      onToggleFold?.();
+                    }}
+                  >
+                    {children}
+                  </button>
+                )}
+              />
+            );
+          })}
+        </SidebarGroup>
+      )}
+
+      {settingsId === null && agentPage === null && !folded && (
         <div className="mx-2 mt-3">
           <Segmented
             label={t('shell.segments')}
@@ -205,7 +278,7 @@ export function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
           <SettingsNav current={settingsId} onNavigate={onNavigate} />
         ) : agentPage !== null ? (
           <AgentNav agentId={agentPage.agentId} current={agentPage.id} onNavigate={onNavigate} />
-        ) : selected === 'chat' ? (
+        ) : folded ? null : selected === 'chat' ? (
           <SessionList {...(onNavigate ? { onOpen: onNavigate } : {})} />
         ) : selected === 'rooms' ? (
           <RoomList {...(onNavigate ? { onOpen: onNavigate } : {})} />
@@ -216,83 +289,145 @@ export function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
         )}
       </SidebarBody>
 
-      <SidebarFooter testId="footer">
-        {/* The profile is switched in the top bar only, and the model in the composer and on
-            Models: the footer no longer repeats either (owner, 2026-09-24). */}
-        <div className="flex items-center gap-2">
-          <Tooltip label={t(`shell.connection.${realtime.state}`)}>
-            <span tabIndex={0} role="status" aria-label={t(`shell.connection.${realtime.state}`)}>
-              {/* On a phone (the drawer) the state is the dot alone; its words stay the
-                  status's accessible name (docs/design/family.md, "Phone adaptations"). */}
-              <Badge tone={connectionTone} dot narrow="dot">
-                {t(`shell.connection.${realtime.state}`)}
-              </Badge>
-            </span>
-          </Tooltip>
-          <span className="min-w-0 flex-1 truncate" dir="auto">
-            {user?.display_name ?? user?.username}
-          </span>
-          {visibleEntries(navigation.footer, role).map((d) => (
-            <Tooltip key={d.id} label={t(termKey(d.id))}>
-              <NavLink
-                to={routeOf(d.id)}
-                onClick={onNavigate}
-                data-nav-id={d.id}
-                className="ch-btn ch-btn-ghost ch-btn-sm"
-                data-icon-only="true"
-                aria-label={t(termKey(d.id))}
+      {folded ? (
+        <SidebarFooter testId="footer">
+          {/* Folded, the person is one round button — their initial, the connection's dot on
+              it — and everything the footer holds is in its menu. */}
+          <Menu
+            tooltip={userName}
+            align="start"
+            testId="person-menu"
+            trigger={
+              <button
+                type="button"
+                className="ch-sidebar-person"
+                aria-label={`${t('shell.person_menu')} · ${userName} · ${t(`shell.connection.${realtime.state}`)}`}
+                data-testid="person-button"
               >
-                <IconSettings size={16} />
-              </NavLink>
-            </Tooltip>
-          ))}
-          <Button
-            variant="ghost"
-            size="sm"
-            iconOnly
-            tooltip={t('nav.sign_out')}
-            aria-label={t('nav.sign_out')}
-            icon={<IconSignOut size={16} />}
-            onClick={() => void signOut()}
-          />
-        </div>
-        <div className="flex items-center gap-2">
-          <Button
-            variant="ghost"
-            size="sm"
-            icon={<IconGlobe size={12} />}
-            aria-label={t('shell.language_chip')}
-            onClick={() => update({ language: language === 'ar' ? 'en' : 'ar' })}
+                <Avatar name={userName || '?'} size="sm" />
+                <span
+                  className="ch-sidebar-person-dot"
+                  data-tone={connectionTone}
+                  aria-hidden="true"
+                />
+              </button>
+            }
           >
-            {language === 'ar' ? 'العربية' : 'English'}
-          </Button>
-          {/* One button, and a press moves to the next: light → dark → system → light.
+            <MenuNote>
+              <span dir="auto">{userName}</span>
+              {' · '}
+              {t(`shell.connection.${realtime.state}`)}
+            </MenuNote>
+            {visibleEntries(navigation.footer, role).map((d) => (
+              <MenuItem
+                key={d.id}
+                icon={<IconSettings size={16} />}
+                onSelect={() => {
+                  onNavigate?.();
+                  navigate(routeOf(d.id));
+                }}
+              >
+                {t(termKey(d.id))}
+              </MenuItem>
+            ))}
+            <MenuItem
+              icon={<IconGlobe size={16} />}
+              onSelect={() => update({ language: language === 'ar' ? 'en' : 'ar' })}
+            >
+              {language === 'ar' ? 'English' : 'العربية'}
+            </MenuItem>
+            <MenuItem
+              icon={themeIcon(nextTheme(prefs.theme), 16)}
+              onSelect={() => update({ theme: nextTheme(prefs.theme) })}
+            >
+              {t('shell.theme_next', { next: t(`display.theme.${nextTheme(prefs.theme)}`) })}
+            </MenuItem>
+            <MenuSeparator />
+            <MenuItem icon={<IconSignOut size={16} />} onSelect={() => void signOut()}>
+              {t('nav.sign_out')}
+            </MenuItem>
+            <MenuNote>v{meta.data?.server_version ?? __APP_VERSION__}</MenuNote>
+          </Menu>
+        </SidebarFooter>
+      ) : (
+        <SidebarFooter testId="footer">
+          {/* The profile is switched in the top bar only, and the model in the composer and on
+            Models: the footer no longer repeats either (owner, 2026-09-24). */}
+          <div className="flex items-center gap-2">
+            <Tooltip label={t(`shell.connection.${realtime.state}`)}>
+              <span tabIndex={0} role="status" aria-label={t(`shell.connection.${realtime.state}`)}>
+                {/* On a phone (the drawer) the state is the dot alone; its words stay the
+                  status's accessible name (docs/design/family.md, "Phone adaptations"). */}
+                <Badge tone={connectionTone} dot narrow="dot">
+                  {t(`shell.connection.${realtime.state}`)}
+                </Badge>
+              </span>
+            </Tooltip>
+            <span className="min-w-0 flex-1 truncate" dir="auto">
+              {user?.display_name ?? user?.username}
+            </span>
+            {visibleEntries(navigation.footer, role).map((d) => (
+              <Tooltip key={d.id} label={t(termKey(d.id))}>
+                <NavLink
+                  to={routeOf(d.id)}
+                  onClick={onNavigate}
+                  data-nav-id={d.id}
+                  className="ch-btn ch-btn-ghost ch-btn-sm"
+                  data-icon-only="true"
+                  aria-label={t(termKey(d.id))}
+                >
+                  <IconSettings size={16} />
+                </NavLink>
+              </Tooltip>
+            ))}
+            <Button
+              variant="ghost"
+              size="sm"
+              iconOnly
+              tooltip={t('nav.sign_out')}
+              aria-label={t('nav.sign_out')}
+              icon={<IconSignOut size={16} />}
+              onClick={() => void signOut()}
+            />
+          </div>
+          <div className="flex items-center gap-2">
+            <Button
+              variant="ghost"
+              size="sm"
+              icon={<IconGlobe size={12} />}
+              aria-label={t('shell.language_chip')}
+              onClick={() => update({ language: language === 'ar' ? 'en' : 'ar' })}
+            >
+              {language === 'ar' ? 'العربية' : 'English'}
+            </Button>
+            {/* One button, and a press moves to the next: light → dark → system → light.
               Three symbols side by side asked the person to work out which of them was
               the selected one, and in a dark theme the highlight that says so is the
               faintest thing on the row. One button has nothing to compare: what it shows
               is what is on. The full picker is still on the Display page, for choosing
               rather than cycling. */}
-          <Tooltip label={t(`display.theme.${prefs.theme}`)}>
-            <Button
-              variant="ghost"
-              size="sm"
-              aria-label={t('shell.theme_next', {
-                next: t(`display.theme.${nextTheme(prefs.theme)}`),
-              })}
-              data-testid="theme-chip"
-              data-theme-choice={prefs.theme}
-              onClick={() => update({ theme: nextTheme(prefs.theme) })}
-            >
-              {themeIcon(prefs.theme, 15)}
-            </Button>
-          </Tooltip>
-          {/* The version that is *running*, which is the hub's — the browser may be
+            <Tooltip label={t(`display.theme.${prefs.theme}`)}>
+              <Button
+                variant="ghost"
+                size="sm"
+                aria-label={t('shell.theme_next', {
+                  next: t(`display.theme.${nextTheme(prefs.theme)}`),
+                })}
+                data-testid="theme-chip"
+                data-theme-choice={prefs.theme}
+                onClick={() => update({ theme: nextTheme(prefs.theme) })}
+              >
+                {themeIcon(prefs.theme, 15)}
+              </Button>
+            </Tooltip>
+            {/* The version that is *running*, which is the hub's — the browser may be
               holding an older bundle. The build constant answers only until the hub does. */}
-          <span className="ms-auto text-faint" data-testid="app-version">
-            v{meta.data?.server_version ?? __APP_VERSION__}
-          </span>
-        </div>
-      </SidebarFooter>
+            <span className="ms-auto text-faint" data-testid="app-version">
+              v{meta.data?.server_version ?? __APP_VERSION__}
+            </span>
+          </div>
+        </SidebarFooter>
+      )}
     </SidebarFrame>
   );
 }

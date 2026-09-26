@@ -10,7 +10,7 @@
  * A tooltip is never the only place a label lives: the trigger keeps its `aria-label`, so
  * a screen reader hears it whether or not the tooltip opens.
  */
-import { Tooltip as RadixTooltip } from 'radix-ui';
+import { Direction, Tooltip as RadixTooltip } from 'radix-ui';
 import type { ReactElement, ReactNode } from 'react';
 
 export function Tooltip({
@@ -24,7 +24,19 @@ export function Tooltip({
   children: ReactElement;
   side?: 'top' | 'bottom' | 'inline-start' | 'inline-end';
 }) {
+  // `inline-start`/`inline-end` follow the reading direction: the end is the left in Arabic.
+  const rtl = Direction.useDirection() === 'rtl';
   if (label === null || label === undefined || label === '') return children;
+  const physical =
+    side === 'inline-start'
+      ? rtl
+        ? 'right'
+        : 'left'
+      : side === 'inline-end'
+        ? rtl
+          ? 'left'
+          : 'right'
+        : side;
   return (
     // The provider lives here so a tooltip works wherever it is rendered, including in a
     // unit test that mounts one component. Nesting providers is allowed by Radix.
@@ -34,7 +46,7 @@ export function Tooltip({
         <RadixTooltip.Portal>
           <RadixTooltip.Content
             className="ch-tooltip"
-            side={side === 'inline-start' ? 'left' : side === 'inline-end' ? 'right' : side}
+            side={physical}
             sideOffset={6}
             collisionPadding={8}
           >

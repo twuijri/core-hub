@@ -106,6 +106,14 @@ export const IconArrowStart = ({ className = '', ...p }: IconProps) =>
 /** "Go": an arrow toward the end of the line, mirrored in a right-to-left page. */
 export const IconArrowEnd = ({ className = '', ...p }: IconProps) =>
   lucide('arrow-right')({ ...p, className: `rtl:-scale-x-100 ${className}` });
+/**
+ * Fold the sidebar into its rail of icons, and open it again. The panel is drawn on the
+ * reading side, so the picture is mirrored in a right-to-left page, where the rail is on the right.
+ */
+export const IconSidebarFold = ({ className = '', ...p }: IconProps) =>
+  lucide('panel-left-close')({ ...p, className: `rtl:-scale-x-100 ${className}` });
+export const IconSidebarUnfold = ({ className = '', ...p }: IconProps) =>
+  lucide('panel-left-open')({ ...p, className: `rtl:-scale-x-100 ${className}` });
 export const IconChevron = lucide('chevron-down');
 export const IconCopy = lucide('copy');
 export const IconCheck = lucide('check');
