@@ -109,6 +109,17 @@ $ pnpm version:check           → version: 1.1.2 everywhere (10 places)
 $ node scripts/check-change-record.mjs --files docs/changes/2026-09-26-twuijri-android-updates.md → change-record  OK — 1 record(s) valid
 ```
 
+CI على الطلب #171 (أول دفع): كل الفحوص خضراء — منها:
+```
+Android build, unit tests, lint                          pass  3m24s
+Lint, typecheck, contracts, client tests, build          pass  4m32s
+Server unit tests (shard 1/3, 2/3, 3/3)                  pass
+Web smoke journeys (Playwright against the real hub)     pass  9m10s
+Desktop app smoke (Electron under Xvfb against the real hub)  pass
+Docker image builds and answers /health                  pass
+PR adds or updates a change record                       pass
+```
+
 ## المخاطر والرجوع
 - لم يُجرَّب على جوال حقيقي ولا على إصدار حقيقي؛ أول دليل فعلي: إصدار 1.1.3 ثم فتح 1.1.3 بعد صدور 1.1.4.
 - **من يملك 1.1.2 أو أقدم ليس لديه محدّث**: يثبّت أول نسخة فيها هذا الكود يدويًا مرة واحدة.
