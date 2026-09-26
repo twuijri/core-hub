@@ -1,1 +1,7 @@
-blank_issues_enabled: true
+# Every issue starts from one of the forms in this folder, so the developer gets the version,
+# where it happens and the reporter's own idea up front (owner, 2026-09-26).
+blank_issues_enabled: false
+contact_links:
+  - name: Contributing guide / دليل المساهمة
+    url: https://github.com/twuijri/core-hub/blob/main/CONTRIBUTING.md
+    about: How pull requests, change records and checks work here. / كيف تعمل طلبات الدمج وسجلات التغيير والفحوص هنا.

@@ -1,0 +1,70 @@
+name: Feature request / اقتراح ميزة
+description: Suggest something Core Hub should do. / اقترح شيئًا يفعله كور هب.
+title: 'feat: '
+labels: [enhancement]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Tell us the problem first, then your idea. The owner decides what is built; a clear problem and a concrete proposal make that decision fast.
+        ابدأ بالمشكلة ثم فكرتك. المالك يقرر ما يُبنى، والمشكلة الواضحة مع اقتراح محدد تسرّع القرار.
+  - type: textarea
+    id: problem
+    attributes:
+      label: The problem / المشكلة
+      description: What are you trying to do, and what stops you today? / ماذا تحاول أن تفعل، وما الذي يمنعك اليوم؟
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Your proposed solution / الحل الذي تقترحه
+      description: How would it work for you? Screens, steps, examples. / كيف تريدها أن تعمل؟ شاشات أو خطوات أو أمثلة.
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives you considered / البدائل التي فكرت فيها
+      description: Other ways to solve it, and why you prefer yours. / طرق أخرى للحل، ولماذا تفضّل اقتراحك.
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area / الجزء
+      multiple: true
+      options:
+        - Chat / المحادثة
+        - Agents / الوكلاء
+        - Tasks and schedules / المهام والجداول
+        - Memory / الذاكرة
+        - Channels (WhatsApp, Telegram …) / المنصات
+        - Devices and desktop control / الأجهزة والتحكم بسطح المكتب
+        - Voice / الصوت
+        - Settings and admin / الإعدادات والإدارة
+        - Mobile apps / تطبيقات الجوال
+        - Desktop apps / تطبيقات سطح المكتب
+        - Download page and install / صفحة التحميل والتثبيت
+        - Other / أخرى
+    validations:
+      required: true
+  - type: dropdown
+    id: importance
+    attributes:
+      label: How much it matters to you / مدى أهميتها لك
+      options:
+        - Blocks me / تعطّلني
+        - Would help a lot / تفيدني كثيرًا
+        - Nice to have / تحسين لطيف
+  - type: textarea
+    id: inspiration
+    attributes:
+      label: Seen elsewhere? / رأيتها في مكان آخر؟
+      description: Name the app or project and its licence. Ideas are welcome; code is not copied (clean room). / اذكر التطبيق أو المشروع ورخصته. الأفكار مرحَّب بها، والكود لا يُنسخ.
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Before sending / قبل الإرسال
+      options:
+        - label: I searched the open and closed issues and this is not a duplicate. / بحثت في البلاغات المفتوحة والمغلقة وهذا ليس مكررًا.
+          required: true
+        - label: I would like to send a pull request for this. / أرغب في إرسال طلب دمج لهذا.

@@ -20,7 +20,11 @@ The short version:
    `pnpm lint`, `pnpm typecheck`, `pnpm test`, `pnpm contract:test`, `pnpm build`.
 5. **Arabic and English.** Every user-facing string exists in both; every screen's entry label
    equals its title (`docs/clients/NAVIGATION.md`).
-6. **Pull requests** are written in English: problem, decision, evidence, risks and rollback.
+6. **Issues** start from a form (bug, feature, wording/translation): version, where it happens and
+   your own idea for the solution. Blank issues are off.
+7. **Pull requests** are written in English: problem, decision, evidence, risks and rollback.
+   Put `Closes #<issue>` in the description so the issue closes itself when the owner merges;
+   do not close it by hand before the merge.
    Only the owner merges into `main`; nobody enables auto-merge. Merging into `main`, publishing
    an image or a release is the owner's decision, never implied by a code request.
 

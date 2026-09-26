@@ -4,6 +4,15 @@ welcome. Rules: CONTRIBUTING.md, docs/TEAM-RULES.md. Only the owner merges into 
 الإنجليزية أولًا لأن المستودع عام، ويُرحَّب بملخص عربي تحتها.
 -->
 
+## Issue / البلاغ
+
+<!-- "Closes #123" closes the issue automatically when this pull request is merged; write one line
+per issue. Use "Refs #123" when it only helps and the issue should stay open. Write "None" when
+there is no issue.
+«Closes #123» يغلق البلاغ تلقائيًا عند الدمج؛ سطر لكل بلاغ. «Refs #123» إن كان يساعد فقط ويبقى البلاغ مفتوحًا. -->
+
+Closes #
+
 ## Problem / المشكلة
 
 <!-- What is wrong or missing, and who notices it. -->
