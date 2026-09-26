@@ -56,6 +56,10 @@
  *
  * **«عنوان الردود»** (WhatsApp in «مراسلة نفسي»): the header over every reply of the agent — its
  * name by default, or a typed title (`ReplyHeaderDialog`).
+ *
+ * **«ويب هوك»** under the channels (`WebhooksSection`, decision §91): Hermes's incoming webhook
+ * routes, each with its address on this hub and its secret, and a plain word that an outside
+ * service needs the hub's address to be public.
  */
 import { useQueryClient } from '@tanstack/react-query';
 import { useEffect, useState, type ReactNode } from 'react';
@@ -112,6 +116,7 @@ import {
 } from './skills.js';
 import { ChannelPlatformPicker } from './ChannelPlatformPicker.js';
 import { ChannelSettingsPanel } from './ChannelSettingsPanel.js';
+import { WebhooksSection } from './WebhooksSection.js';
 import { useProfileName } from '../shell/profiles.js';
 import { describeToolError, platformName } from './toolErrors.js';
 import { useJobs } from './useJobs.js';
@@ -152,9 +157,11 @@ export function AgentChannelsScreen() {
   const restartable = canRestart(agent, user?.role);
   // Only what is linked (or somebody is waiting on): the platforms not linked yet live in the
   // picker, not in a long list under these.
+  // Hermes's webhook receiver is a platform too; it has its own section below (§91).
   const shown = items.filter(
     (channel) =>
-      (channel.link ? channel.link.linked : channel.configured) || waiting.has(channel.platform),
+      channel.platform !== 'webhook' &&
+      ((channel.link ? channel.link.linked : channel.configured) || waiting.has(channel.platform)),
   );
   const linkedSet = new Set(
     items.filter((channel) => channel.link?.linked).map((channel) => channel.platform),
@@ -270,6 +277,9 @@ export function AgentChannelsScreen() {
               })}
             </ul>
           ))}
+        {channels.data && agentId && mayApprove && (
+          <WebhooksSection agentId={agentId} channels={items} />
+        )}
       </div>
       {mayApprove && (
         <ApprovalsSheet agentId={agentId} open={approvalsOpen} onOpenChange={setApprovalsOpen} />

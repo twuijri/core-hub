@@ -1449,6 +1449,24 @@ button.context-ring {
   align-self: center;
   border-radius: var(--ch-radius-md);
 }
+/* A video or a sound of the conversation, played from its stream address (§92). */
+.file-media {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--ch-space-2);
+}
+.file-video {
+  display: block;
+  max-inline-size: 100%;
+  max-block-size: 70vh;
+  border: 1px solid var(--ch-color-border);
+  border-radius: var(--ch-radius-md);
+  background: var(--ch-color-surface-2);
+}
+.file-audio {
+  inline-size: min(100%, 32rem);
+}
 .file-code-wrap pre,
 .file-code {
   margin: 0;

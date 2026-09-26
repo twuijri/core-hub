@@ -11,6 +11,8 @@
  *   answers to it.
  */
 import { mkdirSync, writeFileSync } from 'node:fs';
+import http from 'node:http';
+import type { AddressInfo } from 'node:net';
 import path from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import { byteRangeOf } from '../../src/lib/byte-range.js';
@@ -195,6 +197,56 @@ describe('a conversation’s working folder (sessions.readFile, sessions.createF
       payload: { path: 'nope.mp4' },
     });
     expect(missing.statusCode).toBe(404);
+  });
+});
+
+describe('a player that stops reading half-way (§92)', () => {
+  it('is not an error: the hub keeps answering after a reader drops a long range', async () => {
+    const h = await hub();
+    const { id, dir } = await session(h);
+    // Large enough that the socket is still busy when the reader goes away.
+    writeFileSync(path.join(dir, 'long.wav'), Buffer.alloc(24 * 1024 * 1024, 3));
+    await h.app.listen({ port: 0, host: '127.0.0.1' });
+    const port = (h.app.server.address() as AddressInfo).port;
+    const made = await authed(h, h.token, {
+      method: 'POST',
+      url: `/api/v1/sessions/${id}/files/stream`,
+      payload: { path: 'long.wav' },
+    });
+    const { url } = made.json() as { url: string };
+    const unhandled: unknown[] = [];
+    const onError = (error: unknown) => unhandled.push(error);
+    process.on('uncaughtException', onError);
+    process.on('unhandledRejection', onError);
+    try {
+      for (let round = 0; round < 5; round += 1) {
+        await new Promise<void>((resolve) => {
+          const request = http.get(
+            { host: '127.0.0.1', port, path: url, headers: { range: 'bytes=0-' } },
+            (response) => {
+              expect(response.statusCode).toBe(206);
+              response.once('data', () => {
+                // What a player does once it has the header of the file: it lets go.
+                request.destroy();
+                resolve();
+              });
+            },
+          );
+          request.on('error', () => resolve());
+        });
+      }
+      await new Promise((resolve) => setTimeout(resolve, 300));
+      // Still up, still answering ranges.
+      const again = await fetch(`http://127.0.0.1:${port}${url}`, {
+        headers: { range: 'bytes=10-19' },
+      });
+      expect(again.status).toBe(206);
+      expect(Buffer.from(await again.arrayBuffer())).toEqual(Buffer.alloc(10, 3));
+      expect(unhandled).toEqual([]);
+    } finally {
+      process.off('uncaughtException', onError);
+      process.off('unhandledRejection', onError);
+    }
   });
 });
 

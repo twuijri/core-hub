@@ -25,6 +25,7 @@ import { closeSync, createReadStream } from 'node:fs';
 import { z } from 'zod';
 import { HubError, notFound } from '../../lib/errors.js';
 import { rangeReply } from '../../lib/byte-range.js';
+import { streamed } from '../../lib/route.js';
 import { parse } from '../../lib/validate.js';
 import type { EngineScope } from './engine.js';
 import type { ScopeResolver } from './scope.js';
@@ -333,7 +334,7 @@ export function registerSessionRoutes(app: FastifyInstance, deps: RouteDeps): vo
     }
     // Opened directly, an HTML file still runs nothing in the hub's origin: the sandbox
     // gives it an origin of its own and `default-src 'none'` loads nothing (decision §48).
-    return reply
+    reply
       .status(window.status)
       .headers(window.headers)
       .header('content-type', file.type.contentType)
@@ -342,6 +343,8 @@ export function registerSessionRoutes(app: FastifyInstance, deps: RouteDeps): vo
       .header('cache-control', 'no-store')
       .header('content-disposition', contentDisposition(query.download, name))
       .send(createReadStream('', { fd: file.fd, start: window.start, end: window.end }));
+    // A reader that stops half-way (a player that seeks) is not an error (`lib/route.ts`).
+    return streamed(request, reply);
   });
 
   app.post('/sessions/:session_id/files/stream', async (request, reply: FastifyReply) => {

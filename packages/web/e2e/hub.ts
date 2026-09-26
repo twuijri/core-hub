@@ -71,7 +71,7 @@ type Step =
   | { type: 'delay'; ms: number }
   | { type: 'await_input' }
   /** Write a file in the session's working folder, as an agent's tool would. */
-  | { type: 'write'; path: string; content: string }
+  | { type: 'write'; path: string; content: string | Buffer }
   /** Leave a file in the run's output folder, for the reply (`base64` bytes). */
   | { type: 'produce'; name: string; base64: string }
   // The real direct path (journey 34): the models module answers the turn, fallback chain and all.
@@ -92,7 +92,34 @@ const REPORT_HTML =
 const DATA_CSV = 'البند,المبلغ\nإيجار,1200\nكهرباء,300\n';
 const NOTES_MD = '# ملاحظات\n\n- راجع **الميزانية** قبل الخميس\n';
 
-function writes(ref: string, file: string, content: string): Step[] {
+/**
+ * A plain 440 Hz tone as a WAV file a browser plays: `seconds` of 16-bit mono at 22 050 Hz, about
+ * 43 KiB a second — two minutes is a file large enough that a player seeks through byte ranges.
+ */
+function toneWav(seconds: number): Buffer {
+  const rate = 22_050;
+  const samples = rate * seconds;
+  const data = Buffer.alloc(samples * 2);
+  for (let i = 0; i < samples; i += 1) {
+    data.writeInt16LE(Math.round(Math.sin((2 * Math.PI * 440 * i) / rate) * 6000), i * 2);
+  }
+  const header = Buffer.alloc(44);
+  header.write('RIFF', 0, 'ascii');
+  header.writeUInt32LE(36 + data.length, 4);
+  header.write('WAVEfmt ', 8, 'ascii');
+  header.writeUInt32LE(16, 16);
+  header.writeUInt16LE(1, 20);
+  header.writeUInt16LE(1, 22);
+  header.writeUInt32LE(rate, 24);
+  header.writeUInt32LE(rate * 2, 28);
+  header.writeUInt16LE(2, 32);
+  header.writeUInt16LE(16, 34);
+  header.write('data', 36, 'ascii');
+  header.writeUInt32LE(data.length, 40);
+  return Buffer.concat([header, data]);
+}
+
+function writes(ref: string, file: string, content: string | Buffer): Step[] {
   return [
     {
       type: 'tool_started',
@@ -333,6 +360,17 @@ function scriptFor(prompt: string, workspace = ''): Step[] {
         type: 'message_delta',
         text: again ? 'حدّثت report.html.' : 'كتبت report.html و data.csv و `notes.md`.',
       },
+      { type: 'completed' },
+    ];
+  }
+  if (/نغمة طويلة|a long tone/i.test(prompt)) {
+    // Media in chat (journey 36, decision §92): a two-minute recording written in the session's
+    // folder, played and sought in the file panel; and a short one left for the reply, played in it.
+    return [
+      { type: 'message_delta', text: 'أسجّل النغمة.\n\n' },
+      ...writes('m1', 'tone.wav', toneWav(120)),
+      { type: 'produce', name: 'chime.wav', base64: toneWav(2).toString('base64') },
+      { type: 'message_delta', text: 'سجّلت tone.wav وأرفقت chime.wav.' },
       { type: 'completed' },
     ];
   }

@@ -480,6 +480,39 @@ describe('models screen', () => {
     );
   });
 
+  it('leaves the models that only draw out of the default-model picker (§87)', async () => {
+    const { state, fetchImpl } = hub({
+      providers: [],
+      probe: {
+        ok: true,
+        message: null,
+        duration_ms: 12,
+        models: [
+          { id: 'gpt-image-1', label: 'gpt-image-1', image_only: true },
+          { id: 'gpt-4o', label: 'gpt-4o', image_only: false },
+          { id: 'dall-e-3', label: 'dall-e-3', image_only: true },
+        ],
+      },
+    });
+    renderScreen(fetchImpl);
+    await openDialog();
+    await chooseOption(userEvent, screen.getByTestId('add-preset'), 'LM Studio');
+    await userEvent.click(screen.getByTestId('add-fetch-models'));
+    await waitFor(() =>
+      expect(state.sent.some((call) => call.url.includes('provider-probes'))).toBe(true),
+    );
+    const undo = stubListViewport();
+    await userEvent.click(screen.getByTestId('add-default-model'));
+    const options = (await screen.findAllByRole('option')).map((option) => option.textContent);
+    undo();
+    await userEvent.keyboard('{Escape}');
+    expect(options.some((text) => text?.includes('gpt-4o'))).toBe(true);
+    expect(options.some((text) => text?.includes('gpt-image-1'))).toBe(false);
+    expect(options.some((text) => text?.includes('dall-e-3'))).toBe(false);
+    // The first chat model is the one chosen, never the drawing one listed before it.
+    expect(screen.getByTestId('add-default-model').textContent ?? '').not.toContain('gpt-image-1');
+  });
+
   it('warns that loopback means the container, and suggests the address that works', async () => {
     const { fetchImpl } = hub({ providers: [], containerized: true });
     renderScreen(fetchImpl);

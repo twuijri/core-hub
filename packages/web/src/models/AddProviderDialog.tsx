@@ -134,9 +134,12 @@ export function AddProviderDialog({
             setProbeError(result.message ?? t('models.add.fetch_failed'));
             return;
           }
-          setModels(result.models);
-          if (result.models.length === 0) setProbeError(t('models.add.fetch_empty'));
-          else setModel(result.models[0]?.id ?? '');
+          // A model that only draws is never a chat default (§87): the hub says which by the
+          // same rule as its catalogue, since nothing is stored yet to carry capabilities.
+          const chat = result.models.filter((item) => item.image_only !== true);
+          setModels(chat);
+          if (chat.length === 0) setProbeError(t('models.add.fetch_empty'));
+          else setModel(chat[0]?.id ?? '');
         },
         onError: (error) => setProbeError(describeError(error, t)),
       },
