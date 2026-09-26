@@ -221,7 +221,7 @@ export function SessionList({ onOpen }: { onOpen?: () => void }) {
   const needle = filter.trim().toLowerCase();
   // Telegram, WhatsApp… as Hermes keeps them. Hermes archives nothing the hub can show, so the
   // archive has none; the rest of the time they are polled while the list is on screen.
-  // Hermes's most recent 100 per profile first; "older" reads a hundred more (§102).
+  // Hermes's most recent 100 per profile first; "older" reads a hundred more (§103).
   const [channelLimit, setChannelLimit] = useState(CHANNEL_PAGE);
   const channelList = useChannelConversations({
     allProfiles,

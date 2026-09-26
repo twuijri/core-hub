@@ -91,7 +91,7 @@ const wordOf = (value: unknown, fallback: string): string =>
   typeof value === 'string' && value.trim() !== '' ? value.trim().slice(0, 64) : fallback;
 
 /**
- * A card's history as the contract's `HermesCardHistory` (decision §102): Hermes's own words
+ * A card's history as the contract's `HermesCardHistory` (decision §103): Hermes's own words
  * for each event and run, newest first, capped. Rows Hermes could not date are left out
  * rather than dated now.
  */

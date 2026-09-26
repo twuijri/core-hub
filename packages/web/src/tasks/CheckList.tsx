@@ -1,5 +1,5 @@
 /**
- * A task's definition of done or its constraints (contract decision §103): lines the person
+ * A task's definition of done or its constraints (contract decision §104): lines the person
  * writes, the agent is given with every run, and the reviewer ticks when the task is in review.
  *
  * The ticks are the reviewer's, so the boxes can be ticked only while the task is in review;

@@ -151,7 +151,7 @@ export function adoptProfiles(
       .where(eq(workspaces.slug, name))
       .get();
     if (taken) continue;
-    // Hermes's display name when it has one (decision §102), else the id as before.
+    // Hermes's display name when it has one (decision §103), else the id as before.
     const shown = cleanName(displayNameOf(name)) || name;
     db.insert(workspaces).values({ ownerId, slug: name, name: shown, settings: {} }).run();
     result.adopted.push(name);
@@ -166,7 +166,7 @@ function cleanName(value: string): string {
 
 /**
  * The workspaces whose runtime display name was changed outside the hub take it (decision
- * §102): every rename made here is written to the runtime first, so a runtime name that
+ * §103): every rename made here is written to the runtime first, so a runtime name that
  * differs was set there — `hermes profile rename`, Hermes's dashboard. A profile with no
  * display name leaves the hub's name alone (a name the runtime refused to take is not undone),
  * and so does a named profile whose display name is its id. Archived workspaces are left as

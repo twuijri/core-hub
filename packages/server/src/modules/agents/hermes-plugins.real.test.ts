@@ -174,7 +174,7 @@ describe.skipIf(!image)(
       }
       expect(missing).toEqual([]);
       // And nothing Hermes would not list: skills for another system are left out, as Hermes
-      // leaves them out (§102). The one difference is on purpose: a skill Hermes offers only
+      // leaves them out (§103). The one difference is on purpose: a skill Hermes offers only
       // inside one of its own contexts (`environments:`, such as a kanban worker) is still this
       // profile's skill, listed here to be switched, though Hermes's dashboard leaves it out.
       const listed = new Set(theirs.map((skill) => skill.name));
@@ -186,7 +186,7 @@ describe.skipIf(!image)(
       expect(ours.length).toBe(theirs.length + extra.length);
     }, 300_000);
 
-    it('switches a skill where Hermes keeps the switch, both ways (§102)', async () => {
+    it('switches a skill where Hermes keeps the switch, both ways (§103)', async () => {
       type Theirs = Array<{ name: string; enabled: boolean; provenance: string }>;
       const theirs = () =>
         dashboard.request<Theirs>('GET', '/api/skills?profile=work', undefined, {

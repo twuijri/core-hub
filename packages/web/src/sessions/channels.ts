@@ -23,7 +23,7 @@ export const POLL_MS = 45_000;
 export const TRANSCRIPT_POLL_MS = 30_000;
 /** How many of each profile's conversations a list reads, and how many more "older" adds. */
 export const CHANNEL_PAGE = 100;
-/** The most the hub lists per profile (`limit`, §102). */
+/** The most the hub lists per profile (`limit`, §103). */
 export const CHANNEL_MAX = 1000;
 
 /** `?source=channel` on the chat's address: this id is Hermes's, not a hub session's. */
@@ -48,7 +48,7 @@ export function useChannelConversations(
     allProfiles?: boolean;
     profile?: string | null;
     enabled?: boolean;
-    /** Each profile's most recent this many (§102); the hub's own 100 when not said. */
+    /** Each profile's most recent this many (§103); the hub's own 100 when not said. */
     limit?: number;
   } = {},
 ) {
@@ -80,7 +80,7 @@ export function useChannelConversations(
 }
 
 /**
- * The pages before the latest one, read when the person asks for older messages (§102): each
+ * The pages before the latest one, read when the person asks for older messages (§103): each
  * page is Hermes's own, asked from where the one after it stopped (`next_offset`).
  */
 export function useOlderChannelMessages(id: string) {
@@ -97,7 +97,7 @@ export function useOlderChannelMessages(id: string) {
 }
 
 /**
- * A picture the person sent on the channel, as an address the page can draw (§102): read with
+ * A picture the person sent on the channel, as an address the page can draw (§103): read with
  * the person's own credentials, kept as a blob for as long as it is on screen.
  */
 export function useChannelPicture(conversationId: string, pictureId: string, enabled: boolean) {

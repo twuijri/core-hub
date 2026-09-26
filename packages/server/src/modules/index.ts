@@ -389,7 +389,7 @@ export function hermesChannelSourceOver(
     },
     picture(profile, name) {
       // Hermes's image cache of that profile: `cache/images/`, or `image_cache/` where an
-      // older install still keeps it (`get_hermes_dir`). A name, never a path (§102).
+      // older install still keeps it (`get_hermes_dir`). A name, never a path (§103).
       if (!/^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/.test(name)) return null;
       for (const folder of ['cache/images', 'image_cache']) {
         const file = path.join(homeOf(profile), folder, name);

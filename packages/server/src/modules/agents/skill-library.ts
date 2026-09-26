@@ -24,7 +24,7 @@
  * person's own. Turning it on installs the whole library again.
  *
  * Switching a skill off on the Skills page names it in Hermes's own `skills.disabled` list
- * (decision §102) and leaves its files as they are; an older hub renamed its `SKILL.md` to
+ * (decision §103) and leaves its files as they are; an older hub renamed its `SKILL.md` to
  * `SKILL.md.off` instead, so the manifest still follows the file under either name, and an update
  * keeps a switched-off skill off.
  */

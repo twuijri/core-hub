@@ -939,7 +939,7 @@ export const tasksModule = defineModule({
       // anything else changes, so a refusal from Hermes leaves the task as it was.
       if (hermes && input.start === true && mirror && !HermesMirror.isHermes(current)) {
         try {
-          // Hermes's worker reads only the card, so the lists go into its brief (§103).
+          // Hermes's worker reads only the card, so the lists go into its brief (§104).
           const brief = [
             current.description,
             checkListsBrief(current, scope.language),
@@ -1352,7 +1352,7 @@ export const tasksModule = defineModule({
         const mirror = mirrorOf(request.server);
         const toHermes =
           mirror?.isHermesAgent(scope.workspace, input.assignee_agent_id as string | null) === true;
-        // Hermes briefs its own worker: lists it would never see are refused (decision §103).
+        // Hermes briefs its own worker: lists it would never see are refused (decision §104).
         if (
           toHermes &&
           checkItems(input.definition_of_done).length + checkItems(input.constraints).length > 0
@@ -1438,7 +1438,7 @@ export const tasksModule = defineModule({
             if (patch.archived === true) {
               await releaseQuietly(request.server, service, scope.profile, service.worktreeOf(id));
             }
-            // The same words on every card (decision §102): on Hermes's card first, in the
+            // The same words on every card (decision §103): on Hermes's card first, in the
             // person's name, as one comment is — and read back, so the hub shows what Hermes kept.
             if (said !== '') {
               if (hermes) {
@@ -1513,7 +1513,7 @@ export const tasksModule = defineModule({
         const id = params.task_id as string;
         let row = service.task(scope, id);
         // A Hermes card is read from Hermes when it is opened: the card as Hermes has it
-        // now, what was said on it there, and its history there (§102). A Hermes that cannot
+        // now, what was said on it there, and its history there (§103). A Hermes that cannot
         // answer leaves the last reflection showing — opening a card must not fail because a
         // helper did.
         const hermes = hermesApiOf(request.server, row);
@@ -1558,7 +1558,7 @@ export const tasksModule = defineModule({
         let patch = body as Record<string, unknown>;
         const current = service.task(scope, params.task_id as string);
         // Hermes's worker is briefed by Hermes, not by the hub: a definition of done it never
-        // sees would only look as if it had been kept (decision §103).
+        // sees would only look as if it had been kept (decision §104).
         if (patch.definition_of_done !== undefined || patch.constraints !== undefined) {
           refuseOnHermesCard(current, 'definition_of_done');
         }

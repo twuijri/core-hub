@@ -1,5 +1,5 @@
 /**
- * Several cards at once (contract decision §102): "Select" on the Tasks board ticks cards, and
+ * Several cards at once (contract decision §103): "Select" on the Tasks board ticks cards, and
  * the bar that comes with it sets one priority or says one comment on all of them. The board
  * holds every profile, and a bulk edit is made in one, so the ticked cards go in one request per
  * profile they are in — a Hermes card's change is then made on Hermes first by the hub
@@ -182,7 +182,7 @@ const cardOf = (id: string) =>
 const bulkWrites = (seen: Seen[]) =>
   seen.filter((c) => c.method === 'PATCH' && c.path === '/tasks');
 
-describe('the board edits several cards at once (§102)', () => {
+describe('the board edits several cards at once (§103)', () => {
   it('sets one priority on the ticked cards, one request per profile they are in', async () => {
     const user = userEvent.setup();
     const hub = fakeHub();

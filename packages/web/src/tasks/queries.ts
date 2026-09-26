@@ -98,9 +98,9 @@ export interface Task {
   waiting_on?: TaskDependencyState[];
   /** Set while it runs and its run has been silent too long: the stuck-task watchdog. */
   stuck_since?: string | null;
-  /** What must hold for it to be done; sent with the run, ticked at review (§103). */
+  /** What must hold for it to be done; sent with the run, ticked at review (§104). */
   definition_of_done?: CheckItem[];
-  /** What the agent must keep to while doing it; sent and ticked the same way (§103). */
+  /** What the agent must keep to while doing it; sent and ticked the same way (§104). */
   constraints?: CheckItem[];
 }
 
@@ -159,7 +159,7 @@ export interface TaskComment {
 /** One task opened on its own (contract `TaskDetail`): the card, and what was said on it. */
 export interface TaskDetail extends Task {
   comments: TaskComment[];
-  /** A Hermes card's own history, read from Hermes as it opened (§102); `null` otherwise. */
+  /** A Hermes card's own history, read from Hermes as it opened (§103); `null` otherwise. */
   hermes?: { events: HermesCardEvent[]; runs: HermesCardRun[] } | null;
 }
 
@@ -556,7 +556,7 @@ export function useTaskEvents(): void {
 /** What a bulk edit may change on many tasks at once (contract `TaskBulkUpdate.patch`). */
 export interface BulkPatch {
   priority?: 'low' | 'normal' | 'high' | 'urgent';
-  /** The same words said on every task — on a Hermes card, on Hermes first (§102). */
+  /** The same words said on every task — on a Hermes card, on Hermes first (§103). */
   comment?: string;
 }
 

@@ -22,7 +22,7 @@
  *   resolves an id it does not know as a unique prefix of one it does, so the hub reads the
  *   exact row first and deletes only that (contract decision §88).
  *
- * Paging and pictures (decision §102): `GET /api/sessions` takes `offset` and answers `total`,
+ * Paging and pictures (decision §103): `GET /api/sessions` takes `offset` and answers `total`,
  * so a list longer than one page of 100 is read page by page, as many as the client's `limit`
  * needs; `GET /api/sessions/{id}/messages?order=latest&limit=&offset=` pages back from the
  * newest. A picture the person sent is not in Hermes's store as bytes: Hermes's gateway saves
@@ -76,7 +76,7 @@ export const CONVERSATION_ID = /^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$/;
 
 /** Per profile: Hermes caps a page at 100 (`le=100`). */
 export const LIST_LIMIT = 100;
-/** The most of a profile's conversations one list reads (`limit`, decision §102). */
+/** The most of a profile's conversations one list reads (`limit`, decision §103). */
 export const LIST_LIMIT_MAX = 1000;
 /** Hermes's page of messages (`get_session_messages` caps `limit` at 500). */
 export const MESSAGES_PAGE = 500;
@@ -440,7 +440,7 @@ export class ChannelConversations {
 
   /**
    * Every conversation of these profiles, most recent first — up to `limit` of each profile's
-   * (decision §102) — and why any profile is missing. `has_more`: some profile has more.
+   * (decision §103) — and why any profile is missing. `has_more`: some profile has more.
    */
   async list(
     scopes: readonly ChannelScope[],
@@ -515,7 +515,7 @@ export class ChannelConversations {
 
   /**
    * One conversation and a page of its messages, oldest first; `404` for anything that is not
-   * one. `offset` skips that many of Hermes's newest messages (decision §102).
+   * one. `offset` skips that many of Hermes's newest messages (decision §103).
    */
   async messages(
     scope: ChannelScope,
@@ -587,7 +587,7 @@ export class ChannelConversations {
   }
 
   /**
-   * A picture named in a conversation of this profile (decision §102): where it is in the
+   * A picture named in a conversation of this profile (decision §103): where it is in the
    * profile's image cache, or `404` — a name that is not a picture's, or one Hermes has deleted.
    */
   picture(scope: ChannelScope, id: string, name: string): string {
@@ -653,7 +653,7 @@ export class ChannelConversations {
   /**
    * The profile's rows, most recent first, at least `want` of them when Hermes has that many:
    * what was read, while Hermes's store is unchanged and it was enough; else read again, a page
-   * of 100 at a time (decision §102).
+   * of 100 at a time (decision §103).
    */
   private rows(source: ChannelSource, hermes: string, want: number): Promise<Listed> {
     const cached = this.lists.get(hermes);

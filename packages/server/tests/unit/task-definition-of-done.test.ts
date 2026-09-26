@@ -1,5 +1,5 @@
 /**
- * A task's definition of done and its constraints (contract decision §103): written with the
+ * A task's definition of done and its constraints (contract decision §104): written with the
  * task, sent to the agent in the run's prompt, ticked by the reviewer, and cleared when the
  * task runs again — across `tasks` and `sessions`, joined as production joins them.
  */
@@ -38,7 +38,7 @@ const promptOf = (runner: FakeAgentRunner, index: number) =>
     .map((block) => ('text' in block ? block.text : ''))
     .join('');
 
-describe('tasks: definition of done and constraints (§103)', () => {
+describe('tasks: definition of done and constraints (§104)', () => {
   it('keeps both lists with the task, trimmed, unticked unless ticked', async () => {
     const { hub: h } = await hub();
     try {

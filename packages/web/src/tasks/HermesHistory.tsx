@@ -1,5 +1,5 @@
 /**
- * A Hermes card's own history (contract decision §102), read from Hermes when the card opens:
+ * A Hermes card's own history (contract decision §103), read from Hermes when the card opens:
  * each attempt Hermes's dispatcher made at it, and what happened on it, newest first.
  *
  * The words are Hermes's. An event or a run state this client knows is named in the person's

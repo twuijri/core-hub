@@ -15,7 +15,7 @@
  * Every drag has a keyboard equivalent (dnd-kit's keyboard sensor), and the card's own
  * menu moves it with no dragging at all — which is what a phone uses.
  *
- * "Select" ticks several cards for one change (§102): a priority, or the same comment on each —
+ * "Select" ticks several cards for one change (§103): a priority, or the same comment on each —
  * on a Hermes card said on Hermes first, like one comment is.
  */
 import {
@@ -192,7 +192,7 @@ export function TasksScreen() {
   const [dragging, setDragging] = useState<TaskStatus | null>(null);
   /** A drop that could mean two things, waiting for the person to say which. */
   const [choice, setChoice] = useState<{ task: Task; options: ColumnDrop[] } | null>(null);
-  /** `null` while the board is not selecting; the ticked cards while it is (§102). */
+  /** `null` while the board is not selecting; the ticked cards while it is (§103). */
   const [ticked, setTicked] = useState<Set<string> | null>(null);
   const bulk = useBulkUpdateTasks();
   const selection = useMemo<Selection | null>(
@@ -828,7 +828,7 @@ export function TaskCard({ task, actions }: { task: Task; actions: CardActions }
             </span>
           )}
           {dod.length > 0 && (
-            // Its definition of done: how many lines the reviewer ticked (§103).
+            // Its definition of done: how many lines the reviewer ticked (§104).
             <Tooltip
               label={t('tasks.dod.card', {
                 done: dod.filter((item) => item.checked).length,

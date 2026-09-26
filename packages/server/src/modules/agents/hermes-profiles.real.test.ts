@@ -102,7 +102,7 @@ describe.skipIf(!image)('Hermes profiles (real Hermes; set COREHUB_HERMES_IMAGE 
     expect(design.stdout).toContain('Profile: فريق التصميم (design)');
     const description = await run(['profile', 'describe', 'design']);
     expect(description.stdout).toContain('Designs screens');
-    // Read back as Hermes reads it (§102): `default`'s by Hermes's own rename, and a name
+    // Read back as Hermes reads it (§103): `default`'s by Hermes's own rename, and a name
     // Hermes wrote itself, with Hermes's own command, for a profile the hub never named.
     expect(profiles.displayName('default')).toBe('الرئيسي');
     expect(profiles.displayName('design')).toBe('فريق التصميم');

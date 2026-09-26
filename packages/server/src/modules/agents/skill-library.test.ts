@@ -177,7 +177,7 @@ describe('the Core Hub skill library in a profile', () => {
   it('keeps a switched-off skill off through an update', () => {
     const home = temp('corehub-home-');
     seedLibrary(home, readLibrary(libraryOf(V1)));
-    // Off in Hermes's own list (§102): the update rewrites the file and the skill stays off.
+    // Off in Hermes's own list (§103): the update rewrites the file and the skill stays off.
     setSkillEnabled(home, 'beta', false);
     const v2 = readLibrary(libraryOf({ ...V1, 'beta/SKILL.md': skillDoc('beta', 'Better.') }));
 

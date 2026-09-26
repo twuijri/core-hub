@@ -173,7 +173,7 @@ describe('presets through the routes', () => {
       payload: { enabled: false },
     });
     expect(off.statusCode, off.body).toBe(200);
-    // Off where Hermes keeps it: its own `skills.disabled` list (§102).
+    // Off where Hermes keeps it: its own `skills.disabled` list (§103).
     expect(readFileSync(path.join(root, 'config.yaml'), 'utf8')).toMatch(
       /skills:\s*\n\s+disabled:\s*\n\s+- notes-helper/,
     );

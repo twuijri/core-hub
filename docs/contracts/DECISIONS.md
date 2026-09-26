@@ -3168,3 +3168,81 @@ Proposed — owner to confirm; the threat model and the reasons are ADR 0026.
   `403` for an unshared or unknown agent alike, `429` past `asks_per_hour`, `422
   agent_unavailable` when the agent gave no answer).
 - Every operation on this hub's side is for owners and admins, including asking.
+
+## 103. Hermes-facing follow-ups: a card's history and bulk edits, Hermes's skill switch and platforms, names from Hermes, channel paging and pictures
+
+B17 of the fork gap list. What Hermes does was read in its MIT source at the pinned `v2026.9.14`
+and is said here in our words; each point was run against the real Hermes of the image
+(`*.real.test.ts`). Proposed — owner to confirm:
+
+- **A Hermes card's history.** Hermes's kanban answers a card with its event log (what happened:
+  `created`, `claimed`, `edited`, `reprioritized`, `commented`, `review_requested`… with details
+  and the attempt it belongs to) and its runs (each attempt of its dispatcher: the profile that
+  worked it, its status and outcome, the worker's summary or error, when it started and ended)
+  (`plugins/kanban/dashboard/plugin_api.py` §get_task, `hermes_cli/kanban_db.py` §Event, §Run).
+  `TaskDetail.hermes` carries them, newest first, at most 100 events and 20 runs, texts cut at
+  4 000 characters; `null` for a hub card and for a Hermes card Hermes did not answer just now.
+  Hermes's own words: a client names the kinds it knows and shows any other as Hermes wrote it.
+- **Bulk edits of Hermes cards.** `TaskBulkUpdate.patch.comment` says the same words on every
+  task in the caller's name — on a Hermes card on Hermes first, then read back, as one comment is;
+  `priority` was already set on Hermes first. A refusal is that task's `ok: false`, the others
+  stand. The web board gets "Select": ticks on the cards, one priority or one comment for all,
+  one request per profile the ticked cards are in. Rejected: Hermes's own `POST /tasks/bulk`
+  (it takes no comment, and the hub keeps its per-card reflection in step one card at a time).
+- **Skills: Hermes's own switch.** Hermes keeps "off" in the profile's `config.yaml`,
+  `skills.disabled` (a list of names; a lone string is one name), written sorted by its dashboard
+  and `hermes skills`; `hermes-agent`, its manual, is never off (`agent/skill_utils.py`
+  §get_disabled_skill_names, `hermes_cli/skills_config.py`). The hub now reads and writes that
+  list: a skill in it reads `enabled: false`, and `agents.updateSkill` puts a name in or takes it
+  out, leaving the rest of the file as it was. That works for built-in skills too — the files are
+  not touched — and `hermes-agent` is `409 skill_essential`. Switching on also renames back a
+  `SKILL.md.off` an older hub left. Rejected: keeping the rename (Hermes and the hub would
+  disagree about what is off).
+- **Skills for another system are not listed.** A `platforms:` front matter (`[macos]`,
+  `windows`, a block list) that leaves out the system the hub runs on means Hermes never loads the
+  skill there (`skill_matches_platform`), so the hub leaves it out as Hermes's list does. A skill
+  Hermes offers only inside one of its contexts (`environments:`, e.g. a kanban worker) is still
+  listed: it is the profile's skill and may be switched off, though Hermes's dashboard hides it.
+- **Names from Hermes.** A display name is `display_name` in a profile's `profile.yaml` (for
+  `default`, in Hermes's home itself), shown beside the id and never used to find it
+  (`hermes_cli/profiles.py` §read_profile_meta). Listing profiles now reads it: a Hermes profile
+  the hub adopts takes it (its id when it has none), and a workspace whose Hermes display name
+  was changed outside the hub takes the new one. A Hermes profile without a display name leaves
+  the hub's name alone (a name Hermes refused is not undone). The name given at first-run setup
+  is written as `default`'s display name.
+- **Channel conversations: paging.** Hermes lists sessions 100 at a time with `offset` and a
+  `total`, and pages a transcript back from the newest with `order=latest&limit&offset`
+  (`hermes_cli/web_routers/sessions.py`). `sessions.listChannelConversations` takes `limit`
+  (1–1000 per profile, 100 by default; the hub reads as many pages as that needs) and answers
+  `has_more`; `sessions.listChannelMessages` takes `offset` and answers `next_offset`. The web
+  offers "Older channel conversations" and "Load older messages".
+- **Channel conversations: pictures.** Hermes's gateway saves a picture in the profile's image
+  cache (`cache/images/`, or `image_cache/` on older installs), deletes it after 24 hours, and
+  stores only a note naming the file — `[Image attached at: <path>]`, a `vision_analyze …
+  image_url: <path>` note after describing it, or `[User sent an image: <path>]`
+  (`gateway/run_inbound.py`, `agent/image_routing.py`, `agent/session_persistence.py`). The hub
+  takes the picture's name out of those notes on a person's message (PNG, JPEG, GIF or WebP), drops
+  the notes from the words shown, and lists it in `ChannelMessage.attachments` with `available`;
+  the new `sessions.getChannelPicture` serves it by name from that profile's cache only
+  (`private, no-store`, `nosniff`), `404` once Hermes has deleted it. The web draws it in the
+  bubble, or says Hermes no longer keeps it.
+
+## 104. A task's definition of done and constraints
+
+B18 of the fork gap list (AB 1.1, 1.2). Proposed — owner to confirm:
+
+- **Two lists on a task**, `Task.definition_of_done` and `Task.constraints` (`TaskCheckItem`:
+  `text` 1–500, `checked`), at most 30 lines each, always sent. Written with `TaskCreate` and
+  replaced whole by `TaskPatch` (`TaskCheckItemWrite`, `checked` optional); empty lines are
+  dropped, texts trimmed.
+- **Sent with the run.** The task's prompt gains "Definition of done — the task is done only when
+  every one of these holds" and "Constraints — keep to these while you work", in the run's
+  language, after the checklist.
+- **Ticked at review.** `checked` is the reviewer's tick: the web enables the boxes only while the
+  task is in review and saves them with the dialog's Save. **A new run clears every tick**: they
+  were about the last attempt's work.
+- **The board card** counts the ticked lines of the definition of done (`✓ 1/3`), with the full
+  sentence on hover.
+- **Hermes's cards take none** (`409 conflict`, `hermes_owns_card`, `action: definition_of_done`):
+  Hermes's worker is briefed by the card itself, so lists it never sees would only look kept. A hub
+  task handed to Hermes and started carries its lists into the Hermes card's brief.

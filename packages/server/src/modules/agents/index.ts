@@ -1320,7 +1320,7 @@ export const agentsModule = defineModule({
         if (error.reason === 'skill_bundled') {
           throw new HubError('conflict', { details: { reason: 'skill_bundled' } });
         }
-        // Hermes's manual: Hermes never lets it be off, so neither does the hub (§102).
+        // Hermes's manual: Hermes never lets it be off, so neither does the hub (§103).
         if (error.reason === 'skill_essential') {
           throw new HubError('conflict', { details: { reason: 'skill_essential' } });
         }

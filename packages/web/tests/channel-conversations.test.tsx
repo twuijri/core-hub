@@ -177,7 +177,7 @@ function fakeHub(options: { unreachable?: boolean; paged?: boolean } = {}) {
       gone.add(decodeURIComponent(one[1]!));
       return Promise.resolve(new Response(null, { status: 204 }));
     }
-    // Paging and pictures (§102): the list has older conversations until 200 are asked for,
+    // Paging and pictures (§103): the list has older conversations until 200 are asked for,
     // the transcript an older page, and the person sent a picture Hermes still keeps.
     if (options.paged && path === '/channel-conversations') {
       const limit = Number(url.searchParams.get('limit') ?? 100);
@@ -518,7 +518,7 @@ describe('a channel conversation opens read-only', () => {
   });
 });
 
-describe('paging and pictures (§102)', () => {
+describe('paging and pictures (§103)', () => {
   it('reads older channel conversations when asked, a hundred more each time', async () => {
     const user = userEvent.setup();
     const hub = fakeHub({ paged: true });

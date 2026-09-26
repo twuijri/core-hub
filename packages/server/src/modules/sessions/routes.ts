@@ -693,7 +693,7 @@ export function registerSessionRoutes(app: FastifyInstance, deps: RouteDeps): vo
       );
   });
 
-  // A picture the person sent on the channel (§102), from Hermes's image cache only.
+  // A picture the person sent on the channel (§103), from Hermes's image cache only.
   app.get(
     '/channel-conversations/:conversation_id/pictures/:picture_id',
     async (request, reply) => {
@@ -748,7 +748,7 @@ function contentDisposition(download: boolean, name: string): string {
 /** Hermes refuses inbound media above its own caps; this is a ceiling well over them. */
 const PICTURE_MAX_BYTES = 50 * 1024 * 1024;
 
-/** The picture types a browser draws, by name; nothing else is served (§102). */
+/** The picture types a browser draws, by name; nothing else is served (§103). */
 function pictureType(file: string): string {
   const ext = file.slice(file.lastIndexOf('.') + 1).toLowerCase();
   if (ext === 'png') return 'image/png';

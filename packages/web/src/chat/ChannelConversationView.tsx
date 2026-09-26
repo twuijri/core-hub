@@ -4,7 +4,7 @@
 // banner saying where the reply is made. It is read again every half minute while open.
 // "Continue in Core Hub" (§62) carries it into a new hub chat with the transcript attached.
 // Older messages are read a page at a time when asked, and the pictures the person sent are
-// drawn in their bubble while Hermes still keeps them (§102).
+// drawn in their bubble while Hermes still keeps them (§103).
 import { useEffect, useState } from 'react';
 import { describeError } from '../auth/client.js';
 import { useAuth } from '../auth/context.js';
@@ -265,7 +265,7 @@ function ChannelMessageView({
 }
 
 /**
- * A picture the person sent, drawn from Hermes's image cache through the hub (§102). Hermes
+ * A picture the person sent, drawn from Hermes's image cache through the hub (§103). Hermes
  * deletes those after a day: an older one says so instead of showing a broken image.
  */
 function ChannelPicture({

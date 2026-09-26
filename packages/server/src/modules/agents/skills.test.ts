@@ -168,7 +168,7 @@ describe('writing one back', () => {
 });
 
 describe('turning one off', () => {
-  it("switches through Hermes's own list and touches no file of the skill (§102)", () => {
+  it("switches through Hermes's own list and touches no file of the skill (§103)", () => {
     const dir = home();
     write(dir, 'markdown-viewer', PACK_SKILL);
     writeFileSync(path.join(dir, 'skills', 'markdown-viewer', 'script.js'), 'console.log(1)');
@@ -218,7 +218,7 @@ describe('turning one off', () => {
     expect(existsSync(path.join(dir, 'skills', 'paused', 'SKILL.md'))).toBe(true);
   });
 
-  it("leaves out a skill for another system, as Hermes's list does (§102)", () => {
+  it("leaves out a skill for another system, as Hermes's list does (§103)", () => {
     const dir = home();
     write(dir, 'mac-only', '---\nname: mac-only\nplatforms: [macos]\n---\nbody\n');
     write(dir, 'linux-block', '---\nname: linux-block\nplatforms:\n  - linux # here\n---\nb\n');
@@ -381,7 +381,7 @@ describe('skills in category folders, as Hermes keeps them', () => {
       /skill_bundled/,
     );
     expect(() => deleteSkill(dir, 'findmy')).toThrow(/skill_bundled/);
-    // Switched as Hermes switches it: its name in Hermes's list, its bytes untouched (§102).
+    // Switched as Hermes switches it: its name in Hermes's list, its bytes untouched (§103).
     expect(setSkillEnabled(dir, 'findmy', false).enabled).toBe(false);
     expect(hermesDisabledSkills(dir)).toEqual(new Set(['findmy']));
     expect(readFileSync(file, 'utf8')).toBe(before);

@@ -16,7 +16,7 @@ afterEach(() => rmSync(home, { recursive: true, force: true }));
 const idle: ProfileRunner = async () => ({ code: 0, stdout: '', stderr: '' });
 
 describe("Hermes's profiles", () => {
-  it("reads a display name as Hermes does: default's in the home, a named one's in its folder (§102)", () => {
+  it("reads a display name as Hermes does: default's in the home, a named one's in its folder (§103)", () => {
     home = mkdtempSync(path.join(tmpdir(), 'corehub-hermes-'));
     const profiles = createHermesProfiles({ home, run: idle });
     expect(profiles.displayName('default')).toBe('');

@@ -1593,7 +1593,7 @@ paths:
         Where the hub mirrors Hermes's profiles (ADR 0014), listing also reads them: a Hermes
         profile the hub does not know yet is added under Hermes's display name (its id when it
         has none), and a profile whose Hermes display name was changed outside the hub — `hermes
-        profile rename`, Hermes's dashboard — takes that name (contract decision §102). A Hermes
+        profile rename`, Hermes's dashboard — takes that name (contract decision §103). A Hermes
         profile with no display name leaves the hub's name as it is.
       x-scope: global
       x-rt-events: []
@@ -4175,7 +4175,7 @@ paths:
 
         The `limit` most recent live conversations per profile (100 unless asked), most recent
         first; Hermes's archived ones are left out. `has_more` says some profile has older ones:
-        a client asks again with a larger `limit` to show them (contract decision §102). With `profiles=all` every profile the caller may enter is
+        a client asks again with a larger `limit` to show them (contract decision §103). With `profiles=all` every profile the caller may enter is
         read (ADR 0016), each item naming its `profile`, and the whole list is ordered by
         `last_message_at`. The hub keeps what it read for a short while and asks Hermes again
         only when Hermes's store has been written since (contract decision §61); clients poll
@@ -4214,7 +4214,7 @@ paths:
           in: query
           description: >-
             How many of each profile's most recent conversations to read (contract decision
-            §102). Hermes answers 100 at a time; the hub reads as many of its pages as this
+            §103). Hermes answers 100 at a time; the hub reads as many of its pages as this
             needs.
           schema:
             type: integer
@@ -4235,7 +4235,7 @@ paths:
                     type: boolean
                     description: >-
                       Some profile has older conversations than `limit` let through (Hermes's
-                      own count). Always sent by the hub (contract decision §102).
+                      own count). Always sent by the hub (contract decision §103).
                   items:
                     type: array
                     items:
@@ -4313,7 +4313,7 @@ paths:
       tags: [sessions]
       summary: Read a picture sent on a channel conversation
       description: |
-        The bytes of a picture named in a `ChannelMessage.attachments` (contract decision §102),
+        The bytes of a picture named in a `ChannelMessage.attachments` (contract decision §103),
         from Hermes's image cache of the Hermes profile `X-Hub-Profile` is. Only a picture file
         in that cache is served (a name, never a path); `404` (`resource: channel_picture`)
         once Hermes has deleted it — it keeps them a day — or for any other name. `private,
@@ -4401,7 +4401,7 @@ paths:
         The conversation, as Hermes keeps it, in the profile named by `X-Hub-Profile`: what the
         person on the channel wrote and what the agent answered, oldest first — a page of Hermes's
         latest 500 messages at most. `offset` pages back: the page before is asked with the
-        answer's `next_offset` (contract decision §102). A picture the person sent is named in
+        answer's `next_offset` (contract decision §103). A picture the person sent is named in
         the message's `attachments` and read with `sessions.getChannelPicture`. Tool calls, tool results and system text are left out. Only a
         conversation that came from a messaging channel is found here; any other id is
         `404` (`resource: channel_conversation`). `503 service_unavailable` when Hermes cannot
@@ -4449,7 +4449,7 @@ paths:
                     type: [integer, 'null']
                     description: >-
                       The `offset` that reads the page before this one, or `null` when there is
-                      none. Always sent by the hub (contract decision §102).
+                      none. Always sent by the hub (contract decision §103).
               example:
                 conversation:
                   id: 20260925_091500_3f9a1c2b
@@ -5843,7 +5843,7 @@ paths:
         `library` saying whether the person edited them, and `library` in the answer describes
         the library in this profile.
 
-        As Hermes lists them (contract decision §102): a skill whose front matter names
+        As Hermes lists them (contract decision §103): a skill whose front matter names
         `platforms` that do not include the hub's own system (`linux`, `macos`, `windows`) is
         left out — Hermes never loads it here — and `enabled` is off for a skill in the
         profile's `skills.disabled` list.
@@ -6045,7 +6045,7 @@ paths:
       summary: Enable, disable or pin a skill
       description: >-
         `enabled` switches a skill on or off where Hermes itself keeps that switch: the
-        profile's `skills.disabled` list in `config.yaml` (contract decision §102), so Hermes's
+        profile's `skills.disabled` list in `config.yaml` (contract decision §103), so Hermes's
         own `hermes skills` and dashboard agree with the hub. That works for a built-in skill
         (`source: builtin`) too — its files are not touched. Switching on also restores a skill
         an older hub switched off by renaming its `SKILL.md`. Hermes's own manual,
@@ -17953,7 +17953,7 @@ components:
           description: >-
             Name of the `default` workspace created with the owner; defaults to "Default". Where
             the hub mirrors Hermes's profiles it is written as Hermes's display name of its
-            `default` profile too (contract decision §102); without it, a display name Hermes's
+            `default` profile too (contract decision §103); without it, a display name Hermes's
             `default` profile already has becomes the workspace's name.
     LoginRequest:
       type: object
@@ -19149,7 +19149,7 @@ components:
         attachments:
           type: array
           description: >-
-            The pictures the person sent with this message, in order (contract decision §102).
+            The pictures the person sent with this message, in order (contract decision §103).
             Always sent by the hub; empty when there are none.
           items:
             $ref: '#/components/schemas/ChannelAttachment'
@@ -20914,7 +20914,7 @@ components:
           type: boolean
           description: >-
             Off when the profile's Hermes lists it in `skills.disabled` (its `config.yaml`), or
-            when its `SKILL.md` was renamed off by an older hub (contract decision §102).
+            when its `SKILL.md` was renamed off by an older hub (contract decision §103).
         pinned:
           type: boolean
         source:
@@ -23018,7 +23018,7 @@ components:
                 A card on Hermes's own kanban cannot be given lists (`409 conflict`,
                 `details.reason: hermes_owns_card`): Hermes briefs its own worker from the card.
                 A hub task handed to Hermes and started carries them into that card's brief.
-                Always sent by the hub (contract decision §103).
+                Always sent by the hub (contract decision §104).
               items:
                 $ref: '#/components/schemas/TaskCheckItem'
             constraints:
@@ -23028,7 +23028,7 @@ components:
                 What the agent must not do or must keep to while doing the task (a file not to
                 touch, a library not to add…), one line each. Sent with the run and shown at
                 review exactly as `definition_of_done`. Always sent by the hub (contract decision
-                §103).
+                §104).
               items:
                 $ref: '#/components/schemas/TaskCheckItem'
     TaskCheckItem:
@@ -23181,7 +23181,7 @@ components:
                 For a card on Hermes's own kanban, read from Hermes when the card is opened: what
                 happened on the card (Hermes's own event log) and each attempt Hermes's
                 dispatcher made at it (its runs), newest first — at most 100 events and 20 runs
-                (contract decision §102). `null` for any other task, and for a Hermes card the
+                (contract decision §103). `null` for any other task, and for a Hermes card the
                 hub could not read from Hermes just now (the rest of the card is its last
                 reflection).
               oneOf:
@@ -23396,7 +23396,7 @@ components:
               description: >-
                 Say the same thing on every task, in the caller's name — on a card from
                 Hermes's kanban it is said on Hermes's card first, as `tasks.createComment` does
-                (contract decision §102). `priority` on such a card is likewise set on Hermes
+                (contract decision §103). `priority` on such a card is likewise set on Hermes
                 first; a refusal is that task's `ok: false`, with Hermes's words not lost to the
                 others.
     TaskMove:

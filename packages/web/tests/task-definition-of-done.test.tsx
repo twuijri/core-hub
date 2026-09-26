@@ -1,8 +1,8 @@
 /**
- * A task's definition of done and its constraints (contract decision §103) on the web: written
+ * A task's definition of done and its constraints (contract decision §104) on the web: written
  * in the details dialog, ticked there by the reviewer while the task is in review, counted on
  * the board card — and never offered on a Hermes card, which shows Hermes's own history
- * instead (§102).
+ * instead (§103).
  *
  * The hub's half — that the lists reach the agent's prompt and a new run clears the ticks — is
  * `packages/server/tests/unit/task-definition-of-done.test.ts`.
@@ -125,7 +125,7 @@ const writes = (calls: Call[]) => calls.filter((call) => call.method !== 'GET');
 
 afterEach(cleanup);
 
-describe('definition of done and constraints in the details dialog (§103)', () => {
+describe('definition of done and constraints in the details dialog (§104)', () => {
   it('lets the reviewer tick a line in review, add one, and saves the whole list', async () => {
     const user = userEvent.setup();
     const calls = harness(<TaskDialog task={hubTask()} onClose={() => {}} />, () => ({
@@ -191,7 +191,7 @@ describe('definition of done and constraints in the details dialog (§103)', () 
   });
 });
 
-describe("a Hermes card's details (§102)", () => {
+describe("a Hermes card's details (§103)", () => {
   const hermesCard = hubTask({
     status: 'running',
     external: { source: 'hermes', id: 't_00000001' },
@@ -268,7 +268,7 @@ describe("a Hermes card's details (§102)", () => {
   });
 });
 
-describe('the board card (§103)', () => {
+describe('the board card (§104)', () => {
   const actions = (): CardActions => ({
     onMove: vi.fn(),
     onRename: vi.fn(),

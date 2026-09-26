@@ -7,12 +7,12 @@
  * is shown as Hermes wrote it (`describeTaskError`).
  *
  * For the hub's own task it also holds "Start automatically" (`auto_start`, a switch that
- * takes effect when flipped), its definition of done and constraints (§103: written here, sent
+ * takes effect when flipped), its definition of done and constraints (§104: written here, sent
  * with the run, ticked here by the reviewer while it is in review, saved with Save) and, when
  * the task has one, its git worktree: where it is, its branch, how it stands — git's own
  * message when git refused — and Remove (the branch stays).
  *
- * A Hermes card shows Hermes's own history instead: its runs and its events (§102).
+ * A Hermes card shows Hermes's own history instead: its runs and its events (§103).
  */
 import { useEffect, useState } from 'react';
 import { useI18n } from '../i18n/context.js';
@@ -94,7 +94,7 @@ export function TaskDialog({ task, onClose }: { task: Task | null; onClose(): vo
     if (title.trim() !== shown.title) patch.title = title.trim();
     if (description !== (shown.description ?? '')) patch.description = description || null;
     if (priority !== shown.priority) patch.priority = priority;
-    // A Hermes card has none: Hermes briefs its own worker (§103).
+    // A Hermes card has none: Hermes briefs its own worker (§104).
     if (!fromHermes && !sameLines(cleanLines(done), shownDone))
       patch.definition_of_done = cleanLines(done);
     if (!fromHermes && !sameLines(cleanLines(constraints), shownConstraints))

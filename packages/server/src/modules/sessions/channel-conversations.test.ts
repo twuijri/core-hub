@@ -280,7 +280,7 @@ describe('channel conversations: the reader', () => {
     expect(opened.items).toHaveLength(500);
     expect(opened.items.at(-1)?.text).toBe('m519');
     expect(opened.has_more).toBe(true);
-    // The page before, from where this one stopped (§102).
+    // The page before, from where this one stopped (§103).
     expect(opened.next_offset).toBe(500);
     const older = await new ChannelConversations(() => hermes).messages(
       { workspace: 'w', profile: 'home' },
@@ -293,7 +293,7 @@ describe('channel conversations: the reader', () => {
     expect(hermes.calls.at(-1)).toContain('order=latest&limit=500&offset=500');
   });
 
-  it('reads past Hermes’s page of 100 when asked for more, and says when there is more (§102)', async () => {
+  it('reads past Hermes’s page of 100 when asked for more, and says when there is more (§103)', async () => {
     const many = Array.from({ length: 150 }, (_, i) =>
       telegram(`20260925_1${String(i).padStart(5, '0')}_aa`, T0 + i),
     );
@@ -322,7 +322,7 @@ describe('channel conversations: the reader', () => {
     expect(lists()).toHaveLength(before);
   });
 
-  it("shows the person's pictures and drops Hermes's notes about them (§102)", async () => {
+  it("shows the person's pictures and drops Hermes's notes about them (§103)", async () => {
     const hermes = scriptedChannels(
       {
         default: {
@@ -478,7 +478,7 @@ describe('channel conversations: the routes', () => {
     await hub.close();
   });
 
-  it('serves a picture from Hermes’s image cache by its name only (§102)', async () => {
+  it('serves a picture from Hermes’s image cache by its name only (§103)', async () => {
     const dir = mkdtempSync(path.join(tmpdir(), 'corehub-pictures-'));
     const file = path.join(dir, 'img_a1b2c3d4e5f6.png');
     const png = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 1, 2, 3]);

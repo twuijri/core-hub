@@ -246,7 +246,7 @@ function SkillRow({
   // The server marks an unreadable file by putting the reason where the description goes.
   const broken = (skill.description ?? '').startsWith('[');
   // Hermes's own: readable, pinnable and switchable — the switch is Hermes's own list, which
-  // leaves its files alone (§102) — never rewritten or deleted from here.
+  // leaves its files alone (§103) — never rewritten or deleted from here.
   const builtin = skill.source === 'builtin';
   // Core Hub's own: kept up to date by the hub until the person edits it.
   const library = skill.source === 'library';

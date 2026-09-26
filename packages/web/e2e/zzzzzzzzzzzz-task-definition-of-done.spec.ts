@@ -1,6 +1,6 @@
 /**
- * A task's definition of done and constraints (contract decision §103), and several cards at
- * once (§102), against the real hub: the lists are written in the details dialog and kept,
+ * A task's definition of done and constraints (contract decision §104), and several cards at
+ * once (§103), against the real hub: the lists are written in the details dialog and kept,
  * the card counts the ticked lines, and "Select" gives many cards one priority.
  *
  * Shots: the details dialog with both lists, and the board while selecting (Arabic, light).

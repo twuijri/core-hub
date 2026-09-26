@@ -263,7 +263,7 @@ describe("a profile's name is Hermes's display name; its id never changes", () =
   });
 });
 
-describe('names are read from Hermes (§102)', () => {
+describe('names are read from Hermes (§103)', () => {
   it("adds a Hermes profile under Hermes's display name, and its id when it has none", async () => {
     registerProfileMirror(
       () => fakeMirror(['design', 'ops'], { design: 'فريق التصميم', ops: '' }).mirror,

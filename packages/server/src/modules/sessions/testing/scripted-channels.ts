@@ -21,7 +21,7 @@ import {
 export interface ScriptedProfile {
   sessions: HermesSessionRow[];
   messages?: Record<string, HermesMessage[]>;
-  /** Picture files in the profile's image cache, by name, with where they are (§102). */
+  /** Picture files in the profile's image cache, by name, with where they are (§103). */
   pictures?: Record<string, string>;
 }
 

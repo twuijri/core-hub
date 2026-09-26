@@ -413,7 +413,7 @@ describe("Hermes's own skills, in their category folders", () => {
       expect(res.statusCode, `${request.method} ${res.body}`).toBe(409);
       expect(res.json()).toMatchObject({ code: 'conflict', details: { reason: 'skill_bundled' } });
     }
-    // Switched as Hermes switches it — its name in Hermes's own list — so it works (§102).
+    // Switched as Hermes switches it — its name in Hermes's own list — so it works (§103).
     const off = await authed(h, h.token, {
       method: 'PATCH',
       url: `/api/v1/agents/${agent}/skills/findmy`,

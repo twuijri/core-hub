@@ -62,7 +62,7 @@ elif which == "designer":
 elif which == "more":
     db.append_message("20260925_091500_aa11bb22", "user", "شكرًا!", timestamp=time.time())
 elif which == "pager":
-    # More than one page of Hermes's list (§102): 105 Telegram chats.
+    # More than one page of Hermes's list (§103): 105 Telegram chats.
     for i in range(105):
         sid = "20260926_%06d_aa" % i
         db.create_session(sid, "telegram", user_id=str(9000 + i), chat_id=str(9000 + i),
@@ -300,7 +300,7 @@ describe.skipIf(!image)(
       });
     }, 120_000);
 
-    it('reads past Hermes’s page of 100, and serves a picture Hermes stored (§102)', async () => {
+    it('reads past Hermes’s page of 100, and serves a picture Hermes stored (§103)', async () => {
       await inImage(HERMES, ['profile', 'create', 'pager', '--no-alias']);
       console.log(await seed('pager'));
       const pager = [{ workspace: 'pager', profile: 'pager' }];

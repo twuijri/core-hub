@@ -16,7 +16,7 @@ export function describeTaskError(
         | { details?: { reason?: string; message?: string; field?: string; action?: string } }
         | undefined
     )?.details;
-    // Hermes briefs its own worker, so its cards take no definition of done (§103).
+    // Hermes briefs its own worker, so its cards take no definition of done (§104).
     if (details?.reason === 'hermes_owns_card' && details.action === 'definition_of_done') {
       return t('tasks.dod.hermes_card');
     }

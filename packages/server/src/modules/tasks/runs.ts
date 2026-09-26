@@ -114,7 +114,7 @@ const WORDS = {
 /**
  * The prompt a task's run starts with: the task itself, as the agent needs it — title,
  * brief, the checklist with what is already ticked, its definition of done and its
- * constraints (decision §103), and whatever the person added when they assigned it.
+ * constraints (decision §104), and whatever the person added when they assigned it.
  */
 export function taskPrompt(input: {
   key: string;
@@ -145,7 +145,7 @@ export function taskPrompt(input: {
 }
 
 /**
- * A task's definition of done and constraints as the agent reads them (decision §103), or
+ * A task's definition of done and constraints as the agent reads them (decision §104), or
  * `null` when it has neither. Also the part of a Hermes card's brief they become when a hub
  * task is handed to Hermes, whose worker reads only the card.
  */

@@ -241,7 +241,7 @@ describe.skipIf(!image)(
           'تعليق من المركز',
         );
 
-        // Hermes's own history of the card, read as it opens (§102): its event log, newest
+        // Hermes's own history of the card, read as it opens (§103): its event log, newest
         // first, and no attempt yet — nobody has run it.
         const history = (opened.json() as { hermes: { events: Json[]; runs: Json[] } | null })
           .hermes;
@@ -252,7 +252,7 @@ describe.skipIf(!image)(
         expect(kinds).toContain('commented');
         expect(kinds.at(-1)).toBe('created');
 
-        // Several cards at once (§102): a priority and a comment, on Hermes first.
+        // Several cards at once (§103): a priority and a comment, on Hermes first.
         const bulk = await authed(hub, hub.token, {
           method: 'PATCH',
           url: '/api/v1/tasks',

@@ -34,7 +34,7 @@
  * screen would be the hub quietly forking Hermes's copy, so those are listed, readable,
  * pinnable and switchable (below), and refused (`skill_bundled`) for anything else.
  *
- * **On and off is Hermes's own switch** (decision §102; `hermes_cli/skills_config.py` and
+ * **On and off is Hermes's own switch** (decision §103; `hermes_cli/skills_config.py` and
  * `agent/skill_utils.py` §get_disabled_skill_names at v2026.9.14, in our words): the profile's
  * `config.yaml` names the skills that are off in `skills.disabled` — a list of skill names (a
  * lone string is one name, nothing is none) — and Hermes's dashboard and `hermes skills` write
@@ -321,7 +321,7 @@ function readOne(
     // A skill whose front matter forgot its name is still a skill; the folder names it.
     name,
     description: fields.get('description') ?? null,
-    // Off by Hermes's own list, or by an older hub's rename (§102).
+    // Off by Hermes's own list, or by an older hub's rename (§103).
     enabled: enabled && !view.disabled.has(name),
     pack: packOf(raw),
     version: fields.get('version') ?? null,
@@ -540,7 +540,7 @@ function writable(home: string, key: string): { where: Located; bundled: Set<str
 
 /**
  * On or off where Hermes keeps it: the skill's name in or out of the profile's
- * `skills.disabled` (decision §102). No file of the skill is touched — which is why Hermes's
+ * `skills.disabled` (decision §103). No file of the skill is touched — which is why Hermes's
  * own skills can be switched too — except that switching on renames back a `SKILL.md` an older
  * hub renamed off. Hermes's manual is never off (`skill_essential`).
  */

@@ -487,7 +487,7 @@ export function registerAuthRoutes(app: FastifyInstance, ctx: AuthContext): void
     // The account exists now, so nothing on disk may still create one.
     clearSetupToken(ctx.dataDir);
     // The name the owner gave the default profile is Hermes's display name for it too
-    // (decision §102). Without one, Hermes's own name (if any) is read on the first listing.
+    // (decision §103). Without one, Hermes's own name (if any) is read on the first listing.
     if (body.workspace_name?.trim()) {
       const home = defaultWorkspace(db);
       if (home) await mirrorDisplayName(app, home);
@@ -1039,7 +1039,7 @@ export function registerAuthRoutes(app: FastifyInstance, ctx: AuthContext): void
     const owner = mirror ? ownerUser(db) : null;
     if (!mirror || !owner) return;
     try {
-      // Hermes's display names (decision §102): a new profile is added under it, and a name
+      // Hermes's display names (decision §103): a new profile is added under it, and a name
       // changed on Hermes's side is taken.
       const displayNameOf = (name: string) => mirror.displayName?.(name) ?? '';
       const { adopted, unnamed } = adoptProfiles(db, owner.id, await mirror.list(), displayNameOf);

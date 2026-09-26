@@ -435,7 +435,7 @@ describe('tasks: Hermes cards edited through Hermes', () => {
     }
   });
 
-  it("shows Hermes's own events and runs when a card is opened, newest first (§102)", async () => {
+  it("shows Hermes's own events and runs when a card is opened, newest first (§103)", async () => {
     const card = board.add('Report', 'review');
     board.events.set(card.id, [
       { id: 1, kind: 'created', payload: { assignee: 'default' }, created_at: 1_790_000_000 },
@@ -540,7 +540,7 @@ describe('tasks: Hermes cards edited through Hermes', () => {
     }
   });
 
-  it("sets priority and says a comment on Hermes's cards in bulk, Hermes first (§102)", async () => {
+  it("sets priority and says a comment on Hermes's cards in bulk, Hermes first (§103)", async () => {
     const one = board.add('One', 'ready');
     const two = board.add('Two', 'ready');
     const hub = await signedInHub();
@@ -596,7 +596,7 @@ describe('tasks: Hermes cards edited through Hermes', () => {
     }
   });
 
-  it('refuses a definition of done on a Hermes card, whose worker Hermes briefs (§103)', async () => {
+  it('refuses a definition of done on a Hermes card, whose worker Hermes briefs (§104)', async () => {
     const card = board.add('Hermes owns it', 'ready');
     const hub = await signedInHub();
     try {

@@ -7,7 +7,7 @@
  * - Plugins: what Hermes lists in the profile, in Hermes's words; switch, install (a job),
  *   remove only what was installed.
  * - Skills: skills in Hermes's category folders are listed under their category, and Hermes's
- *   own (`builtin`) offer no delete, and switch through Hermes's own list (§102).
+ *   own (`builtin`) offer no delete, and switch through Hermes's own list (§103).
  *
  * The whole app is mounted on a scripted hub, so what is asserted is what a person meets and
  * what the page asks the hub.
@@ -419,7 +419,7 @@ describe("Hermes's own skills on the Skills page", () => {
     expect(findmy.getAttribute('data-source')).toBe('builtin');
     expect(within(findmy).getByText('Built into Hermes')).toBeTruthy();
     expect(screen.queryByTestId('skill-delete-findmy')).toBeNull();
-    // Hermes's own switch (its `skills.disabled` list) leaves its files alone: offered (§102).
+    // Hermes's own switch (its `skills.disabled` list) leaves its files alone: offered (§103).
     const toggle = within(findmy).getByTestId('skill-toggle-findmy') as HTMLButtonElement;
     expect(toggle.disabled).toBe(false);
     fireEvent.click(toggle);
