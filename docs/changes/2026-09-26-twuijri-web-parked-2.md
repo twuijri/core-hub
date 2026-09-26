@@ -102,7 +102,13 @@ contracts:lint  OK
 
 أول لقطة أظهرت أيقونة «محادثة» مميّزة وأنت في صفحة المهام. صحّحناها: الأيقونة تتميّز فقط حين تكون في قائمتها.
 
-نتيجة CI: تُضاف بعد الدفع.
+نتيجة CI على الطلب #180 (الالتزام `cc23ce2a`): ١١ فحصًا كلها ناجحة، منها:
+- Lint, typecheck, contracts, client tests, build
+- اختبارات الخادم (٣ أجزاء)
+- Web smoke journeys (Playwright، ‏7m49s)
+- Desktop app smoke
+- Docker image
+- db:generate + db:migrate
 
 ## المخاطر والرجوع
 - **`.ch-sidebar` صار `overflow: hidden`** حتى لا يظهر المحتوى أثناء الطيّ.
