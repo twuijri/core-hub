@@ -1589,6 +1589,12 @@ paths:
       operationId: auth.listProfiles
       tags: [auth]
       summary: List the workspaces the user can enter
+      description: >-
+        Where the hub mirrors Hermes's profiles (ADR 0014), listing also reads them: a Hermes
+        profile the hub does not know yet is added under Hermes's display name (its id when it
+        has none), and a profile whose Hermes display name was changed outside the hub — `hermes
+        profile rename`, Hermes's dashboard — takes that name (contract decision §102). A Hermes
+        profile with no display name leaves the hub's name as it is.
       x-scope: global
       x-rt-events: []
       responses:
@@ -4167,8 +4173,9 @@ paths:
         reads them, **read-only**, through Hermes's internal server (ADR 0015), in the Hermes
         profile each hub profile is (ADR 0014). A reply is made on the channel itself.
 
-        Up to the 100 most recent live conversations per profile, most recent first; Hermes's
-        archived ones are left out. With `profiles=all` every profile the caller may enter is
+        The `limit` most recent live conversations per profile (100 unless asked), most recent
+        first; Hermes's archived ones are left out. `has_more` says some profile has older ones:
+        a client asks again with a larger `limit` to show them (contract decision §102). With `profiles=all` every profile the caller may enter is
         read (ADR 0016), each item naming its `profile`, and the whole list is ordered by
         `last_message_at`. The hub keeps what it read for a short while and asks Hermes again
         only when Hermes's store has been written since (contract decision §61); clients poll
@@ -4203,6 +4210,17 @@ paths:
           schema:
             type: string
             enum: [include]
+        - name: limit
+          in: query
+          description: >-
+            How many of each profile's most recent conversations to read (contract decision
+            §102). Hermes answers 100 at a time; the hub reads as many of its pages as this
+            needs.
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 1000
+            default: 100
       x-rt-events: []
       responses:
         '200':
@@ -4213,6 +4231,11 @@ paths:
                 type: object
                 required: [items, unavailable]
                 properties:
+                  has_more:
+                    type: boolean
+                    description: >-
+                      Some profile has older conversations than `limit` let through (Hermes's
+                      own count). Always sent by the hub (contract decision §102).
                   items:
                     type: array
                     items:
@@ -4284,6 +4307,51 @@ paths:
           $ref: '#/components/responses/NotFound'
         '503':
           $ref: '#/components/responses/ServiceUnavailable'
+  /channel-conversations/{conversation_id}/pictures/{picture_id}:
+    get:
+      operationId: sessions.getChannelPicture
+      tags: [sessions]
+      summary: Read a picture sent on a channel conversation
+      description: |
+        The bytes of a picture named in a `ChannelMessage.attachments` (contract decision §102),
+        from Hermes's image cache of the Hermes profile `X-Hub-Profile` is. Only a picture file
+        in that cache is served (a name, never a path); `404` (`resource: channel_picture`)
+        once Hermes has deleted it — it keeps them a day — or for any other name. `private,
+        no-store`, `nosniff`, and only the picture types a browser draws (PNG, JPEG, GIF, WebP;
+        never SVG).
+      parameters:
+        - $ref: '#/components/parameters/Profile'
+        - name: conversation_id
+          in: path
+          required: true
+          description: Hermes's own session id.
+          schema:
+            type: string
+            pattern: '^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$'
+        - name: picture_id
+          in: path
+          required: true
+          description: '`ChannelAttachment.id`.'
+          schema:
+            type: string
+            pattern: '^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$'
+      x-rt-events: []
+      responses:
+        '200':
+          description: The picture.
+          content:
+            'image/*':
+              schema:
+                type: string
+                format: binary
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
   /channel-conversations/{conversation_id}/hidden:
     parameters:
       - $ref: '#/components/parameters/Profile'
@@ -4331,8 +4399,10 @@ paths:
       summary: Read one channel conversation (read-only)
       description: |
         The conversation, as Hermes keeps it, in the profile named by `X-Hub-Profile`: what the
-        person on the channel wrote and what the agent answered, oldest first — the latest 500
-        messages at most. Tool calls, tool results and system text are left out. Only a
+        person on the channel wrote and what the agent answered, oldest first — a page of Hermes's
+        latest 500 messages at most. `offset` pages back: the page before is asked with the
+        answer's `next_offset` (contract decision §102). A picture the person sent is named in
+        the message's `attachments` and read with `sessions.getChannelPicture`. Tool calls, tool results and system text are left out. Only a
         conversation that came from a messaging channel is found here; any other id is
         `404` (`resource: channel_conversation`). `503 service_unavailable` when Hermes cannot
         be asked (`details.reason: hermes_api_unavailable`, or `hermes_not_managed` where the
@@ -4346,6 +4416,16 @@ paths:
           schema:
             type: string
             pattern: '^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$'
+        - name: offset
+          in: query
+          description: >-
+            How many of Hermes's newest messages to skip — `0`, the latest page, unless paging
+            back with an answer's `next_offset`.
+          schema:
+            type: integer
+            minimum: 0
+            maximum: 10000000
+            default: 0
       x-rt-events: []
       responses:
         '200':
@@ -4365,6 +4445,11 @@ paths:
                   has_more:
                     type: boolean
                     description: Older messages exist that this answer does not carry.
+                  next_offset:
+                    type: [integer, 'null']
+                    description: >-
+                      The `offset` that reads the page before this one, or `null` when there is
+                      none. Always sent by the hub (contract decision §102).
               example:
                 conversation:
                   id: 20260925_091500_3f9a1c2b
@@ -5751,11 +5836,17 @@ paths:
         (`skills/<category>/<name>/SKILL.md`, where Hermes keeps its built-in skills) lists
         under that category, whose `description` is the category's `DESCRIPTION.md`. A skill
         Hermes seeded from its own bundle (named in `skills/.bundled_manifest`) is `source:
-        builtin` and read-only here: it can be read and pinned, not written, switched or
-        deleted (`409 conflict`, `details.reason = skill_bundled`). A skill's `key` is its
-        folder's name wherever the folder is. Core Hub's own skills (decision §71) live in the
-        `core-hub` category, are `source: library` with `library` saying whether the person
-        edited them, and `library` in the answer describes the library in this profile.
+        builtin` and read-only here: it can be read, pinned and switched on or off (Hermes's own
+        switch, below), not written or deleted (`409 conflict`, `details.reason =
+        skill_bundled`). A skill's `key` is its folder's name wherever the folder is. Core Hub's
+        own skills (decision §71) live in the `core-hub` category, are `source: library` with
+        `library` saying whether the person edited them, and `library` in the answer describes
+        the library in this profile.
+
+        As Hermes lists them (contract decision §102): a skill whose front matter names
+        `platforms` that do not include the hub's own system (`linux`, `macos`, `windows`) is
+        left out — Hermes never loads it here — and `enabled` is off for a skill in the
+        profile's `skills.disabled` list.
       x-rt-events: []
       responses:
         '200':
@@ -5953,10 +6044,13 @@ paths:
       tags: [agents]
       summary: Enable, disable or pin a skill
       description: >-
-        `enabled` switches a skill on or off by renaming its `SKILL.md`; a built-in skill
-        (`source: builtin`) is Hermes's own and is not switched here (`409 conflict`,
-        `details.reason = skill_bundled`). `pinned` is the hub's own order and works for every
-        skill.
+        `enabled` switches a skill on or off where Hermes itself keeps that switch: the
+        profile's `skills.disabled` list in `config.yaml` (contract decision §102), so Hermes's
+        own `hermes skills` and dashboard agree with the hub. That works for a built-in skill
+        (`source: builtin`) too — its files are not touched. Switching on also restores a skill
+        an older hub switched off by renaming its `SKILL.md`. Hermes's own manual,
+        `hermes-agent`, is never off (`409 conflict`, `details.reason = skill_essential`).
+        `pinned` is the hub's own order and works for every skill.
       requestBody:
         required: true
         content:
@@ -10010,7 +10104,7 @@ paths:
     patch:
       operationId: tasks.bulkUpdateTasks
       tags: [tasks]
-      summary: Bulk edit tasks (archive, priority, tags, project)
+      summary: Bulk edit tasks (archive, priority, tags, project, a comment)
       parameters:
         - $ref: '#/components/parameters/Profile'
       requestBody:
@@ -17856,7 +17950,11 @@ components:
         workspace_name:
           type: string
           maxLength: 80
-          description: Name of the `default` workspace created with the owner; defaults to "Default".
+          description: >-
+            Name of the `default` workspace created with the owner; defaults to "Default". Where
+            the hub mirrors Hermes's profiles it is written as Hermes's display name of its
+            `default` profile too (contract decision §102); without it, a display name Hermes's
+            `default` profile already has becomes the workspace's name.
     LoginRequest:
       type: object
       required: [username, password]
@@ -19042,9 +19140,36 @@ components:
           description: '`user` is the person on the channel; `assistant` is the agent.'
         text:
           type: string
-          description: Markdown as the agent wrote it; plain text as the person did. Cut at 20 000 characters.
+          description: >-
+            Markdown as the agent wrote it; plain text as the person did. Cut at 20 000
+            characters. Hermes's own notes about a picture (where it saved it, what its vision
+            model saw) are left out: the picture is in `attachments`.
         created_at:
           $ref: '#/components/schemas/Timestamp'
+        attachments:
+          type: array
+          description: >-
+            The pictures the person sent with this message, in order (contract decision §102).
+            Always sent by the hub; empty when there are none.
+          items:
+            $ref: '#/components/schemas/ChannelAttachment'
+    ChannelAttachment:
+      type: object
+      description: >-
+        A picture sent on a channel. Hermes keeps it in its image cache for a day and then
+        deletes it (its gateway's housekeeping), so an older one is named but `available: false`.
+      required: [id, kind, available]
+      properties:
+        id:
+          type: string
+          pattern: '^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$'
+          description: The picture's file name in Hermes's image cache; `sessions.getChannelPicture` reads it.
+        kind:
+          type: string
+          enum: [image]
+        available:
+          type: boolean
+          description: Hermes still has the file.
     ChannelConversationsUnavailable:
       type: object
       description: Why one profile's channel conversations could not be read.
@@ -20787,6 +20912,9 @@ components:
           type: [string, 'null']
         enabled:
           type: boolean
+          description: >-
+            Off when the profile's Hermes lists it in `skills.disabled` (its `config.yaml`), or
+            when its `SKILL.md` was renamed off by an older hub (contract decision §102).
         pinned:
           type: boolean
         source:
@@ -22879,6 +23007,58 @@ components:
               oneOf:
                 - $ref: '#/components/schemas/Timestamp'
                 - type: 'null'
+            definition_of_done:
+              type: array
+              maxItems: 30
+              description: >-
+                What must be true for the task to count as done, one line each, in the order the
+                person wrote them. Sent to the agent with every run of the task, in its prompt,
+                and shown at review, where the reviewer ticks each line that holds (`checked`).
+                A new run of the task clears the ticks: they are about the work being reviewed.
+                A card on Hermes's own kanban cannot be given lists (`409 conflict`,
+                `details.reason: hermes_owns_card`): Hermes briefs its own worker from the card.
+                A hub task handed to Hermes and started carries them into that card's brief.
+                Always sent by the hub (contract decision §103).
+              items:
+                $ref: '#/components/schemas/TaskCheckItem'
+            constraints:
+              type: array
+              maxItems: 30
+              description: >-
+                What the agent must not do or must keep to while doing the task (a file not to
+                touch, a library not to add…), one line each. Sent with the run and shown at
+                review exactly as `definition_of_done`. Always sent by the hub (contract decision
+                §103).
+              items:
+                $ref: '#/components/schemas/TaskCheckItem'
+    TaskCheckItem:
+      type: object
+      description: >-
+        One line of a task's definition of done or its constraints. `checked` is the reviewer's
+        tick: this line holds for the work in review.
+      required: [text, checked]
+      properties:
+        text:
+          type: string
+          minLength: 1
+          maxLength: 500
+        checked:
+          type: boolean
+    TaskCheckItemWrite:
+      type: object
+      description: >-
+        A line as a client writes it. The whole list is sent each time, in its order; a line
+        without `checked` is not ticked.
+      required: [text]
+      additionalProperties: false
+      properties:
+        text:
+          type: string
+          minLength: 1
+          maxLength: 500
+        checked:
+          type: boolean
+          default: false
     TaskDependencyState:
       type: object
       description: One task another task depends on, as far as waiting for it goes.
@@ -22996,6 +23176,88 @@ components:
               description: Recent runs, newest first (max 20; the rest via the task session).
               items:
                 $ref: '#/components/schemas/Run'
+            hermes:
+              description: >-
+                For a card on Hermes's own kanban, read from Hermes when the card is opened: what
+                happened on the card (Hermes's own event log) and each attempt Hermes's
+                dispatcher made at it (its runs), newest first — at most 100 events and 20 runs
+                (contract decision §102). `null` for any other task, and for a Hermes card the
+                hub could not read from Hermes just now (the rest of the card is its last
+                reflection).
+              oneOf:
+                - $ref: '#/components/schemas/HermesCardHistory'
+                - type: 'null'
+    HermesCardHistory:
+      type: object
+      description: >-
+        A Hermes card's history as Hermes keeps it (`task_events` and `task_runs` of its kanban),
+        in Hermes's own words: an event's `kind` and a run's `status` and `outcome` are Hermes's
+        values, which a client names where it knows them and shows as they are where it does not.
+      required: [events, runs]
+      properties:
+        events:
+          type: array
+          maxItems: 100
+          items:
+            $ref: '#/components/schemas/HermesCardEvent'
+        runs:
+          type: array
+          maxItems: 20
+          items:
+            $ref: '#/components/schemas/HermesCardRun'
+    HermesCardEvent:
+      type: object
+      required: [id, kind, run_id, payload, created_at]
+      properties:
+        id:
+          type: integer
+        kind:
+          type: string
+          maxLength: 64
+          description: >-
+            Hermes's name for what happened: `created`, `assigned`, `claimed`, `completed`,
+            `blocked`, `unblocked`, `commented`, `edited`, `priority`, `status`, `archived`,
+            `reclaimed`, `crashed`, `timed_out`, `review_requested`, `scheduled`… — Hermes may add
+            more.
+        run_id:
+          type: [integer, 'null']
+          description: The attempt it belongs to, or `null` for the card itself.
+        payload:
+          type: [object, 'null']
+          additionalProperties: true
+          description: Hermes's details of the event (who, why, which field…), as Hermes wrote them.
+        created_at:
+          $ref: '#/components/schemas/Timestamp'
+    HermesCardRun:
+      type: object
+      description: One attempt of Hermes's dispatcher at the card.
+      required: [id, profile, status, outcome, summary, error, started_at, ended_at]
+      properties:
+        id:
+          type: integer
+        profile:
+          type: [string, 'null']
+          description: The Hermes profile that worked it.
+        status:
+          type: string
+          maxLength: 64
+          description: Hermes's run status (`running`, `done`, `blocked`, `reclaimed`, `crashed`…).
+        outcome:
+          type: [string, 'null']
+          maxLength: 64
+          description: How it ended (`completed`, `blocked`, `review_requested`, `reclaimed`…); `null` while it runs.
+        summary:
+          type: [string, 'null']
+          description: The worker's hand-off summary, cut at 4 000 characters.
+        error:
+          type: [string, 'null']
+          description: Hermes's error when the attempt failed, cut at 4 000 characters.
+        started_at:
+          $ref: '#/components/schemas/Timestamp'
+        ended_at:
+          oneOf:
+            - $ref: '#/components/schemas/Timestamp'
+            - type: 'null'
     TaskCreate:
       type: object
       required: [title]
@@ -23049,6 +23311,18 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/Ulid'
+        definition_of_done:
+          type: array
+          maxItems: 30
+          description: See `Task.definition_of_done`. Not for a card made on Hermes's kanban.
+          items:
+            $ref: '#/components/schemas/TaskCheckItemWrite'
+        constraints:
+          type: array
+          maxItems: 30
+          description: See `Task.constraints`. Not for a card made on Hermes's kanban.
+          items:
+            $ref: '#/components/schemas/TaskCheckItemWrite'
     TaskPatch:
       type: object
       properties:
@@ -23076,6 +23350,21 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/Ulid'
+        definition_of_done:
+          type: array
+          maxItems: 30
+          description: >-
+            Replaces the whole list (`Task.definition_of_done`), ticks included — which is how a
+            reviewer ticks a line: the list as it is, with that line `checked`. On a card from
+            Hermes's kanban it is `409 conflict` (`details.reason: hermes_owns_card`).
+          items:
+            $ref: '#/components/schemas/TaskCheckItemWrite'
+        constraints:
+          type: array
+          maxItems: 30
+          description: Replaces the whole list (`Task.constraints`), as `definition_of_done`.
+          items:
+            $ref: '#/components/schemas/TaskCheckItemWrite'
     TaskBulkUpdate:
       type: object
       required: [task_ids, patch]
@@ -23100,6 +23389,16 @@ components:
                 type: string
             project_id:
               $ref: '#/components/schemas/Ulid'
+            comment:
+              type: string
+              minLength: 1
+              maxLength: 8000
+              description: >-
+                Say the same thing on every task, in the caller's name — on a card from
+                Hermes's kanban it is said on Hermes's card first, as `tasks.createComment` does
+                (contract decision §102). `priority` on such a card is likewise set on Hermes
+                first; a refusal is that task's `ok: false`, with Hermes's words not lost to the
+                others.
     TaskMove:
       type: object
       required: [status]

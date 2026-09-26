@@ -54,6 +54,11 @@ export interface HermesProfiles {
   ): Promise<void>;
   /** Sets (or, with `''`, clears) the profile's display name; the id and folder stay. */
   setDisplayName(name: string, displayName: string): Promise<void>;
+  /**
+   * The profile's display name as Hermes reads it (`read_profile_meta`), `''` when it has
+   * none or no such profile exists. A file read, no Python started.
+   */
+  displayName(name: string): string;
 }
 
 export function createHermesProfiles(options: {
@@ -99,7 +104,33 @@ export function createHermesProfiles(options: {
       }
       writeDisplayName(dir, cleaned);
     },
+
+    displayName(name) {
+      if (name === 'default') return readDisplayName(options.home);
+      if (!PROFILE_ID.test(name)) return '';
+      return readDisplayName(path.join(options.home, 'profiles', name));
+    },
   };
+}
+
+/**
+ * `read_profile_meta(dir)["display_name"]` in our words: the `display_name` of the folder's
+ * `profile.yaml`, trimmed; `''` when the file is missing, is not a mapping, or has none —
+ * never an error, as Hermes never fails a listing over one profile's file. Longer than
+ * Hermes's own limit is cut to it.
+ */
+export function readDisplayName(profileDir: string): string {
+  let text: string;
+  try {
+    text = readFileSync(path.join(profileDir, 'profile.yaml'), 'utf8');
+  } catch {
+    return '';
+  }
+  const doc = parseDocument(text);
+  if (doc.errors.length > 0 || !isMap(doc.contents)) return '';
+  const value = doc.get('display_name');
+  if (typeof value !== 'string' && typeof value !== 'number') return '';
+  return String(value).trim().slice(0, DISPLAY_NAME_MAX);
 }
 
 /**

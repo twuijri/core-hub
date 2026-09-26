@@ -17,7 +17,7 @@ import { newUlid } from '../../db/ids.js';
 import type { ModuleDb } from '../../lib/db.js';
 import { conflict, notFound } from '../../lib/errors.js';
 import { append, between } from './position.js';
-import type { TASK_STATUSES } from './schema.js';
+import type { TASK_STATUSES, TaskCheckItem } from './schema.js';
 import {
   projects,
   subtasks,
@@ -567,6 +567,8 @@ export class TasksService {
         position: append(this.lastPosition(scope, project.id, status)),
         dueAt: input.due_at ? new Date(String(input.due_at)) : null,
         attachmentIds: (input.attachment_ids as string[] | undefined) ?? [],
+        definitionOfDone: checkItems(input.definition_of_done),
+        constraints: checkItems(input.constraints),
       })
       .run();
     this.record(scope, actor, id, 'status', null, status, null);
@@ -589,6 +591,9 @@ export class TasksService {
     if (patch.due_at !== undefined)
       values.dueAt = patch.due_at ? new Date(String(patch.due_at)) : null;
     if (patch.attachment_ids !== undefined) values.attachmentIds = patch.attachment_ids as string[];
+    if (patch.definition_of_done !== undefined)
+      values.definitionOfDone = checkItems(patch.definition_of_done);
+    if (patch.constraints !== undefined) values.constraints = checkItems(patch.constraints);
     if (patch.project_id !== undefined && patch.project_id !== current.projectId) {
       const target = this.project(scope, String(patch.project_id));
       values.projectId = target.id;
@@ -819,6 +824,9 @@ export class TasksService {
         sessionId: run.sessionId,
         currentRunId: run.runId,
         attemptCount: current.attemptCount + 1,
+        // The reviewer's ticks were about the last attempt's work; this one is reviewed afresh.
+        definitionOfDone: untick(current.definitionOfDone),
+        constraints: untick(current.constraints),
       })
       .where(eq(tasks.id, id))
       .run();
@@ -1416,4 +1424,24 @@ export class TasksService {
 /** Whether a task counts as done for the tasks that depend on it. */
 function isDone(row: { status: TaskStatus; completedAt: Date | null }): boolean {
   return row.status === 'done' || (row.status === 'archived' && row.completedAt !== null);
+}
+
+/**
+ * A client's list (`TaskCheckItemWrite[]`) as the row keeps it: trimmed, empty lines dropped,
+ * unticked unless it says so. The contract has already checked the lengths.
+ */
+export function checkItems(value: unknown): TaskCheckItem[] {
+  if (!Array.isArray(value)) return [];
+  const out: TaskCheckItem[] = [];
+  for (const entry of value) {
+    if (!entry || typeof entry !== 'object') continue;
+    const text = String((entry as { text?: unknown }).text ?? '').trim();
+    if (text === '') continue;
+    out.push({ text: text.slice(0, 500), checked: (entry as { checked?: unknown }).checked === true });
+  }
+  return out.slice(0, 30);
+}
+
+function untick(items: readonly TaskCheckItem[]): TaskCheckItem[] {
+  return items.map((item) => ({ text: item.text, checked: false }));
 }

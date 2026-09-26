@@ -47,7 +47,9 @@ import { verifyPassword } from './passwords.js';
 import {
   ProfileMirrorError,
   adoptProfiles,
+  mirrorDisplayName,
   profileMirrorFor,
+  syncDisplayNames,
   runtimeDisplayName,
   runtimeProfileName,
   type ProfileOrigin,
@@ -484,6 +486,12 @@ export function registerAuthRoutes(app: FastifyInstance, ctx: AuthContext): void
     );
     // The account exists now, so nothing on disk may still create one.
     clearSetupToken(ctx.dataDir);
+    // The name the owner gave the default profile is Hermes's display name for it too
+    // (decision §102). Without one, Hermes's own name (if any) is read on the first listing.
+    if (body.workspace_name?.trim()) {
+      const home = defaultWorkspace(db);
+      if (home) await mirrorDisplayName(app, home);
+    }
     ctx.log.info(
       open
         ? 'auth: owner account created by first-run setup (open window, no token)'
@@ -1031,8 +1039,17 @@ export function registerAuthRoutes(app: FastifyInstance, ctx: AuthContext): void
     const owner = mirror ? ownerUser(db) : null;
     if (!mirror || !owner) return;
     try {
-      const { adopted, unnamed } = adoptProfiles(db, owner.id, await mirror.list());
+      // Hermes's display names (decision §102): a new profile is added under it, and a name
+      // changed on Hermes's side is taken.
+      const displayNameOf = (name: string) => mirror.displayName?.(name) ?? '';
+      const { adopted, unnamed } = adoptProfiles(db, owner.id, await mirror.list(), displayNameOf);
       if (adopted.length > 0) log.info({ adopted }, 'auth: runtime profiles added as workspaces');
+      if (mirror.displayName) {
+        const renamed = syncDisplayNames(db, displayNameOf);
+        if (renamed.length > 0) {
+          log.info({ renamed }, "auth: workspaces took the runtime's display names");
+        }
+      }
       const fresh = unnamed.filter((name) => !unnamedReported.has(name));
       for (const name of fresh) unnamedReported.add(name);
       if (fresh.length > 0) {

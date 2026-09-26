@@ -22,6 +22,18 @@
  *   resolves an id it does not know as a unique prefix of one it does, so the hub reads the
  *   exact row first and deletes only that (contract decision §88).
  *
+ * Paging and pictures (decision §102): `GET /api/sessions` takes `offset` and answers `total`,
+ * so a list longer than one page of 100 is read page by page, as many as the client's `limit`
+ * needs; `GET /api/sessions/{id}/messages?order=latest&limit=&offset=` pages back from the
+ * newest. A picture the person sent is not in Hermes's store as bytes: Hermes's gateway saves
+ * it in the profile's image cache (`cache/images/`, or `image_cache/` on older installs;
+ * `gateway/platforms/base.py`), deletes it after a day, and the message keeps only a note that
+ * names the file — `[Image attached at: <path>]` when the model looked at it itself,
+ * `…vision_analyze … image_url: <path>…]` after Hermes described it in words, `[User sent an
+ * image: <path>]` while it waited (`gateway/run_inbound.py`, `agent/image_routing.py`). The
+ * hub takes the file's name out of those notes, drops the notes from the words shown, and
+ * serves the picture by that name from that cache only.
+ *
  * The one write is that delete, for an admin (§88). What was read is kept per Hermes profile and asked for again
  * only when Hermes's store changed since (the port's `stamp`, the store file's size and time),
  * and never more often than every few seconds, so a list polled while it is open does not keep
@@ -64,6 +76,13 @@ export const CONVERSATION_ID = /^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$/;
 
 /** Per profile: Hermes caps a page at 100 (`le=100`). */
 export const LIST_LIMIT = 100;
+/** The most of a profile's conversations one list reads (`limit`, decision §102). */
+export const LIST_LIMIT_MAX = 1000;
+/** Hermes's page of messages (`get_session_messages` caps `limit` at 500). */
+export const MESSAGES_PAGE = 500;
+/** A picture's name as the contract's `ChannelAttachment.id` takes it. */
+export const PICTURE_ID = /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/;
+const PICTURE_EXT = /\.(png|jpe?g|gif|webp)$/i;
 /** Never ask Hermes again sooner than this, whatever the store says. */
 export const MIN_REFRESH_MS = 5_000;
 /** Without a stamp to compare, what was read is good for this long. */
@@ -114,6 +133,12 @@ export interface ChannelSource {
    * it cannot be told (then what was read is kept for `TTL_MS`).
    */
   stamp(hermesProfile: string): string | null;
+  /**
+   * Where a picture of that name is in the profile's image cache, or `null` when it is not
+   * there (never was, or Hermes has deleted it). Optional: without it pictures are named but
+   * never available.
+   */
+  picture?(hermesProfile: string, name: string): string | null;
 }
 
 let sourceFactory: ((app: FastifyInstance) => ChannelSource | null) | null = null;
@@ -165,7 +190,7 @@ export interface HermesMessage {
 
 interface HermesMessagesPage {
   messages?: HermesMessage[];
-  pagination?: { limit?: number; returned?: number };
+  pagination?: { limit?: number; offset?: number; returned?: number };
 }
 
 // ------------------------------------------------------------------ the wire's shapes
@@ -190,11 +215,18 @@ export interface ChannelConversation {
   last_message_at: string;
 }
 
+export interface ChannelAttachment {
+  id: string;
+  kind: 'image';
+  available: boolean;
+}
+
 export interface ChannelMessage {
   id: string;
   role: 'user' | 'assistant';
   text: string;
   created_at: string;
+  attachments: ChannelAttachment[];
 }
 
 export interface ChannelUnavailable {
@@ -262,18 +294,73 @@ export function textOf(message: HermesMessage): string {
   return '';
 }
 
-/** The person's and the agent's messages with words in them; tools and system text left out. */
-export function toMessages(messages: readonly HermesMessage[]): ChannelMessage[] {
+/** A path's last part, when it names a picture the hub may serve. */
+function pictureName(pathText: string): string | null {
+  const name = pathText.trim().split(/[\\/]/).pop() ?? '';
+  return PICTURE_ID.test(name) && PICTURE_EXT.test(name) ? name : null;
+}
+
+/**
+ * Hermes's own notes about pictures, taken out of a person's message: the names of the files
+ * they point at, and the words without them. The notes are Hermes's to its model (where the
+ * file is, what its vision model saw, "What do you see in this image?" when the person sent no
+ * words), not what the person wrote.
+ */
+export function picturesOf(text: string): { text: string; names: string[] } {
+  const names: string[] = [];
+  const take = (pathText: string) => {
+    const name = pictureName(pathText);
+    if (name && !names.includes(name)) names.push(name);
+  };
+  let rest = text;
+  // Described in words, then pointed at: both notes go (`_enrich_message_with_vision`).
+  rest = rest.replace(
+    /\[The user sent an image~ Here's what I can see:[\s\S]*?\]\s*\[If you need a closer look, use vision_analyze with image_url: ([^\s\]]+) ~\]/g,
+    (_all, found: string) => (take(found), ''),
+  );
+  // Could not be described: one note that points at it.
+  rest = rest.replace(
+    /\[The user sent an image but [^\[\]]*?image_url: ([^\s\]]+)\]/g,
+    (_all, found: string) => (take(found), ''),
+  );
+  // Handed to the model as a picture (`build_native_content_parts`), or still waiting.
+  rest = rest.replace(/\[Image attached at: ([^\]\n]+)\]/g, (_all, found: string) => {
+    take(found);
+    return '';
+  });
+  rest = rest.replace(/\[User sent an image: ([^\]\n]+)\]/g, (_all, found: string) => {
+    take(found);
+    return '';
+  });
+  if (names.length > 0) {
+    // The stored projection of an image part, and Hermes's words for a picture without any.
+    rest = rest
+      .replace(/^\[screenshot\]$/gm, '')
+      .replace(/^What do you see in this image\?$/m, '');
+  }
+  return { text: names.length > 0 ? rest.replace(/\n{3,}/g, '\n\n').trim() : text, names };
+}
+
+/**
+ * The person's and the agent's messages with words or pictures in them; tools and system text
+ * left out. `available` says whether a picture is still in Hermes's cache.
+ */
+export function toMessages(
+  messages: readonly HermesMessage[],
+  available: (name: string) => boolean = () => false,
+): ChannelMessage[] {
   const out: ChannelMessage[] = [];
   for (const message of messages) {
     if (message.role !== 'user' && message.role !== 'assistant') continue;
-    const text = textOf(message);
-    if (!text) continue;
+    const raw = textOf(message);
+    const { text, names } = message.role === 'user' ? picturesOf(raw) : { text: raw, names: [] };
+    if (!text && names.length === 0) continue;
     out.push({
       id: String(message.id),
       role: message.role,
       text: text.length > MAX_TEXT ? `${text.slice(0, MAX_TEXT)}…` : text,
       created_at: isoOf(message.timestamp),
+      attachments: names.map((name) => ({ id: name, kind: 'image', available: available(name) })),
     });
   }
   return out;
@@ -318,6 +405,15 @@ const isChannel = (source: string | null | undefined): boolean =>
 
 // ------------------------------------------------------------------ the service
 
+/** What was read of one profile's list. */
+interface Listed {
+  rows: HermesSessionRow[];
+  /** Hermes's count of the profile's channel conversations. */
+  total: number;
+  /** Every page there is was read. */
+  exhausted: boolean;
+}
+
 interface Cached<T> {
   value: T;
   at: number;
@@ -331,8 +427,9 @@ export interface ChannelConversationsOptions {
 /** What one hub reads of Hermes's channel conversations, with what it read kept briefly. */
 export class ChannelConversations {
   private readonly now: () => number;
-  private readonly lists = new Map<string, Cached<HermesSessionRow[]>>();
-  private readonly pending = new Map<string, Promise<HermesSessionRow[]>>();
+  /** Per Hermes profile: the rows read so far (most recent first) and Hermes's count of all. */
+  private readonly lists = new Map<string, Cached<Listed>>();
+  private readonly pending = new Map<string, { want: number; read: Promise<Listed> }>();
   /** The latest message of each conversation, keyed by what would change it. */
   private readonly latest = new Map<string, { key: string; value: ChannelMessagePreview | null }>();
 
@@ -343,20 +440,31 @@ export class ChannelConversations {
     this.now = options.now ?? Date.now;
   }
 
-  /** Every conversation of these profiles, most recent first, and why any profile is missing. */
+  /**
+   * Every conversation of these profiles, most recent first — up to `limit` of each profile's
+   * (decision §102) — and why any profile is missing. `has_more`: some profile has more.
+   */
   async list(
     scopes: readonly ChannelScope[],
     channel?: string,
-  ): Promise<{ items: ChannelConversation[]; unavailable: ChannelUnavailable[] }> {
+    limit: number = LIST_LIMIT,
+  ): Promise<{
+    items: ChannelConversation[];
+    unavailable: ChannelUnavailable[];
+    has_more: boolean;
+  }> {
+    const want = Math.min(Math.max(1, Math.trunc(limit) || LIST_LIMIT), LIST_LIMIT_MAX);
     const source = this.source();
     if (!source) {
       return {
         items: [],
         unavailable: [{ profile: null, reason: 'hermes_not_managed', message: null }],
+        has_more: false,
       };
     }
     const items: ChannelConversation[] = [];
     const unavailable: ChannelUnavailable[] = [];
+    let hasMore = false;
     await Promise.all(
       scopes.map(async (scope) => {
         const hermes = source.hermesProfile(scope.workspace);
@@ -368,9 +476,9 @@ export class ChannelConversations {
           });
           return;
         }
-        let rows: HermesSessionRow[];
+        let listed: Listed;
         try {
-          rows = await this.rows(source, hermes);
+          listed = await this.rows(source, hermes, want);
         } catch (error) {
           // What was read before still stands; the list says why it may be stale.
           const stale = this.lists.get(hermes);
@@ -380,8 +488,10 @@ export class ChannelConversations {
             message: error instanceof Error ? error.message : String(error),
           });
           if (!stale) return;
-          rows = stale.value;
+          listed = stale.value;
         }
+        const rows = listed.rows.slice(0, want);
+        if (listed.total > rows.length) hasMore = true;
         const shown = rows.filter((row) => !channel || channelOf(row.source ?? '') === channel);
         await this.readLatest(source, hermes, shown);
         for (const row of shown) {
@@ -402,14 +512,23 @@ export class ChannelConversations {
         b.id.localeCompare(a.id),
     );
     unavailable.sort((a, b) => (a.profile ?? '').localeCompare(b.profile ?? ''));
-    return { items, unavailable };
+    return { items, unavailable, has_more: hasMore };
   }
 
-  /** One conversation and its messages, oldest first; `404` for anything that is not one. */
+  /**
+   * One conversation and a page of its messages, oldest first; `404` for anything that is not
+   * one. `offset` skips that many of Hermes's newest messages (decision §102).
+   */
   async messages(
     scope: ChannelScope,
     id: string,
-  ): Promise<{ conversation: ChannelConversation; items: ChannelMessage[]; has_more: boolean }> {
+    offset = 0,
+  ): Promise<{
+    conversation: ChannelConversation;
+    items: ChannelMessage[];
+    has_more: boolean;
+    next_offset: number | null;
+  }> {
     const missing = () => notFound({ resource: 'channel_conversation', id });
     if (!CONVERSATION_ID.test(id)) throw missing();
     const source = this.source();
@@ -440,18 +559,55 @@ export class ChannelConversations {
     // Only a conversation from a channel is one: the hub's own chats run in Hermes too, and
     // they are read where they belong (`sessions.listMessages`), not here.
     if (!row || typeof row.id !== 'string' || !isChannel(row.source)) throw missing();
-    const page = await ask<HermesMessagesPage | null>(`${base}/messages?${profile}`);
+    const skip = Math.max(0, Math.trunc(offset) || 0);
+    // The first page is asked exactly as before (Hermes's default: its latest 500); an older
+    // one names its place.
+    const pageQuery =
+      skip === 0
+        ? profile
+        : `${profile}&order=latest&limit=${MESSAGES_PAGE}&offset=${String(skip)}`;
+    const page = await ask<HermesMessagesPage | null>(`${base}/messages?${pageQuery}`);
     const raw = Array.isArray(page?.messages) ? page.messages : [];
-    const items = toMessages(raw);
+    const items = toMessages(raw, (name) => (source.picture?.(hermes, name) ?? null) !== null);
     const limit = page?.pagination?.limit ?? 0;
     const returned = page?.pagination?.returned ?? raw.length;
-    const last = previewOf(items.at(-1));
-    this.latest.set(latestKey(hermes, row), { key: changeKey(row), value: last });
+    const hasMore = limit > 0 && returned >= limit;
+    if (skip === 0) {
+      const last = previewOf(items.at(-1));
+      this.latest.set(latestKey(hermes, row), { key: changeKey(row), value: last });
+    }
     return {
-      conversation: toConversation(row, scope.profile, last),
+      conversation: toConversation(
+        row,
+        scope.profile,
+        this.latest.get(latestKey(hermes, row))?.value ?? null,
+      ),
       items,
-      has_more: limit > 0 && returned >= limit,
+      has_more: hasMore,
+      next_offset: hasMore ? skip + returned : null,
     };
+  }
+
+  /**
+   * A picture named in a conversation of this profile (decision §102): where it is in the
+   * profile's image cache, or `404` — a name that is not a picture's, or one Hermes has deleted.
+   */
+  picture(scope: ChannelScope, id: string, name: string): string {
+    const missing = () => notFound({ resource: 'channel_picture', id: name });
+    if (!CONVERSATION_ID.test(id) || !PICTURE_ID.test(name) || !PICTURE_EXT.test(name)) {
+      throw missing();
+    }
+    const source = this.source();
+    if (!source) {
+      throw new HubError('service_unavailable', {
+        details: { reason: 'hermes_not_managed', message: null },
+      });
+    }
+    const hermes = source.hermesProfile(scope.workspace);
+    if (!hermes) throw missing();
+    const file = source.picture?.(hermes, name) ?? null;
+    if (!file) throw missing();
+    return file;
   }
 
   /**
@@ -496,36 +652,70 @@ export class ChannelConversations {
 
   // -------------------------------------------------------------- internals
 
-  /** The profile's rows: what was read, while Hermes's store is unchanged; else read again. */
-  private rows(source: ChannelSource, hermes: string): Promise<HermesSessionRow[]> {
+  /**
+   * The profile's rows, most recent first, at least `want` of them when Hermes has that many:
+   * what was read, while Hermes's store is unchanged and it was enough; else read again, a page
+   * of 100 at a time (decision §102).
+   */
+  private rows(source: ChannelSource, hermes: string, want: number): Promise<Listed> {
     const cached = this.lists.get(hermes);
-    if (cached && this.fresh(source, hermes, cached)) return Promise.resolve(cached.value);
+    const enough = (listed: Listed) =>
+      listed.rows.length >= Math.min(want, listed.total) || listed.exhausted;
+    if (cached && enough(cached.value) && this.fresh(source, hermes, cached)) {
+      return Promise.resolve(cached.value);
+    }
     const running = this.pending.get(hermes);
-    if (running) return running;
-    const query = new URLSearchParams({
-      profile: hermes,
-      sources: CHANNEL_SOURCES.join(','),
-      order: 'recent',
-      limit: String(LIST_LIMIT),
-    });
-    const read = source
-      .get<{ sessions?: HermesSessionRow[] } | null>(`/api/sessions?${query.toString()}`)
-      .then((body) => {
-        const rows = (Array.isArray(body?.sessions) ? body.sessions : []).filter(
-          (row) =>
-            row &&
-            typeof row.id === 'string' &&
-            CONVERSATION_ID.test(row.id) &&
-            isChannel(row.source),
-        );
+    if (running && running.want >= want) return running.read;
+    const read = this.readPages(source, hermes, want)
+      .then((listed) => {
         // Stamped after the read: Hermes may tidy its store while listing (auto-archive), and
         // that write must not make the next call read again.
-        this.lists.set(hermes, { value: rows, at: this.now(), stamp: source.stamp(hermes) });
-        return rows;
+        this.lists.set(hermes, { value: listed, at: this.now(), stamp: source.stamp(hermes) });
+        return listed;
       })
-      .finally(() => this.pending.delete(hermes));
-    this.pending.set(hermes, read);
+      .finally(() => {
+        if (this.pending.get(hermes)?.read === read) this.pending.delete(hermes);
+      });
+    this.pending.set(hermes, { want, read });
     return read;
+  }
+
+  private async readPages(source: ChannelSource, hermes: string, want: number): Promise<Listed> {
+    const rows: HermesSessionRow[] = [];
+    let total = 0;
+    let exhausted = false;
+    for (let offset = 0; rows.length < want; offset += LIST_LIMIT) {
+      const query = new URLSearchParams({
+        profile: hermes,
+        sources: CHANNEL_SOURCES.join(','),
+        order: 'recent',
+        limit: String(LIST_LIMIT),
+      });
+      // The first page is asked as it always was; the next ones say where they start.
+      if (offset > 0) query.set('offset', String(offset));
+      const body = await source.get<{
+        sessions?: HermesSessionRow[];
+        total?: number;
+      } | null>(`/api/sessions?${query.toString()}`);
+      const page = Array.isArray(body?.sessions) ? body.sessions : [];
+      total = typeof body?.total === 'number' ? body.total : offset + page.length;
+      for (const row of page) {
+        if (
+          row &&
+          typeof row.id === 'string' &&
+          CONVERSATION_ID.test(row.id) &&
+          isChannel(row.source) &&
+          !rows.some((seen) => seen.id === row.id)
+        ) {
+          rows.push(row);
+        }
+      }
+      if (page.length < LIST_LIMIT || offset + LIST_LIMIT >= total) {
+        exhausted = true;
+        break;
+      }
+    }
+    return { rows, total: Math.max(total, rows.length), exhausted };
   }
 
   private fresh(source: ChannelSource, hermes: string, cached: Cached<unknown>): boolean {

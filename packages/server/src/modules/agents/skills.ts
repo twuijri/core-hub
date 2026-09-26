@@ -30,9 +30,22 @@
  *
  * **Hermes's own skills are read-only here.** A skill Hermes copied from its bundle is named
  * in `skills/.bundled_manifest` (`name:hash` per line), and Hermes updates it from there as
- * long as its bytes still match the bundle (`tools/skills_sync.py`). Renaming its `SKILL.md`
- * or rewriting it from this screen would be the hub quietly forking Hermes's copy, so those
- * are listed, readable and pinnable, and refused (`skill_bundled`) for anything else.
+ * long as its bytes still match the bundle (`tools/skills_sync.py`). Rewriting it from this
+ * screen would be the hub quietly forking Hermes's copy, so those are listed, readable,
+ * pinnable and switchable (below), and refused (`skill_bundled`) for anything else.
+ *
+ * **On and off is Hermes's own switch** (decision §102; `hermes_cli/skills_config.py` and
+ * `agent/skill_utils.py` §get_disabled_skill_names at v2026.9.14, in our words): the profile's
+ * `config.yaml` names the skills that are off in `skills.disabled` — a list of skill names (a
+ * lone string is one name, nothing is none) — and Hermes's dashboard and `hermes skills` write
+ * that list, sorted. `hermes-agent`, Hermes's manual, is never off whatever the list says. The
+ * hub reads and writes the same list, so the three agree; a skill an older hub switched off by
+ * renaming `SKILL.md` to `SKILL.md.off` still reads as off, and switching it on renames it back.
+ * (`skills.platform_disabled.<platform>` is Hermes's per-channel list; the hub leaves it alone.)
+ *
+ * **A skill for another system is not listed**, as Hermes does not list it: a front matter
+ * `platforms:` naming systems (`macos`, `linux`, `windows`) that do not include the one the hub
+ * runs on means Hermes never loads it here.
  */
 import {
   existsSync,
@@ -45,8 +58,14 @@ import {
   writeFileSync,
 } from 'node:fs';
 import path from 'node:path';
+import { isMap, isSeq, parseDocument, type Document } from 'yaml';
 
 export const SKILL_FILE = 'SKILL.md';
+/** Hermes's manual: the one skill Hermes never lets be off (`ESSENTIAL_SKILLS`). */
+export const ESSENTIAL_SKILLS: ReadonlySet<string> = new Set(['hermes-agent']);
+const CONFIG_FILE = 'config.yaml';
+/** Hermes's names for systems, as Python's `sys.platform` begins (`PLATFORM_MAP`). */
+const PLATFORM_MAP: Record<string, string> = { macos: 'darwin', linux: 'linux', windows: 'win32' };
 /** Hermes ignores anything that is not `SKILL.md`, which is what makes this a switch. */
 export const DISABLED_SUFFIX = '.off';
 
@@ -248,7 +267,24 @@ export function bundledNames(home: string): Set<string> {
   );
 }
 
-function readOne(where: Located, bundled: ReadonlySet<string>): Skill | null {
+/**
+ * What Hermes needs to know to list a skill here: its own disabled list, and the system the hub
+ * runs on. Read once per listing.
+ */
+interface HermesView {
+  disabled: ReadonlySet<string>;
+  platform: string;
+}
+
+function viewOf(home: string, platform: string = process.platform): HermesView {
+  return { disabled: hermesDisabledSkills(home), platform };
+}
+
+function readOne(
+  where: Located,
+  bundled: ReadonlySet<string>,
+  view: HermesView = { disabled: new Set(), platform: process.platform },
+): Skill | null {
   const { key, folder, category } = where;
   const enabledPath = path.join(folder, SKILL_FILE);
   const disabledPath = enabledPath + DISABLED_SUFFIX;
@@ -285,7 +321,8 @@ function readOne(where: Located, bundled: ReadonlySet<string>): Skill | null {
     // A skill whose front matter forgot its name is still a skill; the folder names it.
     name,
     description: fields.get('description') ?? null,
-    enabled,
+    // Off by Hermes's own list, or by an older hub's rename (§102).
+    enabled: enabled && !view.disabled.has(name),
     pack: packOf(raw),
     version: fields.get('version') ?? null,
     updatedAt: statSync(file).mtime,
@@ -297,14 +334,114 @@ function readOne(where: Located, bundled: ReadonlySet<string>): Skill | null {
   };
 }
 
-export function listSkills(home: string): Skill[] {
+/**
+ * Every skill Hermes would offer here, as it lists them: skills for another system are left
+ * out, and one in Hermes's disabled list reads as off. `platform` is the system to list for —
+ * the hub's own, which is the system Hermes runs on beside it.
+ */
+export function listSkills(home: string, platform: string = process.platform): Skill[] {
   const bundled = bundledNames(home);
+  const view = viewOf(home, platform);
   const out: Skill[] = [];
   for (const where of walk(home)) {
-    const skill = readOne(where, bundled);
-    if (skill) out.push({ ...skill, content: null });
+    const skill = readOne(where, bundled, view);
+    if (!skill) continue;
+    if (skill.content !== null && !matchesPlatform(skill.content, platform)) continue;
+    out.push({ ...skill, content: null });
   }
   return out.sort((a, b) => a.name.localeCompare(b.name));
+}
+
+/**
+ * The systems a skill's front matter names under `platforms:` — `[macos, linux]`, a lone
+ * `macos`, or a block list — lower-cased; empty when it names none, which means every system.
+ */
+export function platformsOf(content: string): string[] {
+  const { raw } = parseFrontMatter(content);
+  const lines = raw.split('\n');
+  const at = lines.findIndex((line) => /^platforms:/.test(line));
+  if (at === -1) return [];
+  const value = (lines[at] ?? '').replace(/^platforms:/, '').replace(/\s#.*$/, '').trim();
+  const clean = (entry: string) => unquote(entry.trim()).trim().toLowerCase();
+  if (value.startsWith('[')) {
+    return value
+      .replace(/^\[/, '')
+      .replace(/\].*$/, '')
+      .split(',')
+      .map(clean)
+      .filter(Boolean);
+  }
+  if (value !== '') return [clean(value)].filter(Boolean);
+  const out: string[] = [];
+  for (const line of lines.slice(at + 1)) {
+    const item = /^\s+-\s*(.+?)\s*(?:#.*)?$/.exec(line);
+    if (!item) break;
+    const entry = clean(item[1] ?? '');
+    if (entry) out.push(entry);
+  }
+  return out;
+}
+
+/** Hermes's `skill_matches_platform`: no `platforms` is every system; else one must match. */
+export function matchesPlatform(content: string, platform: string = process.platform): boolean {
+  const wanted = platformsOf(content);
+  if (wanted.length === 0) return true;
+  return wanted.some((name) => platform.startsWith(PLATFORM_MAP[name] ?? name));
+}
+
+function loadConfig(home: string): Document {
+  const file = path.join(home, CONFIG_FILE);
+  if (!existsSync(file)) return parseDocument('');
+  const doc = parseDocument(readFileSync(file, 'utf8'));
+  if (doc.errors.length > 0) throw new SkillError('skill_config_unreadable');
+  return doc;
+}
+
+/**
+ * The profile's `skills.disabled` as Hermes reads it: a list of names, a lone string as one
+ * name, anything else as none — less the skill Hermes never turns off. A `config.yaml` that is
+ * not YAML is read as no list, as Hermes reads it; writing refuses it instead.
+ */
+export function hermesDisabledSkills(home: string): Set<string> {
+  let doc: Document;
+  try {
+    doc = loadConfig(home);
+  } catch {
+    return new Set();
+  }
+  const config = doc.toJS() as unknown;
+  const skills =
+    config && typeof config === 'object' ? (config as Record<string, unknown>).skills : null;
+  const listed =
+    skills && typeof skills === 'object' ? (skills as Record<string, unknown>).disabled : null;
+  const names = typeof listed === 'string' ? [listed] : Array.isArray(listed) ? listed : [];
+  const out = new Set<string>();
+  for (const name of names) {
+    if (typeof name !== 'string' && typeof name !== 'number') continue;
+    const trimmed = String(name).trim();
+    if (trimmed && !ESSENTIAL_SKILLS.has(trimmed)) out.add(trimmed);
+  }
+  return out;
+}
+
+/**
+ * Writes `skills.disabled` as Hermes's `save_disabled_skills` does — the whole list, sorted —
+ * and leaves every other byte of `config.yaml` as it was (the same document editing the other
+ * Hermes settings use). A file Hermes could not read is never rewritten.
+ */
+function writeHermesDisabled(home: string, names: ReadonlySet<string>): void {
+  const doc = loadConfig(home);
+  if (!isMap(doc.contents)) doc.contents = doc.createNode({}) as typeof doc.contents;
+  const skills = doc.get('skills', true);
+  if (skills !== undefined && !isMap(skills)) doc.set('skills', doc.createNode({}));
+  const sorted = [...names].filter((name) => !ESSENTIAL_SKILLS.has(name)).sort();
+  const node = doc.createNode(sorted);
+  if (isSeq(node)) node.flow = false;
+  doc.setIn(['skills', 'disabled'], node);
+  const file = path.join(home, CONFIG_FILE);
+  const staging = path.join(home, `.${CONFIG_FILE}.${process.pid}.tmp`);
+  writeFileSync(staging, doc.toString(), 'utf8');
+  renameSync(staging, file);
 }
 
 /** Where the skill with this key lives: directly under `skills/` first, then in a category. */
@@ -347,7 +484,7 @@ export function categoryDescription(home: string, category: string): string | nu
 
 export function getSkill(home: string, key: string): Skill | null {
   const where = locate(home, key);
-  return where ? readOne(where, bundledNames(home)) : null;
+  return where ? readOne(where, bundledNames(home), viewOf(home)) : null;
 }
 
 export class SkillError extends Error {
@@ -403,16 +540,38 @@ function writable(home: string, key: string): { where: Located; bundled: Set<str
   return { where, bundled };
 }
 
-/** On or off by renaming the file. Nothing is copied and nothing is lost. */
+/**
+ * On or off where Hermes keeps it: the skill's name in or out of the profile's
+ * `skills.disabled` (decision §102). No file of the skill is touched — which is why Hermes's
+ * own skills can be switched too — except that switching on renames back a `SKILL.md` an older
+ * hub renamed off. Hermes's manual is never off (`skill_essential`).
+ */
 export function setSkillEnabled(home: string, key: string, enabled: boolean): Skill {
-  const { where, bundled } = writable(home, key);
-  const enabledPath = path.join(where.folder, SKILL_FILE);
-  const disabledPath = enabledPath + DISABLED_SUFFIX;
-  const from = enabled ? disabledPath : enabledPath;
-  const to = enabled ? enabledPath : disabledPath;
-  if (existsSync(from)) renameSync(from, to);
-  else if (!existsSync(to)) throw new SkillError('skill_not_found');
-  const skill = readOne(where, bundled);
+  if (!LOOKUP_KEY.test(key)) throw new SkillError('skill_key_invalid');
+  const where = locate(home, key);
+  if (!where) throw new SkillError('skill_not_found');
+  const bundled = bundledNames(home);
+  const before = readOne(where, bundled);
+  if (!before) throw new SkillError('skill_not_found');
+  if (!enabled && (ESSENTIAL_SKILLS.has(before.name) || ESSENTIAL_SKILLS.has(key))) {
+    throw new SkillError('skill_essential');
+  }
+  const disabled = hermesDisabledSkills(home);
+  const listed = disabled.has(before.name) || disabled.has(key);
+  if (enabled && listed) {
+    disabled.delete(before.name);
+    disabled.delete(key);
+    writeHermesDisabled(home, disabled);
+  } else if (!enabled && !listed) {
+    disabled.add(before.name);
+    writeHermesDisabled(home, disabled);
+  }
+  if (enabled) {
+    const enabledPath = path.join(where.folder, SKILL_FILE);
+    const disabledPath = enabledPath + DISABLED_SUFFIX;
+    if (!existsSync(enabledPath) && existsSync(disabledPath)) renameSync(disabledPath, enabledPath);
+  }
+  const skill = readOne(where, bundled, viewOf(home));
   if (!skill) throw new SkillError('skill_not_found');
   return skill;
 }
