@@ -25,6 +25,7 @@ import {
   Skeleton,
   SkeletonGroup,
   Switch,
+  Table,
 } from '../ui/index.js';
 import { IconAlert, IconCheck } from '../ui/icons.js';
 import { BrowserPushSection } from './BrowserPushSection.js';
@@ -36,6 +37,7 @@ import {
   useNotifyPreferences,
   useSaveNotifyPreferences,
   type Notice as NoticeRow,
+  type NoticeKind,
   type NotifyPreferences,
 } from './queries.js';
 
@@ -206,43 +208,72 @@ function Preferences() {
   };
   const quiet = current.quiet_hours ?? DEFAULT_QUIET;
   const write = (next: NotifyPreferences) => save.mutate(next);
+  // A kind with no row was never turned off, so it is on.
+  const channelsOf = (kind: NoticeKind) => {
+    const on = current.events[kind]?.in_app ?? true;
+    const push = current.events[kind]?.push ?? true;
+    const set = (channels: { in_app: boolean; push: boolean }) =>
+      write({ ...current, quiet_hours: quiet, events: { ...current.events, [kind]: channels } });
+    return { on, push, set };
+  };
 
   return (
     <section className="flex flex-col gap-3" aria-labelledby="notify-prefs-heading">
       <h3 id="notify-prefs-heading" className="text-sm font-semibold">
         {t('notify.what_reaches_me')}
       </h3>
-      <div className="flex flex-col gap-1">
-        {NOTICE_KINDS.map((kind) => {
-          // A kind with no row was never turned off, so it is on.
-          const on = current.events[kind]?.in_app ?? true;
-          const push = current.events[kind]?.push ?? true;
-          const set = (channels: { in_app: boolean; push: boolean }) =>
-            write({
-              ...current,
-              quiet_hours: quiet,
-              events: { ...current.events, [kind]: channels },
-            });
-          return (
-            <div key={kind} className="flex flex-wrap items-center justify-between gap-x-4">
-              <Switch
-                checked={on}
-                label={t(`notify.kind.${kind}`)}
-                testId={`notify-kind-${kind}`}
-                onChange={(next) => set({ in_app: next, push })}
-              />
-              {/* Push mirrors the inbox: a kind that is not written is not pushed either. */}
-              <Switch
-                checked={on && push}
-                disabled={!on}
-                label={t('notify.push_switch')}
-                testId={`notify-push-${kind}`}
-                onChange={(next) => set({ in_app: on, push: next })}
-              />
-            </div>
-          );
-        })}
-      </div>
+      {/* One row per event and two aligned columns, «في الهب» and «على الأجهزة» (owner,
+          2026-09-26): a label once, and the two switches under their own headers, instead of
+          two switches a row with "Push to devices" said seven times. */}
+      <Table
+        caption={t('notify.what_reaches_me')}
+        testId="notify-events"
+        columns={[
+          {
+            key: 'event',
+            header: t('notify.col_event'),
+            cell: (kind: NoticeKind) => (
+              <span data-testid={`notify-event-${kind}`}>{t(`notify.kind.${kind}`)}</span>
+            ),
+          },
+          {
+            key: 'in_hub',
+            header: t('notify.col_in_hub'),
+            cell: (kind: NoticeKind) => {
+              const { on, push, set } = channelsOf(kind);
+              return (
+                <Switch
+                  checked={on}
+                  labelHidden
+                  label={`${t(`notify.kind.${kind}`)} — ${t('notify.col_in_hub')}`}
+                  testId={`notify-kind-${kind}`}
+                  onChange={(next) => set({ in_app: next, push })}
+                />
+              );
+            },
+          },
+          {
+            key: 'on_devices',
+            header: t('notify.col_on_devices'),
+            cell: (kind: NoticeKind) => {
+              const { on, push, set } = channelsOf(kind);
+              // Push mirrors the inbox: a kind that is not written is not pushed either.
+              return (
+                <Switch
+                  checked={on && push}
+                  disabled={!on}
+                  labelHidden
+                  label={`${t(`notify.kind.${kind}`)} — ${t('notify.col_on_devices')}`}
+                  testId={`notify-push-${kind}`}
+                  onChange={(next) => set({ in_app: on, push: next })}
+                />
+              );
+            },
+          },
+        ]}
+        rows={NOTICE_KINDS}
+        rowKey={(kind) => kind}
+      />
       <Switch
         checked={quiet.enabled}
         label={t('notify.quiet')}

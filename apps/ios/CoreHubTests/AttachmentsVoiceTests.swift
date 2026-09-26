@@ -333,7 +333,7 @@ final class VoiceSourceTests: XCTestCase {
     }
 
     func testTheHubIsAskedForSpeechTheIPhonePlaysInTheRepliesOwnLanguage() {
-        // The iPhone cannot play Ogg (DECISIONS §87).
+        // The iPhone cannot play Ogg (DECISIONS §91).
         XCTAssertEqual(Voice.hubFormat, .mp3)
         XCTAssertEqual(Voice.language(of: "اكتملت الاختبارات بنجاح"), "ar")
         XCTAssertEqual(Voice.language(of: "Все тесты прошли"), "ru")

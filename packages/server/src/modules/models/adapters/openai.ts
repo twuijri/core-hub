@@ -306,7 +306,7 @@ export const openAiAdapter: ProviderAdapter = {
         model: ctx.settings.model ?? 'gpt-4o-mini-tts',
         input: request.text,
         voice,
-        // The client's format when it asked for one (DECISIONS §87); OpenAI calls Ogg Opus `opus`.
+        // The client's format when it asked for one (DECISIONS §91); OpenAI calls Ogg Opus `opus`.
         response_format: request.format === 'ogg' ? 'opus' : (request.format ?? 'mp3'),
       },
       fetchImpl: ctx.fetchImpl,

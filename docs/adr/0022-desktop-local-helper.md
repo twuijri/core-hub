@@ -4,6 +4,11 @@ Status: **proposed — owner to confirm** (2026-09-25). Builds on ADR 0009 ("a s
 helper inside the app exposes the machine to the hub as MCP tools … optional, off by default,
 and shows what it exposes").
 
+**Amended by ADR 0025** (2026-09-27, proposed): turning the helper on with nothing shared makes
+and shares `~/Core Hub` as writable (the owner's decision of 2026-09-26); programs on this
+computer add their tools through the helper; and a hub on a server now reaches the helper through
+the app's device connection. Decisions 2, 3 and 7 below read with those changes.
+
 ## Context
 An agent that can use the person's own computer — read the notes folder, write a draft next
 to the project, open the result — is worth a lot and can do a lot of damage. The hub already

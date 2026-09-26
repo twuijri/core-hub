@@ -243,7 +243,8 @@
       "timeout": "The device did not answer in time.",
       "denied": "The device declined the request.",
       "failed": "The device could not do what was asked.",
-      "cancelled": "The request was cancelled."
+      "cancelled": "The request was cancelled.",
+      "offline": "“{device}” is offline: the Core Hub app is not running there, or not connected to this hub."
     }
   }
 }

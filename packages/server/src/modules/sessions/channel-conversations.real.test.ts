@@ -156,6 +156,10 @@ describe.skipIf(!image)(
         asked.push(apiPath);
         return real.get<T>(apiPath);
       },
+      delete: <T>(apiPath: string) => {
+        asked.push(`DELETE ${apiPath}`);
+        return real.delete<T>(apiPath);
+      },
     };
     let now = Date.now();
     const reader = new ChannelConversations(() => source, { now: () => now });

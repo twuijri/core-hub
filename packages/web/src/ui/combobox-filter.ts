@@ -10,10 +10,12 @@
  * 1. a row matches when the query appears anywhere in its display name **or** in its id,
  *    case-insensitively — so `opus` finds `anthropic/claude-opus-4-6-thinking`;
  * 2. the models chosen most recently in this workspace come first, under **Recent**, as
- *    long as they match too;
+ *    long as they match too — and only there: a row is listed once (owner, 2026-09-26: the
+ *    recent image model showed twice);
  * 3. the rest keep the caller's order, grouped by provider — and the group headers are
  *    only drawn when more than one provider is in scope, because a single header over
- *    every row is noise.
+ *    every row is noise. Under a Recent group the rest always get a header, so they do not
+ *    read as more of Recent.
  */
 export interface ComboboxOption {
   value: string;
@@ -88,13 +90,21 @@ export interface BuildRowsInput {
   recent?: readonly string[];
   /** What the Recent header says. */
   recentLabel: string;
+  /** The rest's header under a Recent group, when the options name no provider. */
+  restLabel?: string;
 }
 
 /**
  * The flat list the virtualizer renders: group headers and option rows in one array, so
  * every row has an index and a sticky header knows which rows it covers.
  */
-export function buildRows({ options, query, recent = [], recentLabel }: BuildRowsInput): Row[] {
+export function buildRows({
+  options,
+  query,
+  recent = [],
+  recentLabel,
+  restLabel = '',
+}: BuildRowsInput): Row[] {
   const matching = options.filter((option) => optionMatches(option, query));
   const withHits = (option: ComboboxOption, prefix: string): Row => ({
     kind: 'option',
@@ -113,11 +123,18 @@ export function buildRows({ options, query, recent = [], recentLabel }: BuildRow
     for (const option of recentRows) rows.push(withHits(option, 'recent:'));
   }
 
-  // One provider in scope needs no header; several do.
-  const groups = new Set(matching.map((option) => option.group).filter(Boolean));
-  const showHeaders = groups.size > 1;
+  // Each row once: what is under Recent is not repeated below it.
+  const shown = new Set(recentRows.map((option) => option.value));
+  const rest = matching.filter((option) => !shown.has(option.value));
+  // One provider in scope needs no header; several do — and so does anything under Recent.
+  const groups = new Set(rest.map((option) => option.group).filter(Boolean));
+  const underRecent = recentRows.length > 0 && rest.length > 0;
+  const showHeaders = groups.size > 1 || (underRecent && groups.size > 0);
+  if (underRecent && groups.size === 0) {
+    rows.push({ kind: 'group', key: 'group:rest', label: restLabel });
+  }
   let current: string | undefined;
-  for (const option of matching) {
+  for (const option of rest) {
     if (showHeaders && option.group !== undefined && option.group !== current) {
       current = option.group;
       rows.push({ kind: 'group', key: `group:${option.group}`, label: option.group });

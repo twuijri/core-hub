@@ -46,7 +46,7 @@ class Speaker(private val context: Context) {
             // The hub takes up to 2 000 characters a request: longer replies go in parts.
             VoiceText.chunks(text).forEachIndexed { index, part ->
                 val file = hubCall {
-                    // MP3, which every phone plays, rather than a provider's default Ogg (DECISIONS §87).
+                    // MP3, which every phone plays, rather than a provider's default Ogg (DECISIONS §91).
                     hub.api.models.modelsSynthesize(hub.profile, SpeechRequest(text = part, language = language, format = SpeechFormat.MP3))
                 }.getOrNull()
                 if (file == null) {

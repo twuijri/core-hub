@@ -65,6 +65,10 @@ export interface DesktopBridge {
   onOpenPath(listener: (path: string) => void): () => void;
   /** The local helper (MCP) — what this computer exposes to agents (ADR 0022). */
   helper: DesktopHelperBridge;
+  /** Programs on this computer the helper can share with agents (ADR 0025). */
+  programs: DesktopProgramsBridge;
+  /** This computer as a device of the hub it is connected to, for a hub on a server (ADR 0025). */
+  device: DesktopDeviceBridge;
   /** The update check (ADR 0023): a notice and a download link, never an install. */
   updates: DesktopUpdatesBridge;
 }
@@ -109,6 +113,10 @@ export interface DesktopHelperActivity {
   target: string | null;
   ok: boolean;
   detail: string | null;
+  /** The program the call went to, for a program's tool. */
+  program?: string | null;
+  /** `local`: the hub on this computer; `hub`: a hub elsewhere, through the device connection. */
+  via?: 'local' | 'hub';
 }
 
 export interface DesktopHelperState {
@@ -127,6 +135,107 @@ export interface DesktopHelperState {
   activity: DesktopHelperActivity[];
   /** Why it is not running although on, or null. */
   error: string | null;
+  /** The folder the app made for Core Hub's own files (`~/Core Hub`), while it is shared. */
+  defaultFolder?: string | null;
+}
+
+/** A setting a program needs that only the person can give (an API key). */
+export interface DesktopProgramField {
+  key: string;
+  title: string;
+  description: string | null;
+  sensitive: boolean;
+  required: boolean;
+  /** A value is saved (a secret's value is never shown back). */
+  set: boolean;
+  /** The saved value, for a setting that is not secret. */
+  value: string | null;
+}
+
+export type DesktopProgramSource =
+  'claude_desktop' | 'claude_desktop_extension' | 'claude_code' | 'codex' | 'cursor' | 'windsurf';
+
+export interface DesktopProgram {
+  id: string;
+  name: string;
+  source: DesktopProgramSource;
+  /** The file it was found in. */
+  origin: string;
+  description: string | null;
+  /**
+   * `ready`: can be switched on; `needs_setup`: a setting is missing; `remote`: a server on the
+   * network, not passed through in this version; `invalid`: its registration names no program.
+   */
+  status: 'ready' | 'needs_setup' | 'remote' | 'invalid';
+  fields: DesktopProgramField[];
+  /** The profiles whose agents may use it; empty: off (the default). */
+  profiles: string[];
+  /** Its tools as it last listed them. */
+  tools: Array<{ name: string; description: string }>;
+  running: boolean;
+  /** Why it could not start, the last time it was tried. */
+  error: string | null;
+  /** DaVinci Resolve's integration: the page shows its readiness check. */
+  resolve: boolean;
+}
+
+export type DesktopResolveStep =
+  'install_integration' | 'share_program' | 'start_resolve' | 'enable_scripting' | 'needs_studio';
+
+export interface DesktopResolveReadiness {
+  checkedAt: string;
+  programId: string | null;
+  integration: 'missing' | 'found' | 'shared';
+  running: boolean | null;
+  scripting: 'reachable' | 'unreachable' | 'unknown';
+  product: string | null;
+  version: string | null;
+  studio: boolean | null;
+  steps: DesktopResolveStep[];
+}
+
+export interface DesktopProgramsState {
+  programs: DesktopProgram[];
+  /** When the other assistants' files were last read. */
+  scannedAt: string | null;
+  /** The last DaVinci Resolve check, or null before the first. */
+  resolve: DesktopResolveReadiness | null;
+}
+
+export interface DesktopProgramsBridge {
+  get(): Promise<DesktopProgramsState>;
+  /** Reads the other assistants' files again. */
+  rescan(): Promise<DesktopProgramsState>;
+  /** The profiles whose agents may use it; empty switches it off. */
+  setProfiles(id: string, profiles: string[]): Promise<DesktopProgramsState>;
+  /** Saves (or, with null, forgets) one of its settings. */
+  setField(id: string, key: string, value: string | null): Promise<DesktopProgramsState>;
+  checkResolve(): Promise<DesktopProgramsState>;
+}
+
+export type DesktopDeviceStatus =
+  'unlinked' | 'connecting' | 'connected' | 'offline' | 'refused' | 'stopped';
+
+export interface DesktopDeviceState {
+  /** The hub this window talks to (remote mode), or null in local mode. */
+  hub: string | null;
+  /** This computer has a device token of that hub. */
+  linked: boolean;
+  deviceId: string | null;
+  status: DesktopDeviceStatus;
+  /** Why it is offline or refused, as the connection said. */
+  detail: string | null;
+}
+
+export interface DesktopDeviceBridge {
+  get(): Promise<DesktopDeviceState>;
+  /**
+   * Pairs this computer with the hub from a pairing the signed-in page just made
+   * (`auth.createPairing`); the token stays in the app, never in the page.
+   */
+  link(pairingId: string, code: string): Promise<DesktopDeviceState>;
+  /** Forgets this computer's device token here (the page unlinks it on the hub). */
+  forget(): Promise<DesktopDeviceState>;
 }
 
 export interface DesktopHelperBridge {

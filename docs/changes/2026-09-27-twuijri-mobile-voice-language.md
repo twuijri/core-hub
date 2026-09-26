@@ -65,7 +65,7 @@
 (`ACTION_VIEW` عبر FileProvider) وإلا ورقة المشاركة. الملفات تُحفظ في ذاكرة التطبيق المؤقتة باسمها
 (مجلد لكل مرفق) فلا تُجلب مرتين.
 
-**٥) صيغة صوت المركز** — DECISIONS §87 (مقترح، للمالك أن يؤكد): العقد لم يكن فيه ما يطلب صيغة، فأُضيف
+**٥) صيغة صوت المركز** — DECISIONS §91 (مقترح، للمالك أن يؤكد): العقد لم يكن فيه ما يطلب صيغة، فأُضيف
 أولًا `SpeechRequest.format` (`SpeechFormat`: `mp3`، `aac`، `wav`، `ogg`) اختياريًا؛ يطلبه المركز من
 المزود حيث يستطيع الاختيار (بروتوكول OpenAI: `response_format`، وOgg Opus اسمه `opus`)، وإلا يرجع بصيغة
 المزود و`Content-Type` يقول ما جاء. تطبيقا الجوال يطلبان `mp3`. ولم ألمس مزودات الصوت الجديدة (Groq
@@ -75,11 +75,11 @@
 
 ## العقد (ما تغيّر في packages/contracts، أو «لا شيء»)
 - `SpeechRequest.format` (اختياري، `SpeechFormat | null`) ومخطط `SpeechFormat` الجديد؛ `audio/aac`
-  بين أنواع ردّ `models.synthesize`؛ وصف العملية يذكر `format`. DECISIONS §87.
+  بين أنواع ردّ `models.synthesize`؛ وصف العملية يذكر `format`. DECISIONS §91.
 - لا عمليات ولا أحداث جديدة. `models.transcribe` كما هو (`language` تلميح اختياري أصلًا).
 
 ## الملفات والتأثير
-- العقد: `packages/contracts/openapi.yaml`، `docs/contracts/DECISIONS.md` (§87).
+- العقد: `packages/contracts/openapi.yaml`، `docs/contracts/DECISIONS.md` (§91).
 - الخادم: `packages/server/src/modules/models/{index.ts,service.ts}`، `adapters/types.ts`،
   `adapters/openai.ts` (سطر الصيغة)، واختبار في `adapters/adapters.test.ts`.
 - iOS: `Phone/DictationLanguage.swift` (جديد، القواعد)، `Phone/KeyboardLanguage.swift` (جديد)،
@@ -129,6 +129,19 @@ iOS      run 36206906889  success  — Executed 114 tests, with 0 failures; من
          KeyboardLanguage.swift، أُصلح.)
 Android  run 36206880647  success  — ./gradlew assembleDebug test lint: :app:testDebugUnitTest و:app:lint
          نجحا، BUILD SUCCESSFUL in 4m 30s (منها DictationLanguageTest الجديد وPhoneTest المحدّث).
+```
+
+بعد دمج `origin/night/2026-09-27` في الفرع (§87–§90 أخذتها مهام أخرى، فصار قرار الصيغة §91):
+
+```
+$ pnpm contracts:lint            → contracts:lint  OK
+$ pnpm contract:test             → Test Files  19 passed (19) · Tests  380 passed (380)
+$ pnpm lint                      → All matched files use Prettier code style!
+$ pnpm typecheck                 → خرج بـ0
+$ pnpm i18n:check                → i18n:check  OK
+$ pnpm change-record:check       → change-record  OK — 4 record(s) valid
+$ pnpm contracts:check-clients   → check-clients  OK — 659 client file(s) scanned, 235 contract path(s) known.
+$ vitest run adapters.test.ts speech-api.test.ts → Test Files  2 passed (2) · Tests  29 passed (29)
 ```
 
 اختبار المالك نفسه (`testAutoListensInTheKeyboardsLanguageNotTheAppsLanguage` / «Auto listens in the

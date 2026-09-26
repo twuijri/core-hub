@@ -7,7 +7,16 @@ import { BackgroundTasks } from './BackgroundTasks.js';
 import { PendingActions } from './PendingActions.js';
 import { WorkspaceSwitcher } from './WorkspaceSwitcher.js';
 
-export function TopBar({ title, onMenu }: { title: string; onMenu: () => void }) {
+export function TopBar({
+  title,
+  onMenu,
+  slotRef,
+}: {
+  title: string;
+  onMenu: () => void;
+  /** Where the page's own controls go, right after the title (`topBarSlot.tsx`). */
+  slotRef?: (node: HTMLElement | null) => void;
+}) {
   const { t } = useI18n();
   const pane = usePane();
   const meta = useMeta();
@@ -31,7 +40,8 @@ export function TopBar({ title, onMenu }: { title: string; onMenu: () => void })
       <h1 className="min-w-0 flex-1 truncate text-base font-semibold" dir="auto">
         {title}
       </h1>
-      <span className="hidden text-xs text-muted sm:inline" dir="auto">
+      <div ref={slotRef} className="topbar-slot" data-testid="topbar-slot" />
+      <span className="topbar-hub hidden text-xs text-muted sm:inline" dir="auto">
         {hubName}
       </span>
       <BackgroundTasks />

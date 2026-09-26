@@ -21,6 +21,19 @@ export interface WindowBounds {
   maximized: boolean;
 }
 
+/**
+ * This computer as a device of one hub (ADR 0025): the device token pairing gave it, sealed by
+ * the OS keychain where there is one, so the main process can keep its own connection.
+ */
+export interface DeviceLinkConfig {
+  deviceId: string;
+  userId: string;
+  /** Sealed (`sealText`); never shown, never sent anywhere but that hub. */
+  token: string;
+  /** The person's profiles when it paired, for catching up on missed requests. */
+  profiles: string[];
+}
+
 export interface DesktopConfig {
   version: 1;
   /** `null` until the person picks one on the first-run screen. */
@@ -45,6 +58,8 @@ export interface DesktopConfig {
   closeToTray: boolean;
   /** The local helper (MCP): off, no folders, until the person says otherwise. */
   helper: HelperConfig;
+  /** Device connections, by hub origin: this computer paired with that hub (ADR 0025). */
+  links: Record<string, DeviceLinkConfig>;
   /** The update check (ADR 0023): a notice and a link, never an install. */
   updates: {
     /** Look once a day on its own (a request to GitHub's API, nothing else). */
@@ -73,6 +88,7 @@ export function defaultConfig(
     deviceKey: makeId(),
     closeToTray: true,
     helper: defaultHelper(makeToken),
+    links: {},
     updates: { auto: true, lastCheckedAt: null, notified: null },
   };
 }
@@ -133,8 +149,36 @@ export function parseConfig(
         : base.deviceKey,
     closeToTray: typeof raw.closeToTray === 'boolean' ? raw.closeToTray : base.closeToTray,
     helper: parseHelper(raw.helper, () => base.helper.token),
+    links: parseLinks(raw.links),
     updates: parseUpdates(raw.updates),
   };
+}
+
+function parseLinks(raw: unknown): Record<string, DeviceLinkConfig> {
+  if (!isRecord(raw)) return {};
+  const out: Record<string, DeviceLinkConfig> = {};
+  for (const [key, value] of Object.entries(raw)) {
+    const hub = origin(key);
+    if (!hub || !isRecord(value)) continue;
+    const id = /^[0-9A-HJKMNP-TV-Z]{26}$/;
+    if (
+      typeof value.deviceId !== 'string' ||
+      !id.test(value.deviceId) ||
+      typeof value.userId !== 'string' ||
+      typeof value.token !== 'string' ||
+      value.token.length === 0
+    )
+      continue;
+    out[hub] = {
+      deviceId: value.deviceId,
+      userId: value.userId,
+      token: value.token,
+      profiles: Array.isArray(value.profiles)
+        ? value.profiles.filter((p): p is string => typeof p === 'string').slice(0, 100)
+        : [],
+    };
+  }
+  return out;
 }
 
 function parseUpdates(raw: unknown): DesktopConfig['updates'] {

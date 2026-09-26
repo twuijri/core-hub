@@ -47,6 +47,8 @@ import {
   IconArchive,
   IconChevron,
   IconClose,
+  IconEye,
+  IconEyeOff,
   IconFolder,
   IconGlobe,
   IconGrip,
@@ -91,6 +93,7 @@ import {
   useChannelConversations,
   type ChannelConversation,
 } from './channels.js';
+import { useChannelActions } from './ChannelActions.js';
 import {
   categoryKeys,
   useCategories,
@@ -223,6 +226,10 @@ export function SessionList({ onOpen }: { onOpen?: () => void }) {
   const unreachable = (channelList.data?.unavailable ?? []).some(
     (entry) => entry.reason === 'hermes_unreachable',
   );
+  // What this person hid stays out of the list until they ask to see it (§88).
+  const [showHidden, setShowHidden] = useState(false);
+  const hiddenCount =
+    scope === 'archived' ? 0 : (channelList.data?.items ?? []).filter((c) => c.hidden).length;
 
   const groups = useMemo(() => {
     // The global agent is not a chat in the list: search and the pending-actions bar lead
@@ -241,7 +248,9 @@ export function SessionList({ onOpen }: { onOpen?: () => void }) {
     const conversations =
       scope === 'archived'
         ? []
-        : (channelList.data?.items ?? []).filter((c) => matchesConversation(c, needle));
+        : (channelList.data?.items ?? []).filter(
+            (c) => (showHidden || !c.hidden) && matchesConversation(c, needle),
+          );
     return groupSessions(filtered, categoryList, {
       manual,
       conversations,
@@ -249,7 +258,7 @@ export function SessionList({ onOpen }: { onOpen?: () => void }) {
       // is typed or the archive is on screen, where they would only be noise.
       keepEmpty: !needle && scope !== 'archived',
     });
-  }, [sessions.data, needle, manual, categoryList, scope, channelList.data]);
+  }, [sessions.data, needle, manual, categoryList, scope, channelList.data, showHidden]);
   /** While a filter is typed every match shows, collapsed or not: hiding a hit helps nobody. */
   const isOpen = (group: SessionGroup) =>
     group.kind === 'rest' || !!needle || !collapsed.has(group.key);
@@ -257,6 +266,7 @@ export function SessionList({ onOpen }: { onOpen?: () => void }) {
   const conversationCount = groups.reduce((n, group) => n + (group.conversations?.length ?? 0), 0);
   /** The conversation on screen, when it is a channel's (its id is Hermes's). */
   const openChannel = isChannelAddress(params) ? sessionId : undefined;
+  const channelActions = useChannelActions({ openId: openChannel });
 
   // A chat filed under a category this list has not loaded (someone else just made it): ask
   // again rather than show it among the loose chats for good.
@@ -623,6 +633,13 @@ export function SessionList({ onOpen }: { onOpen?: () => void }) {
                     active={openChannel === conversation.id}
                     showProfile={showProfile}
                     onOpen={onOpen}
+                    onHide={() => channelActions.hide(conversation)}
+                    onUnhide={() => channelActions.unhide(conversation)}
+                    onDelete={
+                      channelActions.canDelete
+                        ? () => void channelActions.remove(conversation)
+                        : undefined
+                    }
                   />
                 ))}
               </ul>
@@ -701,6 +718,23 @@ export function SessionList({ onOpen }: { onOpen?: () => void }) {
           );
         })}
       </DndContext>
+      {hiddenCount > 0 && (
+        <button
+          type="button"
+          className="session-hidden-toggle"
+          onClick={() => setShowHidden((shown) => !shown)}
+          aria-pressed={showHidden}
+          data-testid="channel-show-hidden"
+        >
+          {showHidden ? <IconEyeOff size={14} /> : <IconEye size={14} />}
+          <span>
+            {showHidden
+              ? t('sessions.channels.hide_hidden')
+              : t('sessions.channels.show_hidden', { count: String(hiddenCount) })}
+          </span>
+        </button>
+      )}
+      {channelActions.dialog}
       <MoveDialog
         session={moving}
         categories={moving ? categoryList.filter((c) => c.profile === moving.profile) : []}
@@ -1100,59 +1134,127 @@ function SessionRow({
 
 /**
  * A conversation Hermes keeps for a channel (contract decision §61): the other party (or
- * Hermes's title), its latest message, and its profile when several are shown. Read-only — it
- * opens as a transcript, and has no menu: nothing the hub could do to it would reach Hermes.
+ * Hermes's title), its latest message, and its profile when several are shown. It opens as a
+ * read-only transcript. Its menu (§88) hides it from this person's list — or shows it again —
+ * and, for an admin, deletes it from Hermes after asking.
  */
 function ChannelRow({
   conversation,
   active,
   showProfile,
   onOpen,
+  onHide,
+  onUnhide,
+  onDelete,
 }: {
   conversation: ChannelConversation;
   active: boolean;
   showProfile: boolean;
   onOpen?: (() => void) | undefined;
+  onHide(): void;
+  onUnhide(): void;
+  /** Only for an admin. */
+  onDelete?: (() => void) | undefined;
 }) {
   const { t, language } = useI18n();
   const inLink = useProfileInLink();
   const title = conversationTitle(conversation, t);
   const when = new Date(conversation.last_message_at);
   return (
-    <li
-      className="session-row"
-      data-active={active ? 'true' : undefined}
-      data-testid="channel-row"
-      data-channel={conversation.channel}
-      data-conversation-id={conversation.id}
+    <ContextMenu
+      testId="channel-menu"
+      trigger={
+        <li
+          className="session-row"
+          data-active={active ? 'true' : undefined}
+          data-hidden={conversation.hidden ? 'true' : undefined}
+          data-testid="channel-row"
+          data-channel={conversation.channel}
+          data-conversation-id={conversation.id}
+        >
+          <span className="session-grip" aria-hidden>
+            {conversation.hidden ? <IconEyeOff size={14} /> : <IconGlobe size={14} />}
+          </span>
+          <NavLink
+            to={channelHref(conversation.id, inLink(conversation.profile))}
+            onClick={() => onOpen?.()}
+            className="session-link"
+            title={Number.isNaN(when.getTime()) ? undefined : when.toLocaleString(language)}
+          >
+            <span className="session-title-row">
+              <span className="min-w-0 truncate" dir="auto">
+                {title}
+              </span>
+              {showProfile && (
+                <ProfileBadge
+                  profile={conversation.profile}
+                  testId="channel-profile"
+                  className="ms-auto"
+                />
+              )}
+            </span>
+            {conversationPreview(conversation, t) && (
+              <span className="session-preview" dir="auto">
+                {plainPreview(conversationPreview(conversation, t))}
+              </span>
+            )}
+          </NavLink>
+          {/* The same actions as the right-click, where the other rows keep theirs. */}
+          <span className="session-actions">
+            <Menu
+              align="end"
+              testId="channel-more"
+              tooltip={t('common.more')}
+              trigger={
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  iconOnly
+                  aria-label={t('sessions.more', { title })}
+                  icon={<IconMore size={14} />}
+                  data-testid="channel-more-button"
+                />
+              }
+            >
+              {conversation.hidden ? (
+                <MenuItem icon={<IconEye size={14} />} onSelect={onUnhide}>
+                  {t('sessions.channels.unhide')}
+                </MenuItem>
+              ) : (
+                <MenuItem icon={<IconEyeOff size={14} />} onSelect={onHide}>
+                  {t('sessions.channels.hide')}
+                </MenuItem>
+              )}
+              {onDelete && (
+                <>
+                  <MenuSeparator />
+                  <MenuItem icon={<IconTrash size={14} />} tone="danger" onSelect={onDelete}>
+                    {t('sessions.channels.delete')}
+                  </MenuItem>
+                </>
+              )}
+            </Menu>
+          </span>
+        </li>
+      }
     >
-      <span className="session-grip" aria-hidden>
-        <IconGlobe size={14} />
-      </span>
-      <NavLink
-        to={channelHref(conversation.id, inLink(conversation.profile))}
-        onClick={() => onOpen?.()}
-        className="session-link"
-        title={Number.isNaN(when.getTime()) ? undefined : when.toLocaleString(language)}
-      >
-        <span className="session-title-row">
-          <span className="min-w-0 truncate" dir="auto">
-            {title}
-          </span>
-          {showProfile && (
-            <ProfileBadge
-              profile={conversation.profile}
-              testId="channel-profile"
-              className="ms-auto"
-            />
-          )}
-        </span>
-        {conversationPreview(conversation, t) && (
-          <span className="session-preview" dir="auto">
-            {plainPreview(conversationPreview(conversation, t))}
-          </span>
-        )}
-      </NavLink>
-    </li>
+      {conversation.hidden ? (
+        <ContextMenuItem icon={<IconEye size={14} />} onSelect={onUnhide}>
+          {t('sessions.channels.unhide')}
+        </ContextMenuItem>
+      ) : (
+        <ContextMenuItem icon={<IconEyeOff size={14} />} onSelect={onHide}>
+          {t('sessions.channels.hide')}
+        </ContextMenuItem>
+      )}
+      {onDelete && (
+        <>
+          <ContextMenuSeparator />
+          <ContextMenuItem icon={<IconTrash size={14} />} tone="danger" onSelect={onDelete}>
+            {t('sessions.channels.delete')}
+          </ContextMenuItem>
+        </>
+      )}
+    </ContextMenu>
   );
 }

@@ -191,7 +191,7 @@ describe('models adapters: OpenAI-shaped', () => {
     expect(voiceless).toEqual({ supported: false, reason: 'no_voice' });
   });
 
-  it('asks for the audio format the client can play (DECISIONS §87)', async () => {
+  it('asks for the audio format the client can play (DECISIONS §91)', async () => {
     const { fetchImpl, calls } = scripted([
       { bytes: new Uint8Array([1]), contentType: 'audio/aac' },
       { bytes: new Uint8Array([2]), contentType: 'audio/ogg' },

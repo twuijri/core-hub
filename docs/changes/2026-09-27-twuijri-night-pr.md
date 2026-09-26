@@ -13,6 +13,11 @@
 ## المهام
 - قنوات: «كيف تبدأ» مطوية، ونصوص الموافقات، وعنوان ردود واتساب (#164) — `fix/channels-polish` — `docs/changes/2026-09-26-twuijri-channels-polish.md`
 - سطح المكتب: «Core Hub» بمسافة في ويندوز (`Core Hub.exe`، ترقية نظيفة من 1.1.1) ولينكس (`/opt/Core Hub/core-hub`) — `fix/desktop-app-name-win-linux` — `docs/changes/2026-09-27-twuijri-desktop-app-name-win-linux.md`
+- تلميع الويب بعد 1.1.1: شريط المحادثة في الشريط العلوي، الإشعارات جدولًا، «الأخيرة» مرة واحدة، نماذج الصور خارج منتقيات المحادثة (§87)، إخفاء محادثات القنوات وحذفها من هرمز (§88)، الاحتياطي بالسحب، `border-line` — `fix/web-polish` — `docs/changes/2026-09-27-twuijri-web-polish.md`
+
+- رفع قائمة App Store: حذف خيار `--skip_submission` غير الصالح — `night/2026-09-27` — `docs/changes/2026-09-27-twuijri-deliver-option.md`
+- برامج هذا الجهاز: المركز على الخادم يصل إلى الحاسوب (اتصال صادر من التطبيق)، مجلد `~/Core Hub`، برامج MCP المكتشفة على ماك وويندوز ولينكس مع الموافقة وجاهزية DaVinci، والفيديو في المحادثة (ADR 0025، §89، §90) — `feat/device-programs` — `docs/changes/2026-09-27-twuijri-device-programs.md`
+- الجوال: الإملاء بلغة لوحة المفاتيح تلقائيًا (لا لغة التطبيق) مع قائمة لغات بالضغط المطوّل، إملاء متواصل بشريط ونص حيّ، صور الردود داخل الرسالة، وصوت المركز MP3 على الآيفون (§91) — `fix/mobile-voice-language` — `docs/changes/2026-09-27-twuijri-mobile-voice-language.md`
 
 ## الملفات والتأثير
 هذا الملف فقط (فهرس). ملفات كل مهمة في سجلها.

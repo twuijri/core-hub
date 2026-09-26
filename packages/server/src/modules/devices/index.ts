@@ -29,8 +29,9 @@ import {
 } from './push.js';
 import { parseSubscription } from './webpush.js';
 import {
-  DEFAULT_TIMEOUT_MS,
+  AGENT_CAPABILITIES,
   DeviceRequestService,
+  defaultTimeoutFor,
   closeRequests,
   deviceRoom,
   requestsFor,
@@ -43,6 +44,7 @@ import type { PushMessage, PushProvider } from './senders.js';
 import type { RelayProof } from './relay.js';
 import {
   devices,
+  type DeviceHelperReport,
   type DeviceRequestStatus,
   type CapabilityKind,
   type DeviceConnection,
@@ -346,6 +348,8 @@ export function serializeDevice(row: DeviceRow, options: SerializeDeviceOptions)
           },
     push_blocker: row.pushBlocker ?? null,
     this_device: options.thisDevice,
+    profiles: row.profiles ?? null,
+    helper: row.helper ?? null,
     created_at: row.createdAt.toISOString(),
     updated_at: row.updatedAt.toISOString(),
   };
@@ -419,6 +423,9 @@ const principalOf = (request: FastifyRequest): Principal => {
 
 const isAdmin = (principal: Principal) =>
   principal.user.role === 'owner' || principal.user.role === 'admin';
+
+/** An agent's run acting for its person (auth `run-tokens.ts`): pinned to the run's profile. */
+const isRunPrincipal = (principal: Principal) => principal.user.pinnedWorkspaceId !== undefined;
 
 /** The device, if the caller may see it: its owner, the device itself, or an admin. */
 function visibleDevice(db: ModuleDb, principal: Principal, id: string): DeviceRow {
@@ -634,8 +641,11 @@ export function createDevicesModule(lent: DevicesPorts): HubModule {
         operationId: 'devices.update',
         handler: (request, { params, body }) => {
           const db = dbOf(request);
-          const row = visibleDevice(db, principalOf(request), params.device_id as string);
+          const principal = principalOf(request);
+          const row = visibleDevice(db, principal, params.device_id as string);
           const patch = body as {
+            profiles?: string[] | null;
+            helper?: DeviceHelperReport | null;
             name?: string;
             brand?: string | null;
             model?: string | null;
@@ -653,6 +663,20 @@ export function createDevicesModule(lent: DevicesPorts): HubModule {
               details: { field: 'name', reason: 'empty' },
             });
           }
+          // Which profiles may ask the device is its person's choice, made from a sign-in of
+          // theirs: not the device's own token, not an agent's run, not an admin (§89).
+          if (
+            patch.profiles !== undefined &&
+            (row.ownerId !== principal.user.id ||
+              principal.deviceId === row.id ||
+              isRunPrincipal(principal))
+          ) {
+            throw new HubError('forbidden', { details: { reason: 'not_the_devices_person' } });
+          }
+          // What the helper offers is the computer's own report, from its own token only.
+          if (patch.helper !== undefined && principal.deviceId !== row.id) {
+            throw new HubError('forbidden', { details: { reason: 'not_this_device' } });
+          }
           const next = db
             .update(devices)
             .set({
@@ -665,6 +689,17 @@ export function createDevicesModule(lent: DevicesPorts): HubModule {
               ...(patch.os_version !== undefined ? { osVersion: patch.os_version } : {}),
               ...(patch.app_version !== undefined ? { appVersion: patch.app_version } : {}),
               ...(patch.push_blocker !== undefined ? { pushBlocker: patch.push_blocker } : {}),
+              ...(patch.profiles !== undefined
+                ? { profiles: patch.profiles === null ? null : [...new Set(patch.profiles)] }
+                : {}),
+              ...(patch.helper !== undefined
+                ? {
+                    helper:
+                      patch.helper === null
+                        ? null
+                        : { ...patch.helper, reported_at: new Date(now()).toISOString() },
+                  }
+                : {}),
               ...(patch.capabilities
                 ? {
                     capabilities: patch.capabilities.map((c) => ({
@@ -871,12 +906,6 @@ export function createDevicesModule(lent: DevicesPorts): HubModule {
         status: 202,
         handler: (request, { body }) => {
           const principal = principalOf(request);
-          if (!principal.scopes.includes('device') && !principal.scopes.includes('admin')) {
-            throw new HubError('forbidden', {
-              messageKey: 'auth.scope_insufficient',
-              details: { required_scope: 'device' },
-            });
-          }
           const input = body as {
             device_id: string;
             capability: CapabilityKind;
@@ -885,20 +914,41 @@ export function createDevicesModule(lent: DevicesPorts): HubModule {
             session_id?: string | null;
             timeout_ms?: number;
           };
+          // An agent's run may ask the person's own computer for its helper's files and
+          // programs, and nothing else (§89); anyone else needs the `device` scope.
+          const run = isRunPrincipal(principal);
+          const allowed = run
+            ? AGENT_CAPABILITIES.has(input.capability)
+            : principal.scopes.includes('device') || principal.scopes.includes('admin');
+          if (!allowed) {
+            throw new HubError('forbidden', {
+              messageKey: 'auth.scope_insufficient',
+              details: { required_scope: 'device' },
+            });
+          }
           const device = findDevice(dbOf(request), input.device_id);
           // Only the device's own person may ask it; anyone else's device is not there.
           if (!device || device.status !== 'paired' || device.ownerId !== principal.user.id) {
             throw notFound({ resource: 'device', id: input.device_id });
           }
+          const workspace = workspaceOf(request);
+          if (device.profiles && !device.profiles.includes(workspace.slug)) {
+            throw new HubError('forbidden', {
+              details: { reason: 'device_not_in_profile', profile: workspace.slug },
+            });
+          }
           const { jobId, request: row } = requests(request).create({
-            workspace: workspaceOf(request),
+            workspace,
             ownerId: principal.user.id,
             device,
             capability: input.capability,
             purpose: input.purpose?.trim() || null,
             params: input.params ?? {},
             sessionId: input.session_id ?? null,
-            timeoutMs: input.timeout_ms ?? DEFAULT_TIMEOUT_MS,
+            // A run token's id is its run's (auth `run-tokens.ts`).
+            runId: run ? principal.tokenId : null,
+            timeoutMs: input.timeout_ms ?? defaultTimeoutFor(input.capability),
+            online: onlineDevices(request.server.hub.io).has(device.id),
           });
           return { job_id: jobId, request_id: row.id };
         },

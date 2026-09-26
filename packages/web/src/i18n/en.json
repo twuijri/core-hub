@@ -223,7 +223,19 @@
         "note": "What should the agent do with it? (optional)",
         "go": "Continue",
         "no_agent": "No agent in this profile can take it. Install one from Agents first."
-      }
+      },
+      "hide": "Hide from my list",
+      "unhide": "Show again",
+      "delete": "Delete from Hermes…",
+      "delete_title": "Delete “{title}” from Hermes?",
+      "delete_body": "The conversation and its messages are removed from Hermes for everyone, permanently. This cannot be undone. The chat in {channel} itself is not affected.",
+      "delete_confirm": "Delete permanently",
+      "hidden_toast": "“{title}” is hidden from your list",
+      "hidden_toast_body": "Only you stop seeing it. “Show hidden chats” at the end of the list brings it back.",
+      "show_hidden": "Show hidden chats ({count})",
+      "hide_hidden": "Stop showing hidden chats",
+      "actions": "Conversation actions",
+      "action_failed": "Couldn't change the conversation"
     }
   },
   "search": {
@@ -282,7 +294,8 @@
     "older_failed": "Couldn’t load older messages.",
     "answered_by": "Answered by {model}",
     "fallback_note": "{failed} failed, so {model} answered",
-    "fallback_reason": "Why: {reason}"
+    "fallback_reason": "Why: {reason}",
+    "bar_more": "More"
   },
   "composer": {
     "label": "Message composer",
@@ -795,8 +808,12 @@
       "fallbacks_empty": "No fallback models: if the chat model's provider fails, the turn fails.",
       "fallbacks_need_default": "Choose a chat model first; the fallbacks are tried after it.",
       "fallback_add": "Add a fallback model",
-      "fallback_up": "Move {model} up",
-      "fallback_down": "Move {model} down",
+      "fallback_reorder": "Drag to reorder {model} (Space to pick up, arrows to move)",
+      "fallback_instructions": "To reorder a fallback model, press Space or Enter on its handle, move it with the arrow keys, and press Space or Enter again to drop it. Escape puts it back.",
+      "fallback_picked": "Picked up {model}, place {position} of {total}.",
+      "fallback_moved": "{model} is now at place {position} of {total}.",
+      "fallback_dropped": "{model} dropped at place {position} of {total}.",
+      "fallback_cancelled": "Reordering cancelled; {model} is back at place {position} of {total}.",
       "fallback_remove": "Remove {model}"
     },
     "ensembles": {
@@ -964,7 +981,8 @@
     "new": "New folder",
     "new_placeholder": "New folder name",
     "create": "Create",
-    "locked": "The folder is fixed once the chat has run."
+    "locked": "The folder is fixed once the chat has run.",
+    "button": "Folder: {name}"
   },
   "combobox": {
     "search": "Search…",
@@ -974,7 +992,8 @@
     "none": "No models in this list.",
     "no_match": "Nothing matches “{query}”.",
     "error": "The list could not be fetched.",
-    "count": "{count} models"
+    "count": "{count} models",
+    "all": "All"
   },
   "ui": {
     "close": "Close",
@@ -1562,7 +1581,6 @@
       "update_available": "An update is available",
       "system": "System messages"
     },
-    "push_switch": "Push to devices",
     "test": "Send a test notification",
     "test_sent": "Sent. Check this browser and your devices.",
     "browser": {
@@ -1574,7 +1592,10 @@
       "denied": "The browser blocks notifications for this site. Allow them in the browser's site settings, then try again.",
       "unsupported": "This browser cannot receive push notifications.",
       "no_key": "Web Push is switched off on this hub. An admin can switch it on."
-    }
+    },
+    "col_event": "Event",
+    "col_in_hub": "In the hub",
+    "col_on_devices": "On devices"
   },
   "webhooks": {
     "intro": "Addresses this hub calls on its own, signed so the receiver can check the sender. Webhooks belong to the profile you are in.",
@@ -1950,7 +1971,8 @@
       "conversations": "Conversations",
       "notifications": "Notifications",
       "workflows": "Workflows",
-      "files": "Files"
+      "files": "Files",
+      "devices": "Your computers"
     },
     "group_about": {
       "tasks": "List the board's tasks; with changes allowed, create, move, assign and comment on them.",
@@ -1958,7 +1980,8 @@
       "conversations": "List and search this profile's conversations and read a summary of one.",
       "notifications": "Tell the person something: a notice in their inbox.",
       "workflows": "List workflows; with changes allowed, run one.",
-      "files": "Read the files in this profile's folder; with changes allowed, write them."
+      "files": "Read the files in this profile's folder; with changes allowed, write them.",
+      "devices": "Use the shared folders and the programs on the person's own computers that run the Core Hub app (each computer asks its person first). With changes allowed, write files and run programs there."
     },
     "unavailable": {
       "runtime_absent": "There is no Hermes beside this hub to give the tools to.",
@@ -2782,9 +2805,9 @@
     "hermes_path": "Hermes program"
   },
   "helper": {
-    "title": "Local helper (MCP)",
-    "intro": "Lets an agent use this computer through MCP tools — only the folders you share, only as you allow. Off until you turn it on.",
-    "enable": "Turn on the local helper",
+    "title": "Agents on this computer",
+    "intro": "Lets an agent use this computer — only the folders and programs you share, only as you allow — from the hub on this computer or from a hub on a server. Off until you turn it on.",
+    "enable": "Let agents use this computer",
     "enable_hint": "It listens on this computer only and wants its key on every request.",
     "exposed": "What agents can do",
     "tool_list_allowed_folders": "See which folders are shared",
@@ -2812,11 +2835,16 @@
     "add_to_hermes": "Add to Hermes on this hub",
     "added_to_hermes": "Added to Hermes as “{name}”. It takes effect on Hermes’s next start.",
     "no_hermes_agent": "This hub has no Hermes agent to add it to.",
-    "remote_note": "The helper answers on this computer only, so a hub on a server cannot reach it. It serves the hub running on this computer (local mode).",
+    "remote_note": "A hub on a server reaches this computer through its device connection, which this app keeps open while it runs, also from the tray.",
     "activity": "Recent use",
     "no_activity": "Nothing has used the helper yet.",
     "refused": "refused",
-    "not_running": "The helper is on but not running: {message}"
+    "not_running": "The helper is on but not running: {message}",
+    "local_note": "The hub on this computer reaches the helper at this address. Add it to Hermes once; each profile gets the programs you switched on for it.",
+    "default_folder": "Core Hub folder",
+    "default_folder_hint": "The app made this folder for Core Hub's files when you turned the helper on. Programs put what they make here (a render, say) unless you say otherwise. Stop sharing it any time.",
+    "via_hub": "from the hub",
+    "via_local": "from this computer"
   },
   "desktop_updates": {
     "title": "Updates",
@@ -3342,5 +3370,81 @@
     "all_none": "Nobody has linked a messaging account.",
     "remove": "Remove",
     "remove_title": "Remove {name}'s link?"
+  },
+  "device_link": {
+    "title": "Connection to this hub",
+    "intro": "A hub on a server can use this computer's shared folders and programs only once this computer is linked to it as a device. The app then keeps its own connection, even when the window is closed; nothing listens on this computer.",
+    "link": "Link this computer to the hub",
+    "refused": "The hub no longer accepts this computer (it was unlinked there). Link it again.",
+    "profiles": "Profiles that may use this computer",
+    "profiles_hint": "All your profiles until you narrow it. A profile left out cannot reach this computer's folders or programs.",
+    "unlink": "Unlink this computer",
+    "status_connected": "Connected",
+    "status_connecting": "Connecting…",
+    "status_offline": "Offline — trying again",
+    "status_refused": "Refused",
+    "status_stopped": "Stopped",
+    "status_unlinked": "Not linked"
+  },
+  "programs": {
+    "title": "Programs on this computer",
+    "count": "{on} of {all} on",
+    "intro": "Programs that registered an AI integration (an MCP server) with another assistant on this computer: Claude Desktop and its extensions, Claude Code, Codex, Cursor or Windsurf. Each is off until you pick the profiles it serves; it runs with your account's rights, and the computer asks you once per session before an agent uses it.",
+    "rescan": "Look again",
+    "empty": "No program found. Programs register with those assistants: install the program's AI integration there, then look again.",
+    "source": {
+      "claude_desktop": "Claude Desktop",
+      "claude_desktop_extension": "Claude Desktop extension",
+      "claude_code": "Claude Code",
+      "codex": "Codex",
+      "cursor": "Cursor",
+      "windsurf": "Windsurf"
+    },
+    "status": {
+      "ready": "Ready",
+      "needs_setup": "Needs setup",
+      "remote": "Online server",
+      "invalid": "Cannot start"
+    },
+    "on_for": "On for {count}",
+    "found_in": "Found in",
+    "remote_note": "This one is a server on the network, not a program on this computer; it is not passed through in this version.",
+    "invalid_note": "Its registration names no program to start.",
+    "settings": "Settings",
+    "needs_setup_hint": "It needs a value only you have, which the other assistant kept to itself. Give it here; the app keeps secrets sealed by your system’s keychain.",
+    "save": "Save",
+    "clear": "Remove",
+    "saved_secret": "Saved — type to replace",
+    "profiles": "Profiles that may use it",
+    "profiles_hint": "None: off (the default).",
+    "failed": "It did not start: {message}",
+    "tools": "What it offers",
+    "consent_note": "Before an agent uses a program, this computer asks you: allow once, allow for this session, or deny. Every call appears under Recent use.",
+    "resolve": {
+      "title": "DaVinci Resolve",
+      "ready": "Ready",
+      "not_ready": "Not ready yet",
+      "check": "Check",
+      "intro": "Checks that Resolve’s integration is here, Resolve is running, scripting from outside is allowed and it is the Studio edition.",
+      "integration": "Integration",
+      "integration_missing": "not found",
+      "integration_found": "found, not switched on",
+      "integration_shared": "found and switched on",
+      "running": "Running",
+      "unknown": "could not tell",
+      "yes": "yes",
+      "no": "no",
+      "scripting": "External scripting",
+      "scripting_reachable": "answers",
+      "scripting_unreachable": "does not answer",
+      "scripting_unknown": "not checked",
+      "edition": "Edition",
+      "step_install_integration": "Install DaVinci Resolve’s AI integration in Claude Desktop (or another assistant listed above), then press Look again.",
+      "step_share_program": "Switch DaVinci Resolve on above for the profiles that should use it.",
+      "step_start_resolve": "Open DaVinci Resolve and keep it running: its scripting talks to the running app.",
+      "step_enable_scripting": "In Resolve: Preferences → System → General → External scripting using → Local. Then restart Resolve.",
+      "step_needs_studio": "Scripting from outside Resolve needs DaVinci Resolve Studio; the free edition allows it only from inside the app.",
+      "support": "DaVinci Resolve support and downloads"
+    }
   }
 }

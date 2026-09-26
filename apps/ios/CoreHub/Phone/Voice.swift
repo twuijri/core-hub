@@ -86,7 +86,7 @@ final class DeviceSettings {
 }
 
 enum Voice {
-    /// The audio the iPhone asks the hub to speak in (`SpeechRequest.format`, DECISIONS §87):
+    /// The audio the iPhone asks the hub to speak in (`SpeechRequest.format`, DECISIONS §91):
     /// `AVAudioPlayer` plays MP3, not Ogg.
     static let hubFormat = SpeechFormat.mp3
 
@@ -215,7 +215,7 @@ final class Speaker {
                 let file = try? await app.api.call {
                     try await ModelsAPI.modelsSynthesize(
                         xHubProfile: profile,
-                        // MP3: the iPhone cannot play the Ogg some providers send by default (§87).
+                        // MP3: the iPhone cannot play the Ogg some providers send by default (§91).
                         speechRequest: SpeechRequest(text: part, language: language, format: Voice.hubFormat),
                         apiConfiguration: $0
                     )

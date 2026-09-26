@@ -16,7 +16,13 @@
  *   first, the latest 500 at most; each with `id`, `role`, `content`, `timestamp`, and
  *   `display_kind` / `display_content` for compaction summaries.
  *
- * Nothing here writes to Hermes. What was read is kept per Hermes profile and asked for again
+ * - `DELETE /api/sessions/{id}?profile=<p>` — what `hermes sessions delete` does: the session
+ *   row and its messages go, delegate children with it, branch children are kept and orphaned,
+ *   and a session already gone is answered `{"ok": true, "already_absent": true}`. Hermes
+ *   resolves an id it does not know as a unique prefix of one it does, so the hub reads the
+ *   exact row first and deletes only that (contract decision §88).
+ *
+ * The one write is that delete, for an admin (§88). What was read is kept per Hermes profile and asked for again
  * only when Hermes's store changed since (the port's `stamp`, the store file's size and time),
  * and never more often than every few seconds, so a list polled while it is open does not keep
  * Hermes's server awake when nothing happens: with no call for ten minutes it stops (ADR 0015).
@@ -98,6 +104,11 @@ export interface ChannelSource {
    * with an error, `ChannelSourceUnavailable` when there is no server to ask.
    */
   get<T>(path: string): Promise<T>;
+  /**
+   * One `DELETE` to Hermes's server, JSON back; errors as `get`. Only
+   * `ChannelConversations.remove` calls it, for one channel conversation it has just read.
+   */
+  delete<T>(path: string): Promise<T>;
   /**
    * Something that changes whenever Hermes writes that profile's session store, or `null` when
    * it cannot be told (then what was read is kept for `TTL_MS`).
@@ -441,6 +452,46 @@ export class ChannelConversations {
       items,
       has_more: limit > 0 && returned >= limit,
     };
+  }
+
+  /**
+   * Deletes one channel conversation from Hermes, permanently (contract decision §88). The row
+   * is read first, by its exact id: anything that is not a channel conversation of this
+   * profile — the hub's own chats run in Hermes too — is `404`, and so is an id Hermes would
+   * only match as a prefix. What was read of the profile is dropped, so the next list reads
+   * Hermes again.
+   */
+  async remove(scope: ChannelScope, id: string): Promise<void> {
+    const missing = () => notFound({ resource: 'channel_conversation', id });
+    if (!CONVERSATION_ID.test(id)) throw missing();
+    const source = this.source();
+    if (!source) {
+      throw new HubError('service_unavailable', {
+        details: { reason: 'hermes_not_managed', message: null },
+      });
+    }
+    const hermes = source.hermesProfile(scope.workspace);
+    if (!hermes) throw missing();
+    const path = `/api/sessions/${encodeURIComponent(id)}?profile=${encodeURIComponent(hermes)}`;
+    const ask = async <T>(call: () => Promise<T>): Promise<T> => {
+      try {
+        return await call();
+      } catch (error) {
+        if (error instanceof ChannelSourceRefusal && error.status === 404) throw missing();
+        if (error instanceof ChannelSourceRefusal || error instanceof ChannelSourceUnavailable) {
+          throw new HubError('service_unavailable', {
+            message: `Hermes's API is not available: ${error.message}`,
+            details: { reason: 'hermes_api_unavailable', message: error.message },
+          });
+        }
+        throw error;
+      }
+    };
+    const row = await ask(() => source.get<HermesSessionRow | null>(path));
+    if (!row || row.id !== id || !isChannel(row.source)) throw missing();
+    await ask(() => source.delete<unknown>(path));
+    this.lists.delete(hermes);
+    this.latest.delete(latestKey(hermes, row));
   }
 
   // -------------------------------------------------------------- internals

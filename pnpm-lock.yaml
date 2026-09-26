@@ -223,6 +223,12 @@ importers:
       esbuild:
         specifier: ^0.28.2
         version: 0.28.2
+      smol-toml:
+        specifier: ^1.9.0
+        version: 1.9.0
+      socket.io-client:
+        specifier: ^4.8.3
+        version: 4.8.3(supports-color@10.2.2)
       typescript:
         specifier: ^5.9.3
         version: 5.9.3
@@ -4859,6 +4865,10 @@ packages:
   smart-buffer@4.2.0:
     resolution: {integrity: sha512-94hK0Hh8rPqQl2xXc3HsaBoOXKV20MToPkcXvwbISWLEs+64sBq5kFgn2kJDHb1Pry9yrP0dxrCI9RRci7RXKg==}
     engines: {node: '>= 6.0.0', npm: '>= 3.0.0'}
+
+  smol-toml@1.9.0:
+    resolution: {integrity: sha512-hpd+HLON7HdZXqYchMM/+LaTTbdK0AU3NngIJ4KVyWbY9bfQqdL9cD+4yf6dUoU2Ap4VsU0JkQi6FxAI1B2mXQ==}
+    engines: {node: '>= 18'}
 
   socket.io-adapter@2.5.8:
     resolution: {integrity: sha512-6Oy52pbg+kvdCVvjcN+FnY7BvxZ7cIHNScbvztT/It5d0vbwoJoVZmF2gjJmnV0/4WlXRfG15zc45ySk9Ah8bw==}
@@ -9985,6 +9995,8 @@ snapshots:
       semver: 7.8.5
 
   smart-buffer@4.2.0: {}
+
+  smol-toml@1.9.0: {}
 
   socket.io-adapter@2.5.8(supports-color@10.2.2):
     dependencies:

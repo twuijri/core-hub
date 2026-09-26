@@ -1,9 +1,10 @@
 /**
- * A scripted Hermes for channel conversations (contract decision §61): answers the three
+ * A scripted Hermes for channel conversations (contract decisions §61, §88): answers the
  * calls `channel-conversations.ts` makes to Hermes's server the way Hermes does
  * (`hermes_cli/web_routers/sessions.py`, `v2026.9.14`) — `GET /api/sessions` filtered by
  * `sources`, most recent first, capped by `limit`; one session's row, `404 {"detail":
- * "Session not found"}` for an unknown id; its messages, the latest page when `order=latest`.
+ * "Session not found"}` for an unknown id; its messages, the latest page when `order=latest`;
+ * and `DELETE` of one session, `{"ok": true}` (`already_absent` for one already gone).
  *
  * Test scaffolding in the source tree on purpose, like `fake-runner.ts`: the unit tests, the
  * contract test and the e2e hub drive the real routes and the real reader against it. It is
@@ -87,6 +88,20 @@ export function scriptedChannels(
         messages: page,
         pagination: { limit, offset: 0, returned: page.length },
       } as T;
+    },
+    /** `DELETE /api/sessions/{id}`: gone, with its messages; one already gone is fine. */
+    async delete<T>(path: string): Promise<T> {
+      calls.push(`DELETE ${path}`);
+      if (source.down) throw new ChannelSourceUnavailable('connect ECONNREFUSED 127.0.0.1');
+      const url = new URL(path, 'http://hermes.test');
+      const store = profiles[url.searchParams.get('profile') ?? 'default'] ?? { sessions: [] };
+      const id = decodeURIComponent(url.pathname.split('/').filter(Boolean)[2] ?? '');
+      const at = store.sessions.findIndex((each) => each.id === id);
+      if (at < 0) return { ok: true, already_absent: true } as T;
+      store.sessions.splice(at, 1);
+      if (store.messages) delete store.messages[id];
+      writes.set(url.searchParams.get('profile') ?? 'default', (writes.get(id) ?? 0) + 1);
+      return { ok: true } as T;
     },
   };
   return source;
