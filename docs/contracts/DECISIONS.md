@@ -3514,3 +3514,30 @@ repository. Proposed, owner to confirm:
   list endpoint (§94). `.github/workflows/models-catalog-watch.yml` compares the file every Monday
   with CLI Proxy API's public catalogues and keeps one issue (label `models-catalog`) of ids seen
   there and not here, and ids here no source lists any more; it never edits the file or pushes.
+
+## 111. A turn's tool activity: a live window, then one folded row
+
+The owner, with an iPhone screenshot (2026-09-26): every tool the agent used was its own big card
+stacked above the answer (skill_view, vision_analyze, terminal, vision_analyze …) — noisy on the
+web, worse on the phone. He wants it like an activity view: while the agent works only the latest
+few steps, and when the turn ends one compact row that opens when the person wants to read them or
+see what failed; the answer stays the main thing on screen. No contract change: every client reads
+the `ToolCall`s it already has. Proposed, owner to confirm:
+
+- **The live window is 4 calls on the web and 2 on a phone** (iOS, Android). A call still running or
+  waiting for approval is always in view, and so is one that **failed**, until the turn ends — an
+  error never scrolls out of sight while the agent carries on. The rest are one «+k خطوات سابقة» /
+  "+k earlier steps" line that opens them and folds them back. A new step slides in and an old one
+  leaves with a fade; nothing moves under reduced motion on any platform.
+- **When the turn has ended** (the message is no longer streaming and no call runs or waits) every
+  call folds into **one row**: how many steps, how long, how many failed (in the danger colour, only
+  when some did) and the latest tools' names as small chips (three on the web, two on a phone). A
+  click or tap opens the full list with the same cards as before. What is open is per message and
+  never saved.
+- **"How long"** is the wall-clock time from the first call's start to the last call's end when
+  every call carries both; otherwise the calls' durations summed; otherwise nothing is shown.
+  Under a minute it reads «42 ث» / "42s", from a minute «1 د 05 ث» / "1m 05s", never below one
+  second.
+- The rule is one pure function per client — `toolActivity` (web), `ToolActivity` (Android and
+  iOS) — tested the same way on all three. The questions the agent asked (`clarify`) keep showing
+  as they do (web: `AnsweredQuestions`).

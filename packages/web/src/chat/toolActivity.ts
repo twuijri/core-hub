@@ -1,6 +1,6 @@
 /**
  * What a turn's tool calls show, decided once and the same on every client
- * (DECISIONS §TOOL-ACTIVITY; the iOS and Android twins are `ToolActivity` in their apps).
+ * (DECISIONS §111; the iOS and Android twins are `ToolActivity` in their apps).
  *
  * - **While the turn runs**, the last `window` calls are shown (4 on the web, 2 on a phone).
  *   A call that is still running or waits for approval is always shown, and so is one that
@@ -37,8 +37,7 @@ export interface ToolActivity {
   summary: ToolActivitySummary;
 }
 
-const isBusy = (call: ToolCall) =>
-  call.status === 'running' || call.status === 'awaiting_approval';
+const isBusy = (call: ToolCall) => call.status === 'running' || call.status === 'awaiting_approval';
 
 /** A live call that stays on screen whatever the window: running, waiting, or failed. */
 const isPinned = (call: ToolCall) => isBusy(call) || call.status === 'failed';
