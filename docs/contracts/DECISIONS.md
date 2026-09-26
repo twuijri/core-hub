@@ -3396,3 +3396,45 @@ Rejected: subscribing a browser on sign-in without a subscription it already hol
 person's choice on the Notifications page); the Secure Enclave for the iOS key (not in the simulator
 the CI tests on, and the relay's risk model — ADR 0024 §6 — does not need a key that cannot leave
 the phone).
+
+## 109. The desktop apps update themselves from the GitHub releases; the Store and the .deb do not
+
+Proposed — owner to confirm (2026-09-26; owner: «خل الاندرويد والماك والويندوز واللينكس يكتشفون
+التحديث اذا نزل تحديث»; docs/changes/2026-09-26-twuijri-desktop-updates.md). No path or schema
+changes: the desktop app and the web page it shows only. Supersedes ADR 0023 §6 for the builds
+below; §108 is the Android side.
+
+- **How each copy updates** (`updateMode` in `apps/desktop/src/shared/updates.ts`): the Windows
+  `.exe` (NSIS), the macOS app and the Linux AppImage **install**; the Linux `.deb`, a development
+  run and a packaged app run from its folder only **notify**; the Microsoft Store build (MSIX,
+  `process.windowsStore`) is **off** — the Store updates it and the app never asks GitHub. The
+  AppImage is told by Electron's `APPIMAGE`, the `.deb` by electron-builder's
+  `resources/package-type`.
+- **Install** is electron-updater (MIT, bundled into the main process) with the GitHub provider on
+  `twuijri/core-hub`, stable releases only (`allowPrerelease: false`, no downgrade). It reads the
+  latest release's `latest.yml` / `latest-mac.yml` / `latest-linux.yml` from github.com without a
+  token, downloads the new version in the background, and checks its SHA-512. It **never restarts
+  on its own**: the page floats *Restart to update* / *Later* (a toast-like card, `UpdateNotice`),
+  the menus and tray offer *Restart to update to X*, and a downloaded version is installed when the
+  app quits. The OS notification says it once per version, only when no app window is in front.
+  macOS updates from a zip of the same signed, notarised app (Squirrel.Mac takes only a zip and
+  checks the signature); the unsigned Windows `.exe` is checked by its SHA-512 only. When the feed
+  cannot be read, the releases API may still say a newer version is out (notify fallback).
+- **Notify** asks GitHub's releases API (as before) and says *Core Hub X is available* with a
+  button to the download page, https://twuijri.github.io/core-hub/. Nothing is downloaded.
+- **When**: about ten seconds after start, then every six hours while the app runs, and whenever
+  the person asks — *Check for updates…* in the app menu (macOS), Help (Windows, Linux) and the
+  tray, or *Check now* in This device. The switch in This device (`desktop.json`
+  `updates.auto`, on by default) turns the automatic looks off.
+- **The release carries** `latest.yml`, `latest-mac.yml`, `latest-linux.yml`, the blockmaps the
+  build made, and `Core-Hub-X.Y.Z-arm64-mac.zip` beside the dmg. The files the feeds name are the
+  release files under the very same names; `release-assets.mjs` refuses to publish otherwise, and
+  the packaging jobs check each feed right after it is written. A tag whose code predates this has
+  no feeds (`--without=updates`).
+- **Copies of 1.1.2 and older have no updater**: their owners install 1.1.3 by hand once.
+
+Rejected: restarting to install without asking (a restart is the person's choice);
+self-installing the `.deb` (electron-updater would run `pkexec dpkg`, a root password prompt for
+an update the person did not ask for); a check in the Store build (the Store delivers its updates; a
+second path would fight it); our own feed or server (GitHub already serves the release files,
+without a token); checking once a day as before (a fix could wait a day to be seen).

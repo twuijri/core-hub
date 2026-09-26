@@ -3,7 +3,7 @@
 // files as workflow artifacts, and publish-release.yml attaches them to a tag's GitHub release
 // (docs/RELEASING.md).
 //
-// Updates (DECISIONS §108): `publish` below names the GitHub releases the apps update from, so
+// Updates (DECISIONS §109): `publish` below names the GitHub releases the apps update from, so
 // packaging writes the update feeds — `latest.yml` (NSIS), `latest-mac.yml` (the zip, and the
 // dmg), `latest-linux.yml` (the AppImage, and the .deb) — and `resources/app-update.yml`. The
 // feeds name the files by these artifactName patterns; release-assets.mjs publishes them under
@@ -72,7 +72,7 @@ module.exports = {
     // Apple silicon only: argon2 (the hub's password hashing) ships no darwin-x64 binary, so an
     // Intel build could not run local mode. Proposed — owner to confirm (ADR 0023).
     // The dmg is the download; the zip of the same signed app is what an installed copy updates
-    // from (Squirrel.Mac takes only a zip; DECISIONS §108).
+    // from (Squirrel.Mac takes only a zip; DECISIONS §109).
     target: [
       { target: 'dmg', arch: ['arm64'] },
       { target: 'zip', arch: ['arm64'] },

@@ -11,7 +11,7 @@ export interface MenuActions {
   changeConnection(): void;
   openWebsite(): void;
   quit(): void;
-  /** Looks for a new version now and shows the answer (DECISIONS §108). */
+  /** Looks for a new version now and shows the answer (DECISIONS §109). */
   checkForUpdates(): void;
   /** Installs the downloaded version and starts it again. */
   restartToUpdate(): void;

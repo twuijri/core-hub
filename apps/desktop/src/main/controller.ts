@@ -130,7 +130,7 @@ export class DesktopController {
   private stopUpdateSchedule: (() => void) | null = null;
   /** `store` in the Microsoft Store build: the Store updates it, the app never checks GitHub. */
   private readonly channel: UpdateChannel = appChannel(app.getAppPath());
-  /** `install`, `notify` or `off`, from how this copy was installed (DECISIONS §108). */
+  /** `install`, `notify` or `off`, from how this copy was installed (DECISIONS §109). */
   private readonly updateMode: UpdateMode = updateMode(
     appPackaging({
       channel: this.channel,
@@ -217,7 +217,7 @@ export class DesktopController {
       // A file another assistant wrote badly never stops the app; the page can rescan.
     }
     if (this.config.get().helper.enabled) await this.syncHelper();
-    // New versions (DECISIONS §108): about ten seconds after start, then every six hours. Tests
+    // New versions (DECISIONS §109): about ten seconds after start, then every six hours. Tests
     // turn the schedule off: they must not ask GitHub anything. A Store build never looks.
     if (this.updateMode === 'install')
       this.installer = new AutoInstaller(process.platform, (pending) =>

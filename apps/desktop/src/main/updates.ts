@@ -1,5 +1,5 @@
 /**
- * The `notify` update check (DECISIONS §108, for the .deb and development runs; also the
+ * The `notify` update check (DECISIONS §109, for the .deb and development runs; also the
  * fallback when the `install` updater cannot read its feed): the repository's GitHub releases,
  * read without a token. The result is a notice and a link — nothing is downloaded or installed.
  * Which way this copy updates: `appPackaging` here, `updateMode` in shared/updates.ts.
@@ -96,7 +96,7 @@ export function appPackaging(input: {
   platform?: NodeJS.Platform;
   env?: NodeJS.ProcessEnv;
 }): Packaging {
-  let packageType: string | null = null;
+  let packageType: string | null;
   try {
     packageType = readFileSync(path.join(input.resourcesPath, 'package-type'), 'utf8').trim();
   } catch {

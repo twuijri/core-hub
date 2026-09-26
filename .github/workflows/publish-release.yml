@@ -9,7 +9,7 @@ name: Publish release
 #   - the signed and notarised macOS dmg, and the zip installed copies update from —
 #     desktop-signed.yml;
 #   - the update feeds latest.yml, latest-mac.yml, latest-linux.yml and the blockmaps the apps
-#     update from (DECISIONS §108); `collect` refuses a feed that names a file the release does
+#     update from (DECISIONS §109); `collect` refuses a feed that names a file the release does
 #     not carry under that very name;
 #   - the signed Android APK — android-signed.yml.
 # One workflow with job dependencies rather than workflow_run: the release job starts only when

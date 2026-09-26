@@ -69,7 +69,7 @@ export interface DesktopBridge {
   programs: DesktopProgramsBridge;
   /** This computer as a device of the hub it is connected to, for a hub on a server (ADR 0025). */
   device: DesktopDeviceBridge;
-  /** New versions of the app (DECISIONS §108): download and restart, or a notice and a link. */
+  /** New versions of the app (DECISIONS §109): download and restart, or a notice and a link. */
   updates: DesktopUpdatesBridge;
   /**
    * The microphone as the OS sees it, for dictation (B11). Absent in an app older than it:
@@ -113,7 +113,7 @@ export interface DesktopUpdatesState {
    */
   channel?: 'github' | 'store';
   /**
-   * What the app does about a new version (DECISIONS §108): `install` downloads it in the
+   * What the app does about a new version (DECISIONS §109): `install` downloads it in the
    * background and asks to restart (the Windows .exe, macOS, the Linux AppImage); `notify` says it
    * is out and links `downloadPage` (the Linux .deb); `off` the Store build. Absent (an app before
    * 1.1.3): the old notice with a link to the installer.

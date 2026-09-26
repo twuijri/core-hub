@@ -13,9 +13,21 @@ xvfb-run -a pnpm --filter @corehub/desktop test:smoke   # Electron against the e
 pnpm --filter @corehub/desktop package              # this platform's installers → release/
 ```
 
-Installers (ADR 0023): AppImage + deb on Linux, dmg on macOS, NSIS and the Microsoft Store
-MSIX on Windows (`COREHUB_CHANNEL=store pnpm --filter @corehub/desktop package --win`; that build
-never checks GitHub for updates), unsigned on pull requests. A `v*` tag's GitHub release gets
+Installers (ADR 0023): AppImage + deb on Linux, dmg (+ the zip macOS updates from) on macOS, NSIS
+and the Microsoft Store MSIX on Windows (`COREHUB_CHANNEL=store pnpm --filter @corehub/desktop
+package --win`; that build never checks GitHub for updates), unsigned on pull requests. Packaging
+also writes the update feeds (`latest.yml`, `latest-mac.yml`, `latest-linux.yml`) that
+`release-assets.mjs` puts on the release.
+
+Updates (DECISIONS §109, `src/shared/updates.ts` decides): the Windows `.exe`, the macOS app and the
+AppImage use electron-updater (`src/main/auto-update.ts`) — about ten seconds after start and every
+six hours they read the latest release's feed, download a newer version in the background, and
+the page shows *Restart to update* / *Later* (`packages/web/src/desktop/UpdateNotice.tsx`); nothing
+restarts on its own, and a downloaded version is installed on quit. The `.deb` (and a development
+run) only asks GitHub's releases API and links the download page (`src/main/updates.ts`). The Store
+build never looks. *Check for updates…* sits in the app menu (macOS), Help (Windows, Linux) and the
+tray; the switch is in Settings → This device (`desktop.json`, `updates.auto`). A real update can
+only be tried between two published releases that carry the feeds (1.1.3 → the next). A `v*` tag's GitHub release gets
 them from `.github/workflows/publish-release.yml`; names and notes: `scripts/release-assets.mjs`. `COREHUB_VERSION` stamps the version; without it the app carries the root
 `package.json` version, like every Core Hub deliverable (`docs/RELEASING.md`). CI builds all three in
 `.github/workflows/desktop.yml` as artifacts; nothing is published. The macOS dmg signed with

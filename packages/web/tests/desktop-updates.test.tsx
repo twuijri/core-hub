@@ -1,4 +1,4 @@
-// The desktop app's new versions in the page (DECISIONS §108): which notice floats over the page
+// The desktop app's new versions in the page (DECISIONS §109): which notice floats over the page
 // for each state, "Restart to update" and "Later", and the Updates part of This device in the
 // `install` and `notify` modes.
 import { act, cleanup, render, screen } from '@testing-library/react';
@@ -87,7 +87,9 @@ describe('which notice floats over the page', () => {
     expect(
       updateNoticeOf(base({ channel: 'store', mode: 'off', last: available('1.2.0') })),
     ).toBeNull();
-    expect(updateNoticeOf(base({ mode: undefined, last: available('1.2.0') }))).toBeNull();
+    // An app from before the update modes keeps its notice in This device only.
+    const { mode: _mode, ...older } = base({ last: available('1.2.0') });
+    expect(updateNoticeOf(older)).toBeNull();
     expect(updateNoticeOf(null)).toBeNull();
   });
 });

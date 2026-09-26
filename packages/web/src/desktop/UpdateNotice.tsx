@@ -1,6 +1,6 @@
 /**
  * The desktop app's "a new version is here" card, floating at the page's lower end corner
- * (DECISIONS §108). It looks like a toast (the same surface, border and shadow) but stays until
+ * (DECISIONS §109). It looks like a toast (the same surface, border and shadow) but stays until
  * the person answers, because it asks for something: "Restart to update" or "Later". "Later"
  * hides it for that version until the app starts again; the downloaded version is installed
  * when the app quits anyway. Nothing renders in a browser or the Store build.

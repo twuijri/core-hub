@@ -60,7 +60,7 @@ describe('versions', () => {
   });
 });
 
-describe('what each copy does about a new version (DECISIONS §108)', () => {
+describe('what each copy does about a new version (DECISIONS §109)', () => {
   const base = { channel: 'github' as const, packaged: true };
 
   it.each([

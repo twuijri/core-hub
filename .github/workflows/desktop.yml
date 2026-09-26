@@ -4,7 +4,7 @@ name: Desktop installers
 # artifacts, with their sizes in the job summary: AppImage + deb, dmg (+ the zip macOS updates
 # from), and on Windows both the NSIS .exe (GitHub releases, updates itself) and the Microsoft
 # Store MSIX (the Store signs and updates it; the app never looks), with the update feeds
-# (latest*.yml) and blockmaps the apps update from (DECISIONS §108). Unsigned: the signed and notarised macOS build is
+# (latest*.yml) and blockmaps the apps update from (DECISIONS §109). Unsigned: the signed and notarised macOS build is
 # desktop-signed.yml, never run on a pull request (docs/RELEASING.md). It publishes nothing
 # itself; publish-release.yml calls it on a release tag and attaches the files to the release.
 on:
@@ -66,7 +66,7 @@ jobs:
       - run: pnpm build
       - name: Package
         run: pnpm --filter @corehub/desktop package ${{ matrix.target }}
-      # The apps update from these feeds (DECISIONS §108): every file a feed names must be a
+      # The apps update from these feeds (DECISIONS §109): every file a feed names must be a
       # release file, under that very name. A release of an older tag builds none.
       - name: Check the update feed
         if: hashFiles('apps/desktop/src/main/auto-update.ts') != ''

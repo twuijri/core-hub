@@ -1,5 +1,5 @@
 /**
- * The desktop app's new versions, as the page sees them (DECISIONS §108): the state the app
+ * The desktop app's new versions, as the page sees them (DECISIONS §109): the state the app
  * hands over (and every change it makes on its own), and which notice — if any — floats over
  * the page. In a browser there is no bridge and nothing here does anything.
  */

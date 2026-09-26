@@ -37,6 +37,12 @@ silent auto-update without his decision.
    architecture; pre-releases are offered only to a pre-release app (the `test` channel). The
    answer is a notice — in This device, and once per version from the OS — with a link to the
    installer and the release notes. **Nothing is downloaded or installed by the app.**
+   *Update 2026-09-26 (owner: «خل … الماك والويندوز واللينكس يكتشفون التحديث»):* superseded for the
+   Windows `.exe`, macOS and the Linux AppImage by DECISIONS §109 (proposed — owner to confirm):
+   electron-updater downloads a newer release in the background and asks the person to restart;
+   it never restarts on its own. The `.deb` keeps this notice-and-link check (now pointing at the
+   download page), and the Store build never looks. The check runs about ten seconds after start
+   and every six hours.
 
 ## Measured (2026-09-25, version 0.0.0)
 | Installer | Size | Where |

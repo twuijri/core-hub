@@ -125,7 +125,7 @@ jobs:
           spctl --assess --type open --context context:primary-signature --verbose=2 "$dmg" || true
           echo "Signed dmg: $(du -h "$dmg" | cut -f1)" | tee -a "$GITHUB_STEP_SUMMARY"
       # An installed copy updates from the zip of the same signed app, through latest-mac.yml
-      # (DECISIONS §108); the feed must name the zip exactly as the release carries it.
+      # (DECISIONS §109); the feed must name the zip exactly as the release carries it.
       - name: Check the update zip and feed
         if: hashFiles('apps/desktop/src/main/auto-update.ts') != ''
         run: |

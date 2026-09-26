@@ -1,5 +1,5 @@
 /**
- * Updates, inside This device (DECISIONS §108): the app's version, whether it looks for a new
+ * Updates, inside This device (DECISIONS §109): the app's version, whether it looks for a new
  * one on its own, and what it found. How it updates depends on how it was installed (`mode`):
  * - `install` (the Windows .exe, macOS, the Linux AppImage): a new version downloads in the
  *   background, and "Restart to update" installs it; otherwise it is installed on quit;

@@ -1,5 +1,5 @@
 /**
- * The `install` way of updating (DECISIONS §108): electron-updater against the repository's
+ * The `install` way of updating (DECISIONS §109): electron-updater against the repository's
  * GitHub releases. It reads the release's `latest.yml` (Windows .exe), `latest-mac.yml` (the
  * signed zip beside the dmg) or `latest-linux.yml` (the AppImage) — from github.com, without a
  * token — downloads a newer version in the background, checks its SHA-512, and says so. The

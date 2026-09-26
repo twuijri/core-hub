@@ -1,7 +1,7 @@
 /**
  * "Is there a newer Core Hub for this computer?", and what the app does about it.
  *
- * Two ways, by how this copy was installed (`updateMode`, DECISIONS §108):
+ * Two ways, by how this copy was installed (`updateMode`, DECISIONS §109):
  * - `install` — the Windows .exe (NSIS), the macOS dmg and the Linux AppImage: electron-updater
  *   reads the release's `latest*.yml`, downloads the new version in the background and asks the
  *   person to restart (src/main/auto-update.ts). It installs on quit too, never by restarting on

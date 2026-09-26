@@ -20,7 +20,7 @@
 //
 // The desktop app's update check (src/shared/updates.ts, assetFor) picks the installer for its
 // platform from these names; tests/unit/release-assets.test.ts keeps the two in step. The
-// updater (src/main/auto-update.ts, DECISIONS §108) reads `latest.yml`, `latest-mac.yml` and
+// updater (src/main/auto-update.ts, DECISIONS §109) reads `latest.yml`, `latest-mac.yml` and
 // `latest-linux.yml`: every file they name must be on the release under that very name, which
 // `feedProblems` checks before anything is published.
 import {
@@ -99,7 +99,7 @@ export function releaseAssets(version) {
 }
 
 /**
- * The files the apps' updater reads (DECISIONS §108), beside the downloads above. They are not
+ * The files the apps' updater reads (DECISIONS §109), beside the downloads above. They are not
  * downloads — the download page never offers them. electron-builder writes each feed next to
  * the installers it names; the blockmaps let a Windows or macOS update download only what
  * changed, and are left out without harm when a build made none (the update then downloads the

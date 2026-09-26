@@ -257,7 +257,7 @@ function feedText(version: string, files: string[]): string {
   ].join('\n');
 }
 
-describe('the update feeds (DECISIONS §108)', () => {
+describe('the update feeds (DECISIONS §109)', () => {
   const version = '1.2.0';
   const published = [...releaseAssets(version), ...updateAssets(version)].map((a) => a.name);
   /** What electron-builder names each file it lists, from this repository's own config. */
