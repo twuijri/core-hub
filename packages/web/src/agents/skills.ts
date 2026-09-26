@@ -455,6 +455,11 @@ export interface ChannelLink {
   account_username: string | null;
   /** WhatsApp: how the linked number is used; null elsewhere, absent from an older hub. */
   mode?: WhatsAppMode | null;
+  /**
+   * WhatsApp: the title of the header over the agent's replies in self-chat; null while nothing is
+   * written (Hermes's own «☤ Hermes Agent» shows) and elsewhere; absent from an older hub.
+   */
+  reply_title?: string | null;
 }
 
 /**
@@ -885,6 +890,24 @@ export function useSetChannelMode(agentId: string | undefined) {
         await client.request('put', '/agents/{agent_id}/channels/{platform}/mode', {
           params: { agent_id: agentId ?? '', platform: input.platform },
           body: { mode: input.mode } as never,
+        })
+      ).data as unknown as Channel,
+    onSuccess: invalidate,
+  });
+}
+
+/** What goes over the agent's WhatsApp replies in self-chat: its name, or a typed title. */
+export type ReplyHeaderWrite = { use: 'agent_name' } | { use: 'custom'; title: string };
+
+export function useSetChannelReplyHeader(agentId: string | undefined) {
+  const { client } = useAuth();
+  const invalidate = useChannelInvalidation(agentId);
+  return useMutation({
+    mutationFn: async (input: { platform: string; header: ReplyHeaderWrite }) =>
+      (
+        await client.request('put', '/agents/{agent_id}/channels/{platform}/reply-header', {
+          params: { agent_id: agentId ?? '', platform: input.platform },
+          body: input.header as never,
         })
       ).data as unknown as Channel,
     onSuccess: invalidate,
