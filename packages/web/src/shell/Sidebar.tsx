@@ -6,7 +6,7 @@
 // so the phone drawer and any later rail are assembled from the same pieces rather than
 // drawn again (docs/clients/DESIGN.md §UI policy).
 import { derived } from '@corehub/contracts';
-import { useEffect, type ReactElement } from 'react';
+import { useEffect } from 'react';
 import { Link, NavLink, useLocation, useNavigate } from 'react-router';
 import { useAuth } from '../auth/context.js';
 import { useTheme, themeIcon, nextTheme } from '../design/theme.js';
@@ -25,15 +25,12 @@ import { SessionList } from '../sessions/SessionList.js';
 import { SettingsNav, settingsIdFromPath } from '../settings/SettingsNav.js';
 import { AgentBackRow, AgentNav } from '../agents/AgentNav.js';
 import {
-  IconAgents,
+  destinationIcons,
   IconArrowStart,
   IconGlobe,
-  IconPlus,
-  IconSchedules,
   IconSearch,
   IconSettings,
   IconSignOut,
-  IconTasks,
 } from '../ui/icons.js';
 import {
   Badge,
@@ -50,14 +47,6 @@ import {
 } from '../ui/index.js';
 import { useNoticeStream } from '../notify/queries.js';
 import { useDesktopEffects } from '../desktop/effects.js';
-
-const RAIL_ICONS: Record<string, (p: { size?: number }) => ReactElement> = {
-  new_chat: IconPlus,
-  search: IconSearch,
-  agent_manager: IconAgents,
-  tasks: IconTasks,
-  schedules: IconSchedules,
-};
 
 const SEGMENT_STORAGE = `${derived.storagePrefix}segment`;
 /** The last page outside Settings, for the sidebar's way back (per tab, not per device). */
@@ -170,7 +159,7 @@ export function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
       ) : (
         <SidebarGroup testId="rail">
           {rail.map((d, index) => {
-            const Icon = RAIL_ICONS[d.id] ?? IconSearch;
+            const Icon = destinationIcons[d.id] ?? IconSearch;
             return (
               <SidebarRow
                 key={d.id}
