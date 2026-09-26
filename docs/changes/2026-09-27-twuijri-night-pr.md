@@ -21,6 +21,7 @@
 - المهام بالترتيب: البدء التلقائي ينتظر الاعتماديات، مراقب المهام المتوقفة، حمولة «نُقلت المهمة»، الأرشيف عند الطلب (§93)، §26 المكرر صار §92، إصلاح اختبار الرموز المتذبذب، قوالب GitHub ثنائية اللغة (B7 + B22) — `feat/tasks-in-order` — `docs/changes/2026-09-27-twuijri-tasks-in-order.md`
 - مزوّدو الصوت: Groq (أصوات Orpheus الإنجليزية والسعودية)، ElevenLabs Scribe، Deepgram، Azure Speech؛ الأصوات من المزوّد أو وثائقه، كل اللغات، المعاينة قبل الحفظ، تقسيم النص الطويل، واختيار الصوت في هرمز (§94) — `feat/voice-providers` — `docs/changes/2026-09-27-twuijri-voice-providers.md`
 - صوت سطح المكتب (الميكروفون، الإملاء والقراءة عبر المركز، قسم الصوت، نقل `corehub.app` القديم إلى السلة) والوصول من خارج البيت لمركز الحاسوب عبر نفق Cloudflare أو Tailscale الخاص بالشخص (§95) — `feat/desktop-voice-relay` — `docs/changes/2026-09-27-twuijri-desktop-voice-relay.md`
+- App Store: تجهيز إصدار iOS للمراجعة عبر واجهة App Store Connect (ربط البناء، التصنيف العمري، مجاني ومتاح عدا الصين القارية — مقترح، حقوق المحتوى، نشر يدوي) وقائمة ما ينقص، والإرسال بمفتاح `submit` فقط عند الاكتمال (`ios-submit.yml`) — `ci/app-store-submit` — `docs/changes/2026-09-27-twuijri-app-store-submit.md`
 
 ## الملفات والتأثير
 هذا الملف فقط (فهرس). ملفات كل مهمة في سجلها.
