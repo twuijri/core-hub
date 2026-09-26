@@ -175,7 +175,8 @@ private fun AgentMessage(message: ChatMessage, profile: String) {
         CompositionLocalProvider(androidx.compose.material3.LocalContentColor provides t.agentBubbleText) {
             if (!message.streaming && message.reasoning.isNotBlank()) ReasoningFold(message.reasoning, message.reasoningMs)
             ToolActivityView(message.toolCalls, live = message.streaming)
-            if (message.text.isNotBlank()) MarkdownView(message.text)
+            // A link in the reply that names one of its files opens it (FileLinkHandler).
+            if (message.text.isNotBlank()) FileLinkHandler(message.attachments, profile) { MarkdownView(message.text) }
             MessageFiles(message.attachments, profile)
             if (!message.streaming && message.text.isNotBlank()) {
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {

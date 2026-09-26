@@ -566,7 +566,13 @@
     "photo_quality": "Photos",
     "compressed": "Compressed",
     "original": "Original quality",
-    "open": "Open {name}"
+    "open": "Open {name}",
+    "fetching": "Fetching…",
+    "progress": "{percent}% · {done} of {total}",
+    "cancel": "Cancel the download",
+    "gone": "This file is no longer on the hub.",
+    "open_too_large": "This file is too large to open here.",
+    "link_failed": "This link could not be opened."
   },
   "pending": {
     "title": "Waiting for you",

@@ -152,7 +152,9 @@ fun ChatScreen(
                         val agent = if (turn.fromPerson) null else hub.core.android.ui.components.AgentIdentity.of(
                             turn.messages.first().authorId, turn.authorName, agents, agentFallback,
                         )
-                        TurnView(turn, youLabel, profile, agent = agent)
+                        androidx.compose.runtime.CompositionLocalProvider(hub.core.android.ui.components.LocalChatSession provides sessionId) {
+                            TurnView(turn, youLabel, profile, agent = agent)
+                        }
                     }
                 }
             }
