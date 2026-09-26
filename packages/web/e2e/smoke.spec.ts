@@ -146,7 +146,8 @@ test.describe('web smoke journeys', () => {
     // Inside Settings the sidebar *is* the settings list (owner, 2026-09-22): the
     // management pages are rows in it, and the conversation list has stepped aside.
     // Models · Device connections · Knowledge: Agents left for the rail (owner, 2026-09-24).
-    await expect(page.getByTestId('settings-management').getByRole('link')).toHaveCount(3);
+    // Four since «المراكز المرتبطة» / Linked hubs joined them (ADR 0026).
+    await expect(page.getByTestId('settings-management').getByRole('link')).toHaveCount(4);
     await expect(page.getByTestId('session-row')).toHaveCount(0);
     // And the rail too (owner, 2026-09-23): one row leads back, to the conversation that
     // was open — not a New chat pressed to get out.
