@@ -1,5 +1,5 @@
 # عائلة تصميم واحدة: الويب وسطح المكتب والآيفون والأندرويد
-المسؤول: twuijri · الفرع: feat/design-family · الحالة: review
+المسؤول: twuijri · الفرع: feat/design-family · الحالة: done
 
 ## المشكلة والهدف
 توجيه المالك (٢٠٢٦-٠٩-٢٧):
@@ -113,7 +113,23 @@ $ playwright test --workers=1 e2e/zz-design.spec.ts e2e/zzzzzz-rooms.spec.ts e2e
 قاعدة «الجديد يفشل على القديم»: الاختبار الثاني في المواصفة الجديدة شُغّل على الفرع قبل التغيير وفشل
 (`getByTestId('settings-nav').locator('a').first().locator('svg')` — `Expected: 1, Received: 0`).
 
-الآيفون على GitHub (تشغيل يدوي على الفرع): `iOS` (بناء واختبارات المحاكي) — نجح، التشغيل 36213101852.
+الآيفون على GitHub (تشغيل يدوي على الفرع): `iOS` (بناء واختبارات المحاكي، ومنها `FamilyTests`) — نجح في
+36213101852 و36214437672؛ `iOS store screenshots` بالفاتح والداكن — نجح في 36213103086 و36214438878 (منه صور «بعد»).
+
+CI على #165 عند `bc4b4f14` (رأس `night/2026-09-27` بعد آخر دمج لي):
+
+```
+CI       36216787513  success  — Lint/typecheck/contracts/client tests/build, Web smoke journeys (Playwright),
+                                 Desktop app smoke (Electron under Xvfb), server shards 1–3, migrations, Docker
+iOS      36216787539  success  — Build and test on the iOS simulator
+Android  36216787517  success
+```
+
+ما صلّحته في الطريق: اختبار الويب الجديد `agent-identity` كان فيه مسار هب مكتوب باليد فأوقف `check-clients`
+(أزلته)؛ ووجه الوكيل في قائمة المحادثات أخذ معرّف الاختبار `session-agent` نفسه الذي يحمله زر الوكيل في رأس
+المحادثة، فأسقط رحلتي الدخان ١ و٨ (صار `session-row-agent`، والرحلتان تنجحان محليًا وفي CI). وخارج نطاقي، لإبقاء
+#165 أخضر: رحلة الدخان ١ تعدّ الآن أربعة صفوف إدارة (أضيفت «المراكز المرتبطة»)، و`nav.linked_hubs` في لغتي
+الآيفون (كان `L10nTests` يفشل).
 
 صور قبل/بعد (خارج المستودع): مجلد `design-family/` في مساحة عمل الجلسة — `ios-before/`، `ios-after/`،
 `web-before/`، `web-after/`.
@@ -126,4 +142,5 @@ $ playwright test --workers=1 e2e/zz-design.spec.ts e2e/zzzzzz-rooms.spec.ts e2e
   `android` تلقائيًا.
 
 ## التسليم والخطوة التالية
-دُمج في `night/2026-09-27` (#165). التالي: مراقبة CI على #165 (ويب e2e، محاكي iOS، دخان سطح المكتب).
+دُمج في `night/2026-09-27` (#165) على مراحل، وCI أخضر عند `bc4b4f14`. التالي للمالك: مراجعة القرارات المقترحة
+أعلاه؛ ولوكيل الأندرويد: جدول الأيقونات وتكييفات الجوال في `docs/design/family.md`.
