@@ -105,11 +105,35 @@ struct TaskRow: View {
     }
 }
 
+enum SchedulesHalf: Hashable { case jobs, workflows }
+
 struct SchedulesScreen: View {
     @Environment(AppModel.self) private var app
     @Environment(\.l10n) private var l10n
+    @State private var half: SchedulesHalf = .jobs
 
     var body: some View {
+        // Schedules and workflows share the page, as on the web: one segmented switch above them.
+        VStack(spacing: 0) {
+            Picker(l10n("nav.schedules"), selection: $half) {
+                Text(l10n("schedules.tab_jobs")).tag(SchedulesHalf.jobs)
+                Text(l10n("schedules.tab_workflows")).tag(SchedulesHalf.workflows)
+            }
+            .pickerStyle(.segmented)
+            .padding(.horizontal, Space.s4)
+            .padding(.vertical, Space.s2)
+            .accessibilityIdentifier("schedules.half")
+            switch half {
+            case .jobs: jobs
+            case .workflows: WorkflowsList()
+            }
+        }
+        .navigationTitle(l10n("nav.schedules"))
+        .navigationBarTitleDisplayMode(.inline)
+        .accessibilityIdentifier("screen.schedules")
+    }
+
+    private var jobs: some View {
         AsyncContent(key: "schedules") {
             try await app.api.call { try await SchedulesAPI.schedulesList(profiles: .all, limit: 200, apiConfiguration: $0) }.items
         } content: { schedules, reload in
@@ -121,9 +145,6 @@ struct SchedulesScreen: View {
             }
             .refreshable { reload() }
         }
-        .navigationTitle(l10n("nav.schedules"))
-        .navigationBarTitleDisplayMode(.inline)
-        .accessibilityIdentifier("screen.schedules")
     }
 }
 
