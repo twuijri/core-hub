@@ -14,10 +14,12 @@ import { installedAgents } from '../chat/AgentChips.js';
 import { useAgents } from '../hub/queries.js';
 import { useI18n } from '../i18n/context.js';
 import { Button, Dialog, Field, Notice, Select, Textarea, useToast } from '../ui/index.js';
+import { listOf } from './board.js';
 import { useAssignTask, type Task } from './queries.js';
 
 export function AssignDialog({ task, onClose }: { task: Task | null; onClose(): void }) {
-  const { t } = useI18n();
+  const { t, language } = useI18n();
+  const waitingOn = task?.waiting_on ?? [];
   const toast = useToast();
   const agents = useAgents();
   const assign = useAssignTask();
@@ -122,6 +124,18 @@ export function AssignDialog({ task, onClose }: { task: Task | null; onClose(): 
             />
           )}
         </Field>
+        {/* Starting by hand is not held back by what the task depends on — the person is
+            told first, in the words of what is not done (DECISIONS §88). */}
+        {waitingOn.length > 0 && (
+          <Notice tone="warning" testId="task-assign-waiting">
+            {t('tasks.assign.waiting', {
+              titles: listOf(
+                waitingOn.map((one) => one.title),
+                language,
+              ),
+            })}
+          </Notice>
+        )}
         {assign.isError && <Notice tone="danger">{describeError(assign.error, t)}</Notice>}
       </div>
     </Dialog>

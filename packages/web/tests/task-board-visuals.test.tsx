@@ -22,6 +22,8 @@ import { ThemeProvider } from '../src/design/theme.js';
 import { I18nProvider } from '../src/i18n/context.js';
 import { RealtimeProvider } from '../src/realtime/context.js';
 import { TASK_STATUSES, type TaskStatus } from '../src/tasks/board.js';
+import { AssignDialog } from '../src/tasks/AssignDialog.js';
+import { TaskDialog } from '../src/tasks/TaskDialog.js';
 import { TaskCard, TasksScreen } from '../src/tasks/TasksScreen.js';
 import type { Task } from '../src/tasks/queries.js';
 
@@ -78,14 +80,14 @@ function hub(board: Task[], archived: Task[] = []) {
         headers: { 'Content-Type': 'application/json' },
       }),
     );
+  // As the hub answers (DECISIONS §88): without `include_archived` the archive is counted,
+  // not sent.
   const columns = (withArchive: boolean) =>
     TASK_STATUSES.map((status) => {
-      const tasks =
-        status === 'archived'
-          ? withArchive
-            ? archived
-            : []
-          : board.filter((one) => one.status === status);
+      if (status === 'archived') {
+        return { status, count: archived.length, tasks: withArchive ? archived : [] };
+      }
+      const tasks = board.filter((one) => one.status === status);
       return { status, count: tasks.length, tasks };
     });
   const fetchImpl: typeof fetch = (input, init) => {
@@ -98,7 +100,7 @@ function hub(board: Task[], archived: Task[] = []) {
       return json({
         project_id: null,
         columns: all,
-        counts: { total: all.reduce((sum, c) => sum + c.count, 0) },
+        counts: { total: all.reduce((sum, c) => sum + c.tasks.length, 0) },
       });
     }
     if (url.includes('/move')) return json(board[0]);
@@ -249,11 +251,12 @@ describe('the board: the Waiting strip and the archive behind Done', () => {
     expect(toggle).toHaveTextContent('Show archived (2)');
     expect(toggle).toHaveAttribute('aria-expanded', 'false');
     expect(screen.queryByTestId('task-archive')).toBeNull();
-    // The archive is its own read, with `include_archived`; the board itself is not.
-    expect(calls.some((c) => c.url.includes('include_archived=true'))).toBe(true);
+    // The link's number is the board's own count: the archive is not read until it is opened.
+    expect(calls.some((c) => c.url.includes('include_archived=true'))).toBe(false);
 
     await user.click(toggle);
-    const archive = screen.getByTestId('task-archive');
+    const archive = await screen.findByTestId('task-archive');
+    expect(calls.filter((c) => c.url.includes('include_archived=true'))).toHaveLength(1);
     expect(within(archive).getAllByTestId('task-card-archived')).toHaveLength(2);
     expect(archive).toHaveTextContent('Old one');
     // Read-only: nothing to drag, no menu, no quick action.
@@ -296,5 +299,65 @@ describe('the board: the Waiting strip and the archive behind Done', () => {
     await user.click(within(dialog).getByRole('button', { name: 'Cancel' }));
     await waitFor(() => expect(screen.queryByTestId('confirm-dialog')).toBeNull());
     expect(calls.some((c) => c.url.includes('/move'))).toBe(false);
+  });
+});
+
+describe('tasks run in order: what a card waits for, and a stuck run', () => {
+  const first = {
+    id: '01J8QK3ZR2W7M5N4P6T8V9XAAA',
+    title: 'Design first',
+    status: 'todo' as const,
+  };
+  const second = { id: '01J8QK3ZR2W7M5N4P6T8V9XBBB', title: 'Copy', status: 'review' as const };
+
+  it('a card that depends on unfinished tasks says how many, and names them on hover', async () => {
+    const user = userEvent.setup();
+    mount(card(task({ status: 'ready', auto_start: true, waiting_on: [first, second] })));
+    const waiting = screen.getByTestId('task-waiting-on');
+    expect(waiting).toHaveTextContent('Waiting on 2');
+    await user.hover(waiting);
+    expect(await screen.findByRole('tooltip')).toHaveTextContent('Waiting on: Design first, Copy');
+  });
+
+  it('says nothing once the task runs or is finished, or when nothing is left to wait for', () => {
+    for (const status of ['running', 'review', 'done'] as const) {
+      mount(card(task({ status, waiting_on: [first] })));
+      expect(screen.queryByTestId('task-waiting-on'), status).toBeNull();
+      cleanup();
+    }
+    mount(card(task({ status: 'ready', waiting_on: [] })));
+    expect(screen.queryByTestId('task-waiting-on')).toBeNull();
+  });
+
+  it('starting by hand is not refused, but the assign dialog warns with what is not done', async () => {
+    mount(<AssignDialog task={task({ status: 'ready', waiting_on: [first] })} onClose={vi.fn()} />);
+    const warning = await screen.findByTestId('task-assign-waiting');
+    expect(warning).toHaveTextContent('Design first');
+    expect(screen.getByTestId('task-assign-start')).toBeInTheDocument();
+  });
+
+  it('the details list what it waits for, with their columns', async () => {
+    const waiter = task({ status: 'ready', auto_start: true, waiting_on: [first, second] });
+    const fetchImpl: typeof fetch = () =>
+      Promise.resolve(
+        new Response(JSON.stringify({ ...waiter, comments: [], subtasks: [], runs: [] }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        }),
+      );
+    mount(<TaskDialog task={waiter} onClose={vi.fn()} />, fetchImpl);
+    const list = await screen.findByTestId('task-dialog-waiting-on');
+    expect(list).toHaveTextContent('Design first');
+    expect(list).toHaveTextContent('Copy');
+    expect(list).toHaveTextContent('Review');
+    expect(list).toHaveTextContent('It starts on its own only when all of these are done.');
+  });
+
+  it('a running card whose run went quiet is marked stuck; others are not', () => {
+    mount(card(task({ status: 'running', stuck_since: '2026-09-27T01:00:00Z' })));
+    expect(screen.getByTestId('task-stuck')).toHaveTextContent('Stuck');
+    cleanup();
+    mount(card(task({ status: 'running', stuck_since: null })));
+    expect(screen.queryByTestId('task-stuck')).toBeNull();
   });
 });

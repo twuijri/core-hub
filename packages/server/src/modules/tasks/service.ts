@@ -985,7 +985,7 @@ export class TasksService {
   }
 
   /**
-   * The dependencies of a task that are not done yet, in the order they were made — what a
+   * The dependencies of a task that are not done yet, oldest first — what a
    * card says it waits for, and what keeps `auto_start` from starting it (DECISIONS §88).
    * `done` is done; `archived` is done only when it was done first (the weekly archive
    * keeps `completed_at`, a task archived by hand has none).
@@ -1001,7 +1001,7 @@ export class TasksService {
       .from(taskDependencies)
       .innerJoin(tasks, eq(tasks.id, taskDependencies.dependsOnTaskId))
       .where(eq(taskDependencies.taskId, taskId))
-      .orderBy(asc(taskDependencies.id))
+      .orderBy(asc(tasks.createdAt), asc(tasks.number), asc(tasks.id))
       .all()
       .filter((row) => !isDone(row))
       .map(({ id, title, status }) => ({ id, title, status }));
@@ -1350,25 +1350,27 @@ export class TasksService {
    * `auto_start`, `ready`, given to an agent, on no run, and the hub's own card.
    */
   autoStartable(workspace: string): TaskRow[] {
-    return this.db
-      .select()
-      .from(tasks)
-      .where(
-        and(
-          eq(tasks.workspace, workspace),
-          eq(tasks.autoStart, true),
-          eq(tasks.status, 'ready'),
-          eq(tasks.assigneeKind, 'agent'),
-          isNull(tasks.currentRunId),
-          isNull(tasks.externalSource),
-          isNull(tasks.archivedAt),
-        ),
-      )
-      .orderBy(asc(tasks.position), asc(tasks.id))
-      .all()
-      // A task that depends on others waits for all of them to be done (DECISIONS §88);
-      // the move of the last one to `done` looks again.
-      .filter((row) => this.waitingOn(row.id).length === 0);
+    return (
+      this.db
+        .select()
+        .from(tasks)
+        .where(
+          and(
+            eq(tasks.workspace, workspace),
+            eq(tasks.autoStart, true),
+            eq(tasks.status, 'ready'),
+            eq(tasks.assigneeKind, 'agent'),
+            isNull(tasks.currentRunId),
+            isNull(tasks.externalSource),
+            isNull(tasks.archivedAt),
+          ),
+        )
+        .orderBy(asc(tasks.position), asc(tasks.id))
+        .all()
+        // A task that depends on others waits for all of them to be done (DECISIONS §88);
+        // the move of the last one to `done` looks again.
+        .filter((row) => this.waitingOn(row.id).length === 0)
+    );
   }
 
   // ------------------------------------------------------------- watchdog

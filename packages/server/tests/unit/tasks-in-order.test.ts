@@ -6,6 +6,7 @@
  * by the composition root exactly as production does.
  */
 import { describe, expect, it } from 'vitest';
+import { requireSqlite } from '../../src/lib/db.js';
 import { modules as defaultModules } from '../../src/modules/index.js';
 import { principalScopeResolver } from '../../src/modules/auth/index.js';
 import { schedulerFor } from '../../src/modules/schedules/index.js';
@@ -16,7 +17,7 @@ import {
   fakeHermes,
   type ScriptStep,
 } from '../../src/modules/sessions/testing/fake-runner.js';
-import { taskRunsFor, watchStuckTasks } from '../../src/modules/tasks/index.js';
+import { TasksService, taskRunsFor, watchStuckTasks } from '../../src/modules/tasks/index.js';
 import { authed, signedInHub } from './helpers.js';
 
 type Json = Record<string, unknown>;
@@ -26,10 +27,7 @@ const MINUTE = 60_000;
 
 const finishes: ScriptStep[] = [{ type: 'message_delta', text: 'تم.' }, { type: 'completed' }];
 /** A run that says one thing and then nothing, until somebody stops it. */
-const goesQuiet: ScriptStep[] = [
-  { type: 'message_delta', text: 'أعمل…' },
-  { type: 'await_input' },
-];
+const goesQuiet: ScriptStep[] = [{ type: 'message_delta', text: 'أعمل…' }, { type: 'await_input' }];
 
 async function hubWith(script: ScriptStep[], env: Record<string, string> = {}) {
   const runner = new FakeAgentRunner({ script });
@@ -178,6 +176,16 @@ describe('tasks: auto_start waits for what the task depends on', () => {
       await move(hub, archivedByHand.id, 'archived');
       const finished = await newTask(hub, 'Finished');
       await move(hub, finished.id, 'done');
+      // The weekly archive takes it, the way opening the board does after seven days.
+      const profiles = (
+        await authed(hub, hub.token, { method: 'GET', url: '/api/v1/profiles' })
+      ).json() as { items: Array<{ id: string }> };
+      const archived = new TasksService(requireSqlite(hub.app.hub.database)).archiveDoneBefore(
+        profiles.items.map((profile) => profile.id),
+        new Date(Date.now() + MINUTE),
+      );
+      expect(archived).toBe(1);
+      expect((await getTask(hub, finished.id)).status).toBe('archived');
       const task = await newTask(hub, 'After both');
       const set = await dependOn(hub, task.id, [archivedByHand.id, finished.id]);
       expect(set.waiting_on).toEqual([
