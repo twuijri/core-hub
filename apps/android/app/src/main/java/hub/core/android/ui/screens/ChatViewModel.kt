@@ -50,6 +50,8 @@ data class ChatUi(
     /** The draft's agent row (an empty chat only). */
     val agents: List<Agent> = emptyList(),
     val agentId: String? = null,
+    /** The draft's agents have been read: «no agent» is said only then, never while they load. */
+    val agentsLoaded: Boolean = false,
 )
 
 /**
@@ -115,7 +117,7 @@ class ChatViewModel(
         viewModelScope.launch {
             hubCall { api.agents.agentsList(profile) }.onSuccess { page ->
                 val agents = ChatAgents.startable(page.items)
-                _ui.update { it.copy(agents = agents, agentId = it.agentId ?: agents.firstOrNull()?.id) }
+                _ui.update { it.copy(agents = agents, agentId = it.agentId ?: agents.firstOrNull()?.id, agentsLoaded = true) }
             }.onFailure { e -> _ui.update { it.copy(error = e as HubError) } }
         }
     }

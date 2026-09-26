@@ -124,6 +124,7 @@ class ScreenShots {
         }
         open("/new") { activity ->
             waitFor("screen.new_chat")
+            waitForPrefix("chat.agent.")
             save(activity, dir, "05-new-chat")
         }
         open("/settings") { activity ->

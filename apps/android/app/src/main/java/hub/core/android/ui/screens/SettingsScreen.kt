@@ -122,7 +122,10 @@ fun SettingsScreen(isAdmin: Boolean, onOpen: (Route) -> Unit, onBackToChats: () 
             item(key = "g$title") {
                 GroupedList(Modifier.padding(top = if (title == null) 16.dp else 0.dp), title = title?.let { stringResource(it) }) {
                     rows.forEach { destination ->
-                        Item(term(destination), icon = settingsIcon(destination), chevron = true, tag = "settings.row.$destination", onClick = { onOpen(Route.SettingsPage(destination)) })
+                        Item(
+                            term(destination), icon = settingsIcon(destination), iconTint = t.accent, chevron = true,
+                            tag = "settings.row.$destination", onClick = { onOpen(Route.SettingsPage(destination)) },
+                        )
                     }
                 }
             }
