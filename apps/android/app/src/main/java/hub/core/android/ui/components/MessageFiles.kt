@@ -22,12 +22,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.Share
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -58,6 +53,9 @@ import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import androidx.core.content.FileProvider
 import hub.core.android.R
+import hub.core.android.ui.kit.HubIconButton
+import hub.core.android.ui.kit.Lucide
+import hub.core.android.ui.kit.Spinner
 import hub.core.android.chat.ChatAttachment
 import hub.core.android.data.hubCall
 import hub.core.android.graph
@@ -116,7 +114,7 @@ private fun FileChip(file: ChatAttachment, busy: Boolean = false, onClick: (() -
         horizontalArrangement = Arrangement.spacedBy(6.dp),
     ) {
         if (busy) {
-            CircularProgressIndicator(Modifier.size(14.dp), strokeWidth = 2.dp)
+            Spinner(14.dp, t.textMuted)
         } else {
             Icon(
                 painterResource(if (file.kind == hub.core.client.model.ContentBlock.Type.IMAGE) R.drawable.lucide_image else R.drawable.lucide_file_text),
@@ -174,12 +172,10 @@ private fun ImageViewer(local: File, file: ChatAttachment, onClose: () -> Unit) 
                         }
                         .graphicsLayer(scaleX = scale, scaleY = scale, translationX = offset.x, translationY = offset.y),
                 )
-            } ?: CircularProgressIndicator(Modifier.align(Alignment.Center))
+            } ?: Spinner(28.dp, Color.White, Modifier.align(Alignment.Center))
             Row(Modifier.fillMaxWidth().statusBarsPadding().padding(8.dp), horizontalArrangement = Arrangement.SpaceBetween) {
-                IconButton(onClick = onClose) { Icon(Icons.Default.Close, stringResource(R.string.close), tint = Color.White) }
-                IconButton(onClick = { AttachmentFiles.share(context, local, file.mime) }) {
-                    Icon(Icons.Default.Share, stringResource(R.string.attach_share), tint = Color.White)
-                }
+                HubIconButton(Lucide.X, stringResource(R.string.close), onClose, tint = Color.White)
+                HubIconButton(Lucide.Share2, stringResource(R.string.attach_share), { AttachmentFiles.share(context, local, file.mime) }, tint = Color.White)
             }
         }
     }

@@ -20,6 +20,9 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
@@ -55,6 +58,8 @@ fun HubTextField(
     visualTransformation: VisualTransformation = VisualTransformation.None,
     size: ControlSize = ControlSize.Lg,
     error: String? = null,
+    focusRequester: FocusRequester? = null,
+    fieldTag: String? = null,
 ) {
     val t = LocalTokens.current
     val interaction = remember { MutableInteractionSource() }
@@ -79,7 +84,9 @@ fun HubTextField(
             keyboardActions = keyboardActions,
             visualTransformation = visualTransformation,
             interactionSource = interaction,
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier.fillMaxWidth()
+                .then(if (focusRequester != null) Modifier.focusRequester(focusRequester) else Modifier)
+                .then(if (fieldTag != null) Modifier.testTag(fieldTag) else Modifier),
             decorationBox = { inner ->
                 val border = when {
                     error != null -> t.danger

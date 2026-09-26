@@ -71,6 +71,7 @@ fun <T> LoadView(loader: Loader<T>, modifier: Modifier = Modifier, content: @Com
 }
 
 /** One row of a read-mostly list: a solid card with a title, a line under it, and something at its end. */
+@Suppress("ModifierParameter") // the older call sites pass the subtitle second
 @Composable
 fun ListRow(
     title: String,

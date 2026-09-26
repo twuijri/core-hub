@@ -256,6 +256,11 @@ private fun SeatActivity(seat: Seat, step: String?, onStop: () -> Unit) {
             stringResource(label, seat.name) + (step?.let { " · $it" } ?: ""),
             fontSize = FontTokens.sizeSm.sp,
             color = t.textMuted,
+            // A sentence of the UI with a name in it: it reads in the UI's direction, whatever the name's.
+            style = androidx.compose.ui.text.TextStyle(
+                textDirection = if (androidx.compose.ui.platform.LocalLayoutDirection.current == androidx.compose.ui.unit.LayoutDirection.Rtl)
+                    androidx.compose.ui.text.style.TextDirection.Rtl else androidx.compose.ui.text.style.TextDirection.Ltr,
+            ),
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
             modifier = Modifier.weight(1f),

@@ -38,6 +38,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 /**
@@ -73,16 +74,25 @@ class AgentDirectory(private val graph: AppGraph) {
     val byProfile: StateFlow<Map<String, List<Agent>>> = _byProfile.asStateFlow()
     private val loading = ConcurrentHashMap.newKeySet<String>()
 
-    suspend fun ensure(profile: String) {
+    /** The directory's own work: a screen leaving while a list loads must not cancel the load. */
+    private val scope = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.SupervisorJob() + Dispatchers.IO)
+
+    /**
+     * Loads [profile]'s agents once. The call runs in the directory's scope, not the asking
+     * screen's: a screen that goes away mid-load (the draft replaced by a chat a link opened)
+     * used to cancel it and leave the profile «loading» for good, so no face or name ever came.
+     */
+    fun ensure(profile: String) {
         if (profile in _byProfile.value || !loading.add(profile)) return
-        val session = graph.store.current
-        if (session == null) {
-            loading.remove(profile)
-            return
+        scope.launch {
+            try {
+                val session = graph.store.current ?: return@launch
+                hubCall { graph.apis(session).agents.agentsList(profile).items }
+                    .onSuccess { agents -> _byProfile.update { it + (profile to agents) } }
+            } finally {
+                loading.remove(profile)
+            }
         }
-        hubCall { graph.apis(session).agents.agentsList(profile).items }
-            .onSuccess { agents -> _byProfile.update { it + (profile to agents) } }
-        loading.remove(profile)
     }
 
     /** A picture the hub keeps for an agent, fetched once into the cache. */

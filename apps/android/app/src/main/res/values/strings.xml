@@ -12,8 +12,6 @@
     <string name="error_not_built">The hub does not do this yet.</string>
     <string name="error_code">The hub refused: %1$s</string>
     <string name="error_unknown">Something went wrong.</string>
-
-    <string name="connect_title">Connect to your hub</string>
     <string name="connect_scan_body">On the web or the desktop app, open Settings → Device connections and choose to pair a device. Then scan the code it shows.</string>
     <string name="connect_scan">Scan the pairing code</string>
     <string name="connect_scan_prompt">Point the camera at the pairing code</string>
@@ -56,8 +54,6 @@
     <string name="theme_system">System</string>
 
     <string name="chat_you">You</string>
-    <string name="chat_greeting">What shall we work on?</string>
-    <string name="chat_in_profile">In the profile %1$s</string>
     <string name="chat_no_agents">No agent to talk to</string>
     <string name="chat_no_agents_body">No agent is installed in this profile. An owner or admin installs one from Agents.</string>
     <string name="chat_placeholder">Message</string>
@@ -250,7 +246,6 @@
     <string name="attach_too_large">This file is over %1$s, the largest the hub takes.</string>
     <string name="attach_unreadable">This file could not be read.</string>
     <string name="attach_camera_denied">Core Hub may not use the camera. Allow it in the phone settings.</string>
-    <string name="voice_source">Voice</string>
     <string name="voice_source_hub">Core Hub</string>
     <string name="voice_source_phone">This phone</string>
     <string name="voice_source_hint">Core Hub uses the profile\'s speech providers on the hub for dictation and reading replies aloud; when the hub has none, this phone\'s own voice is used.</string>
@@ -302,7 +297,6 @@
     <string name="room_you_name">%1$s (you)</string>
     <string name="room_remove">Remove</string>
     <string name="room_invite">Invite</string>
-    <string name="room_invite_code">Invite code: %1$s</string>
     <string name="room_invite_hint">Anyone who may enter this profile can join with the code or its link.</string>
     <string name="room_invite_share">Share the link</string>
     <string name="room_invite_rotate">New code</string>
@@ -353,4 +347,5 @@
     <string name="pending_count">%1$d waiting for you</string>
     <string name="chat_new_in_profile">New chat in %1$s</string>
     <string name="chat_start_hint">Ask anything. The conversation starts with your first message.</string>
+    <string name="connect_or">or</string>
 </resources>

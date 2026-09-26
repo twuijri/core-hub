@@ -38,6 +38,7 @@ fun errorText(error: HubError): String = when {
 /** A message on a tinted, solid surface: danger, warning or information. */
 enum class Tone { DANGER, WARNING, INFO, SUCCESS }
 
+@Suppress("ModifierParameter") // the older call sites name the tone before modifier
 @Composable
 fun Notice(text: String, tone: Tone = Tone.DANGER, modifier: Modifier = Modifier) {
     NoticeBox(
@@ -86,5 +87,6 @@ fun Loading(modifier: Modifier = Modifier) {
 }
 
 @Composable
+@Suppress("ModifierParameter") // the older call sites name body before modifier
 fun EmptyState(title: String, body: String? = null, modifier: Modifier = Modifier) =
     hub.core.android.ui.kit.EmptyState(title, modifier, body = body)

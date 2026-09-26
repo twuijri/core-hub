@@ -1,6 +1,9 @@
 package hub.core.android.shots
 
 import hub.core.android.repoRoot
+import kotlinx.serialization.json.jsonArray
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
 import okhttp3.mockwebserver.Dispatcher
 import okhttp3.mockwebserver.MockResponse
 import okhttp3.mockwebserver.MockWebServer
@@ -23,6 +26,23 @@ class DemoHub(private val extra: Map<String, String> = emptyMap()) {
         .findAll(source).map { Route(it.groupValues[1], Regex(it.groupValues[2]), it.groupValues[3]) }.toList()
     private val answers: Map<String, String> = Regex("""^\s*"((?:en|ar) [^"]+)": ##"(.*)"##,?\s*$""", RegexOption.MULTILINE)
         .findAll(source).associate { it.groupValues[1] to it.groupValues[2] }
+
+    /**
+     * The board as Android asks for it (`tasks.getColumns`), made from the same tasks the iOS demo
+     * lists (`tasks.listTasks`), in the board's column order.
+     */
+    private val columns: Map<String, String> = listOf("en", "ar").mapNotNull { language ->
+        val list = answers["$language tasks.listTasks"] ?: return@mapNotNull null
+        val items = kotlinx.serialization.json.Json.parseToJsonElement(list).jsonObject.getValue("items").jsonArray
+        val order = listOf("triage", "todo", "ready", "scheduled", "running", "blocked", "review", "done")
+        val byStatus = items.groupBy { it.jsonObject.getValue("status").jsonPrimitive.content }
+        val cols = order.joinToString(",", "[", "]") { status ->
+            val tasks = byStatus[status].orEmpty()
+            """{"status":"$status","count":${tasks.size},"tasks":${kotlinx.serialization.json.JsonArray(tasks)}}"""
+        }
+        val counts = order.joinToString(",", "{", "}") { "\"$it\":${byStatus[it].orEmpty().size}" }
+        "$language tasks.getColumns" to """{"columns":$cols,"counts":{"total":${items.size},"by_status":$counts},"project_id":null}"""
+    }.toMap()
 
     val chatId: String = Regex("""static let chatID = "(\w+)"""").find(source)!!.groupValues[1]
     val server = MockWebServer()
@@ -72,13 +92,13 @@ class DemoHub(private val extra: Map<String, String> = emptyMap()) {
                     val parameter = match.groupValues.getOrNull(1)
                     val keys = listOfNotNull(parameter?.let { "$language ${route.operation} $it" }, "$language ${route.operation}")
                     for (key in keys) {
-                        (answers[key] ?: extra[key])?.let { return json(200, it) }
+                        (answers[key] ?: extra[key] ?: columns[key])?.let { return json(200, it) }
                     }
                 }
                 // What the iOS demo has no page for: the extras here, else the contract's own example.
                 for ((route, example) in contract) {
                     if (route.method != request.method || route.pattern.find(path) == null) continue
-                    return json(200, extra["$language ${route.operation}"] ?: extra[route.operation] ?: example)
+                    return json(200, extra["$language ${route.operation}"] ?: extra[route.operation] ?: columns["$language ${route.operation}"] ?: example)
                 }
                 missed += "${request.method} $path"
                 return json(404, """{"error":"Not in the demo hub.","code":"not_found"}""")

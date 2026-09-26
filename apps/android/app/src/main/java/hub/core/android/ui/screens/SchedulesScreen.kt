@@ -1,5 +1,30 @@
 package hub.core.android.ui.screens
 
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.sp
+import hub.core.android.generated.FontTokens
+import hub.core.android.ui.components.InContentDirection
+import hub.core.android.ui.kit.Badge
+import hub.core.android.ui.kit.BadgeTone
+import hub.core.android.ui.kit.ButtonKind
+import hub.core.android.ui.kit.ControlSize
+import hub.core.android.ui.kit.EmptyState
+import hub.core.android.ui.kit.GroupedList
+import hub.core.android.ui.kit.HubButton
+import hub.core.android.ui.kit.HubCard
+import hub.core.android.ui.kit.HubSheet
+import hub.core.android.ui.kit.Item
+import hub.core.android.ui.kit.Lucide
+import hub.core.android.ui.kit.LucideIcon
+import hub.core.android.ui.kit.NoticeBox
+import hub.core.android.ui.kit.SectionTitle
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.FlowRow
@@ -9,13 +34,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.material3.Button
-import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.ModalBottomSheet
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -36,10 +55,8 @@ import hub.core.android.data.hubCall
 import hub.core.android.graph
 import hub.core.android.realtime.SCHEDULES_NAMESPACE
 import hub.core.android.ui.components.ErrorNotice
-import hub.core.android.ui.components.ListRow
 import hub.core.android.ui.components.LoadView
 import hub.core.android.ui.components.Loading
-import hub.core.android.ui.components.ProfileBadge
 import hub.core.android.ui.components.StatusBadge
 import hub.core.android.ui.components.Tone
 import hub.core.android.ui.components.rememberLoad
@@ -141,49 +158,64 @@ private fun StateBadge(schedule: Schedule) {
     StatusBadge(stringResource(label), tone)
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
+/**
+ * Schedules, as a card per schedule: its name and profile, when it runs (and next), its state as
+ * a tinted badge, a last error in red. A tap opens its sheet: run now as the one primary action,
+ * pause or resume beside it, and the history.
+ */
 @Composable
 fun SchedulesScreen(shell: ShellViewModel, onOpenChat: (String, String) -> Unit) {
     val context = LocalContext.current
     val vm: SchedulesViewModel = viewModel { SchedulesViewModel(context.graph) }
     val ui by vm.ui.collectAsState()
+    val t = LocalTokens.current
     var opened by remember { mutableStateOf<Schedule?>(null) }
     val badges = ui.items.map { it.profile }.distinct().size > 1
     Column(Modifier.fillMaxSize()) {
-        ui.error?.let { ErrorNotice(it, Modifier.padding(12.dp)) }
-        ui.notice?.let { Text(stringResource(it), color = LocalTokens.current.textMuted, modifier = Modifier.padding(12.dp)) }
+        ui.error?.let { ErrorNotice(it, Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) }
+        ui.notice?.let { NoticeBox(stringResource(it), BadgeTone.Success, Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) }
         if (ui.loading) {
             Loading()
             return@Column
         }
-        LazyColumn(contentPadding = PaddingValues(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            if (ui.items.isEmpty()) item { Text(stringResource(R.string.schedules_empty), color = LocalTokens.current.textMuted) }
+        LazyColumn(
+            Modifier.fillMaxSize().testTag("schedules.list"),
+            contentPadding = PaddingValues(horizontal = 16.dp, vertical = 12.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+            if (ui.items.isEmpty()) item { EmptyState(stringResource(R.string.schedules_empty), icon = Lucide.CalendarClock) }
             items(ui.items, key = { it.id }) { schedule ->
-                ListRow(
-                    title = schedule.name,
-                    subtitle = listOfNotNull(
-                        schedule.trigger.display ?: schedule.trigger.expression,
-                        schedule.nextRunAt?.let { stringResource(R.string.schedules_next, localTime(it)) },
-                        schedule.lastError,
-                    ).joinToString(" · "),
-                    trailing = {
-                        Column(horizontalAlignment = androidx.compose.ui.Alignment.End, verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                            StateBadge(schedule)
-                            if (badges) ProfileBadge(shell.profileName(schedule.profile))
+                HubCard(Modifier.testTag("schedule.card.${schedule.id}"), onClick = { opened = schedule }, padding = 14.dp) {
+                    Row(verticalAlignment = Alignment.Top, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        InContentDirection(schedule.name) {
+                            Text(schedule.name, fontSize = FontTokens.sizeMd.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f), maxLines = 2, overflow = TextOverflow.Ellipsis)
                         }
-                    },
-                    onClick = { opened = schedule },
-                )
+                        if (badges) Badge(shell.profileName(schedule.profile), tone = BadgeTone.Accent)
+                    }
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        StateBadge(schedule)
+                        LucideIcon(Lucide.Clock, null, size = 13.dp, tint = t.textMuted)
+                        Text(
+                            listOfNotNull(
+                                schedule.trigger.display ?: schedule.trigger.expression,
+                                schedule.nextRunAt?.let { stringResource(R.string.schedules_next, localTime(it)) },
+                            ).joinToString(" · "),
+                            fontSize = FontTokens.sizeXs.sp, color = t.textMuted, maxLines = 2, overflow = TextOverflow.Ellipsis,
+                        )
+                    }
+                    schedule.lastError?.takeIf { it.isNotBlank() }?.let { Text(it, fontSize = FontTokens.sizeXs.sp, color = t.danger, maxLines = 2) }
+                }
             }
         }
     }
     opened?.let { schedule ->
-        ModalBottomSheet(onDismissRequest = { opened = null }) {
+        HubSheet(onDismiss = { opened = null }) {
             ScheduleSheet(schedule, vm, onOpenChat = { id -> opened = null; onOpenChat(id, schedule.profile) }, onDone = { opened = null })
         }
     }
 }
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun ScheduleSheet(schedule: Schedule, vm: SchedulesViewModel, onOpenChat: (String) -> Unit, onDone: () -> Unit) {
     val context = LocalContext.current
@@ -192,41 +224,45 @@ private fun ScheduleSheet(schedule: Schedule, vm: SchedulesViewModel, onOpenChat
         val s = context.graph.store.current!!
         context.graph.apis(s).schedules.schedulesListRuns(schedule.profile, schedule.id, limit = 10).items
     }
-    Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        Text(schedule.name, style = MaterialTheme.typography.titleMedium)
-        FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+    Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).testTag("schedule.sheet"), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        Text(schedule.name, fontSize = FontTokens.sizeLg.sp, fontWeight = FontWeight.SemiBold)
+        FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
             StateBadge(schedule)
-            (schedule.trigger.display ?: schedule.trigger.expression)?.let { StatusBadge(it) }
+            (schedule.trigger.display ?: schedule.trigger.expression)?.let { Badge(it) }
         }
-        schedule.target.prompt?.let { Text(it, style = MaterialTheme.typography.bodyMedium, color = t.textMuted, maxLines = 4) }
-        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            Button(onClick = { vm.runNow(schedule); onDone() }) { Text(stringResource(R.string.schedules_run_now)) }
-            OutlinedButton(onClick = { vm.setEnabled(schedule, !schedule.enabled); onDone() }) {
-                Text(stringResource(if (schedule.enabled) R.string.schedules_pause else R.string.schedules_resume))
-            }
+        schedule.target.prompt?.let { p -> InContentDirection(p) { Text(p, fontSize = FontTokens.sizeSm.sp, color = t.textMuted, maxLines = 4) } }
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            HubButton(stringResource(R.string.schedules_run_now), { vm.runNow(schedule); onDone() }, size = ControlSize.Md, icon = Lucide.Play)
+            HubButton(
+                stringResource(if (schedule.enabled) R.string.schedules_pause else R.string.schedules_resume),
+                { vm.setEnabled(schedule, !schedule.enabled); onDone() },
+                kind = ButtonKind.Secondary, size = ControlSize.Md, icon = if (schedule.enabled) Lucide.Pause else Lucide.Play,
+            )
         }
-        Text(stringResource(R.string.schedules_history), style = MaterialTheme.typography.titleSmall)
+        SectionTitle(stringResource(R.string.schedules_history))
         LoadView(history) { runs ->
-            if (runs.isEmpty()) Text(stringResource(R.string.schedules_no_runs), color = t.textMuted)
-            runs.forEach { run ->
-                ListRow(
-                    title = run.startedAt?.let(::localTime) ?: "—",
-                    subtitle = run.error ?: run.outputPreview,
-                    trailing = {
-                        StatusBadge(
-                            jobLabel(run.status),
-                            when (run.status) {
-                                JobStatus.SUCCEEDED -> Tone.SUCCESS
-                                JobStatus.FAILED -> Tone.DANGER
-                                JobStatus.RUNNING -> Tone.INFO
-                                else -> null
-                            },
-                        )
-                    },
-                    onClick = run.sessionId?.let { id -> { onOpenChat(id) } },
-                )
+            if (runs.isEmpty()) Text(stringResource(R.string.schedules_no_runs), fontSize = FontTokens.sizeSm.sp, color = t.textMuted)
+            else GroupedList {
+                runs.forEach { run ->
+                    Item(
+                        run.startedAt?.let(::localTime) ?: "—",
+                        subtitle = run.error ?: run.outputPreview,
+                        chevron = run.sessionId != null,
+                        onClick = run.sessionId?.let { id -> { onOpenChat(id) } },
+                        trailing = {
+                            StatusBadge(
+                                jobLabel(run.status),
+                                when (run.status) {
+                                    JobStatus.SUCCEEDED -> Tone.SUCCESS
+                                    JobStatus.FAILED -> Tone.DANGER
+                                    JobStatus.RUNNING -> Tone.INFO
+                                    else -> null
+                                },
+                            )
+                        },
+                    )
+                }
             }
         }
-        TextButton(onClick = onDone) { Text(stringResource(R.string.close)) }
     }
 }

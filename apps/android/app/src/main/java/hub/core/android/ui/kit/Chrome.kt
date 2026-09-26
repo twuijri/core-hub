@@ -86,7 +86,7 @@ fun HubTopBar(
                 modifier = Modifier.semantics { heading() }.testTag("topbar.title"),
             )
             if (!subtitle.isNullOrBlank()) {
-                Text(subtitle, fontSize = FontTokens.sizeXs.sp, color = t.textMuted, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text(subtitle, fontSize = FontTokens.sizeXs.sp, color = t.textMuted, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.testTag("topbar.subtitle"))
             }
         }
         Row(
@@ -160,7 +160,7 @@ fun MenuDivider() = Hairline(Modifier.fillMaxWidth().padding(vertical = 4.dp))
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun HubSheet(onDismiss: () -> Unit, title: String? = null, modifier: Modifier = Modifier, content: @Composable ColumnScope.() -> Unit) {
+fun HubSheet(onDismiss: () -> Unit, modifier: Modifier = Modifier, title: String? = null, content: @Composable ColumnScope.() -> Unit) {
     val t = LocalTokens.current
     ModalBottomSheet(
         onDismissRequest = onDismiss,
