@@ -31,7 +31,7 @@ class UploadAttachmentTest {
                 {"id":"01J8QK3ZR2W7M5N4P6T8V9X0HM","profile":"default","owner_id":"01J8QK3ZR2W7M5N4P6T8V9X0HN",
                  "created_at":"2026-09-26T16:29:45Z","updated_at":"2026-09-26T16:29:45Z",
                  "name":"photo-20260926-162945.jpg","mime":"image/jpeg","size_bytes":4,"kind":"image",
-                 "url":"/api/v1/attachments/01J8QK3ZR2W7M5N4P6T8V9X0HM/content","purpose":"message",
+                 "url":"https://hub.example/picture","purpose":"message",
                  "sha256":"0000000000000000000000000000000000000000000000000000000000000000"}
                 """.trimIndent(),
             ),
