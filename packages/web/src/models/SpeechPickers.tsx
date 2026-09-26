@@ -39,7 +39,8 @@ function IdField({
 }) {
   return (
     <Input
-      dir="ltr"
+      // An id reads left to right; the hint in the empty field is in the interface language.
+      dir={value ? 'ltr' : undefined}
       aria-label={label}
       placeholder={placeholder}
       value={value}
