@@ -68,13 +68,51 @@ $ npx vitest run tests/unit
       Tests  128 passed (128)
 $ pnpm --filter @corehub/desktop typecheck
 tc=0
+$ pnpm lint
+All matched files use Prettier code style!
+$ pnpm change-record:check
+change-record  OK — 3 record(s) valid
 ```
 صنف النافذة في Electron 44.4.5 (Xvfb، `desktopName: corehub.desktop`):
 ```
 WM_CLASS(STRING) = "corehub", "corehub"
 WM_NAME(UTF8_STRING) = "Core Hub"
 ```
-CI: يُكمل بعد الدفع.
+CI: `desktop.yml` بـ workflow_dispatch على الفرع (run 36204985382، بعد دمج `night/2026-09-27`): الوظائف الثلاث
+Installers (macos / ubuntu / windows) نجحت. ترقية ويندوز من مثبّت v1.1.1 المنشور (`nsis-upgrade-smoke.ps1`، من run
+36204663876؛ الملف نفسه لم يتغيّر بعده):
+```
+ok: 1.1.1 installed C:\Users\runneradmin\AppData\Local\Programs\corehub\corehub.exe
+ok: the app is C:\Users\runneradmin\AppData\Local\Programs\Core Hub\Core Hub.exe
+ok: the old folder C:\Users\runneradmin\AppData\Local\Programs\corehub is gone
+ok: no corehub.exe is left under C:\Users\runneradmin\AppData\Local\Programs
+ok: the Start menu shortcut opens C:\Users\runneradmin\AppData\Local\Programs\Core Hub\Core Hub.exe
+ok: the desktop shortcut opens C:\Users\runneradmin\AppData\Local\Programs\Core Hub\Core Hub.exe
+ok: one uninstall entry (found 1)
+ok: the uninstall entry is 'Core Hub 1.1.1' (Core Hub 1.1.1)
+ok: the uninstall entry runs the new uninstaller ("C:\Users\runneradmin\AppData\Local\Programs\Core Hub\Uninstall Core Hub.exe" /currentuser)
+ok: the next upgrade finds C:\Users\runneradmin\AppData\Local\Programs\Core Hub (…)
+ok: corehub:// opens the new .exe before its first start ("C:\Users\runneradmin\AppData\Local\Programs\Core Hub\Core Hub.exe" "%1")
+ok: the Startup shortcut still names corehub.exe before the app starts
+ok: the Startup shortcut now opens C:\Users\runneradmin\AppData\Local\Programs\Core Hub\Core Hub.exe
+ok: its Start in folder is C:\Users\runneradmin\AppData\Local\Programs\Core Hub
+ok: the uninstall entry is gone
+ok: C:\Users\runneradmin\AppData\Local\Programs\Core Hub\Core Hub.exe is gone
+ok: corehub:// is unregistered
+```
+MSIX (`Executable="app\Core Hub.exe"`؛ الحزمة تخزّن الاسم `Core%20Hub.exe` كاسم جزء OPC، فقبله الفحص) ثبت وعمل في الوضع
+المحلي: `Core Hub processes: 5`، `health: {"ok":true,"server_version":"1.1.1",…}`. ترقية لينكس من `.deb` 1.1.1 المنشور:
+```
+update-alternatives: using /opt/Core Hub/corehub to provide /usr/bin/corehub (corehub) in auto mode
+Unpacking corehub (1.1.1) over (1.1.1) ...
+update-alternatives: using /opt/Core Hub/core-hub to provide /usr/bin/core-hub (core-hub) in auto mode
+ls: cannot access '/usr/bin/corehub': No such file or directory
+lrwxrwxrwx  1 root root   26 … /usr/bin/core-hub -> /etc/alternatives/core-hub
+Name=Core Hub
+Exec="/opt/Core Hub/core-hub" %U
+StartupWMClass=corehub
+```
+والماك كما في #163 (`Core Hub.app`، نافذة «Core Hub 1.1.1»).
 
 ## المخاطر والرجوع
 - كود NSIS لا يُبنى إلا على ويندوز؛ مساره الصامت (`/S`) مختبر في CI من مثبّت 1.1.1 المنشور. المسار التفاعلي
@@ -84,4 +122,4 @@ CI: يُكمل بعد الدفع.
 - الرجوع: إعادة `win.executableName`/`linux.executableName` إلى `corehub` وحذف `nsis.include`.
 
 ## التسليم والخطوة التالية
-PR جديد إلى `main` بالإنجليزية، بلا دمج ولا وسم.
+يُدمج في `night/2026-09-27` (طلب الليلة #165)، بلا طلب دمج خاص ولا وسم.
