@@ -12,7 +12,7 @@ enum AppRoutes {
         .models: "/settings/models",
         .knowledge: "/settings/knowledge",
         .chat: "/chat/:sessionId?",
-        .rooms: "/rooms",
+        .rooms: "/rooms/:roomId?",
         .tasks: "/tasks",
         .schedules: "/schedules",
         .settings: "/settings",

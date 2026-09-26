@@ -13,6 +13,8 @@ sealed interface Route {
 
     data object NewChat : Route { override val destination = "new_chat" }
     data class Chat(val sessionId: String, val profile: String) : Route { override val destination = "chat" }
+    /** One room, opened from the drawer's Rooms list (the `rooms` segment), in its own profile. */
+    data class Room(val roomId: String, val profile: String) : Route { override val destination = "rooms" }
     data object Search : Route { override val destination = "search" }
     data object Agents : Route { override val destination = "agent_manager" }
     data object Tasks : Route { override val destination = "tasks" }
@@ -85,7 +87,7 @@ object Screens {
 }
 
 /**
- * A back stack. The root is always the new-chat draft or a conversation; everything else is
+ * A back stack. The root is always the new-chat draft, a conversation or a room; everything else is
  * pushed on top and Back returns through it, the way the web's history does.
  */
 @Stable
@@ -96,7 +98,7 @@ class Navigator(start: Route = Route.NewChat) {
     /** Opens a route; a destination already on the stack is brought back rather than stacked twice. */
     fun go(route: Route) {
         if (current == route) return
-        if (route is Route.NewChat || route is Route.Chat) {
+        if (route is Route.NewChat || route is Route.Chat || route is Route.Room) {
             stack.clear()
             stack.add(route)
             return
@@ -113,7 +115,7 @@ class Navigator(start: Route = Route.NewChat) {
 
     /** The route Settings' "back to chats" row returns to: the last conversation or the draft. */
     fun backToChats() {
-        val chat = stack.lastOrNull { it is Route.Chat || it is Route.NewChat } ?: Route.NewChat
+        val chat = stack.lastOrNull { it is Route.Chat || it is Route.NewChat || it is Route.Room } ?: Route.NewChat
         stack.clear()
         stack.add(chat)
     }

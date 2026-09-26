@@ -32,6 +32,7 @@ const val SESSIONS_NAMESPACE = "/rt/sessions"
 const val DEVICES_NAMESPACE = "/rt/devices"
 const val TASKS_NAMESPACE = "/rt/tasks"
 const val SCHEDULES_NAMESPACE = "/rt/schedules"
+const val ROOMS_NAMESPACE = "/rt/rooms"
 
 /** One realtime message: the envelope of packages/contracts/events/README.md. */
 data class Envelope(
@@ -111,6 +112,13 @@ class Realtime(private val http: OkHttpClient) {
     private val _refused = MutableSharedFlow<String>(extraBufferCapacity = 4)
     val refused: SharedFlow<String> = _refused.asSharedFlow()
 
+    /** Rooms this phone is in now (`join`): joined again on every (re)connect. */
+    private val joinedRooms = mutableSetOf<String>()
+    private val _roomReconnects = MutableStateFlow(0)
+
+    /** Ticks when `/rt/rooms` comes back: an open room reads what it missed (rooms have no replay). */
+    val roomReconnects: StateFlow<Int> = _roomReconnects.asStateFlow()
+
     /**
      * Opens the sockets for this hub, person and profile. A token that merely rotated does not
      * reconnect a live socket; [force] does, after a refused handshake was answered with a
@@ -122,7 +130,7 @@ class Realtime(private val http: OkHttpClient) {
         if (identity == connectedAs && !force) return
         close()
         connectedAs = identity
-        for (namespace in listOf(SESSIONS_NAMESPACE, DEVICES_NAMESPACE, TASKS_NAMESPACE, SCHEDULES_NAMESPACE)) {
+        for (namespace in listOf(SESSIONS_NAMESPACE, DEVICES_NAMESPACE, TASKS_NAMESPACE, SCHEDULES_NAMESPACE, ROOMS_NAMESPACE)) {
             sockets[namespace] = open(session, namespace)
         }
     }
@@ -148,8 +156,14 @@ class Realtime(private val http: OkHttpClient) {
         options.webSocketFactory = http
         val socket = IO.socket(URI.create(session.hub + namespace), options)
         var everConnected = false
+        var roomsEverConnected = false
         socket.on(Socket.EVENT_CONNECT) {
             if (synchronized(this) { namespace in wholeNamespaces }) socket.emit("subscribe", JSONObject())
+            if (namespace == ROOMS_NAMESPACE) {
+                synchronized(this) { joinedRooms.toList() }.forEach { socket.emit("join", JSONObject().put("room_id", it)) }
+                if (roomsEverConnected) _roomReconnects.value += 1
+                roomsEverConnected = true
+            }
             if (namespace == SESSIONS_NAMESPACE) {
                 _connected.value = true
                 if (everConnected) _reconnects.value += 1
@@ -197,6 +211,28 @@ class Realtime(private val http: OkHttpClient) {
             sockets[namespace]
         }
         if (socket?.connected() == true) socket.emit("subscribe", JSONObject())
+    }
+
+    /** `join { room_id }` on `/rt/rooms`: the room's events, and presence, while it is open. */
+    fun joinRoom(roomId: String) {
+        val socket = synchronized(this) {
+            joinedRooms += roomId
+            sockets[ROOMS_NAMESPACE]
+        }
+        if (socket?.connected() == true) socket.emit("join", JSONObject().put("room_id", roomId))
+    }
+
+    fun leaveRoom(roomId: String) {
+        val socket = synchronized(this) {
+            joinedRooms -= roomId
+            sockets[ROOMS_NAMESPACE]
+        }
+        socket?.emit("leave", JSONObject().put("room_id", roomId))
+    }
+
+    /** `typing { room_id, typing }`: the others see who is writing. */
+    fun typing(roomId: String, typing: Boolean) {
+        synchronized(this) { sockets[ROOMS_NAMESPACE] }?.emit("typing", JSONObject().put("room_id", roomId).put("typing", typing))
     }
 
     @Synchronized

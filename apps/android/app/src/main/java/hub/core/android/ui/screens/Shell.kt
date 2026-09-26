@@ -4,6 +4,7 @@ import android.app.Activity
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -65,6 +66,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -84,7 +86,6 @@ import hub.core.android.ui.components.rememberKeyboardDismisser
 import hub.core.android.ui.components.ErrorNotice
 import hub.core.android.ui.components.Glyphs
 import hub.core.android.ui.components.ProfileBadge
-import hub.core.android.ui.components.errorText
 import hub.core.android.ui.theme.LocalGlassLevel
 import hub.core.android.ui.theme.LocalTokens
 import hub.core.android.ui.theme.ThemeChoice
@@ -167,7 +168,7 @@ private fun Sidebar(shell: ShellViewModel, nav: Navigator, onClose: () -> Unit) 
     val t = LocalTokens.current
     val session by shell.session.collectAsState()
     val s = session ?: return
-    var segment by rememberSaveable { mutableStateOf(Segment.CHAT) }
+    var segment by rememberSaveable { mutableStateOf(if (nav.current is Route.Room) Segment.ROOMS else Segment.CHAT) }
     // imePadding: while the drawer's search has the keyboard, the footer (account, language,
     // theme, sign out, version) rides above it instead of under it.
     Column(Modifier.fillMaxSize().statusBarsPadding().imePadding()) {
@@ -196,7 +197,7 @@ private fun Sidebar(shell: ShellViewModel, nav: Navigator, onClose: () -> Unit) 
         Box(Modifier.weight(1f)) {
             when (segment) {
                 Segment.CHAT -> ChatsPanel(shell, nav, onOpen = onClose)
-                Segment.ROOMS -> RoomsPanel()
+                Segment.ROOMS -> RoomsPanel(nav, onOpen = onClose)
             }
         }
         HorizontalDivider(color = t.border)
@@ -289,6 +290,8 @@ private fun ChatsPanel(shell: ShellViewModel, nav: Navigator, onOpen: () -> Unit
             }
         }
         chats.error?.let { ErrorNotice(it, Modifier.padding(16.dp)) }
+        val selected by shell.selected.collectAsState()
+        if (selected.isNotEmpty()) BatchBar(shell, selected.size)
         val pinned = chats.items.filter { it.pinned }
         val recent = chats.items.filter { !it.pinned }
         LazyColumn(Modifier.fillMaxSize()) {
@@ -316,17 +319,74 @@ private fun SectionLabel(text: String) {
     Text(text, style = MaterialTheme.typography.labelMedium, color = LocalTokens.current.textMuted, modifier = Modifier.padding(start = 16.dp, top = 12.dp, bottom = 4.dp))
 }
 
+/**
+ * The chats list's batch mode (a long press on a chat): how many are selected, and archive,
+ * bring back or delete them all — deleting asks first.
+ */
+@Composable
+private fun BatchBar(shell: ShellViewModel, count: Int) {
+    val t = LocalTokens.current
+    val busy by shell.batchBusy.collectAsState()
+    val error by shell.batchError.collectAsState()
+    var confirm by remember { mutableStateOf(false) }
+    Column(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp).testTag("chats.batch")) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            IconButton(onClick = shell::clearSelection) { Icon(Icons.Default.Close, stringResource(R.string.chats_batch_done)) }
+            Text(stringResource(R.string.chats_batch_selected, count), style = MaterialTheme.typography.labelLarge, modifier = Modifier.weight(1f))
+        }
+        Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+            TextButton(onClick = { shell.archiveSelected(true) }, enabled = !busy, modifier = Modifier.testTag("chats.batch.archive")) { Text(stringResource(R.string.chats_batch_archive)) }
+            TextButton(onClick = { shell.archiveSelected(false) }, enabled = !busy, modifier = Modifier.testTag("chats.batch.unarchive")) { Text(stringResource(R.string.chats_batch_unarchive)) }
+            TextButton(onClick = { confirm = true }, enabled = !busy, modifier = Modifier.testTag("chats.batch.delete")) { Text(stringResource(R.string.chats_batch_delete), color = t.danger) }
+        }
+        error?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = t.danger) }
+    }
+    if (confirm) {
+        androidx.compose.material3.AlertDialog(
+            onDismissRequest = { confirm = false },
+            title = { Text(stringResource(R.string.chats_batch_delete_title, count)) },
+            text = { Text(stringResource(R.string.chats_batch_delete_body)) },
+            confirmButton = {
+                TextButton(onClick = { confirm = false; shell.deleteSelected() }) { Text(stringResource(R.string.chats_batch_delete), color = t.danger) }
+            },
+            dismissButton = { TextButton(onClick = { confirm = false }) { Text(stringResource(R.string.cancel)) } },
+        )
+    }
+}
+
+@OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
 @Composable
 private fun ChatRow(session: Session, badge: Boolean, shell: ShellViewModel, nav: Navigator, onOpen: () -> Unit) {
     val t = LocalTokens.current
-    val selected = (nav.current as? Route.Chat)?.sessionId == session.id
+    val picked by shell.selected.collectAsState()
+    val selecting = picked.isNotEmpty()
+    val chosen = session.id in picked
+    val selected = chosen || (!selecting && (nav.current as? Route.Chat)?.sessionId == session.id)
     Row(
         Modifier.fillMaxWidth().padding(horizontal = 8.dp)
             .background(if (selected) t.accentSoft else androidx.compose.ui.graphics.Color.Transparent, RoundedCornerShape(12.dp))
-            .clickable { nav.go(Route.Chat(session.id, session.profile)); onOpen() }
-            .padding(horizontal = 8.dp, vertical = 8.dp),
+            .combinedClickable(
+                onClick = {
+                    if (selecting) shell.toggleSelected(session.id)
+                    else { nav.go(Route.Chat(session.id, session.profile)); onOpen() }
+                },
+                onLongClick = { shell.toggleSelected(session.id) },
+            )
+            .padding(horizontal = 8.dp, vertical = 8.dp)
+            .testTag("chat.row.${session.id}"),
         verticalAlignment = Alignment.CenterVertically,
     ) {
+        if (selecting) {
+            androidx.compose.material3.Checkbox(checked = chosen, onCheckedChange = { shell.toggleSelected(session.id) })
+        } else {
+            // The chat's agent, by its face (its picture, its mark, or its initial).
+            val agents = hub.core.android.ui.components.rememberAgents(session.profile)
+            val agent = agents.firstOrNull { it.id == session.agentId }
+            if (agent != null) {
+                hub.core.android.ui.components.AgentAvatar(hub.core.android.ui.components.AgentIdentity.of(agent), session.profile, 22.dp)
+                Spacer(Modifier.size(8.dp))
+            }
+        }
         Column(Modifier.weight(1f)) {
             Text(session.title ?: stringResource(R.string.term_new_chat), style = MaterialTheme.typography.bodyMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
             session.preview?.takeIf { it.isNotBlank() }?.let {
@@ -335,28 +395,6 @@ private fun ChatRow(session: Session, badge: Boolean, shell: ShellViewModel, nav
         }
         if (session.pinned) Icon(Icons.Default.Star, stringResource(R.string.chats_pinned), tint = t.textFaint, modifier = Modifier.size(14.dp))
         if (badge) ProfileBadge(shell.profileName(session.profile), Modifier.padding(start = 6.dp))
-    }
-}
-
-@Composable
-private fun RoomsPanel() {
-    val context = LocalContext.current
-    val s = context.graph.store.current ?: return
-    var error by remember { mutableStateOf<hub.core.android.data.HubError?>(null) }
-    var names by remember { mutableStateOf<List<String>?>(null) }
-    LaunchedEffect(s.profile) {
-        hub.core.android.data.hubCall { context.graph.apis(s).rooms.roomsList(s.profile) }
-            .onSuccess { page -> names = page.items.map { it.name } }
-            .onFailure { error = it as hub.core.android.data.HubError }
-    }
-    Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            TextButton(onClick = {}, enabled = error == null && names != null) { Text(term("new_room")) }
-            TextButton(onClick = {}, enabled = error == null && names != null) { Text(term("join_by_code")) }
-        }
-        error?.let { Text(errorText(it), color = LocalTokens.current.textMuted) }
-        names?.forEach { Text(it) }
-        if (names?.isEmpty() == true) Text(stringResource(R.string.rooms_empty), color = LocalTokens.current.textMuted)
     }
 }
 

@@ -93,6 +93,8 @@ fun ChatScreen(
     val listState = rememberLazyListState()
     val atBottom by remember { derivedStateOf { !listState.canScrollForward } }
     val youLabel = stringResource(R.string.chat_you)
+    val agents = hub.core.android.ui.components.rememberAgents(profile)
+    val agentFallback = agents.firstOrNull { it.id == chat.session?.agentId }?.name ?: stringResource(R.string.agent_fallback)
 
     // Follow the reply while the reader is at the bottom; leave them where they are otherwise.
     LaunchedEffect(turns.size, turns.lastOrNull()?.messages?.lastOrNull()?.text?.length) {
@@ -131,7 +133,7 @@ fun ChatScreen(
         ) {
             when {
                 ui.loading -> Loading()
-                sessionId == null -> DraftIntro(profileName, ui, vm::selectAgent)
+                sessionId == null -> DraftIntro(profileName, profile, ui, vm::selectAgent)
                 else -> LazyColumn(
                     state = listState,
                     contentPadding = PaddingValues(horizontal = 16.dp, vertical = 12.dp),
@@ -141,7 +143,12 @@ fun ChatScreen(
                     item(key = "older") {
                         if (ui.loadingOlder) Text(stringResource(R.string.chat_loading_older), color = LocalTokens.current.textMuted)
                     }
-                    items(turns, key = { it.messages.first().id }) { turn -> TurnView(turn, youLabel, profile) }
+                    items(turns, key = { it.messages.first().id }) { turn ->
+                        val agent = if (turn.fromPerson) null else hub.core.android.ui.components.AgentIdentity.of(
+                            turn.messages.first().authorId, turn.authorName, agents, agentFallback,
+                        )
+                        TurnView(turn, youLabel, profile, agent = agent)
+                    }
                 }
             }
         }
@@ -194,7 +201,7 @@ fun ChatScreen(
 }
 
 @Composable
-private fun DraftIntro(profileName: String, ui: ChatUi, onSelect: (String) -> Unit) {
+private fun DraftIntro(profileName: String, profile: String, ui: ChatUi, onSelect: (String) -> Unit) {
     val t = LocalTokens.current
     Column(Modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.Bottom, horizontalAlignment = Alignment.CenterHorizontally) {
         Text(stringResource(R.string.chat_greeting), style = MaterialTheme.typography.headlineSmall, textAlign = TextAlign.Center)
@@ -204,7 +211,10 @@ private fun DraftIntro(profileName: String, ui: ChatUi, onSelect: (String) -> Un
         }
         LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp), contentPadding = PaddingValues(vertical = 12.dp)) {
             items(ui.agents, key = { it.id }) { agent ->
-                FilterChip(selected = agent.id == ui.agentId, onClick = { onSelect(agent.id) }, label = { Text(agent.name) })
+                FilterChip(
+                    selected = agent.id == ui.agentId, onClick = { onSelect(agent.id) }, label = { Text(agent.name) },
+                    leadingIcon = { hub.core.android.ui.components.AgentAvatar(hub.core.android.ui.components.AgentIdentity.of(agent), profile, 20.dp) },
+                )
             }
         }
     }

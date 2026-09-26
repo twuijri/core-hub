@@ -449,6 +449,8 @@ export interface ApprovalView {
   sessionId: string | null;
   messageId: string | null;
   agent: { id: string; name: string };
+  /** The room whose seat asked, when a seat's session asked (DECISIONS §69). */
+  roomId?: string | null;
 }
 
 export function toApproval(view: ApprovalView, profile: string): Record<string, unknown> {
@@ -474,7 +476,7 @@ export function toApproval(view: ApprovalView, profile: string): Record<string, 
     session_id: view.sessionId,
     run_id: row.runId,
     message_id: view.messageId,
-    room_id: null,
+    room_id: view.roomId ?? null,
     workflow_run_id: row.workflowRunId ?? null,
     node_id: row.nodeId ?? null,
     agent: view.agent,

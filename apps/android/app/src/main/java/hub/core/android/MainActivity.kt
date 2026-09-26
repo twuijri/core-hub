@@ -23,6 +23,9 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.filled.Share
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import hub.core.android.data.DeepLink
 import hub.core.android.data.PairingRequest
@@ -30,6 +33,8 @@ import hub.core.android.nav.AppPaths
 import hub.core.android.nav.Navigator
 import hub.core.android.nav.Route
 import hub.core.android.ui.screens.ChatScreen
+import hub.core.android.ui.screens.PendingButton
+import hub.core.android.ui.screens.RoomScreen
 import hub.core.android.ui.screens.ConnectScreen
 import hub.core.android.ui.screens.MainShell
 import hub.core.android.nav.Screens
@@ -158,7 +163,7 @@ private fun Destination(route: Route, nav: Navigator, shell: ShellViewModel, ope
     Column(Modifier.fillMaxSize().navigationBarsPadding()) {
         when (route) {
             Route.NewChat -> {
-                TopBar(term("new_chat"), onMenu = openDrawer, subtitle = shell.profileName(s.profile))
+                TopBar(term("new_chat"), onMenu = openDrawer, subtitle = shell.profileName(s.profile)) { PendingButton(shell, nav) }
                 ChatScreen(null, s.profile, shell.profileName(s.profile), onCreated = { id, profile -> nav.go(Route.Chat(id, profile)) })
             }
             is Route.Chat -> {
@@ -167,8 +172,19 @@ private fun Destination(route: Route, nav: Navigator, shell: ShellViewModel, ope
                 TopBar(
                     title, onMenu = openDrawer,
                     subtitle = if (route.profile != s.profile) shell.profileName(route.profile) else null,
-                )
+                ) {
+                    PendingButton(shell, nav)
+                    ExportButton(shell, route.sessionId, route.profile, title)
+                }
                 ChatScreen(route.sessionId, route.profile, shell.profileName(route.profile), onCreated = { _, _ -> })
+            }
+            is Route.Room -> {
+                RoomScreen(
+                    route.roomId, route.profile,
+                    subtitle = if (route.profile != s.profile) shell.profileName(route.profile) else null,
+                    onMenu = openDrawer,
+                    onGone = { nav.go(Route.NewChat) },
+                ) { PendingButton(shell, nav) }
             }
             Route.Search -> {
                 TopBar(term("search"), onMenu = openDrawer)
@@ -220,4 +236,43 @@ fun titleOf(route: Route): String = when (route) {
         else -> route.destination.removePrefix("agent_")
     }
     else -> route.destination
+}
+
+/**
+ * The conversation's «⋮»: Export, which asks the hub for the chat's Markdown transcript
+ * (`sessions.export`) and hands it to the share sheet.
+ */
+@Composable
+private fun ExportButton(shell: ShellViewModel, sessionId: String, profile: String, title: String) {
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val scope = androidx.compose.runtime.rememberCoroutineScope()
+    var open by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(false) }
+    var failed by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(false) }
+    androidx.compose.foundation.layout.Box {
+        androidx.compose.material3.IconButton(onClick = { open = true }, modifier = Modifier.testTag("chat.more")) {
+            androidx.compose.material3.Icon(androidx.compose.material.icons.Icons.Default.MoreVert, stringResource(R.string.chat_more))
+        }
+        androidx.compose.material3.DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
+            androidx.compose.material3.DropdownMenuItem(
+                text = { Text(stringResource(R.string.chat_export)) },
+                leadingIcon = { androidx.compose.material3.Icon(androidx.compose.material.icons.Icons.Default.Share, null) },
+                onClick = {
+                    open = false
+                    scope.launch {
+                        val file = shell.exportChat(context, sessionId, profile, title)
+                        if (file == null) failed = true
+                        else hub.core.android.ui.components.AttachmentFiles.share(context, file, "text/markdown")
+                    }
+                },
+                modifier = Modifier.testTag("chat.export"),
+            )
+        }
+    }
+    if (failed) {
+        AlertDialog(
+            onDismissRequest = { failed = false },
+            text = { Text(stringResource(R.string.chat_export_failed)) },
+            confirmButton = { TextButton(onClick = { failed = false }) { Text(stringResource(R.string.ok)) } },
+        )
+    }
 }

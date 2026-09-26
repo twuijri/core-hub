@@ -433,4 +433,14 @@ export interface SessionsPorts {
   agentTimeoutMs: number;
   /** Who continues a workflow when its gate is answered; `null` when nobody can. */
   gate?: (() => WorkflowGate | null) | undefined;
+  /** Which room a seat sits in, for `Approval.room_id`; `null` when no rooms are composed. */
+  roomOfSeat?: (() => RoomOfSeat | null) | undefined;
 }
+
+/**
+ * The room a seat sits in (`rooms`, DECISIONS §69), or `null` for a seat that is gone. An
+ * approval raised in a seat's own session names its room with it (`Approval.room_id`), so a
+ * pending list opens it in the room. The composition root joins it (`registerRoomOfSeat`),
+ * so neither module imports the other.
+ */
+export type RoomOfSeat = (workspace: string, seatId: string) => string | null;

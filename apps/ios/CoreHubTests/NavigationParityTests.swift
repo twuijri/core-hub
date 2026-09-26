@@ -66,6 +66,7 @@ final class NavigationParityTests: XCTestCase {
         for destination in DestinationID.allCases {
             let path = routes[destination.rawValue]!.replacingOccurrences(of: ":agentId", with: "01J8QK3ZR2W7M5N4P6T8V9X0AG")
                 .replacingOccurrences(of: ":sessionId?", with: "01J8QK3ZR2W7M5N4P6T8V9X0YA")
+                .replacingOccurrences(of: ":roomId?", with: "01J8QK3ZR2W7M5N4P6T8V9X0RM")
             XCTAssertEqual(AppRoutes.match(path)?.destination, destination, path)
         }
     }

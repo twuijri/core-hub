@@ -17,6 +17,8 @@ struct ChatScreen: View {
     @State private var atBottom = true
     /// The keyboard started opening while the reader was at the latest message.
     @State private var keepBottom = false
+    /// The transcript the hub exported, waiting in the share sheet.
+    @State private var exported: SharedFile?
 
     var body: some View {
         VStack(spacing: 0) {
@@ -39,6 +41,23 @@ struct ChatScreen: View {
         .background(Tone.bg)
         .navigationTitle(fixedTitle ?? model.state.title ?? l10n("sessions.untitled"))
         .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            ToolbarItem(placement: .topBarTrailing) {
+                Menu {
+                    Button {
+                        Task { if let url = await model.exportMarkdown() { exported = SharedFile(url: url) } }
+                    } label: {
+                        Label(l10n("chat.export"), systemImage: "square.and.arrow.up")
+                    }
+                    .accessibilityIdentifier("chat.export")
+                } label: {
+                    Image(systemName: "ellipsis.circle")
+                }
+                .accessibilityLabel(l10n("chat.more"))
+                .accessibilityIdentifier("chat.more")
+            }
+        }
+        .sheet(item: $exported) { file in ActivitySheet(items: [file.url]) }
         .onAppear {
             if tray == nil { tray = AttachmentTray(app: app) }
             model.start()
@@ -74,7 +93,8 @@ struct ChatScreen: View {
                             message: message,
                             startsTurn: Turns.startsTurn(visible, at: index),
                             run: message.runId.flatMap { model.state.runs[$0] },
-                            profile: model.profile
+                            profile: model.profile,
+                            agent: message.role == .assistant ? identity(of: message) : nil
                         )
                         .id(message.id)
                     }
@@ -145,9 +165,20 @@ struct ChatScreen: View {
         .padding(.bottom, Space.s2)
     }
 
+    /// A reply's agent: the registry's name and face, never the placeholder «agent».
+    private func identity(of message: Message) -> AgentIdentity {
+        AgentIdentity.of(
+            authorID: message.author.id ?? model.state.agentID,
+            shownName: message.author.name,
+            agents: app.agentDirectory.agents(model.profile),
+            fallback: agentName
+        )
+    }
+
     private var agentName: String {
         guard let id = model.state.agentID else { return l10n("chat.agent") }
-        return app.agents.first { $0.id == id }?.name ?? l10n("chat.agent")
+        return app.agentDirectory.agents(model.profile).first { $0.id == id }?.name
+            ?? app.agents.first { $0.id == id }?.name ?? l10n("chat.agent")
     }
 
     /// The tool the active run is in, when the agent reported one.
@@ -177,10 +208,15 @@ struct MessageRow: View {
     let run: Run?
     /// The chat's profile: the one its files are fetched from.
     var profile: String = ""
+    /// In a room, whether the message is yours: another person is on the left, named, like the
+    /// agents (DECISIONS §69). `nil` in a chat, where every person's message is yours.
+    var mine: Bool? = nil
+    /// Who the agent is (its registry name and face); `nil` draws the author's name and initial.
+    var agent: AgentIdentity? = nil
     @Environment(\.l10n) private var l10n
     @Environment(\.layoutDirection) private var uiDirection
 
-    private var isPerson: Bool { message.role == .user || message.role == .command }
+    private var isPerson: Bool { mine ?? (message.role == .user || message.role == .command) }
 
     var body: some View {
         VStack(alignment: .leading, spacing: Space.s1) {
@@ -196,16 +232,20 @@ struct MessageRow: View {
         HStack(spacing: Space.s2) {
             if isPerson { Spacer(minLength: 0) }
             if !isPerson {
-                Circle()
-                    .fill(Tone.accentSoft)
-                    .frame(width: Layout.avatarSm, height: Layout.avatarSm)
-                    .overlay(
-                        Text(String(message.author.name.prefix(1)).uppercased())
-                            .font(.system(size: FontSize.sizeXs, weight: .bold))
-                            .foregroundStyle(Tone.accentSoftText)
-                    )
+                if let agent {
+                    AgentAvatar(identity: agent, profile: profile, size: Layout.avatarSm)
+                } else {
+                    Circle()
+                        .fill(Tone.accentSoft)
+                        .frame(width: Layout.avatarSm, height: Layout.avatarSm)
+                        .overlay(
+                            Text(String(message.author.name.prefix(1)).uppercased())
+                                .font(.system(size: FontSize.sizeXs, weight: .bold))
+                                .foregroundStyle(Tone.accentSoftText)
+                        )
+                }
             }
-            Text(isPerson ? l10n("chat.you") : message.author.name)
+            Text(isPerson ? l10n("chat.you") : (agent?.name ?? message.author.name))
                 .font(.system(size: FontSize.sizeSm, weight: .semibold))
                 .foregroundStyle(Tone.textMuted)
                 .environment(\.layoutDirection, uiDirection)
@@ -362,4 +402,21 @@ struct ThinkingIndicator: View {
         }
         .accessibilityHidden(true)
     }
+}
+
+/// A file handed to the share sheet.
+struct SharedFile: Identifiable {
+    let url: URL
+    var id: String { url.path }
+}
+
+/// The system's share sheet.
+struct ActivitySheet: UIViewControllerRepresentable {
+    let items: [Any]
+
+    func makeUIViewController(context: Context) -> UIActivityViewController {
+        UIActivityViewController(activityItems: items, applicationActivities: nil)
+    }
+
+    func updateUIViewController(_ controller: UIActivityViewController, context: Context) {}
 }
