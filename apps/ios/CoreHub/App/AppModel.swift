@@ -53,6 +53,8 @@ final class AppModel {
     let agentDirectory = AgentDirectory()
     /// Text shared from another app, waiting to become a new chat.
     var pendingDraft: String?
+    /// Pictures and files shared from another app, waiting to become a new chat's attachments.
+    var pendingFiles: [URL] = []
     private let defaults: UserDefaults
     @ObservationIgnored private var sessionsNamespace: RealtimeNamespace?
     @ObservationIgnored private var roomsNamespace: RealtimeNamespace?
@@ -206,7 +208,7 @@ final class AppModel {
             appVersion: described.appVersion,
             osVersion: described.osVersion,
             pushBlocker: pushBlocker,
-            capabilities: [.camera, .microphone, .notifications, .clipboard]
+            capabilities: [.camera, .microphone, .notifications, .clipboard, .location]
         )
     }
 
@@ -215,7 +217,8 @@ final class AppModel {
     func thisDeviceReport(pushBlocker: PushBlocker?) -> DevicePatch {
         let described = DeviceInfo.current(appVersion: appVersion)
         return DevicePatch(brand: "Apple", model: described.model, osVersion: described.osVersion,
-                           appVersion: described.appVersion, pushBlocker: pushBlocker)
+                           appVersion: described.appVersion, pushBlocker: pushBlocker,
+                           capabilities: [Locating.capability(Locating.storedChoice())])
     }
 
     /// Claims a pairing the web made (Settings → Device connections → App).
@@ -271,12 +274,22 @@ final class AppModel {
             await self?.handshake(all: true) ?? [:]
         }
         LocalNotices.shared.start(app: self)
+        // An agent may ask where this phone is (§105): requests reach `/rt/devices`.
+        LocationRequests.shared.start(app: self)
         takeShared()
     }
 
-    /// Text the share extension left for the app becomes a new chat's draft.
+    /// Text the share extension left for the app becomes a new chat's draft; its files, the
+    /// new chat's attachments.
     func takeShared() {
-        if let text = ShareInbox.take(from: ShareInbox.defaults()) { pendingDraft = text }
+        let files = ShareInbox.takeFiles(from: ShareInbox.defaults(), folder: ShareInbox.folder())
+        if !files.isEmpty { pendingFiles += files }
+        if let text = ShareInbox.take(from: ShareInbox.defaults()) {
+            pendingDraft = text
+        } else if !files.isEmpty {
+            // Files alone still open a new chat.
+            pendingDraft = pendingDraft ?? ""
+        }
     }
 
     /// The profile the app opens on: the one used last if still allowed, else the person's
@@ -437,6 +450,7 @@ final class AppModel {
         #endif
         realtime.resume()
         takeShared()
+        Task { await LocationRequests.shared.catchUp() }
         Task {
             if let stored = await keeper.credentials, stored.needsRenewal() { _ = await keeper.refresh() }
             // Not asked yet, turned on in Settings, or the hub has a sender now: try again.

@@ -214,6 +214,15 @@ struct NotificationsPage: View {
                 // Whether this phone can show them at all comes first.
                 PushStatusSection()
                 Section {
+                    // Which notice comes in the app and as a push, and quiet hours (phone parity).
+                    NavigationLink {
+                        NotificationSettingsPage()
+                    } label: {
+                        LucideLabel(l10n("notify_page.settings"), icon: .slidersHorizontal, size: 16)
+                    }
+                    .accessibilityIdentifier("notifications.settings")
+                }
+                Section {
                     Toggle(l10n("notifications.on_complete"), isOn: draft.notifyOnComplete)
                     Toggle(l10n("notifications.on_approval"), isOn: draft.notifyOnApproval)
                     Toggle(l10n("notifications.sound"), isOn: draft.soundOnComplete)
@@ -301,6 +310,8 @@ struct ThisDevicePage: View {
                 .font(.system(size: FontSize.sizeSm))
             }
             ThisDeviceExtras()
+            // Whether an agent may ask where this phone is (§105).
+            LocationChoiceSection()
             Section {
                 Button(l10n("nav.sign_out"), role: .destructive) { Task { await app.signOut() } }
             }

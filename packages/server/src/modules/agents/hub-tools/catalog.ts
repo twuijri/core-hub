@@ -215,6 +215,8 @@ const DEVICE_GRACE_MS = 5_000;
 /** The longest a program tool waits for its request (the device answers `running` before). */
 const PROGRAM_TIMEOUT_MS = 120_000;
 const FILES_TIMEOUT_MS = 60_000;
+/** A phone asks its person before it tells where it is: long enough to read and answer (§105). */
+const LOCATION_TIMEOUT_MS = 90_000;
 
 interface DeviceRequestView {
   id: string;
@@ -232,7 +234,7 @@ async function askDevice(
   ctx: ToolContext,
   input: {
     deviceId: string;
-    capability: 'files' | 'apps';
+    capability: 'files' | 'apps' | 'location';
     purpose: string;
     params: Record<string, unknown>;
     timeoutMs: number;
@@ -317,6 +319,38 @@ interface DeviceView {
       tools: Array<{ name: string; description: string; input_schema: unknown }>;
     }>;
   } | null;
+}
+
+interface PhoneView {
+  id: string;
+  name: string;
+  kind: string;
+  online: boolean;
+  last_seen_at?: string | null;
+  profiles?: string[] | null;
+  capabilities?: Array<{ kind: string; enabled: boolean }>;
+}
+
+/**
+ * Which of the person's devices to ask where they are (§105): one they name, or else the one
+ * that can tell (declares `location`, switched on, may be asked in this profile), connected
+ * first, then the one seen most recently.
+ */
+export function phoneToLocate(
+  devices: PhoneView[],
+  profile: string,
+  wanted?: string,
+): PhoneView | null {
+  const able = devices.filter(
+    (d) =>
+      (d.capabilities ?? []).some((c) => c.kind === 'location' && c.enabled) &&
+      (!d.profiles || d.profiles.includes(profile)),
+  );
+  if (wanted) return able.find((d) => d.id === wanted) ?? null;
+  const seen = (d: PhoneView) => (d.last_seen_at ? Date.parse(d.last_seen_at) : 0);
+  return (
+    [...able].sort((a, b) => Number(b.online) - Number(a.online) || seen(b) - seen(a))[0] ?? null
+  );
 }
 
 const DEVICE_ID = {
@@ -499,6 +533,56 @@ function deviceTools(): HubToolDefinition[] {
           timeoutMs: PROGRAM_TIMEOUT_MS,
         });
         return programResult(result);
+      },
+    },
+    {
+      name: 'devices.locate',
+      group: 'devices',
+      access: 'read',
+      description:
+        "Where the person's phone is now: its latitude, longitude, accuracy in metres and when it was read. The phone asks its person first (once, or every time, as they chose); without their yes, or when no phone of theirs can tell, this answers why instead. Ask only when the task needs the place, and say why in `why`: the person reads it.",
+      inputSchema: {
+        type: 'object',
+        properties: {
+          why: {
+            type: 'string',
+            maxLength: 200,
+            description: 'What the place is for, in the words the person will read on the phone.',
+          },
+          device_id: {
+            type: 'string',
+            description:
+              'A phone to ask by its id; without it, the phone that can tell and was seen last.',
+          },
+        },
+      },
+      async run(ctx, a) {
+        const body = await ctx.call('GET', '/devices', { query: { limit: 50 } });
+        const phone = phoneToLocate(
+          items(body) as PhoneView[],
+          ctx.profile,
+          str(a, 'device_id') ?? undefined,
+        );
+        if (!phone) {
+          throw new ToolRefusal(
+            'device_capability_off',
+            'no phone of the person can tell where it is here (none has location on for this profile)',
+          );
+        }
+        const result = await askDevice(ctx, {
+          deviceId: phone.id,
+          capability: 'location',
+          purpose: str(a, 'why') ?? 'devices.locate',
+          params: {},
+          timeoutMs: LOCATION_TIMEOUT_MS,
+        });
+        return {
+          device: phone.name,
+          latitude: result.latitude,
+          longitude: result.longitude,
+          accuracy_m: result.accuracy_m,
+          captured_at: result.captured_at,
+        };
       },
     },
     {

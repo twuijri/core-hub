@@ -67,12 +67,23 @@ export const DEFAULT_TIMEOUT_MS = 30_000;
  * in a moment but may first ask the person; a program's call may ask and then run a while (a
  * long one answers "running" before this and is followed with `op: status`).
  */
-const TIMEOUTS: Partial<Record<CapabilityKind, number>> = { files: 60_000, apps: 120_000 };
+const TIMEOUTS: Partial<Record<CapabilityKind, number>> = {
+  files: 60_000,
+  apps: 120_000,
+  location: 90_000,
+};
 export function defaultTimeoutFor(capability: CapabilityKind): number {
   return TIMEOUTS[capability] ?? DEFAULT_TIMEOUT_MS;
 }
-/** What an agent's run may ask the person's own computer for (§89). */
-export const AGENT_CAPABILITIES: ReadonlySet<CapabilityKind> = new Set(['files', 'apps']);
+/**
+ * What an agent's run may ask the person's own devices for: a computer's files and programs
+ * (§89), and a phone's location (§105), which the phone answers only after its person agrees.
+ */
+export const AGENT_CAPABILITIES: ReadonlySet<CapabilityKind> = new Set([
+  'files',
+  'apps',
+  'location',
+]);
 /**
  * Capabilities only a connected computer serves: asked of one that is offline, the answer is
  * "offline" at once instead of a wait for a device that cannot hear it (§89). A phone's

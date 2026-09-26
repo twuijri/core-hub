@@ -587,8 +587,7 @@
         "kind": "agent"
       },
       "roles": ["admin"],
-      "surfaces": ["web", "desktop"],
-      "note": "A coding agent's own instructions and settings files (CLAUDE.md, settings.json, AGENTS.md, config.toml …), one set for every profile in the home of the user the hub runs as (DECISIONS §78). Owners and admins; not on the phones."
+      "note": "A coding agent's own instructions and settings files (CLAUDE.md, settings.json, AGENTS.md, config.toml …), one set for every profile in the home of the user the hub runs as (DECISIONS §78). Owners and admins; on the phones as a plain editor since 2026-09-27 (docs/changes/2026-09-27-twuijri-phone-parity.md)."
     },
     {
       "id": "agent_settings",
@@ -767,6 +766,7 @@
       "agent_jobs": "/agents/:agentId/jobs",
       "agent_channels": "/agents/:agentId/channels",
       "agent_plugins": "/agents/:agentId/plugins",
+      "agent_config_files": "/agents/:agentId/config-files",
       "agent_settings": "/agents/:agentId/settings",
       "global_agent": "/global-agent"
     },
@@ -805,6 +805,7 @@
       "agent_jobs": "/agents/:agentId/jobs",
       "agent_channels": "/agents/:agentId/channels",
       "agent_plugins": "/agents/:agentId/plugins",
+      "agent_config_files": "/agents/:agentId/config-files",
       "agent_settings": "/agents/:agentId/settings",
       "global_agent": "/global-agent"
     },

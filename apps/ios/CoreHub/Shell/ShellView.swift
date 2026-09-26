@@ -27,10 +27,14 @@ struct ShellView: View {
     @State private var searching = false
     /// A shared text waiting in the new chat's composer.
     @State private var seed: String?
+    /// Shared pictures and files waiting to be attached in the new chat.
+    @State private var seedFiles: [URL] = []
     @State private var pending: PendingModel?
     @State private var showingPending = false
 
     var body: some View {
+        // Read here, so the shell redraws when an agent's location request arrives (§105).
+        let locating = LocationRequests.shared.waiting.first
         GeometryReader { geometry in
             ZStack(alignment: .leading) {
                 page
@@ -72,6 +76,18 @@ struct ShellView: View {
                 openGlobalAgent: { navigate(.destination(.globalAgent)) }
             )
         }
+        // An agent asked where this phone is: the person answers here, once or for good (§105).
+        .sheet(isPresented: Binding(
+            get: { locating != nil },
+            set: { shown in
+                // Swiped away: no, this time only.
+                if !shown, let first = LocationRequests.shared.waiting.first, first.id == locating?.id {
+                    Task { await LocationRequests.shared.decide(first, allow: false, remember: false) }
+                }
+            }
+        )) {
+            if let locating { LocationConsentSheet(request: locating) }
+        }
         .sheet(isPresented: $showingPending) {
             if let pending {
                 NavigationStack { PendingSheet(model: pending, go: navigate) }
@@ -84,6 +100,8 @@ struct ShellView: View {
         guard let draft = app.pendingDraft else { return }
         app.pendingDraft = nil
         seed = draft
+        seedFiles = app.pendingFiles
+        app.pendingFiles = []
         navigate(.newChat)
     }
 
@@ -142,9 +160,10 @@ struct ShellView: View {
             NewChatScreen(opened: { sessionID, profile, message in
                 firstMessages.put(sessionID, message)
                 seed = nil
+                seedFiles = []
                 main = .chat(sessionID: sessionID, profile: profile)
-            }, seed: seed)
-            .id(seed ?? "")
+            }, seed: seed, seedFiles: seedFiles)
+            .id((seed ?? "") + seedFiles.map(\.lastPathComponent).joined())
         case .chat(let sessionID, let profile):
             ChatScreen(model: ChatModel(
                 app: app,

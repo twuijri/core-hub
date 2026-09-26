@@ -3293,3 +3293,30 @@ B18 of the fork gap list (AB 1.1, 1.2). Proposed — owner to confirm:
 - **Hermes's cards take none** (`409 conflict`, `hermes_owns_card`, `action: definition_of_done`):
   Hermes's worker is briefed by the card itself, so lists it never sees would only look kept. A hub
   task handed to Hermes and started carries its lists into the Hermes card's brief.
+
+## 105. An agent may ask its person's phone where it is; the phone asks the person first
+
+Proposed — owner to confirm (2026-09-27, phone parity). §74 built the request and §89 let a run ask a
+computer for files and programs; an agent still could not ask a phone for its location, and neither
+app answered a request (the owner's B8).
+
+- **A run token may create `location` requests** to its own person's devices, like `files` and
+  `apps` (§89); every other capability still needs the `device` scope. Everything else of §74
+  stands: only that person's device, the profile the device allows, answered once, by the device.
+- **The hub's `devices` tools gain `devices.locate`** (read): the phone to ask is the one named, or
+  else the one that declares `location` switched on and may be asked in the profile, connected
+  first, then seen last; its answer is `{device, latitude, longitude, accuracy_m, captured_at}`. The
+  agent says why in `why`, which becomes the request's `purpose` and is what the person reads. A
+  refusal, no answer in 90 s (the default wait for `location` now, long enough to read and answer)
+  or no phone that can tell is a tool refusal the agent reads (`device_denied`, `device_timeout`,
+  `device_capability_off`).
+- **The phones declare `location`** in their registration and answer pending requests (a
+  `request.created` on `/rt/devices`, and `listRequests?status=pending` on connecting): a consent
+  prompt the first time — «Allow every time», «Only this time», «Don't allow» — then the operating
+  system's own location permission; «every time» and «never» are kept on the phone and changed under
+  This device. A phone that is not connected answers when it next connects, within the wait.
+
+Rejected: a standing permission kept by the hub (the person decides on the device that has the
+location, where they can see it happen); a background location the phone keeps sending (the
+request is one answer, as §74 says).
+

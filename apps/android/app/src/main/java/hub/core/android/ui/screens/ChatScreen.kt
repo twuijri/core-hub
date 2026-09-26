@@ -82,8 +82,15 @@ fun ChatScreen(
         // Text shared from another app lands in the new chat's draft, once.
         val shared by context.graph.sharedText.collectAsState()
         LaunchedEffect(shared) {
-            shared?.let { draft = if (draft.isBlank()) it else "$draft\n$it" }
+            shared?.takeIf { it.isNotBlank() }?.let { draft = if (draft.isBlank()) it else "$draft\n$it" }
             context.graph.sharedText.value = null
+        }
+        // Pictures and files shared from another app go into the tray and upload, once.
+        val sharedFiles by context.graph.sharedFiles.collectAsState()
+        LaunchedEffect(sharedFiles) {
+            if (sharedFiles.isEmpty()) return@LaunchedEffect
+            sharedFiles.forEach { vm.tray.add(it.file, isImage = it.isImage, preview = it.preview) }
+            context.graph.sharedFiles.value = emptyList()
         }
     }
     val chat = ui.chat

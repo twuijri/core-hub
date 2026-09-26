@@ -23,7 +23,7 @@ final class FamilyTests: XCTestCase {
             .usage: "chart-column", .skillsUsage: "activity", .performance: "gauge", .theme: "palette",
             .workspaces: "layout-grid", .updates: "circle-arrow-down", .plugins: "puzzle", .files: "folder",
             .agentSkills: "sparkles", .agentMcp: "server", .agentMemory: "brain",
-            .agentJobs: "rotate-ccw-clock", .agentChannels: "radio", .agentPlugins: "puzzle",
+            .agentJobs: "rotate-ccw-clock", .agentChannels: "radio", .agentPlugins: "puzzle", .agentConfigFiles: "file-cog",
             .agentSettings: "sliders-horizontal", .globalAgent: "globe",
         ]
         for destination in DestinationID.allCases {

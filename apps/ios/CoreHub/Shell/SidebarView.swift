@@ -227,6 +227,7 @@ enum Icons {
         case .agentJobs: return .rotateCcwClock
         case .agentChannels: return .radio
         case .agentPlugins: return .puzzle
+        case .agentConfigFiles: return .fileCog
         case .agentSettings: return .slidersHorizontal
         case .globalAgent: return .globe
         }

@@ -39,6 +39,7 @@ enum AppRoutes {
         .agentJobs: "/agents/:agentId/jobs",
         .agentChannels: "/agents/:agentId/channels",
         .agentPlugins: "/agents/:agentId/plugins",
+        .agentConfigFiles: "/agents/:agentId/config-files",
         .agentSettings: "/agents/:agentId/settings",
         .globalAgent: "/global-agent",
     ]

@@ -176,7 +176,7 @@ describe('devices: a computer’s helper and who may ask it', () => {
     expect(back.json().profiles).toBeNull();
   });
 
-  it("an agent's run asks the person's own computer for files and programs, and for nothing else", async () => {
+  it("an agent's run asks the person's own devices for files, programs and the location, and for nothing else", async () => {
     const h = await hub();
     const mac = await pairComputer(h, ['notifications', 'files', 'apps', 'location']);
     await online(h, mac.appToken);
@@ -206,13 +206,22 @@ describe('devices: a computer’s helper and who may ask it', () => {
       run_id: '01J8QK3ZR2W7M5N4P6T8V9X0RN',
     });
 
+    // Its location too, since §105: the device asks its person before it answers.
     const location = await authed(h, run, {
       method: 'POST',
       url: '/api/v1/device-requests',
       payload: { device_id: mac.deviceId, capability: 'location' },
     });
-    expect(location.statusCode).toBe(403);
-    expect(location.json().details.required_scope).toBe('device');
+    expect(location.statusCode, location.body).toBe(202);
+
+    // Anything else still needs the `device` scope.
+    const camera = await authed(h, run, {
+      method: 'POST',
+      url: '/api/v1/device-requests',
+      payload: { device_id: mac.deviceId, capability: 'camera' },
+    });
+    expect(camera.statusCode).toBe(403);
+    expect(camera.json().details.required_scope).toBe('device');
 
     // A run may not decide which profiles may ask the computer.
     const narrowing = await authed(h, run, {

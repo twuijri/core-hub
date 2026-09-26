@@ -139,6 +139,9 @@ fun ThisDevicePage(shell: ShellViewModel) {
                 )
             }
         }
+        // Whether an agent may ask where this phone is (§105): asked the first time, changed here.
+        item { SectionTitle(stringResource(R.string.locate_heading)) }
+        item { LocationChoiceRow() }
         item { SectionTitle(stringResource(R.string.update_heading)) }
         item { UpdateSection() }
     }
@@ -219,5 +222,22 @@ private fun UpdateSection() {
             enabled = state != UpdateState.Checking && state != UpdateState.Downloading,
             modifier = Modifier.fillMaxWidth(),
         )
+    }
+}
+
+@Composable
+private fun LocationChoiceRow() {
+    val graph = androidx.compose.ui.platform.LocalContext.current.graph
+    val choice by graph.locationChoices.choice.collectAsState()
+    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        Segmented(
+            listOf(
+                Segment(LocationChoice.ASK, stringResource(R.string.locate_ask), tag = "locate.choice.ask"),
+                Segment(LocationChoice.ALWAYS, stringResource(R.string.locate_choice_always), tag = "locate.choice.always"),
+                Segment(LocationChoice.NEVER, stringResource(R.string.locate_choice_never), tag = "locate.choice.never"),
+            ),
+            choice, { graph.locationChoices.set(it); graph.reportDevice() }, Modifier.fillMaxWidth(),
+        )
+        Text(stringResource(R.string.locate_hint), fontSize = FontTokens.sizeXs.sp, color = hub.core.android.ui.theme.LocalTokens.current.textMuted)
     }
 }

@@ -51,28 +51,16 @@ struct DeviceConnectionsPage: View {
         VStack(spacing: 0) {
             Picker("", selection: $tab) {
                 Text(l10n("devices.tab_app")).tag(0)
-                if app.isAdmin { Text(l10n("devices.tab_devices")).tag(1) }
+                // Everyone sees their own devices; an admin sees everyone's (the hub decides).
+                Text(l10n("devices.tab_devices")).tag(1)
             }
             .pickerStyle(.segmented)
             .padding(Space.s3)
             if tab == 0 {
                 PairingMaker()
             } else {
-                AsyncContent(key: "devices") {
-                    try await app.api.call { try await DevicesAPI.devicesList(apiConfiguration: $0) }.items
-                } content: { devices, reload in
-                    List {
-                        if devices.isEmpty { EmptyRow(icon: .qrCode) }
-                        ForEach(devices, id: \.id) { device in
-                            HStack {
-                                Text(device.name)
-                                Spacer()
-                                StatusPill(text: device.online ? l10n("shell.connected") : l10n("shell.offline"), kind: device.online ? .good : .neutral)
-                            }
-                        }
-                    }
-                    .refreshable { reload() }
-                }
+                // The cards of #149: state, last active, push; rename, test the push, remove.
+                DeviceCardsList()
             }
         }
     }
