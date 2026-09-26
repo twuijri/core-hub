@@ -7,17 +7,33 @@
 
 # Core Hub
 
-**[Download the apps](https://twuijri.github.io/core-hub/)** for Windows, macOS, Linux and
-Android, or run your own hub with Docker (below).
+**Runs on**
+
+| | Platform | How you get it |
+|---|---|---|
+| 🪟 | **Windows** 10 / 11 (x64) | Installer (`.exe`), updates itself · Microsoft Store (coming) |
+| 🍎 | **macOS** (Apple silicon) | Signed and notarised `.dmg`, updates itself |
+| 🐧 | **Linux** (x64) | AppImage (updates itself) · `.deb` |
+| 🤖 | **Android** 8.0 and later | `.apk`, updates itself · Google Play (coming) |
+| 📱 | **iPhone and iPad** (iOS 17 and later) | TestFlight by invitation · App Store (coming) |
+| 🌐 | **Any browser** | The web app your hub serves |
+| 🐳 | **Your own server** (linux/amd64, linux/arm64) | Docker image `ghcr.io/twuijri/core-hub` ([quick start](#quick-start-with-docker)) |
+
+<p align="center">
+  <a href="https://twuijri.github.io/core-hub/"><img alt="Download Core Hub" src="https://img.shields.io/badge/Download-Core%20Hub-1f6f5f?style=for-the-badge&logo=github&logoColor=white" height="44"></a>
+</p>
+
+The download page picks the right file for your system and always offers the newest release.
+The desktop and Android apps update themselves from version 1.1.3 on.
 
 **One self-hosted hub for every AI agent you use: chat, tasks, schedules and workflows,
-from the web today and from the desktop and your phone next.**
+from the web, the desktop and your phone.**
 
 Core Hub is a server you run on your own machine. It is built around
 [Hermes Agent](https://github.com/NousResearch/hermes-agent) (MIT), which ships inside the
 image, and it adds a curated catalog of coding agents you install on demand. Everything the
 hub knows is exposed through one versioned contract (REST + realtime), and every client (web,
-terminal and, later, desktop and mobile) is a thin surface over that same contract.
+terminal, desktop and mobile) is a thin surface over that same contract.
 
 - **Self-hosted:** one container, one data volume. Your keys, conversations and agent homes
   stay on your box.
