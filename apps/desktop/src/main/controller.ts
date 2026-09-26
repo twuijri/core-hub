@@ -107,6 +107,9 @@ export class DesktopController {
     private readonly options: { devTools: boolean; tray: boolean },
   ) {
     this.config = new ConfigStore(app.getPath('userData'));
+    const testHome = process.env.COREHUB_DESKTOP_HOME
+      ? path.resolve(process.env.COREHUB_DESKTOP_HOME)
+      : null;
     this.computer = new ThisComputerService({
       config: this.config,
       seal: (text) => sealText(text),
@@ -118,6 +121,14 @@ export class DesktopController {
       },
       version: app.getVersion(),
       productName: PRODUCT.name,
+      // Tests give the app a home of their own, so `~/Core Hub` and the other assistants'
+      // files are never the machine's real ones.
+      ...(testHome
+        ? {
+            home: testHome,
+            discovery: { home: testHome, platform: process.platform, env: process.env },
+          }
+        : {}),
       computer: () => ({
         deviceKey: this.config.get().deviceKey,
         name: os.hostname() || PRODUCT.name,

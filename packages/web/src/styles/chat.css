@@ -1253,6 +1253,25 @@ button.context-ring {
   background: var(--ch-color-surface-2);
   object-fit: contain;
 }
+/* A video or a sound on a message, played in place from a stream ticket (§87). */
+.msg-attachment-media {
+  display: flex;
+  flex-basis: 100%;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--ch-space-1);
+}
+.msg-video {
+  display: block;
+  max-inline-size: min(100%, 32rem);
+  max-block-size: 24rem;
+  border: 1px solid var(--ch-color-border);
+  border-radius: var(--ch-radius-md);
+  background: var(--ch-color-surface-2);
+}
+.msg-audio {
+  max-inline-size: min(100%, 24rem);
+}
 
 .file-list {
   display: flex;

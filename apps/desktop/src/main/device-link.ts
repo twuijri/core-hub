@@ -143,6 +143,7 @@ export class DeviceLink {
     this.socket = socket;
     socket.on('connect', () => {
       this.setStatus('connected', null);
+      void this.renew();
       void this.sendReport();
       void this.catchUp();
     });
@@ -205,6 +206,17 @@ export class DeviceLink {
         this.socket?.disconnect();
       }
     }
+  }
+
+  /**
+   * A pairing token lasts months; each connect renews it (`auth.refresh` with no body), at
+   * most once a day, so a computer that stays linked never finds itself signed out.
+   */
+  private renewedAt = 0;
+  async renew(): Promise<void> {
+    if (Date.now() - this.renewedAt < 24 * 60 * 60 * 1000) return;
+    this.renewedAt = Date.now();
+    await this.client.raw('post', '/auth/refresh').catch(() => undefined);
   }
 
   /** The requests that arrived while this computer was away. */
