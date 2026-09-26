@@ -119,4 +119,18 @@ hub.core.android.phone.PushTest tests=11 failures=0 errors=0
 - لم يُنشر المرحّل بعد، فالإثبات لم يُجرَّب إلا أمام المرحّل المزيّف ومنطق المرحّل الحقيقي في اختباراته.
 
 ## التسليم والخطوة التالية
-(يُحدَّث بعد CI.)
+CI يدويًا على فرع المهمة (`workflow_dispatch`):
+```
+CI 36222900009 (054ec08c…aa81c7cc) — success: Lint/typecheck/contracts/tests/build, Server unit tests (shard 1/3, 2/3, 3/3),
+   Web smoke journeys (Playwright against the real hub), db:generate + db:migrate, Docker, Desktop app smoke
+Android 36222898428 — success: Android build, unit tests, lint
+iOS 36222896736 — failure: CoreHubTests/DeviceInfoTests.swift:50:21: error: type 'ReportingBackend' does not conform to protocol 'PushBackend'
+   (نسخة ثانية مزيّفة من PushBackend لم تأخذ المعامل الجديد؛ أُصلحت)
+iOS 36223120990 (f65e90ea) — success: ** TEST SUCCEEDED ** Executed 167 tests, with 0 failures
+   Test Case '-[CoreHubTests.DeviceProofTests testTheProofIsWhatTheRelayVerifies]' passed
+   … وحالات DeviceProofTests الخمس، وPushTests testTheRegistrationCarriesTheRelayProofEachTime
+   وtestASignOutByTheHubForgetsTheTokenAndDropsTheAPNsRegistration: passed
+```
+- يُدمج في `night/2026-09-27` (#165)؛ نتيجة CI هناك تُضاف هنا.
+- لم يُجرَّب على هاتف ولا متصفح حقيقي مع مزوّد دفع حقيقي، ولم يُنشر المرحّل.
+- للمالك: تأكيد §107 (خاصة: إعادة الاشتراك لصاحب التفعيل وحده، وإلغاء تسجيل APNs عند خروج يفرضه المركز).
