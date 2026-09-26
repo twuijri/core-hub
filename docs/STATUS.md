@@ -295,7 +295,19 @@ its approval.
   unsigned, built by
   `.github/workflows/desktop.yml` as artifacts and never published; This device checks GitHub
   releases once a day (switchable) or on demand and links the installer — nothing is downloaded
-  or installed by the app. Since 2026-09-26 the `appId` is `com.twuijri.corehub` and
+  or installed by the app. Since 2026-09-26 (from 1.1.3; DECISIONS §109, proposed — owner to
+  confirm) **the apps update themselves**: the Windows `.exe`, the macOS app and the AppImage run
+  electron-updater against the GitHub releases' `latest*.yml` about ten seconds after start and
+  every six hours, download a newer version in the background and float *Restart to update* /
+  *Later* over the page (never restarting on their own; installed on quit otherwise); the `.deb`
+  says a new version is out and links the download page; the Store build never looks. *Check for
+  updates…* is in the menus and the tray; the switch stays in This device. The release now carries
+  `latest.yml`, `latest-mac.yml`, `latest-linux.yml`, the blockmaps and a signed
+  `Core-Hub-X.Y.Z-arm64-mac.zip`, and refuses to publish a feed naming a file it does not carry.
+  Unit-tested (the mode per platform and packaging, the schedule, the feeds' names); the packaged
+  Linux app was run here as an AppImage runs (`APPIMAGE` set) and reached GitHub (the 1.1.2 release has no feed, so it fell back to
+  the releases API); **no real update has been installed yet** — the first is 1.1.3 → the next
+  release; 1.1.2 and older must install 1.1.3 by hand once. Since 2026-09-26 the `appId` is `com.twuijri.corehub` and
   `.github/workflows/desktop-signed.yml` (by hand or a release tag, never on a pull request)
   signs the macOS dmg with Developer ID and notarises it (docs/RELEASING.md); Windows is still
   unsigned. Since 2026-09-26 Windows also builds the **Microsoft Store MSIX** (identity

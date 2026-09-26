@@ -4,28 +4,57 @@
  * actions are handed in, so a test can read the menu without starting Electron.
  */
 import type { MenuItemConstructorOptions } from 'electron';
+import { isolate } from '../shared/i18n.js';
 
 export interface MenuActions {
   showWindow(): void;
   changeConnection(): void;
   openWebsite(): void;
   quit(): void;
+  /** Looks for a new version now and shows the answer (DECISIONS §109). */
+  checkForUpdates(): void;
+  /** Installs the downloaded version and starts it again. */
+  restartToUpdate(): void;
 }
 
-type T = (key: string) => string;
+/**
+ * The update items: "Check for updates…" unless the app never looks (the Store build), and
+ * "Restart to update" once a new version is downloaded.
+ */
+export interface MenuUpdates {
+  check: boolean;
+  /** The downloaded version waiting for a restart, or null. */
+  ready: string | null;
+}
+
+type T = (key: string, params?: Record<string, string>) => string;
+
+function updateItems(t: T, actions: MenuActions, updates: MenuUpdates | undefined) {
+  const items: MenuItemConstructorOptions[] = [];
+  if (updates?.check)
+    items.push({ label: t('menu.check_updates'), click: () => actions.checkForUpdates() });
+  if (updates?.ready)
+    items.push({
+      label: t('menu.restart_to_update', { version: isolate(updates.ready) }),
+      click: () => actions.restartToUpdate(),
+    });
+  return items;
+}
 
 export function appMenuTemplate(
   t: T,
   actions: MenuActions,
-  options: { platform: NodeJS.Platform; devTools: boolean },
+  options: { platform: NodeJS.Platform; devTools: boolean; updates?: MenuUpdates },
 ): MenuItemConstructorOptions[] {
   const mac = options.platform === 'darwin';
+  const updates = updateItems(t, actions, options.updates);
   const template: MenuItemConstructorOptions[] = [];
   if (mac)
     template.push({
       label: t('app.name'),
       submenu: [
         { role: 'about', label: t('menu.about') },
+        ...updates,
         { type: 'separator' },
         { label: t('menu.change_connection'), click: () => actions.changeConnection() },
         { type: 'separator' },
@@ -82,16 +111,28 @@ export function appMenuTemplate(
     },
     {
       label: t('menu.help'),
-      submenu: [{ label: t('menu.website'), click: () => actions.openWebsite() }],
+      submenu: [
+        { label: t('menu.website'), click: () => actions.openWebsite() },
+        // On macOS they sit in the app menu, under About.
+        ...(mac || updates.length === 0
+          ? []
+          : [{ type: 'separator' } as MenuItemConstructorOptions, ...updates]),
+      ],
     },
   );
   return template;
 }
 
-export function trayMenuTemplate(t: T, actions: MenuActions): MenuItemConstructorOptions[] {
+export function trayMenuTemplate(
+  t: T,
+  actions: MenuActions,
+  updates?: MenuUpdates,
+): MenuItemConstructorOptions[] {
+  const items = updateItems(t, actions, updates);
   return [
     { label: t('tray.show'), click: () => actions.showWindow() },
     { label: t('tray.change_connection'), click: () => actions.changeConnection() },
+    ...(items.length > 0 ? [{ type: 'separator' } as MenuItemConstructorOptions, ...items] : []),
     { type: 'separator' },
     { label: t('tray.quit'), click: () => actions.quit() },
   ];

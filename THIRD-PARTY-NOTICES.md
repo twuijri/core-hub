@@ -108,6 +108,35 @@ here on the owner's request (2026-09-25):
 Both under the MIT licence quoted in full above (lobe-icons), with the copyright lines in the
 table. Their `LICENSE` files are in their packages in `node_modules`.
 
+## The desktop app's updater
+
+Since 1.1.3 the desktop app updates itself with
+[`electron-updater`](https://github.com/electron-userland/electron-builder/tree/master/packages/electron-updater)
+(DECISIONS §109). It is an npm dependency, not copied source, but esbuild bundles it — with what it
+needs — into the app's main process (`apps/desktop/dist/main.cjs`) without their licence files, so
+they are noted here, like the web terminal's libraries above. The versions are the ones
+`pnpm-lock.yaml` pins:
+
+| Package | Version | Licence | Copyright |
+|---|---|---|---|
+| `electron-updater` | `6.8.9` | MIT | (c) 2015 Loopline Systems |
+| `builder-util-runtime` | `9.7.0` | MIT | (c) 2015 Loopline Systems |
+| `js-yaml` | `4.3.2` | MIT | (c) 2011-2015 Vitaly Puzrin |
+| `fs-extra` | `10.1.0` | MIT | (c) 2011-2017 JP Richardson |
+| `jsonfile` | `6.2.1` | MIT | (c) 2012-2015 JP Richardson |
+| `universalify` | `2.0.1` | MIT | (c) 2017 Ryan Zimmerman |
+| `graceful-fs` | `4.2.11` | ISC | (c) 2011-2022 Isaac Z. Schlueter, Ben Noordhuis, and Contributors |
+| `semver` | `7.7.4` | ISC | (c) Isaac Z. Schlueter and Contributors |
+| `lazy-val` | `1.0.5` | MIT | Vladimir Krivosheev (its `package.json`; the package ships no licence file) |
+| `lodash.escaperegexp`, `lodash.isequal` | `4.1.2`, `4.5.0` | MIT | (c) JS Foundation and other contributors; based on Underscore.js, (c) Jeremy Ashkenas |
+| `debug` | `4.4.3` | MIT | (c) 2014-2017 TJ Holowaychuk; (c) 2018-2021 Josh Junon |
+| `ms` | `2.1.3` | MIT | (c) 2020 Vercel, Inc. |
+| `supports-color` | `10.2.2` | MIT | (c) Sindre Sorhus |
+| `sax` | `1.6.1` | [Blue Oak Model License 1.0.0](https://blueoakcouncil.org/license/1.0.0) | Isaac Z. Schlueter (its author) |
+
+The MIT licence is quoted in full above (lobe-icons); ISC is quoted under Lucide. Their `LICENSE`
+files are in their packages in `node_modules`.
+
 ## Ideas taken, code not taken
 
 Two entries would be expected here by a reader of `packages/web/src/ui/` and are
