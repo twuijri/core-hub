@@ -94,6 +94,7 @@ struct ChatScreen: View {
                             startsTurn: Turns.startsTurn(visible, at: index),
                             run: message.runId.flatMap { model.state.runs[$0] },
                             profile: model.profile,
+                            sessionID: model.sessionID,
                             agent: message.role == .assistant ? identity(of: message) : nil
                         )
                         .id(message.id)
@@ -208,6 +209,8 @@ struct MessageRow: View {
     let run: Run?
     /// The chat's profile: the one its files are fetched from.
     var profile: String = ""
+    /// The conversation, for links in a reply to its working folder's files; nil in a room.
+    var sessionID: String? = nil
     /// In a room, whether the message is yours: another person is on the left, named, like the
     /// agents (DECISIONS §69). `nil` in a chat, where every person's message is yours.
     var mine: Bool? = nil
@@ -286,7 +289,9 @@ struct MessageRow: View {
                 ToolCallCard(call: call)
             }
             if !message.text.isEmpty {
+                // A link in the reply that names one of its files opens it (FileLinkOpener).
                 MarkdownView(text: message.text)
+                    .modifier(FileLinkOpener(own: MessageAttachments.files(message.content), profile: profile, sessionID: sessionID))
             }
             MessageAttachments(content: message.content, profile: profile)
             switch message.status {

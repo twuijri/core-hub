@@ -535,7 +535,13 @@
     "photo_quality": "الصور",
     "compressed": "مضغوطة",
     "original": "بالجودة الأصلية",
-    "open": "افتح {name}"
+    "open": "افتح {name}",
+    "fetching": "جارٍ الجلب…",
+    "progress": "{percent}% · {done} من {total}",
+    "cancel": "ألغِ التنزيل",
+    "gone": "هذا الملف لم يعد في المركز.",
+    "open_too_large": "هذا الملف أكبر من أن يُفتح هنا.",
+    "link_failed": "تعذّر فتح هذا الرابط."
   },
   "pending": {
     "title": "بانتظارك",
