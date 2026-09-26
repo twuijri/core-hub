@@ -65,7 +65,15 @@ All matched files use Prettier code style!
 أثناء الكتابة كشف الاختبار خطأً حقيقيًا: مقارنة الإجابة بالاسم القديم كانت تعدّ السؤال غير المُجاب (`undefined`) مُجابًا،
 فلا يُرسل؛ صُحّح قبل الـcommit. لم يُشغَّل `actionlint` (غير مثبت)؛ صحة YAML فُحصت بـ `yaml.safe_load`.
 
-التشغيل الحقيقي: تُكمَّل أدناه.
+التشغيل الحقيقي: **لم يُشغَّل بعد.** GitHub لا يقبل تشغيل مسار `workflow_dispatch` غير موجود في الفرع الافتراضي:
+
+```
+$ gh workflow run ios-submit.yml --repo twuijri/core-hub --ref night/2026-09-27 -f version=1.1.1 -f build=110 -f submit=false
+HTTP 404: Not Found (https://api.github.com/repos/twuijri/core-hub/actions/workflows/ios-submit.yml)
+```
+
+طريقة التسجيل البديلة (فرع مؤقت بمشغّل `push` يتخطّى الوظيفة) رُفضت بصلاحيات الجلسة، فلم تُجرَّب. يُشغَّل بعد دمج #165 في
+`main` (أو بإذن المالك لتلك الطريقة) بالمدخلات `version=1.1.1` و`build=110` و`submit=false`.
 
 ## المخاطر والرجوع
 - التشغيل الحقيقي يغيّر حالة التطبيق في App Store Connect (البناء، التصنيف، السعر، التوفر، الحقوق، طريقة النشر)؛ كلها
@@ -74,4 +82,5 @@ All matched files use Prettier code style!
 - الرجوع: استرجاع الـcommit؛ وما تغيّر في App Store Connect يُعدَّل من صفحاته.
 
 ## التسليم والخطوة التالية
-دُمج في `night/2026-09-27` (#165). المالك يكمل في App Store Connect ما يطبعه التقرير، ثم يشغّل المسار بـ `submit`.
+دُمج في `night/2026-09-27` (#165). تشغيل المسار مرة بـ `submit=false` بعد وصوله إلى `main`، ثم يكمل المالك في App Store Connect ما يطبعه التقرير، ثم يشغّله
+بـ `submit`.
