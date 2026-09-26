@@ -107,9 +107,14 @@ test.describe('web smoke journeys', () => {
     await expect(page.getByTestId('session-row').first()).toContainText(
       'خطة الإطلاق في ثلاث مراحل',
     );
-    // Once the chat has run, the folder is fixed and says so instead of going quiet.
-    await expect(page.getByTestId('working-dir-button')).toBeDisabled();
+    // Once the chat has run, the folder is fixed and says so instead of going quiet: the
+    // folder icon in the top bar opens its name, its path and why it no longer moves.
+    await page.getByTestId('working-dir-button').click();
     await expect(page.getByTestId('working-dir-locked')).toBeVisible();
+    await expect(page.getByTestId('working-dir-path')).toContainText('لوحة-الإطلاق');
+    await expect(page.getByTestId('working-dir-new')).toHaveCount(0);
+    await shot(page, 'chat-bar-folder-ar-light');
+    await page.keyboard.press('Escape');
     // The column has handed itself to the transcript: the composer is docked.
     await expect(page.getByTestId('chat-screen')).toHaveAttribute('data-empty', 'false');
     await shot(page, 'chat-reply-ar-light');

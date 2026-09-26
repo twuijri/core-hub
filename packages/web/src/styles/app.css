@@ -1187,3 +1187,56 @@
   font-size: var(--ch-font-size-xs);
   color: var(--ch-color-text-faint);
 }
+
+/* ------------------------------------------- the fallback chain (Models → Defaults)
+   Reordered by dragging its grip (owner, 2026-09-26); the place number follows the row. */
+.fallback-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--ch-space-1);
+  max-inline-size: 36rem;
+}
+.fallback-row {
+  display: flex;
+  align-items: center;
+  gap: var(--ch-space-2);
+  padding: var(--ch-space-1) var(--ch-space-2);
+  border: 1px solid var(--ch-color-border);
+  border-radius: var(--ch-radius-md);
+  background: var(--ch-color-bg-raised);
+}
+.fallback-row-dragging {
+  position: relative;
+  z-index: 1;
+  box-shadow: var(--ch-shadow-sm);
+  opacity: 0.9;
+}
+.fallback-grip {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  inline-size: 1.5rem;
+  block-size: 1.75rem;
+  border-radius: var(--ch-radius-sm);
+  color: var(--ch-color-text-faint);
+  cursor: grab;
+  touch-action: none;
+}
+.fallback-grip:hover:not(:disabled) {
+  color: var(--ch-color-text);
+  background: var(--ch-color-surface-2);
+}
+.fallback-grip:active {
+  cursor: grabbing;
+}
+.fallback-grip:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+.fallback-place {
+  min-inline-size: 1.25rem;
+  font-size: var(--ch-font-size-xs);
+  font-variant-numeric: tabular-nums;
+  color: var(--ch-color-text-muted);
+  text-align: center;
+}

@@ -796,8 +796,12 @@
       "fallbacks_empty": "No fallback models: if the chat model's provider fails, the turn fails.",
       "fallbacks_need_default": "Choose a chat model first; the fallbacks are tried after it.",
       "fallback_add": "Add a fallback model",
-      "fallback_up": "Move {model} up",
-      "fallback_down": "Move {model} down",
+      "fallback_reorder": "Drag to reorder {model} (Space to pick up, arrows to move)",
+      "fallback_instructions": "To reorder a fallback model, press Space or Enter on its handle, move it with the arrow keys, and press Space or Enter again to drop it. Escape puts it back.",
+      "fallback_picked": "Picked up {model}, place {position} of {total}.",
+      "fallback_moved": "{model} is now at place {position} of {total}.",
+      "fallback_dropped": "{model} dropped at place {position} of {total}.",
+      "fallback_cancelled": "Reordering cancelled; {model} is back at place {position} of {total}.",
       "fallback_remove": "Remove {model}"
     },
     "ensembles": {

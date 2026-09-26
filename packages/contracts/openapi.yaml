@@ -4103,6 +4103,9 @@ paths:
         Where the hub cannot read them — it does not supervise Hermes, a profile has no Hermes
         profile, or Hermes did not answer — the answer is still `200`: `items` holds what could
         be read and `unavailable` says, per profile, why the rest is missing.
+
+        A conversation the caller hid (`sessions.hideChannelConversation`) is left out unless
+        `hidden=include` is asked (contract decision §87).
       parameters:
         - $ref: '#/components/parameters/Profile'
         - name: profiles
@@ -4118,6 +4121,14 @@ paths:
           schema:
             type: string
             pattern: '^[a-z][a-z0-9_]{0,31}$'
+        - name: hidden
+          in: query
+          description: >-
+            `include` lists the conversations the caller hid too, each with `hidden: true`
+            (contract decision §87). Without it they are left out.
+          schema:
+            type: string
+            enum: [include]
       x-rt-events: []
       responses:
         '200':
@@ -4160,6 +4171,85 @@ paths:
           $ref: '#/components/responses/Unauthorized'
         '404':
           $ref: '#/components/responses/NotFound'
+  /channel-conversations/{conversation_id}:
+    delete:
+      operationId: sessions.deleteChannelConversation
+      tags: [sessions]
+      summary: Delete a channel conversation from Hermes (admin, permanent)
+      description: |
+        Removes the conversation from Hermes's own session store, in the Hermes profile the
+        profile in `X-Hub-Profile` is (contract decision §87): its messages go with it and it
+        cannot be brought back. It is what `hermes sessions delete` does, asked through Hermes's
+        internal server (ADR 0015). Clients ask for a confirmation that says it is permanent.
+
+        Only a conversation from a messaging channel is deleted here, and only by its exact id:
+        the hub reads it first and answers `404` (`resource: channel_conversation`) for anything
+        else, including the hub's own chats, which Hermes keeps too. `503 service_unavailable`
+        when Hermes cannot be asked (`details.reason: hermes_api_unavailable`, or
+        `hermes_not_managed` where the hub does not supervise Hermes). Every person's "hidden"
+        mark on it goes too.
+      x-roles: [owner, admin]
+      parameters:
+        - $ref: '#/components/parameters/Profile'
+        - name: conversation_id
+          in: path
+          required: true
+          description: Hermes's own session id.
+          schema:
+            type: string
+            pattern: '^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$'
+      x-rt-events: []
+      responses:
+        '204':
+          description: Deleted from Hermes.
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
+  /channel-conversations/{conversation_id}/hidden:
+    parameters:
+      - $ref: '#/components/parameters/Profile'
+      - name: conversation_id
+        in: path
+        required: true
+        description: Hermes's own session id.
+        schema:
+          type: string
+          pattern: '^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$'
+    put:
+      operationId: sessions.hideChannelConversation
+      tags: [sessions]
+      summary: Hide a channel conversation from the caller's list
+      description: |
+        The caller's own list stops showing the conversation (contract decision §87). Only the
+        hub remembers it — per person, per profile — and Hermes, the channel and everyone
+        else's list are untouched. Hiding one that is already hidden, or one the hub cannot read
+        right now, is allowed; the conversation itself is not looked up.
+      x-rt-events: []
+      responses:
+        '204':
+          description: Hidden.
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+    delete:
+      operationId: sessions.unhideChannelConversation
+      tags: [sessions]
+      summary: Show a hidden channel conversation again
+      description: The reverse of `sessions.hideChannelConversation`; one not hidden is fine.
+      x-rt-events: []
+      responses:
+        '204':
+          description: Shown again.
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
   /channel-conversations/{conversation_id}/messages:
     get:
       operationId: sessions.listChannelMessages
@@ -17699,6 +17789,12 @@ components:
           $ref: '#/components/schemas/Timestamp'
         last_message_at:
           $ref: '#/components/schemas/Timestamp'
+        hidden:
+          type: boolean
+          description: >-
+            The caller hid it from their list (`sessions.hideChannelConversation`, contract
+            decision §87). Only a list asked with `hidden=include` carries hidden ones; absent
+            means `false`.
     ChannelMessagePreview:
       type: object
       required: [role, text]
@@ -22402,6 +22498,15 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/ModelCapability'
+        image_only:
+          type: boolean
+          description: >-
+            The model answers with images only (contract decision §86) — an Images-API model
+            such as `gpt-image-*`, DALL·E, Imagen or FLUX, or the ChatGPT subscription's image
+            model. It is offered as the profile's image model and never as a chat model: clients
+            leave it out of every chat-model picker (the composer, the defaults, the fallback
+            chain). A model that draws and also chats (`gemini-*-image`) is not image-only.
+            Absent from an older hub, which means `false`.
         pricing:
           oneOf:
             - $ref: '#/components/schemas/ModelPricing'

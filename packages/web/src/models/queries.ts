@@ -327,6 +327,18 @@ export function useSignInStatus(providerId: string, signInId: string | null) {
 }
 
 /** `<provider_id>|<model>` — one string a picker can carry for a `ModelRef`. */
+/**
+ * The models a chat can be held with: chat models, less the ones that only draw (contract
+ * decision §86 — `gpt-image-*`, DALL·E, FLUX …, which fail a chat turn). Every chat-model
+ * picker lists these: the composer, the defaults, the fallback chain, a provider's default, a
+ * workflow step. The image-only ones are offered on the Images tab alone.
+ */
+export function chatModels<T extends Pick<Model, 'kind' | 'image_only'>>(
+  models: readonly T[],
+): T[] {
+  return models.filter((model) => model.kind === 'chat' && model.image_only !== true);
+}
+
 export function refValue(ref: ModelRef | null | undefined): string {
   return ref ? `${ref.provider_id}|${ref.model}` : '';
 }

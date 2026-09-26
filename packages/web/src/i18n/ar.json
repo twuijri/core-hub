@@ -796,8 +796,12 @@
       "fallbacks_empty": "لا نماذج احتياطية: إذا فشل مزوّد نموذج المحادثة فشل الدور.",
       "fallbacks_need_default": "اختر نموذج المحادثة أولًا؛ النماذج الاحتياطية تُجرَّب بعده.",
       "fallback_add": "أضف نموذجًا احتياطيًا",
-      "fallback_up": "قدّم {model}",
-      "fallback_down": "أخّر {model}",
+      "fallback_reorder": "اسحب لترتيب {model} (المسافة للإمساك، والأسهم للتحريك)",
+      "fallback_instructions": "لترتيب نموذج احتياطي: اضغط المسافة أو Enter على مقبضه، وحرّكه بالأسهم، ثم اضغط المسافة أو Enter مرة أخرى لإفلاته. Escape يعيده مكانه.",
+      "fallback_picked": "أمسكت {model}، في المكان {position} من {total}.",
+      "fallback_moved": "{model} الآن في المكان {position} من {total}.",
+      "fallback_dropped": "أُفلت {model} في المكان {position} من {total}.",
+      "fallback_cancelled": "أُلغي الترتيب؛ عاد {model} إلى المكان {position} من {total}.",
       "fallback_remove": "احذف {model}"
     },
     "ensembles": {

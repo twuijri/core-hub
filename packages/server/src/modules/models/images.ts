@@ -51,6 +51,20 @@ export function withImageCapability(
 const IMAGES_API_MODEL =
   /(?:^|[/:._-])(?:gpt-image|chatgpt-image|dall-e|dalle|imagen|flux|stable-diffusion|sdxl|sd3|seedream|hidream|recraft|ideogram|kolors|qwen-image)/i;
 
+/**
+ * True when the model answers with images only (contract decision §86): the Images-API families
+ * above — `gpt-image-*` (the ChatGPT subscription's too), DALL·E, Imagen, FLUX … — which take a
+ * prompt and give back a picture, never a turn of conversation. Chosen as a chat model, such a
+ * model fails the turn, so the clients keep it out of every chat-model picker. A chat model that
+ * draws (`gemini-*-image`, `gpt-5-image`) chats as well, and is not one.
+ */
+export function isImageOnlyModel(
+  modelKey: string,
+  capabilities: readonly ModelCapability[] = [],
+): boolean {
+  return isImageModel(modelKey, capabilities) && IMAGES_API_MODEL.test(modelKey);
+}
+
 /** How `image_api.py` speaks to the model: its `COREHUB_IMAGE_PROVIDER`. */
 export type ImageProtocol = 'gemini' | 'compatible' | 'chat' | 'codex';
 

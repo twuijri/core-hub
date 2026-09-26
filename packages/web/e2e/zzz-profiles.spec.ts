@@ -123,7 +123,10 @@ test.describe('lists across profiles', () => {
     ] as const) {
       await row(page, id).getByRole('link').click();
       await expect(page).toHaveURL(new RegExp(`/chat/${id}\\?profile=${slug}$`));
-      await expect(page.getByTestId('chat-profile')).toHaveAttribute('data-profile', slug);
+      // The bar already shows the person's profile (Designer): the conversation's own is
+      // added only when it is another one.
+      if (slug === 'designer') await expect(page.getByTestId('chat-profile')).toHaveCount(0);
+      else await expect(page.getByTestId('chat-profile')).toHaveAttribute('data-profile', slug);
       // Count only once the transcript is on screen: each chat already has its first reply,
       // and counting while it still loads read 0 on a busy hub (a race, not a failure).
       await expect(page.getByTestId('message-assistant').first()).toHaveAttribute(
