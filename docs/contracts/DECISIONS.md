@@ -2637,3 +2637,38 @@ owner to confirm:
 Rejected: guessing the mode from the number, which cannot be known; Hermes's own `…/apply`,
 which runs `hermes gateway restart` and in a container starts a second gateway inside the
 dashboard process.
+
+The header over self-chat replies: §86.
+
+## 86. The header over WhatsApp self-chat replies is the agent's name, or a typed title
+
+The owner (2026-09-26, hub 1.1.1, approved: «ممتاز»): in «أنا (مراسلة نفسي)» every reply of the
+agent starts with Hermes's «☤ *Hermes Agent*» over a rule; it should name the agent.
+
+Observed (ADR 0012; Hermes v2026.9.14, MIT): in `self-chat` the owner and the agent write from one
+number, so Hermes's WhatsApp bridge puts a header over every reply (`bot` replies carry none).
+`WHATSAPP_REPLY_PREFIX` in the profile's `.env` replaces Hermes's own, a written `\n` being a line
+break. Hermes's Python side reads an empty value as "no header", but its adapter drops an empty
+variable from the bridge's environment and the bridge then sends its own default header — tried
+on the real Hermes in the image, with its adapter and the bridge's own formatting code. Proposed,
+owner to confirm:
+
+- **`agents.setChannelReplyHeader`** (WhatsApp only; `409 reply_header_not_supported` elsewhere,
+  `409 not_linked` with no phone): `use: agent_name` — the agent's name as the hub shows it
+  (`Agent.name`), read when written — or `use: custom` with a `title` (one line, 1–64 characters).
+  The hub writes `*<title>*`, Hermes's rule, a line break: the shape of Hermes's own header with
+  another title. The gateway serving the profile follows like any channel change (§85).
+  `ChannelLink.reply_title` reads it back; null while nothing usable is written (Hermes's own).
+- **The default is the agent's name**, written when a number is linked in `self-chat` or switched
+  to it and nothing is written yet. Links made before are not rewritten when the hub starts: they
+  keep Hermes's header until someone saves the setting or changes the mode. A value written by hand
+  is kept and reads as its text.
+- **No "no header"**: with Hermes v2026.9.14 an empty value still sends Hermes's header, and a
+  header is what tells the owner's messages from the agent's in one chat. If Hermes's bridge takes
+  an empty value one day, `use: none` can be added.
+- Renaming the agent later does not rewrite the header (it then reads as a typed title).
+
+Rejected: `reply_prefix` in the platform's `config.yaml` — the adapter hands it to the bridge only
+while the environment variable is also set, so it adds nothing; faking "no header" with a
+zero-width prefix (Hermes's own code notes WhatsApp renders those as stray characters) or a
+blank-line prefix.
