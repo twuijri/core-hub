@@ -16,6 +16,19 @@ if (hasFirebase) apply(plugin = "com.google.gms.google-services")
 
 val repoRoot = rootProject.file("../..")
 
+// Self-update from the GitHub releases (phone/SelfUpdate.kt, docs/RELEASING.md): on for the APK the
+// GitHub release carries, off for a Google Play build — Play updates the app and forbids an app
+// installing its own updates. `-Pcorehub.selfUpdate=false` or COREHUB_ANDROID_SELF_UPDATE=false turns
+// it off: the app never asks GitHub, and REQUEST_INSTALL_PACKAGES leaves the manifest.
+val selfUpdate = when (
+    val v = (providers.gradleProperty("corehub.selfUpdate").orNull ?: providers.environmentVariable("COREHUB_ANDROID_SELF_UPDATE").orNull)
+        ?.trim()?.lowercase()
+) {
+    null, "", "true", "1" -> true
+    "false", "0" -> false
+    else -> throw GradleException("corehub.selfUpdate / COREHUB_ANDROID_SELF_UPDATE must be true or false, not \"$v\"")
+}
+
 // One version for every Core Hub deliverable (owner, 2026-09-26): the root package.json's.
 // `pnpm version:check` fails if versionName stops being read from it (docs/RELEASING.md).
 @Suppress("UNCHECKED_CAST")
@@ -276,6 +289,7 @@ android {
         versionName = rootVersion
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         buildConfigField("boolean", "FIREBASE", hasFirebase.toString())
+        buildConfigField("boolean", "SELF_UPDATE", selfUpdate.toString())
     }
 
     // A signed release needs the keystore (docs/RELEASING.md): CI writes it from the repository's
@@ -309,6 +323,11 @@ android {
     buildFeatures {
         compose = true
         buildConfig = true
+    }
+    // Without self-update the app has no reason to install packages (Play's policy on the permission).
+    if (!selfUpdate) {
+        sourceSets["debug"].manifest.srcFile("src/noSelfUpdate/AndroidManifest.xml")
+        sourceSets["release"].manifest.srcFile("src/noSelfUpdate/AndroidManifest.xml")
     }
     sourceSets["main"].java.srcDir(generateSharedSources.flatMap { it.output })
     sourceSets["main"].res.srcDir(generateSharedSources.flatMap { it.resOutput })

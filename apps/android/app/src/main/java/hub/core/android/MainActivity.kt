@@ -10,6 +10,8 @@ import hub.core.android.ui.kit.IconKind
 import hub.core.android.ui.kit.Lucide
 import hub.core.android.ui.kit.MenuItem
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
+import androidx.compose.ui.unit.dp
 import android.content.Context
 import android.content.Intent
 import androidx.lifecycle.lifecycleScope
@@ -105,6 +107,12 @@ class MainActivity : ComponentActivity() {
                 }
             }
         }
+    }
+
+    /** Each return to the app may look for a newer release (at most every six hours, SelfUpdate.kt). */
+    override fun onStart() {
+        super.onStart()
+        graph.updates.onForeground()
     }
 
     override fun onNewIntent(intent: Intent) {
@@ -204,6 +212,8 @@ private fun Destination(route: Route, nav: Navigator, shell: ShellViewModel, ope
             Route.NewChat -> {
                 // The page itself names the profile the chat will be made in (as on iOS).
                 TopBar(term("new_chat"), onMenu = openDrawer) { PendingButton(shell, nav) }
+                // A newer Core Hub on GitHub: Update or Later, under the top bar (SelfUpdate.kt).
+                hub.core.android.phone.UpdateBanner(Modifier.padding(horizontal = 16.dp, vertical = 4.dp))
                 ChatScreen(null, s.profile, shell.profileName(s.profile), onCreated = { id, profile -> nav.go(Route.Chat(id, profile)) })
             }
             is Route.Chat -> {

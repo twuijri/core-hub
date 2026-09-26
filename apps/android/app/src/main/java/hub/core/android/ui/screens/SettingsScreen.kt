@@ -118,6 +118,12 @@ fun SettingsScreen(isAdmin: Boolean, onOpen: (Route) -> Unit, onBackToChats: () 
                 )
             }
         }
+        // A newer Core Hub was found (SelfUpdate.kt): one row, opening This device where Update is.
+        item(key = "update") {
+            hub.core.android.phone.UpdateSettingsRow(
+                onOpen = { onOpen(Route.SettingsPage("this_device")) }, modifier = Modifier.padding(top = 16.dp),
+            )
+        }
         SettingsList.visible(isAdmin).forEach { (title, rows) ->
             if (rows.isEmpty()) return@forEach
             item(key = "g$title") {
