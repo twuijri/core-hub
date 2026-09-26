@@ -2970,12 +2970,15 @@ Proposed — owner to confirm:
   `cloudflared` on the same machine connect from these, so every stack we deploy keeps working
   by replacing the image; a client on the internet does not, so what it writes is ignored.
   Tailscale's own addresses (`100.64.0.0/10`) are clients, not proxies.
+- **The desktop app's Tailscale route** (§95) connects to the hub from loopback, which the
+  default trusts, so it no longer passes bytes through: it forwards HTTP — requests, server-sent
+  events and WebSocket upgrades — drops the peer's own `Forwarded`, `X-Forwarded-*` and
+  `X-Real-IP`, and writes `X-Forwarded-For` with the tailnet peer's address
+  (`apps/desktop/src/main/tailnet.ts`). A machine on the person's tailnet is counted as itself.
 
 Known limits: under the default a machine on the same private network as a hub whose port is
 published directly can still write its own address — such a stack sets `false` (docs/DEPLOY.md
-§3d). The desktop app's Tailscale route (§95) is a plain TCP pass-through from loopback, which
-the default trusts, so a machine on the person's own tailnet can do the same against a desktop
-hub; making that pass-through write `X-Forwarded-For` itself is left for later. Rejected: `false`
+§3d). Rejected: `false`
 as the default (every client behind a proxy would share one address, and one person's failed
 sign-ins would lock everyone out); a hop count as the default (a client reaching the port
 directly could claim any address); reading `CF-Connecting-IP` or `X-Real-IP` (headers a client

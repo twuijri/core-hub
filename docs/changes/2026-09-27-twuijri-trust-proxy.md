@@ -24,6 +24,10 @@
   (`request.ip`) وفي المقبس (صار `socketAddressOf`)، الإقران (`request.ip`)، طرفية الويب (صار `socketAddressOf`).
   لا يوجد تحديد معدّل آخر بالعنوان، ولا يقرأ تسجيل مُرحّل الإشعارات ولا الـwebhooks عنوان العميل ولا أي ترويسة
   `X-Forwarded-*` / `X-Real-IP` / `CF-Connecting-IP` مباشرة.
+- إضافة بطلب المنسّق: مُمرِّر Tailscale في تطبيق سطح المكتب (`apps/desktop/src/main/tailnet.ts`) كان تمرير TCP خامًا
+  من loopback، والافتراضي يثق بـloopback، فجهاز في شبكة Tailscale يستطيع كتابة عنوانه. صار يتكلم HTTP (الطلبات
+  والبث وترقيات WebSocket)، يحذف `Forwarded` و`X-Forwarded-*` و`X-Real-IP` القادمة من الطرف، ويكتب `X-Forwarded-For`
+  بعنوان الطرف الحقيقي.
 
 ## العقد (ما تغيّر في packages/contracts، أو «لا شيء»)
 لا شيء. قرار جديد في `docs/contracts/DECISIONS.md` §96 فقط.
@@ -36,6 +40,7 @@
 - `packages/server/src/modules/auth/sockets.ts`، `packages/server/src/modules/terminal/index.ts`: `socketAddressOf(socket)`
   بدل `socket.handshake.address`.
 - `packages/server/tests/unit/trust-proxy.test.ts` (جديد)، `packages/server/tests/unit/config.test.ts`.
+- `apps/desktop/src/main/tailnet.ts` (`Forwarder` صار وسيط HTTP)، `apps/desktop/tests/unit/tailnet-forwarder.test.ts` (جديد).
 - `docs/DEPLOY.md` (صف في جدول المتغيرات و§3d: Caddy/Traefik/Cloudflare/بلا بروكسي)، `docs/contracts/DECISIONS.md`
   §96، `docs/STATUS.md` (سطر auth).
 
@@ -63,6 +68,21 @@ lint exit: 0
 $ pnpm typecheck
 typecheck exit: 0
 ```
+مُمرِّر Tailscale — على الكود القديم (تمرير TCP) يفشل الاختباران:
+```
+     × drops what a peer says about itself and names the peer it saw 17ms
+     × carries a WebSocket upgrade both ways, with the same header rule 10047ms
+      Tests  2 failed (2)
+```
+وبعد التغيير (مع اختبارات المسار نفسه):
+```
+$ pnpm exec vitest run tests/unit/tailnet-forwarder.test.ts tests/unit/relay.test.ts
+      Tests  16 passed (16)
+$ pnpm lint
+lint exit: 0
+$ pnpm typecheck
+typecheck exit: 0
+```
 CI على طلب الليلة #165 (الرأس `2b03bb18`، بعد دمج هذه المهمة في `e772ef71`؛ تشغيل CI الخاص بـ`e772ef71` أُلغي بدفعات لاحقة):
 ```
  ✓  unit  tests/unit/config.test.ts (10 tests) 29ms
@@ -81,12 +101,11 @@ fail	Android build, unit tests, lint — ContractExamplesTest > every response e
 ## المخاطر والرجوع
 - حزمة تنشر منفذ الخادم مباشرة بلا بروكسي: جهاز في الشبكة الخاصة نفسها ما زال يستطيع كتابة عنوانه؛ الحل
   `COREHUB_TRUST_PROXY=false` (موثّق في DEPLOY §3d).
-- مسار Tailscale في تطبيق سطح المكتب (§95) تمرير TCP خام من loopback، والافتراضي يثق بـloopback، فجهاز في شبكة
-  Tailscale الخاصة بالشخص يستطيع كتابة عنوانه أمام مركز الحاسوب. جعل ذلك التمرير يكتب `X-Forwarded-For` بنفسه متروك
-  لاحقًا (خارج نطاق هذه المهمة، وهو في ملف مهمة أخرى الليلة).
+- مسار Tailscale في سطح المكتب صار وسيط HTTP بدل تمرير TCP؛ خطره: طلب أو ترقية WebSocket لا يمرّان كما كانا. الاختبار
+  يغطي الطلب العادي والترقية بالاتجاهين، ولم يُجرَّب بعد مع جوال حقيقي عبر Tailscale.
 - Cloudflare البرتقالية أمام Caddy/Traefik: بدون ضبط يُحسب عنوان حافة Cloudflare؛ الخطوات في DEPLOY §3d.
 - الرجوع: استرجاع الدمج؛ أو مؤقتًا `COREHUB_TRUST_PROXY` بقائمة البروكسيات المطلوبة. لا ترحيل بيانات.
 
 ## التسليم والخطوة التالية
-دُمج في `night/2026-09-27` (طلب #165)، بلا طلب دمج خاص. الخطوة التالية: تأكيد المالك للافتراضي، ثم متابعة مسار
-Tailscale في سطح المكتب.
+دُمج في `night/2026-09-27` (طلب #165)، بلا طلب دمج خاص. الخطوة التالية: تأكيد المالك للافتراضي، وتجربة مسار
+Tailscale مع جوال حقيقي.
