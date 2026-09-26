@@ -51,7 +51,7 @@ import { DataKeyRing } from './crypto.js';
 import { SecretStore } from './secrets.js';
 import { roleForAdapter } from './defaults.js';
 import { hermesSignInRuntime, type SignInRuntime } from './sign-in.js';
-import { codexClientVersion } from './live-models.js';
+import { codexVersionSource } from './live-models.js';
 import {
   ModelsService,
   type HermesTarget,
@@ -191,6 +191,11 @@ function contextOf(app: FastifyInstance): ModelsService {
   const db = requireSqlite(hub.database);
   const keys = dataKeyRingFor(app);
   const runtime = hermesRuntimeFor(app);
+  // The Codex CLI version the ChatGPT subscription's list is asked as (decision §110).
+  const codexVersion = codexVersionSource({
+    env: () => hub.config.hostEnv.inherited ?? {},
+    ...(own.fetchImpl ? { fetch: own.fetchImpl } : {}),
+  });
   const hermes: HermesTarget = own.hermes ?? {
     // Only a runtime this hub supervises has a home the hub may write into; an
     // external gateway is somebody else's process with somebody else's files.
@@ -254,8 +259,8 @@ function contextOf(app: FastifyInstance): ModelsService {
               if (!existsSync(python)) return null;
               return hermesPythonRunner({ python, env: () => runtime.cliEnv(), timeoutMs: 45_000 });
             },
-            // The hub's environment may move the version without a release.
-            clientVersion: () => codexClientVersion(hub.config.hostEnv.inherited ?? {}),
+            // The newest Codex CLI release, read by itself; the hub's environment may pin it.
+            clientVersion: codexVersion,
             home: (profile) => {
               const home = runtime.status().home;
               if (!home) return null;

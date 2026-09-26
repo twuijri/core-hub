@@ -66,7 +66,7 @@ export interface LiveListing {
   /** The Hermes home of a profile; `null` for the root. */
   home(profile: string | null): string | null;
   /** The Codex CLI version the ChatGPT subscription's list is asked as (decision §83). */
-  clientVersion?(): string;
+  clientVersion?(): string | Promise<string>;
 }
 
 /** The one call the runtime is made of: Hermes's server, JSON in and out. */
@@ -192,7 +192,7 @@ export function hermesSignInRuntime(
           python,
           home,
           provider,
-          live?.clientVersion?.() ?? CODEX_CLIENT_VERSION,
+          (await live?.clientVersion?.()) ?? CODEX_CLIENT_VERSION,
         );
         if (asked.ok) {
           return {

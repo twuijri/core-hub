@@ -52,9 +52,98 @@ export type LiveModels = { ok: true; models: LiveModel[] } | { ok: false; reason
 export const CODEX_CLIENT_VERSION = '0.157.0';
 
 /** The version sent, as the hub's environment may override it. */
-export function codexClientVersion(env: NodeJS.ProcessEnv): string {
+export function codexClientVersion(env: NodeJS.ProcessEnv, newest?: string | null): string {
   const override = (env.COREHUB_CODEX_CLIENT_VERSION ?? '').trim();
-  return /^\d+\.\d+\.\d+$/.test(override) ? override : CODEX_CLIENT_VERSION;
+  if (/^\d+\.\d+\.\d+$/.test(override)) return override;
+  return newest && compareVersions(newest, CODEX_CLIENT_VERSION) > 0
+    ? newest
+    : CODEX_CLIENT_VERSION;
+}
+
+/** `rust-v0.157.1` → `0.157.1`; anything else (a pre-release, another tag) → null. */
+export function codexReleaseVersion(tag: unknown): string | null {
+  const found = typeof tag === 'string' ? /^rust-v(\d+\.\d+\.\d+)$/.exec(tag.trim()) : null;
+  return found?.[1] ?? null;
+}
+
+/** Numeric X.Y.Z comparison: negative, zero or positive. */
+export function compareVersions(a: string, b: string): number {
+  const left = a.split('.').map(Number);
+  const right = b.split('.').map(Number);
+  for (let index = 0; index < 3; index += 1) {
+    const diff = (left[index] ?? 0) - (right[index] ?? 0);
+    if (diff !== 0) return diff;
+  }
+  return 0;
+}
+
+/** Where the newest Codex CLI release is read (public, no token). */
+export const CODEX_RELEASES_URL = 'https://api.github.com/repos/openai/codex/releases/latest';
+
+/** How long a read release version is trusted before it is read again. */
+export const CODEX_RELEASE_TTL_MS = 12 * 60 * 60 * 1000;
+
+/**
+ * The Codex CLI version to ask the subscription's model list as, kept current by itself
+ * (decision §110): the backend shows a model only to clients at least as new as its
+ * `minimal_client_version`, so a model OpenAI ships behind a newer Codex CLI appears in the hub
+ * as soon as that CLI is released — the way CLI Proxy API's catalogue follows OpenAI's — instead
+ * of waiting for a hub release to bump {@link CODEX_CLIENT_VERSION}.
+ *
+ * The newest `rust-v*` release of github.com/openai/codex is read at most every twelve hours,
+ * when a list is asked for. It only ever raises the version: an older, unreadable or missing
+ * answer keeps {@link CODEX_CLIENT_VERSION}, and `COREHUB_CODEX_CLIENT_VERSION` in the hub's
+ * environment still wins over both. A read that takes longer than `waitMs` is not waited for;
+ * the list is asked with what is known and the next one uses the answer.
+ */
+export function codexVersionSource(options: {
+  env: () => NodeJS.ProcessEnv;
+  fetch?: (url: string, init?: RequestInit) => Promise<Response>;
+  now?: () => number;
+  waitMs?: number;
+}): () => Promise<string> {
+  const fetcher = options.fetch ?? ((url, init) => fetch(url, init));
+  const now = options.now ?? (() => Date.now());
+  const waitMs = options.waitMs ?? 5_000;
+  let newest: string | null = null;
+  let readAt = Number.NEGATIVE_INFINITY;
+  let reading: Promise<void> | null = null;
+
+  const read = async (): Promise<void> => {
+    try {
+      const response = await fetcher(CODEX_RELEASES_URL, {
+        headers: { Accept: 'application/vnd.github+json', 'User-Agent': 'core-hub' },
+        signal: AbortSignal.timeout(15_000),
+      });
+      if (!response.ok) return;
+      const body = (await response.json()) as { tag_name?: unknown; prerelease?: unknown };
+      if (body.prerelease === true) return;
+      const version = codexReleaseVersion(body.tag_name);
+      if (version && (!newest || compareVersions(version, newest) > 0)) newest = version;
+    } catch {
+      // Offline or rate-limited: the version already known is used.
+    }
+  };
+
+  return async () => {
+    if (now() - readAt >= CODEX_RELEASE_TTL_MS) {
+      readAt = now();
+      reading = read().finally(() => {
+        reading = null;
+      });
+    }
+    if (reading) {
+      let timer: NodeJS.Timeout | undefined;
+      await Promise.race([
+        reading,
+        new Promise<void>((resolve) => {
+          timer = setTimeout(resolve, waitMs);
+        }),
+      ]);
+      clearTimeout(timer);
+    }
+    return codexClientVersion(options.env(), newest);
+  };
 }
 
 /**

@@ -448,7 +448,11 @@ describe.skipIf(!PY)('the ChatGPT subscription in the hub (§83, §84)', () => {
         'gpt-6-astra',
         'gpt-6-luna',
         'gpt-6-sol',
+        'gpt-image-1.5',
         'gpt-image-2',
+        'gpt-image-2.5',
+        'gpt-image-2.5-flare',
+        'gpt-image-2.5-sunburst',
       ]);
       expect(
         provider.models.find((model) => model.model === 'gpt-image-2')?.capabilities,

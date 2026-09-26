@@ -54,6 +54,7 @@ import { AUXILIARY_TASKS, isAuxiliaryKey, roleForAdapter } from './defaults.js';
 import { writeHermesImagePlugin } from './hermes-image-plugin.js';
 import {
   CODEX_IMAGES,
+  codexImageModels,
   IMAGE_ENV_NAMES,
   imageEnvOf,
   imageProtocolOf,
@@ -1672,7 +1673,7 @@ export class ModelsService {
   /**
    * The models of a provider signed in through Hermes (decision §83): the provider's own list
    * for the account, else Hermes's, marked `fallback`. The ChatGPT subscription also offers its
-   * one way to draw (§84), `gpt-image-2` through the chat model, for the Images role.
+   * way to draw (§84, §110), each image model its tool takes, for the Images role.
    */
   private async signedInModels(
     scope: WorkspaceScope,
@@ -1704,16 +1705,16 @@ export class ModelsService {
         label: key,
         kind: 'chat' as const,
       }));
-      if (
-        entry.hermesProvider === CODEX_IMAGES.hermesProvider &&
-        !listed.models.includes(CODEX_IMAGES.model)
-      ) {
-        models.push({
-          key: CODEX_IMAGES.model,
-          label: `${CODEX_IMAGES.model} via ChatGPT (through ${CODEX_IMAGES.host})`,
-          kind: 'chat',
-          capabilities: ['image_output'],
-        });
+      if (entry.hermesProvider === CODEX_IMAGES.hermesProvider) {
+        for (const image of codexImageModels()) {
+          if (listed.models.includes(image)) continue;
+          models.push({
+            key: image,
+            label: `${image} via ChatGPT (through ${CODEX_IMAGES.host})`,
+            kind: 'chat',
+            capabilities: ['image_output'],
+          });
+        }
       }
       return { supported: true, models, source: listed.source, reason: listed.reason };
     } catch (error) {
