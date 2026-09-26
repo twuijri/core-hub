@@ -94,6 +94,7 @@ OpenAI) في ملف واحد قابل للتحرير `packages/server/src/module
   `model`/`source`، التقسيم والضمّ، `hermesSpeechChoice`، نشر الاختيار عند كل حفظ للكلام)؛ `propagation.ts`
   (`hermesSpeech` و`applySpeech`)؛ `index.ts` (المسارات).
 - اختبارات الخادم: `speech-providers.test.ts` و`speech/speech.test.ts` (جديدان)، `tests/contract/speech.contract.test.ts`،
+  `tests/unit/profile-transfer-providers.test.ts` (تصدير Groq يحمل صفّي الصوت)،
   `providers-shared.test.ts` (Groq صار ثلاثة صفوف بمفتاح واحد: الاختبار يحذفها كلها ويتحقق أن المفتاح يبقى حتى آخرها).
 - الويب: `models/SpeechPickers.tsx` (جديد)، `models/SpeechCard.tsx`، `models/AddProviderDialog.tsx`، `models/queries.ts`،
   `voice/languages.ts` (جديد)، `voice/DictationControls.tsx`، `voice/context.tsx`، `voice/speech-api.ts`، `i18n/{ar,en}.json`.
@@ -175,7 +176,10 @@ $ (web) vitest run tests/speech-voice-picker.test.tsx tests/models-screen.test.t
 الحقيقي في الصورة (لم أحمل Docker في هذه المهمة) — فكتابة `stt:`/`tts:` في `config.yaml` مثبتة بالملف وبقراءة مصدر
 هرمز، لا بدور صوت حقيقي في هرمز. ولا مفتاح حقيقي لأي مزوّد.
 
-CI على #165: يُكمل بعد الدفع.
+CI على #165 عند `98d73b31` (فيه هذه المهمة): كله ناجح إلا شريحة الخادم ٣/٣، وفيها
+`tests/unit/profile-transfer-providers.test.ts` يعدّ مزوّدَين في تصدير بروفايل فيه Groq، وصار Groq ثلاثة صفوف بمفتاح واحد
+(`expected 4 to be 2`؛ الاستيراد نفسه نجح بأربعة). أصلحت الاختبار ليذكر `groq-stt` و`groq-tts` (السلوك مقصود: التصدير
+يحمل صفوف الصوت بمفتاحها)، ومحليًا: `Tests  4 passed (4)`.
 
 ## المخاطر والرجوع
 - **الوثائق تتغيّر:** قوائم Groq وOpenAI الموثّقة قد تتقادم؛ الملف يذكر الصفحة ويوم التحقق، والصوت غير المدرج يُكتب يدويًا.
