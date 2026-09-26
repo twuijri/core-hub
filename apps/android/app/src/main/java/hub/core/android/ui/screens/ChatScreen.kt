@@ -218,7 +218,7 @@ private fun DraftIntro(profileName: String, profile: String, ui: ChatUi, onSelec
             )
             Text(stringResource(R.string.chat_start_hint), textAlign = TextAlign.Center, fontSize = hub.core.android.generated.FontTokens.sizeSm.sp, color = t.textMuted)
         }
-        if (ui.agents.isEmpty() && ui.error == null) {
+        if (ui.agentsLoaded && ui.agents.isEmpty() && ui.error == null) {
             hub.core.android.ui.kit.NoticeBox(
                 stringResource(R.string.chat_no_agents) + " — " + stringResource(R.string.chat_no_agents_body),
                 hub.core.android.ui.kit.BadgeTone.Warning, Modifier.padding(horizontal = 12.dp),

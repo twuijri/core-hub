@@ -118,7 +118,8 @@ fun GroupScope.Item(
     onClick: (() -> Unit)? = null,
     trailing: (@Composable RowScope.() -> Unit)? = null,
     accent: Boolean = false,
-) = ListRow(title, modifier, icon, subtitle, value, chevron, danger, tag, onClick, trailing, divider = true, accent = accent)
+    iconTint: androidx.compose.ui.graphics.Color? = null,
+) = ListRow(title, modifier, icon, subtitle, value, chevron, danger, tag, onClick, trailing, divider = true, accent = accent, iconTint = iconTint)
 
 /** Any content as a row of a group, under the same hairline. */
 @Composable
@@ -145,6 +146,8 @@ fun ListRow(
     divider: Boolean = false,
     /** A link-like row (iOS's «Back to chats»): the words and the icon in the accent. */
     accent: Boolean = false,
+    /** The icon's own colour (Settings' rows wear the accent, as on iOS). */
+    iconTint: Color? = null,
 ) {
     val t = LocalTokens.current
     Column(modifier.fillMaxWidth()) {
@@ -162,7 +165,7 @@ fun ListRow(
                 accent -> t.accent
                 else -> null
             }
-            if (icon != null) LucideIcon(icon, null, size = 20.dp, tint = tone ?: t.textMuted)
+            if (icon != null) LucideIcon(icon, null, size = 20.dp, tint = tone ?: iconTint ?: t.textMuted)
             Column(Modifier.weight(1f)) {
                 Text(
                     title, fontSize = FontTokens.sizeMd.sp, color = tone ?: t.text,
