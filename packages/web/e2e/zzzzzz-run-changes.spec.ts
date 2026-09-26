@@ -100,3 +100,33 @@ test('33. a run’s changed files are counted under its reply and open as a diff
   await expect(pane.getByTestId('diff-view').getByTestId('diff-line')).toHaveCount(4);
   await expect(pane.getByTestId('diff-view').locator('tr[data-kind="add"]')).toHaveCount(4);
 });
+
+test('33. while a run is still going, the files it has changed so far show under its reply', async ({
+  page,
+}) => {
+  // Decision §102: the same card, marked «حتى الآن», read again as the run works; the recorded
+  // card takes over when the run ends.
+  await login(page);
+  await page.getByRole('link', { name: 'محادثة جديدة' }).first().click();
+  await expect(page).toHaveURL(/\/new$/);
+  await send(page, 'اكتب ببطء ملفين');
+  await expect(page).toHaveURL(/\/chat\/[0-9A-Z]{26}(\?profile=[a-z0-9-]+)?$/);
+  const reply = page.getByTestId('message-assistant').last();
+  const live = reply.getByTestId('run-changes-live');
+  await expect(live).toBeVisible({ timeout: 15_000 });
+  await expect(live.getByTestId('run-changes-live-badge')).toHaveText('حتى الآن');
+  await expect(live.getByTestId('run-change-file')).toHaveCount(1);
+  await expect(live.getByTestId('run-change-file').first()).toHaveAttribute(
+    'data-path',
+    'draft.md',
+  );
+  await live.scrollIntoViewIfNeeded();
+  await page.screenshot({ path: path.join(shots, '33-run-changes-live.png') });
+
+  // The run ends: the recorded card, with both files, and the live one is gone.
+  const recorded = page.getByTestId('message-assistant').last().getByTestId('run-changes');
+  await expect(recorded.getByTestId('run-changes-title')).toHaveText('غيّر ملفين', {
+    timeout: 20_000,
+  });
+  await expect(page.getByTestId('run-changes-live')).toHaveCount(0);
+});

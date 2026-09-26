@@ -88,6 +88,20 @@ test('32. a two-step workflow drawn on the canvas runs, and its run is read on t
   await expect(editor).not.toHaveAttribute('data-workflow-id', 'new');
   await expect(page).toHaveURL(/workflow=[0-9A-Z]{26}/);
 
+  // Nothing selected: the side panel holds the workflow's own limits (decision §102), and Run
+  // has a companion that sets them for one run only.
+  await canvas.press('Escape');
+  const settings = page.getByTestId('workflow-settings');
+  await expect(settings.getByTestId('workflow-limits-form')).toBeVisible();
+  await shot(page, 'workflow-limits-ar-light');
+  await page.getByTestId('workflow-run-with-limits').click();
+  const limits = page.getByTestId('workflow-run-limits-dialog');
+  await expect(limits).toBeVisible();
+  await limits.getByTestId('workflow-run-limit-time').fill('30');
+  await limits.screenshot({ path: path.join(shots, 'workflow-run-limits-ar-light.png') });
+  await limits.getByRole('button', { name: 'إلغاء' }).first().click();
+  await expect(limits).toHaveCount(0);
+
   // Run: the canvas turns into the run, and both steps end done.
   await page.getByTestId('workflow-run').click();
   const run = page.getByTestId('workflow-run-view');
