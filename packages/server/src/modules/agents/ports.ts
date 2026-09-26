@@ -362,9 +362,19 @@ export interface RunnerCompressResult {
   message: string | null;
 }
 
+/** `adapters/types.ts` `ContextBreakdown`, restated for `sessions` (decision §102). */
+export interface RunnerContextBreakdown {
+  usedTokens: number;
+  windowTokens: number | null;
+  estimated: boolean;
+  categories: Array<{ id: string; label: string; tokens: number }>;
+}
+
 export interface AgentRunnerPort {
   start(request: RunnerRunRequest): Promise<RunnerRunAccepted>;
   compress(request: RunnerCompressRequest): Promise<RunnerCompressResult>;
+  /** The window by category, from the conversation the agent already has open; `null` if none. */
+  contextBreakdown(sessionId: string): Promise<RunnerContextBreakdown | null>;
   steer(runId: string, text: string): Promise<'queued' | 'rejected'>;
   stream(runId: string): AsyncIterable<RunnerEvent>;
   send(runId: string, input: RunnerRunInput): Promise<void>;

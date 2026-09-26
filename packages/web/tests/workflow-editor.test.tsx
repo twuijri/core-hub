@@ -75,6 +75,11 @@ const saved = {
   run_count: 1,
   schedule_count: 0,
   updated_at: '2026-09-25T06:00:00Z',
+  limits: {
+    max_duration_seconds: 1800,
+    max_cost: { amount: '2.000000', currency: 'USD' },
+    step_timeout_seconds: null,
+  },
 };
 
 interface Seen {
@@ -134,7 +139,10 @@ function fakeHub() {
     if (path === '/workflows' && method === 'POST') {
       return json({ ...saved, ...(body as object), id: OTHER, profile: profile ?? 'default' }, 201);
     }
+    if (path === `/workflows/${FLOW}` && method === 'PATCH') return json({ ...saved, ...body });
     if (path === `/workflows/${FLOW}`) return json(saved);
+    if (path === `/workflows/${FLOW}/run`)
+      return json({ job_id: '01J8QK3ZR2W7M5N4P6T8V9X0JY', workflow_run_id: RUN }, 202);
     if (path === `/workflows/${FLOW}/runs`) {
       return json({
         items: [
@@ -301,6 +309,70 @@ describe('Schedules: the Workflows section', () => {
     });
     // The address follows the saved workflow.
     await waitFor(() => expect(screen.getByTestId('where')).toHaveTextContent(`workflow=${OTHER}`));
+  });
+
+  it('keeps the workflow’s limits in the side panel while no step is selected (§102)', async () => {
+    const user = userEvent.setup();
+    const { seen, fetchImpl } = fakeHub();
+    mount(fetchImpl, `/schedules?section=workflows&workflow=${FLOW}&profile=designer`);
+    await waitFor(() => expect(screen.getAllByTestId('workflow-node')).toHaveLength(4));
+    const settings = await screen.findByTestId('workflow-settings');
+    const time = await within(settings).findByTestId('workflow-limit-time');
+    await waitFor(() => expect(time).toHaveValue('30'));
+    expect(within(settings).getByTestId('workflow-limit-cost')).toHaveValue('2');
+    await user.clear(time);
+    await user.type(time, '45');
+    await user.click(within(settings).getByTestId('workflow-limits-save'));
+    await waitFor(() =>
+      expect(
+        seen.find((c) => c.method === 'PATCH' && c.path === `/workflows/${FLOW}`),
+      ).toMatchObject({
+        profile: 'designer',
+        body: {
+          limits: {
+            max_duration_seconds: 2700,
+            max_cost: { amount: '2', currency: 'USD' },
+            step_timeout_seconds: null,
+          },
+        },
+      }),
+    );
+    // A selected step takes the panel; the limits return with nothing selected.
+    const gate = screen.getAllByTestId('workflow-node').find((n) => n.dataset.nodeId === 'gate')!;
+    gate.focus();
+    await screen.findByTestId('workflow-panel');
+    expect(screen.queryByTestId('workflow-settings')).toBeNull();
+  });
+
+  it('runs once with its own limits, starting from the workflow’s (§102)', async () => {
+    const user = userEvent.setup();
+    const { seen, fetchImpl } = fakeHub();
+    mount(fetchImpl, `/schedules?section=workflows&workflow=${FLOW}&profile=designer`);
+    await waitFor(() => expect(screen.getAllByTestId('workflow-node')).toHaveLength(4));
+    await user.click(screen.getByTestId('workflow-run-with-limits'));
+    const dialog = await screen.findByTestId('workflow-run-limits-dialog');
+    expect(within(dialog).getByTestId('workflow-run-limit-time')).toHaveValue('30');
+    const cost = within(dialog).getByTestId('workflow-run-limit-cost');
+    await user.clear(cost);
+    await user.type(cost, '0.5');
+    await user.type(within(dialog).getByTestId('workflow-run-limit-step'), '5');
+    await user.click(within(dialog).getByTestId('workflow-run-limited'));
+    await waitFor(() =>
+      expect(seen.find((c) => c.path === `/workflows/${FLOW}/run`)).toMatchObject({
+        method: 'POST',
+        profile: 'designer',
+        body: {
+          start_node_ids: null,
+          limits: {
+            max_duration_seconds: 1800,
+            max_cost: { amount: '0.5', currency: 'USD' },
+            step_timeout_seconds: 300,
+          },
+        },
+      }),
+    );
+    // The workflow itself is left as it was.
+    expect(seen.some((c) => c.method === 'PATCH')).toBe(false);
   });
 
   it('the keyboard deletes the selected step and its connections', async () => {

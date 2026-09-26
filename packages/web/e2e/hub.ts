@@ -43,6 +43,7 @@ import type {
   AgentAskRequest,
   AgentCompressRequest,
   AgentCompressResult,
+  AgentContextBreakdown,
   AgentEvent,
   AgentRunAccepted,
   AgentRunInput,
@@ -392,6 +393,19 @@ function scriptFor(prompt: string, workspace = ''): Step[] {
         // `{{out}}` is the run's output folder, filled in when the run starts.
         text: 'I generated the image and saved it to: {{out}}/flying_cat.png',
       },
+      { type: 'completed' },
+    ];
+  }
+  if (/اكتب ببطء|write slowly/i.test(prompt)) {
+    // The live "files changed" card (decision §102): one file written, then a long pause while
+    // the run is still going — long enough for the card to be read and photographed — then a
+    // second file and the end, when the recorded card takes over.
+    return [
+      { type: 'message_delta', text: 'أكتب الملفات واحدًا واحدًا.\n\n' },
+      ...writes('s1', 'draft.md', '# مسودة\n\nالسطر الأول\n'),
+      { type: 'delay', ms: 8_000 },
+      ...writes('s2', 'final.md', '# النهائي\n'),
+      { type: 'message_delta', text: 'كتبت draft.md و final.md.' },
       { type: 'completed' },
     ];
   }
@@ -782,6 +796,25 @@ class ScriptedRunner implements AgentRunner {
   /** `/steer` into a running scripted turn: taken, as Hermes takes it. */
   async steer(): Promise<'queued' | 'rejected'> {
     return 'queued';
+  }
+
+  /**
+   * The window by category (decision §102), in the shape Hermes's `session.context_breakdown`
+   * gives after a compression like the one above: most of it tools and the conversation.
+   */
+  async contextBreakdown(): Promise<AgentContextBreakdown | null> {
+    return {
+      usedTokens: 24_000,
+      windowTokens: 200_000,
+      estimated: false,
+      categories: [
+        { id: 'system_prompt', label: 'System prompt', tokens: 3_100 },
+        { id: 'tool_definitions', label: 'Tool definitions', tokens: 9_800 },
+        { id: 'skills', label: 'Skills', tokens: 1_200 },
+        { id: 'memory', label: 'Memory', tokens: 400 },
+        { id: 'conversation', label: 'Conversation', tokens: 9_500 },
+      ],
+    };
   }
 
   /**

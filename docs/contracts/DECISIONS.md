@@ -3168,3 +3168,50 @@ Proposed — owner to confirm; the threat model and the reasons are ADR 0026.
   `403` for an unshared or unknown agent alike, `429` past `asks_per_hour`, `422
   agent_unavailable` when the agent gave no answer).
 - Every operation on this hub's side is for owners and admins, including asking.
+
+## 102. Web follow-ups: memory entries and their budget, a live run's changes, the window by category
+
+Proposed — owner to confirm (the fork gap list, batches B10 and B19, 2026-09-27: items the earlier
+records left as "later").
+
+- **A memory list comes with its entries and its budget.** `MemoryItem` gains `entries` (a list
+  document's entries as Hermes reads them: split on a `§` line, trimmed, empty ones dropped),
+  `char_limit` (Hermes's `memory.memory_char_limit` / `memory.user_char_limit`, else its defaults
+  2200 / 1375) and `char_count` (code points of the entries joined, what the hub's
+  `memory_too_long` measures). All three are `null` for `soul`, which is one text, and optional, so
+  a client still splits `content` on an older hub. The web draws each entry on its own with edit and
+  remove, adds one at the end, and shows the list against its budget (a bar that warns from 80 %
+  and says "full" past it); a write that would grow a list past its budget is held back with the
+  reason before the hub has to refuse it. Editing one entry sends the whole list, as before: no
+  per-entry operation (Hermes's file has no ids, and a second writer would race it).
+- **A run's changes while it is still going.** `sessions.getRunChanges` on a run in flight answers
+  the working folder compared with the run's start **now**, `RunChanges.live: true`, instead of
+  `404`: the same comparison the run's end records (§49), kept nowhere. One look is shared for two
+  seconds, so several viewers cost one comparison. Its files carry no diff to fetch yet
+  (`getRunChangeDiff` stays `404` until the run ends). The web draws it under the live reply as the
+  same card with a "so far" mark, read again every four seconds and whenever a tool call ends, with
+  rows that open nothing; the recorded card takes over at the end. Rejected: a realtime event per
+  change (a run that rewrites a file in a loop would flood every viewer), and diffs while live (they
+  would have to be computed per look).
+- **The window by category.** `sessions.getContextBreakdown` (`GET /sessions/{id}/context`) answers
+  `SessionContextBreakdown`: the categories Hermes counts with `session.context_breakdown`
+  (observed in Hermes v0.21.3, the pinned image: `system_prompt`, `tool_definitions`, `rules`,
+  `skills`, `mcp`, `subagent_definitions`, `memory`, `conversation`, each with its English label and
+  a token count; Hermes's own CSS colour is dropped), `used_tokens`, `window_tokens`, `estimated`.
+  It asks only a conversation the agent already has open and never opens one for it; with none
+  open, or an agent that cannot tell, it answers `available: false` with no categories rather than
+  an error. The web reads it only while the context meter's details are open, draws one bar of the
+  window in the chart palette and a line per category (names it knows in the person's language,
+  Hermes's label for any other), and says the per-category counts are the agent's rough estimate.
+- **A category's colour** is picked from eight swatches or none (`SessionCategory.color`, already in
+  the contract, now set from the chats list's category menu and drawn as a dot before its name). A
+  fixed set rather than a free picker, so a colour reads as itself on light and dark alike.
+- **The pending-actions sheet** counts, for an admin, the memory and skill writes Hermes's agent
+  staged for review in the profile they are in (§58's `agents.listPendingWrites`) and answers them
+  right there; and a room's question opens its room (`/rooms/<id>`, with `?profile=` when it waits in
+  another profile, which the room page now honours).
+- **A member whose remembered profile was taken** (or archived) but who still has others is moved
+  to the first profile they were given, instead of pages that each answer "not found".
+- **Workflow limits** live in the editor's side panel while no step is selected (the workflow's own,
+  §53), and the Run button has a companion "run with limits" that opens on the workflow's limits
+  and sends `WorkflowRunRequest.limits` for that run only.

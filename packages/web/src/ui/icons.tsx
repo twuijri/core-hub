@@ -50,6 +50,9 @@ function lucide(name: LucideName): IconComponent {
 
 export const IconPlus = lucide('plus');
 export const IconSearch = lucide('search');
+export const IconEdit = lucide('square-pen');
+export const IconPalette = lucide('palette');
+export const IconGauge = lucide('gauge');
 export const IconDevices = lucide('monitor-smartphone');
 export const IconTablet = lucide('tablet');
 export const IconAgents = lucide('bot');

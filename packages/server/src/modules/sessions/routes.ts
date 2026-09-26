@@ -490,6 +490,12 @@ export function registerSessionRoutes(app: FastifyInstance, deps: RouteDeps): vo
     return deps.service(request).compress(scope, session_id, body);
   });
 
+  app.get('/sessions/:session_id/context', async (request) => {
+    const scope = await scopeOf(request);
+    const session_id = pathId(request.params, 'session_id', 'session');
+    return deps.service(request).contextBreakdown(scope, session_id);
+  });
+
   app.post('/sessions/:session_id/runs/:run_id/steer', async (request) => {
     const scope = await scopeOf(request);
     const params = {

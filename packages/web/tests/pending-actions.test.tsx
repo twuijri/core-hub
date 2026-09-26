@@ -197,7 +197,31 @@ describe('what the bar lists, and where each thing leads', () => {
       ],
       [],
     );
-    expect(pendingHref(room!, inLink)).toBeNull();
+    // A room's question opens its room, in the profile it was asked in (decision §102).
+    expect(pendingHref(room!, inLink)).toBe(`/rooms/${RUN}?profile=default`);
+    expect(pendingHref(room!, () => null)).toBe(`/rooms/${RUN}`);
+  });
+
+  it('counts the writes an agent staged for review, and opens its settings (§102)', () => {
+    const write = {
+      id: 'w1',
+      kind: 'memory' as const,
+      action: 'add',
+      summary: 'Remember: the deploy runs on Fridays',
+      origin: 'foreground',
+      created_at: '2026-09-25T10:01:00Z',
+      target: 'memory',
+      name: null,
+      content: 'The deploy runs on Fridays.',
+      old_text: null,
+    };
+    const items = mergePending(
+      [{ profile: 'default', items: [approval({ id: 'a1', created_at: '2026-09-25T10:00:00Z' })] }],
+      [],
+      [{ profile: 'default', agentId: AGENT_ID, items: [write, write] }],
+    );
+    expect(items.map((i) => i.key)).toEqual(['approval:a1', 'write:default:memory:w1']);
+    expect(pendingHref(items[1]!, inLink)).toBe(`/agents/${AGENT_ID}/settings`);
   });
 });
 
@@ -227,9 +251,11 @@ function hub(options: {
   approvals: Record<string, Approval[]>;
   agents?: unknown[];
   pairing?: unknown[];
+  writes?: unknown[];
 }) {
   const seen: Seen[] = [];
   let pairing = [...((options.pairing ?? []) as Array<{ request_id: string }>)];
+  let writes = [...((options.writes ?? []) as Array<{ id: string }>)];
   const fetchImpl = ((url: string, init: RequestInit = {}) => {
     const { pathname } = new URL(String(url));
     // Everything after the version segment: the operation's own path.
@@ -255,7 +281,15 @@ function hub(options: {
       body = { items: options.approvals[profile ?? ''] ?? [], next_cursor: null };
     else if (path === '/agents') body = { items: options.agents ?? [], next_cursor: null };
     else if (path.endsWith('/pairing')) body = { pending: pairing, approved: [] };
-    else if (/\/pairing\/whatsapp\/requests\/[^/]+(\/approve)?$/.test(path)) {
+    else if (path.endsWith('/pending-writes')) body = { items: writes };
+    else if (/\/pending-writes\/[a-z]+\/[^/]+(\/approve)?$/.test(path)) {
+      const id = path
+        .split('/')
+        .filter((part) => part !== 'approve')
+        .at(-1);
+      writes = writes.filter((row) => row.id !== id);
+      body = null;
+    } else if (/\/pairing\/whatsapp\/requests\/[^/]+(\/approve)?$/.test(path)) {
       // Approved or denied: either way it no longer waits.
       const id = path.split('/requests/')[1]!.replace('/approve', '');
       body = pairing.find((row) => row.request_id === id) ?? null;
@@ -413,6 +447,58 @@ describe('the bar in the top bar', () => {
     expect(
       seen.find((s) => s.method === 'DELETE' && s.path.endsWith('/requests/r22')),
     ).toBeTruthy();
+  });
+});
+
+describe('writes the agent staged for review (decision §102)', () => {
+  const write = {
+    id: 'w1',
+    kind: 'memory',
+    action: 'add',
+    summary: 'Remember: the deploy runs on Fridays',
+    origin: 'background_review',
+    created_at: '2026-09-25T10:01:00Z',
+    target: 'user',
+    name: null,
+    content: 'The deploy runs on Fridays.',
+    old_text: null,
+  };
+
+  it('counts them for an admin, and approves one right there', async () => {
+    const { fetchImpl, seen } = hub({
+      profiles: ['default'],
+      approvals: {},
+      agents: [AGENT],
+      writes: [write],
+    });
+    mount(fetchImpl, 'owner', <TopBar title="x" onMenu={() => undefined} />);
+    const bar = await screen.findByTestId('pending-actions');
+    await waitFor(() => expect(bar.getAttribute('data-count')).toBe('1'));
+    fireEvent.click(bar);
+    const item = await screen.findByTestId('pending-item');
+    expect(item.getAttribute('data-kind')).toBe('write');
+    expect(item.textContent).toContain('Remember: the deploy runs on Fridays');
+    expect(within(item).getByTestId('pending-item-open').getAttribute('href')).toBe(
+      `/agents/${AGENT_ID}/settings`,
+    );
+    fireEvent.click(within(item).getByTestId('pending-write-approve'));
+    expect(await screen.findByTestId('pending-actions-none')).toBeTruthy();
+    expect(seen.find((s) => s.method === 'POST' && s.path.endsWith('/approve'))).toMatchObject({
+      path: `/agents/${AGENT_ID}/pending-writes/memory/w1/approve`,
+    });
+  });
+
+  it('never asks for them for a member', async () => {
+    const { fetchImpl, seen } = hub({
+      profiles: ['default'],
+      approvals: {},
+      agents: [AGENT],
+      writes: [write],
+    });
+    mount(fetchImpl, 'member', <TopBar title="x" onMenu={() => undefined} />);
+    const bar = await screen.findByTestId('pending-actions');
+    await waitFor(() => expect(bar.getAttribute('aria-label')).toBe('Waiting for you'));
+    expect(seen.some((s) => s.path.endsWith('/pending-writes'))).toBe(false);
   });
 });
 

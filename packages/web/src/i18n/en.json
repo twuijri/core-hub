@@ -206,7 +206,20 @@
       "none": "No category",
       "current": "Current",
       "new_and_move": "New category…",
-      "empty_group": "Drag a chat here, or use its menu."
+      "empty_group": "Drag a chat here, or use its menu.",
+      "colour": "Colour",
+      "colour_title": "Colour of {name}",
+      "colour_none": "No colour",
+      "colours": {
+        "blue": "Blue",
+        "green": "Green",
+        "amber": "Amber",
+        "red": "Red",
+        "purple": "Purple",
+        "pink": "Pink",
+        "teal": "Teal",
+        "slate": "Slate"
+      }
     },
     "channels": {
       "telegram": "Telegram",
@@ -392,7 +405,19 @@
     "last_compressed": "Last compression: about {before} → {after} tokens.",
     "last_done": "Last compression finished.",
     "last_failed": "The last compression failed.",
-    "wait_for_run": "Wait for the running turn to finish, then compress."
+    "wait_for_run": "Wait for the running turn to finish, then compress.",
+    "breakdown_title": "What fills it",
+    "breakdown_note": "By category, as the agent counts it roughly.",
+    "category": {
+      "system_prompt": "System prompt",
+      "tool_definitions": "Tool definitions",
+      "rules": "Rules",
+      "skills": "Skills",
+      "mcp": "MCP",
+      "subagent_definitions": "Subagent definitions",
+      "memory": "Memory",
+      "conversation": "Conversation"
+    }
   },
   "compression_settings": {
     "title": "Context compression",
@@ -433,7 +458,9 @@
     "workflow_step": "Workflow step",
     "pairing": "{name} wants to message the agent on {platform}",
     "pairing_hint": "Approve or deny them here, or under Approvals on the agent’s channels page.",
-    "global_agent": "Ask the global agent"
+    "global_agent": "Ask the global agent",
+    "write_hint": "The agent wants to keep this; it waits for review.",
+    "room_item": "Room"
   },
   "global_agent": {
     "intro": "One standing conversation with your agent in this profile, outside the chats list. Reach it from search and from the bar of things waiting for you.",
@@ -1369,7 +1396,11 @@
         "max_duration": "Stopped: the run went over its time limit.",
         "max_cost": "Stopped: the run went over its cost limit.",
         "step_timeout": "Stopped: a step went over its timeout and nothing handled it."
-      }
+      },
+      "run_with": "Run with limits for this run",
+      "run_title": "Limits for this run",
+      "run_hint": "Starts from the workflow's limits. What you change applies to this run only; an empty field means no limit.",
+      "save_first": "Save the workflow to set its limits."
     }
   },
   "workflows": {
@@ -2065,7 +2096,17 @@
     "empty_memory": "It has kept nothing yet.",
     "empty_user": "It has written nothing about you yet.",
     "entries_hint": "A list of short entries, each separated by a line holding only §. It has a character limit: past it, the agent cannot add anything new.",
-    "too_long": "Too long for this memory: {length} characters, and the limit is {limit}. Shorten or merge entries."
+    "too_long": "Too long for this memory: {length} characters, and the limit is {limit}. Shorten or merge entries.",
+    "add_entry": "Add entry",
+    "edit_all": "Edit all",
+    "edit_entry": "Edit this entry",
+    "remove": "Remove",
+    "remove_title": "Remove this entry?",
+    "entry": "Entry",
+    "add_entry_title": "New entry in {name}",
+    "edit_entry_title": "An entry in {name}",
+    "budget": "{count} of {limit} characters",
+    "budget_over": "{count} of {limit} characters — full: the agent cannot keep anything new"
   },
   "channels": {
     "title_of": "{name} channels",
@@ -3344,7 +3385,8 @@
     "show_all": "Show all {count}",
     "show_less": "Show fewer",
     "unlisted": "And more files not listed here ({count}).",
-    "incomplete": "The folder is larger than the hub reads when a run starts, so a change may be missing here."
+    "incomplete": "The folder is larger than the hub reads when a run starts, so a change may be missing here.",
+    "live": "So far"
   },
   "diff": {
     "layout": "How to show the changes",

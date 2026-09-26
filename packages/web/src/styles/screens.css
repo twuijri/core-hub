@@ -1192,3 +1192,96 @@ button.files-name:focus-visible {
 .ch-terminal-screen[hidden] {
   display: none;
 }
+
+/* ------------------------------------------------------------ memory entries
+   A memory list is drawn entry by entry (decision §102): each its own line with its own
+   edit and remove, and above them how much of the list's budget they take. */
+.memory-entries {
+  display: flex;
+  flex-direction: column;
+  gap: var(--ch-space-1);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.memory-entry {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--ch-space-2);
+  padding: var(--ch-space-2) var(--ch-space-3);
+  border: 1px solid var(--ch-color-border);
+  border-radius: var(--ch-radius-sm);
+  background: var(--ch-color-surface-2);
+}
+.memory-entry-text {
+  flex: 1;
+  min-inline-size: 0;
+  margin: 0;
+  font-size: var(--ch-font-size-sm);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.memory-entry-actions {
+  display: flex;
+  flex-shrink: 0;
+  gap: var(--ch-space-1);
+}
+.memory-budget {
+  display: flex;
+  align-items: center;
+  gap: var(--ch-space-2);
+  font-size: var(--ch-font-size-xs);
+  color: var(--ch-color-text-muted);
+}
+.memory-budget-bar {
+  flex: 1;
+  max-inline-size: 12rem;
+  block-size: 4px;
+  border-radius: 999px;
+  background: var(--ch-color-surface-2);
+  overflow: hidden;
+}
+.memory-budget-bar > span {
+  display: block;
+  block-size: 100%;
+  background: var(--ch-color-accent);
+}
+.memory-budget[data-tone='warning'] .memory-budget-bar > span {
+  background: var(--ch-color-warning-soft-text);
+}
+.memory-budget[data-tone='danger'] .memory-budget-bar > span {
+  background: var(--ch-color-danger-soft-text);
+}
+.memory-budget[data-tone='danger'] {
+  color: var(--ch-color-danger-soft-text);
+}
+
+/* A category's colour (decision §102): a dot before its name, and the swatches to pick it. */
+.session-group-dot {
+  flex-shrink: 0;
+  inline-size: 8px;
+  block-size: 8px;
+  border-radius: 999px;
+}
+.category-swatches {
+  display: grid;
+  grid-template-columns: repeat(4, 2.25rem);
+  gap: var(--ch-space-2);
+}
+.category-swatch {
+  display: grid;
+  place-items: center;
+  inline-size: 2.25rem;
+  block-size: 2.25rem;
+  border: 2px solid transparent;
+  border-radius: 999px;
+  color: #fff;
+  cursor: pointer;
+}
+.category-swatch[aria-pressed='true'] {
+  border-color: var(--ch-color-text);
+}
+.category-swatch:focus-visible {
+  outline: 2px solid var(--ch-color-focus);
+  outline-offset: 2px;
+}

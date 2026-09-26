@@ -373,6 +373,11 @@ export interface AgentSession {
    */
   compress?(focus: string | null): Promise<CompressOutcome>;
   /**
+   * What fills the model's window, by category, as the agent counts it (decision §102).
+   * Absent when the agent cannot tell; `null` when it could not answer this time.
+   */
+  contextBreakdown?(): Promise<ContextBreakdown | null>;
+  /**
    * Hand the turn in flight a piece of guidance without stopping it: the agent reads it
    * after its next tool call. `rejected` = not now; the caller sends it as a message.
    */
@@ -382,6 +387,14 @@ export interface AgentSession {
    * conversation does not change. Absent when the agent has no such surface.
    */
   oneshot?(request: OneshotRequest): Promise<string | null>;
+}
+
+/** `AgentSession.contextBreakdown`: the contract's `SessionContextBreakdown`, less `available`. */
+export interface ContextBreakdown {
+  usedTokens: number;
+  windowTokens: number | null;
+  estimated: boolean;
+  categories: Array<{ id: string; label: string; tokens: number }>;
 }
 
 /** What `AgentSession.compress` did, in the contract's `SessionCompression` terms. */

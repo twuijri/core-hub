@@ -299,6 +299,14 @@ export interface AgentCompressResult {
   message: string | null;
 }
 
+/** `sessions.getContextBreakdown`'s answer from the agent (decision §102). */
+export interface AgentContextBreakdown {
+  usedTokens: number;
+  windowTokens: number | null;
+  estimated: boolean;
+  categories: Array<{ id: string; label: string; tokens: number }>;
+}
+
 export interface AgentRunner {
   /** Hand the turn to the agent. Throws to fail the run before it streams. */
   start(request: AgentRunRequest): Promise<AgentRunAccepted>;
@@ -320,6 +328,11 @@ export interface AgentRunner {
    * `HubError('state_invalid', {reason: 'command_unsupported'})`.
    */
   compress?(request: AgentCompressRequest): Promise<AgentCompressResult>;
+  /**
+   * Optional (decision §102): what fills the window of this conversation, by category, from
+   * the conversation the agent already has open. `null` when none is open or it cannot tell.
+   */
+  contextBreakdown?(sessionId: string): Promise<AgentContextBreakdown | null>;
   /** Optional: guidance into the run in flight without stopping it (`sessions.steerRun`). */
   steer?(runId: string, text: string): Promise<'queued' | 'rejected'>;
   /**
