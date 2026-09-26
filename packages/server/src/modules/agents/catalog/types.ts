@@ -53,11 +53,7 @@ export type InstallRecipe =
 
 /** `process.platform`-`process.arch`, for the platforms a release is published for. */
 export type DownloadPlatform =
-  | 'linux-x64'
-  | 'linux-arm64'
-  | 'darwin-x64'
-  | 'darwin-arm64'
-  | 'win32-x64';
+  'linux-x64' | 'linux-arm64' | 'darwin-x64' | 'darwin-arm64' | 'win32-x64';
 
 export const DOWNLOAD_PLATFORMS: readonly DownloadPlatform[] = [
   'linux-x64',

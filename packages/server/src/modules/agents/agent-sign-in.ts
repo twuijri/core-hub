@@ -132,7 +132,11 @@ export class AgentSignIns {
   }
 
   /** Starts the CLI's sign-in and resolves once it has printed its link and code. */
-  async start(agentId: string, argv: readonly string[], env: NodeJS.ProcessEnv): Promise<AgentSignInView> {
+  async start(
+    agentId: string,
+    argv: readonly string[],
+    env: NodeJS.ProcessEnv,
+  ): Promise<AgentSignInView> {
     const [command, ...args] = argv;
     if (!command) throw new HubError('internal', { message: 'no sign-in command' });
     for (const [id, record] of this.records) {
@@ -173,7 +177,8 @@ export class AgentSignIns {
         clearTimeout(timer);
         reject(
           new HubError('agent_error', {
-            message: lastLine(output) ?? `the sign-in ended (exit ${String(code)}) before it gave a link`,
+            message:
+              lastLine(output) ?? `the sign-in ended (exit ${String(code)}) before it gave a link`,
             details: { reason: 'sign_in_ended' },
           }),
         );

@@ -28,7 +28,12 @@ import type { ReadableStream as WebReadableStream } from 'node:stream/web';
 import { createGunzip } from 'node:zlib';
 import { agentUnavailable, HubError } from '../../lib/errors.js';
 import { runCommand, whichSync, type HostEnvironment } from './adapters/host.js';
-import type { CatalogEntry, DownloadAsset, DownloadPlatform, InstallRecipe } from './catalog/index.js';
+import type {
+  CatalogEntry,
+  DownloadAsset,
+  DownloadPlatform,
+  InstallRecipe,
+} from './catalog/index.js';
 
 export interface DownloadInstallOptions {
   /** `<DATA_DIR>/agents/<id>`: replaced only once everything below has succeeded. */

@@ -8,12 +8,7 @@ import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
-import {
-  authed,
-  drainJobs,
-  fakeInstaller,
-  signedInHub,
-} from '../../../tests/unit/helpers.js';
+import { authed, drainJobs, fakeInstaller, signedInHub } from '../../../tests/unit/helpers.js';
 import { AgentSignIns, parseDeviceCode, type SpawnSignIn } from './agent-sign-in.js';
 
 // What `kimi login --region global` printed on 2.1.1 (stderr), and `grok login --device-auth`
@@ -168,7 +163,11 @@ describe('agent sign-in: following the process', () => {
     await expect(
       store.start(
         'agent-1',
-        [process.execPath, '-e', 'process.stderr.write("Not logged in: no network\\n"); process.exit(3)'],
+        [
+          process.execPath,
+          '-e',
+          'process.stderr.write("Not logged in: no network\\n"); process.exit(3)',
+        ],
         process.env,
       ),
     ).rejects.toMatchObject({ code: 'agent_error', message: 'Not logged in: no network' });

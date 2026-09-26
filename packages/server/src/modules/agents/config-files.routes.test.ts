@@ -49,6 +49,29 @@ const url = (agent: string, key?: string) =>
   `/api/v1/agents/${agent}/config-files${key ? `/${key}` : ''}`;
 
 describe("coding agents' config files", () => {
+  it("edits Goose's config.yaml, where its provider and model are set", async () => {
+    const { h, home: dir, agentOf } = await boot();
+    const goose = agentOf('goose');
+    const list = await authed(h, h.token, { method: 'GET', url: url(goose) });
+    expect(list.statusCode, list.body).toBe(200);
+    expect(list.json().items).toEqual([
+      expect.objectContaining({
+        key: 'settings',
+        path: '~/.config/goose/config.yaml',
+        language: 'yaml',
+        exists: false,
+      }),
+    ]);
+    const content = 'GOOSE_PROVIDER: anthropic\nGOOSE_MODEL: claude-sonnet-4-5\n';
+    const written = await authed(h, h.token, {
+      method: 'PUT',
+      url: url(goose, 'settings'),
+      payload: { content, revision: null },
+    });
+    expect(written.statusCode, written.body).toBe(200);
+    expect(readFileSync(path.join(dir, '.config', 'goose', 'config.yaml'), 'utf8')).toBe(content);
+  });
+
   it("lists Claude Code's two files, writes CLAUDE.md where the agent reads it, and reads it back", async () => {
     const { h, home: dir, agentOf } = await boot();
     const claude = agentOf('claude-code');

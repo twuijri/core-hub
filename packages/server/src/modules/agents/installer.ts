@@ -137,8 +137,7 @@ export function createNpmInstaller(options: NpmInstallerOptions): AgentInstaller
       });
     }
   };
-  const platform =
-    options.platform === undefined ? downloadPlatform() : (options.platform ?? null);
+  const platform = options.platform === undefined ? downloadPlatform() : (options.platform ?? null);
 
   const binaryIn = (entry: CatalogEntry, binary: string = entry.binary): string | null =>
     whichSync(binary, {

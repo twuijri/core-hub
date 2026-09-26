@@ -244,7 +244,11 @@ describe('download recipes: the catalog guard', () => {
           kind: 'download',
           version: 'latest',
           assets: {
-            'linux-x64': { url: 'https://example.org/latest/t', sha256: 'b'.repeat(64), format: 'raw' },
+            'linux-x64': {
+              url: 'https://example.org/latest/t',
+              sha256: 'b'.repeat(64),
+              format: 'raw',
+            },
           },
         }),
       ]),
@@ -285,10 +289,9 @@ describe('download recipes: the catalog guard', () => {
       ]);
     }
     expect(catalogEntry('kimi-code')?.signIn).toEqual({ args: ['login', '--region', 'global'] });
-    expect(CATALOG.filter((item) => item.install.kind === 'download').map((item) => item.id)).toEqual([
-      'goose',
-      'grok-build',
-    ]);
+    expect(
+      CATALOG.filter((item) => item.install.kind === 'download').map((item) => item.id),
+    ).toEqual(['goose', 'grok-build']);
   });
 
   it('names the host platform the way the recipes do', () => {
