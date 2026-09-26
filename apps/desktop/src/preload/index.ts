@@ -80,6 +80,11 @@ const bridge: DesktopBridge = {
     check: () => ipcRenderer.invoke(CHANNELS.updatesCheck),
     setAuto: (value) => ipcRenderer.invoke(CHANNELS.updatesAuto, value === true),
   },
+  voice: {
+    mic: () => ipcRenderer.invoke(CHANNELS.voiceMic),
+    askMic: () => ipcRenderer.invoke(CHANNELS.voiceMicAsk),
+    openMicSettings: () => ipcRenderer.invoke(CHANNELS.voiceMicSettings) as Promise<void>,
+  },
 };
 
 contextBridge.exposeInMainWorld('corehubDesktop', bridge);

@@ -193,6 +193,28 @@ function fakeDevice() {
 
 const DEVICE_ID = '01J8QK3ZR2W7M5N4P6T8V9X0DV';
 
+/** What the OS answered about the microphone, for the fake bridge. */
+let micStatus: 'granted' | 'denied' | 'not-determined' | 'restricted' | 'unknown' = 'unknown';
+
+/** The hub's `devices.getRelay`, as the desktop app would answer it through the hub. */
+const RELAY_OFF = {
+  available: true,
+  enabled: false,
+  connected: false,
+  route: null,
+  relay_url: null,
+  hub_port: 47113,
+  token_set: false,
+  tunnel_id: null,
+  hostname: null,
+  hostnames: [],
+  tailnet: null,
+  error: null,
+  error_detail: null,
+  connected_at: null,
+};
+let relayState: Record<string, unknown> = { ...RELAY_OFF };
+
 function fakeBridge(
   over: Partial<DesktopState> = {},
   helperOver: Partial<DesktopHelperState> = {},
@@ -222,6 +244,11 @@ function fakeBridge(
     onOpenPath: vi.fn(() => () => {}),
     helper: fakeHelper(helperOver),
     programs: fakePrograms(),
+    voice: {
+      mic: vi.fn(async () => ({ status: micStatus, canOpenSettings: true })),
+      askMic: vi.fn(async () => ({ status: 'granted' as const, canOpenSettings: true })),
+      openMicSettings: vi.fn(async () => {}),
+    },
     device: fakeDevice(),
     updates: {
       get: vi.fn(async () => ({ auto: true, last: null, releasesPage: RELEASES })),
@@ -267,6 +294,23 @@ const fetchImpl = (async (url: string, init: RequestInit = {}) => {
   const method = (init.method ?? 'GET').toUpperCase();
   sent.push({ method, path: pathname, body: init.body ? JSON.parse(String(init.body)) : null });
   if (pathname.endsWith('/meta')) return json(meta);
+  if (pathname.endsWith('/models/speech'))
+    return json({ stt: { ready: true }, tts: { ready: false } });
+  if (pathname.endsWith('/relay') && method === 'PUT') {
+    const body = JSON.parse(String(init.body)) as Record<string, unknown>;
+    relayState = {
+      ...relayState,
+      enabled: body.enabled ?? relayState.enabled,
+      route: body.route ?? relayState.route,
+      hostname: body.hostname ?? relayState.hostname,
+      token_set: body.token ? true : relayState.token_set,
+      tunnel_id: body.token ? '6ff42ae2' : relayState.tunnel_id,
+      connected: body.enabled === true,
+      relay_url: body.enabled === true ? 'https://hub.example.com' : null,
+    };
+    return json(relayState);
+  }
+  if (pathname.endsWith('/relay')) return json(relayState);
   if (pathname.endsWith('/agents')) return json({ items: [{ id: 'AG1', slug: 'hermes' }] });
   if (pathname.endsWith('/agents/AG1/mcp-servers'))
     return method === 'POST' ? json({ name: 'this-computer' }, 201) : json({ items: [] });
@@ -677,5 +721,128 @@ describe('pairing link for a computer', () => {
     );
     expect(pairingLinkOf('not json')).toBeNull();
     expect(pairingLinkOf('{"hub_url":1}')).toBeNull();
+  });
+});
+
+describe('Voice in This device', () => {
+  afterEach(() => {
+    micStatus = 'unknown';
+  });
+
+  it('says what the system answered about the microphone, and opens its settings when blocked', async () => {
+    micStatus = 'denied';
+    const bridge = fakeBridge();
+    withBridge(bridge);
+    mountThisDevice();
+    const part = await screen.findByTestId('desktop-voice');
+    await waitFor(() => expect(within(part).getByText('Blocked')).toBeTruthy());
+    // The page no longer says the desktop app has no voice.
+    expect(screen.queryByText(/not in the desktop app yet/)).toBeNull();
+    await userEvent.click(within(part).getByTestId('desktop-voice-settings'));
+    expect(bridge.voice.openMicSettings).toHaveBeenCalledOnce();
+  });
+
+  it('asks the system on macOS while it has not been asked', async () => {
+    micStatus = 'not-determined';
+    const bridge = fakeBridge({ platform: 'darwin' });
+    withBridge(bridge);
+    mountThisDevice();
+    await userEvent.click(await screen.findByTestId('desktop-voice-ask'));
+    expect(bridge.voice.askMic).toHaveBeenCalledOnce();
+    await waitFor(() => expect(screen.getByText('Allowed')).toBeTruthy());
+  });
+
+  it('says so when this browser cannot record, instead of hanging', async () => {
+    withBridge(fakeBridge());
+    mountThisDevice();
+    await userEvent.click(await screen.findByTestId('desktop-voice-test'));
+    expect((await screen.findByTestId('desktop-voice-result')).textContent).toBe(
+      'No microphone could be opened.',
+    );
+  });
+});
+
+describe('Reach from outside in This device', () => {
+  const LOCAL = {
+    mode: 'local' as const,
+    hubUrl: 'http://127.0.0.1:47113',
+    local: {
+      dataDir: '/home/t/.config/Core Hub/local-hub',
+      hermes: 'program' as const,
+      hermesProgram: null,
+    },
+  };
+  beforeEach(() => {
+    relayState = { ...RELAY_OFF };
+    sent.length = 0;
+  });
+
+  it('is not offered when the app talks to a hub on a server', async () => {
+    withBridge(fakeBridge());
+    mountThisDevice();
+    await screen.findByTestId('desktop-voice');
+    expect(screen.queryByTestId('outside-access')).toBeNull();
+  });
+
+  it('warns first, then hands the pasted token to the hub once and never shows it', async () => {
+    withBridge(fakeBridge(LOCAL));
+    mountThisDevice();
+    const part = await screen.findByTestId('outside-access');
+    expect(within(part).getByTestId('outside-warning').textContent).toContain(
+      'reachable from the internet',
+    );
+    expect(within(part).getByTestId('outside-service').textContent).toBe('http://localhost:47113');
+    const on = within(part).getByTestId('outside-on');
+    expect(on.hasAttribute('disabled')).toBe(true);
+    await userEvent.type(
+      within(part).getByTestId('outside-token'),
+      'eyJhIjoiYSIsInQiOiJ0IiwicyI6InMifQ==',
+    );
+    await userEvent.type(within(part).getByTestId('outside-hostname'), 'hub.example.com');
+    await userEvent.click(on);
+    await waitFor(() =>
+      expect(sent.find((r) => r.method === 'PUT' && r.path.endsWith('/relay'))?.body).toEqual({
+        enabled: true,
+        route: 'cloudflare',
+        hostname: 'hub.example.com',
+        token: 'eyJhIjoiYSIsInQiOiJ0IiwicyI6InMifQ==',
+      }),
+    );
+    expect((await within(part).findByTestId('outside-connected')).textContent).toContain(
+      'https://hub.example.com',
+    );
+    expect(within(part).getByTestId('outside-token-kept').textContent).toContain('6ff42ae2');
+    expect((within(part).getByTestId('outside-token') as HTMLInputElement).value).toBe('');
+  });
+
+  it('offers Tailscale only when this computer is on a tailnet', async () => {
+    relayState = { ...RELAY_OFF, tailnet: { address: '100.101.102.103', dns_name: null } };
+    withBridge(fakeBridge(LOCAL));
+    mountThisDevice();
+    const part = await screen.findByTestId('outside-access');
+    await userEvent.click(within(part).getByRole('radio', { name: /Tailscale/ }));
+    expect(within(part).getByTestId('outside-tailnet').textContent).toBe('100.101.102.103');
+    await userEvent.click(within(part).getByTestId('outside-on'));
+    await waitFor(() =>
+      expect(sent.find((r) => r.method === 'PUT')?.body).toEqual({
+        enabled: true,
+        route: 'tailscale',
+      }),
+    );
+  });
+});
+
+describe('dictation in the desktop app', () => {
+  it('never falls back to the browser recognizer, which has no service behind it in Electron', async () => {
+    const { browserRecognizer } = await import('../src/voice/useDictation.js');
+    const scope = window as unknown as { webkitSpeechRecognition?: unknown };
+    scope.webkitSpeechRecognition = class {};
+    try {
+      expect(browserRecognizer()).not.toBeNull();
+      withBridge(fakeBridge());
+      expect(browserRecognizer()).toBeNull();
+    } finally {
+      delete scope.webkitSpeechRecognition;
+    }
   });
 });

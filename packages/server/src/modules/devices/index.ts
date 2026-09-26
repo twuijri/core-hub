@@ -4,8 +4,8 @@
 // What answers (DECISIONS §66): the registry (list, read, rename, unlink, register a
 // browser), push registration, the push senders (Web Push with the hub's own VAPID keys,
 // FCM, APNs) and a test push; and capability requests (DECISIONS §14, §74; `requests.ts`).
-// The relay and peers stay 501 (they wait for the owner: docs/changes/
-// 2026-09-26-twuijri-close-501-stubs.md).
+// The way in from outside for a hub the desktop app runs (`getRelay` / `setRelay`, DECISIONS
+// §95; `outside.ts`). Peers stay 501 (DECISIONS §80).
 //
 // `auth` imports this module (pairing creates the device row), so this module does not
 // import `auth`: what it needs from it — the route guards, revoking a token, reaching a
@@ -42,6 +42,7 @@ import {
 import type { Language } from '../../i18n/index.js';
 import type { PushMessage, PushProvider } from './senders.js';
 import type { RelayProof } from './relay.js';
+import { changeRelay, readRelay, type RelayChange } from './outside.js';
 import {
   devices,
   type DeviceHelperReport,
@@ -71,6 +72,14 @@ export {
 export type { DeliveryResult, Sealer } from './push.js';
 export type { PushMessage, PushProvider } from './senders.js';
 export type { RequestJobHandle, RequestJobs } from './requests.js';
+export {
+  RelayHostRefusal,
+  relayPairingUrl,
+  type RelayChange,
+  type RelayHost,
+  type RelayHostState,
+  type RelayView,
+} from './outside.js';
 
 /** What the composition root lends this module (it may not import `auth` or `notify`). */
 export interface DevicesPorts {
@@ -114,6 +123,8 @@ export interface DevicesOverrides {
   /** Lets a Web Push endpoint be `http:` and private (tests and the e2e fake push service). */
   allowPrivateEndpoints?: boolean;
   now?: () => number;
+  /** How long `getRelay` / `setRelay` wait for the desktop app (`outside.ts`). */
+  relayHostTimeoutMs?: number;
 }
 let overrides: DevicesOverrides = {};
 export function overrideDevices(next: DevicesOverrides): void {
@@ -1030,6 +1041,23 @@ export function createDevicesModule(lent: DevicesPorts): HubModule {
         handler: (request, { body }) =>
           pushFor(request.server).updateRelay(
             body as { enabled?: boolean; private_push?: boolean },
+          ),
+      });
+
+      // ---------------------------------------------------------------- way in from outside
+
+      defineRoute(app, deps, {
+        operationId: 'devices.getRelay',
+        handler: (request) => readRelay(request.server.hub.relayHost, overrides.relayHostTimeoutMs),
+      });
+
+      defineRoute(app, deps, {
+        operationId: 'devices.setRelay',
+        handler: (request, { body }) =>
+          changeRelay(
+            request.server.hub.relayHost,
+            body as RelayChange,
+            overrides.relayHostTimeoutMs,
           ),
       });
 

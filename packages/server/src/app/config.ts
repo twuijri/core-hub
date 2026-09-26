@@ -12,6 +12,7 @@ export const ENV_KEYS = [
   'COREHUB_SETUP_OPEN_MINUTES',
   'COREHUB_RESET_OWNER',
   'COREHUB_TASK_AUTO_START_MAX',
+  'COREHUB_TASK_STUCK_MINUTES',
   'COREHUB_PUSH_CONTACT',
   'COREHUB_FCM_SERVICE_ACCOUNT',
   'COREHUB_APNS_KEY_ID',
@@ -87,6 +88,17 @@ const envSchema = z.object({
     .min(1, 'COREHUB_TASK_AUTO_START_MAX must be at least 1')
     .max(50, 'COREHUB_TASK_AUTO_START_MAX must be at most 50')
     .default(2),
+  /**
+   * Tasks: after how many minutes without any activity from its run a running task is marked
+   * stuck and its owner told (DECISIONS §93; the default of 30 is proposed — owner to
+   * confirm). `0` switches the watchdog off.
+   */
+  COREHUB_TASK_STUCK_MINUTES: z.coerce
+    .number()
+    .int('COREHUB_TASK_STUCK_MINUTES must be a whole number')
+    .min(0, 'COREHUB_TASK_STUCK_MINUTES must be 0 (off) or more')
+    .max(10_080, 'COREHUB_TASK_STUCK_MINUTES must be at most 10080 (a week)')
+    .default(30),
   /**
    * Push (DECISIONS §66). All optional: Web Push works with nothing set (the hub makes its own
    * VAPID keys), and FCM / APNs can be configured from Settings instead. When set here, the
@@ -203,6 +215,8 @@ export interface HubConfig {
   resetOwner: boolean;
   /** Runs started by `auto_start` at once per profile (`COREHUB_TASK_AUTO_START_MAX`, 2). */
   taskAutoStartMax: number;
+  /** Minutes of silence before a running task is marked stuck (`COREHUB_TASK_STUCK_MINUTES`, 30; 0 = off). */
+  taskStuckMinutes: number;
   /** Push senders' credentials from the environment (all optional). */
   push?: PushEnv;
   /** The owner's web terminal: off unless `COREHUB_WEB_TERMINAL=1` (DECISIONS §70). */
@@ -253,6 +267,7 @@ export function loadConfig(
     setupOpenMinutes: env.COREHUB_SETUP_OPEN_MINUTES,
     resetOwner: env.COREHUB_RESET_OWNER === '1' || env.COREHUB_RESET_OWNER === 'true',
     taskAutoStartMax: env.COREHUB_TASK_AUTO_START_MAX,
+    taskStuckMinutes: env.COREHUB_TASK_STUCK_MINUTES,
     push: {
       contact: env.COREHUB_PUSH_CONTACT,
       fcmServiceAccount: env.COREHUB_FCM_SERVICE_ACCOUNT,

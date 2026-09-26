@@ -100,11 +100,16 @@ struct ThisDeviceExtras: View {
             }
             .accessibilityIdentifier("device.voice_source")
             Toggle(l10n("device.voice_input"), isOn: $device.voiceInput)
-            Picker(l10n("device.dictation_language"), selection: $device.dictationLanguage) {
-                Text(l10n("device.dictation_app")).tag(DeviceSettings.DictationLanguage.app)
-                Text(l10n("shell.language_ar")).tag(DeviceSettings.DictationLanguage.ar)
-                Text(l10n("shell.language_en")).tag(DeviceSettings.DictationLanguage.en)
+            NavigationLink {
+                DictationLanguageList(choice: $device.dictationLanguage)
+            } label: {
+                LabeledContent(
+                    l10n("device.dictation_language"),
+                    value: device.dictationLanguage == DictationLanguage.auto ? l10n("voice.language_auto")
+                        : DictationLanguage.name(device.dictationLanguage, in: app.language.rawValue)
+                )
             }
+            .accessibilityIdentifier("device.dictation_language")
             Toggle(l10n("device.spoken_replies"), isOn: $device.spokenReplies)
         } header: {
             Text(l10n("device.voice"))

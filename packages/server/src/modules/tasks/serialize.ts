@@ -17,6 +17,13 @@ export type WorktreeRow = typeof worktrees.$inferSelect;
 /** How a name is found for an id. Returns `null` for someone the hub no longer knows. */
 export type NameOf = (kind: 'agent' | 'user', id: string) => string | null;
 
+/** A dependency not done yet, as a card shows it (contract `TaskDependencyState`). */
+export interface WaitingOn {
+  id: string;
+  title: string;
+  status: string;
+}
+
 export interface Counts {
   total: number;
   by_status: Record<string, number>;
@@ -72,6 +79,8 @@ export function toTask(
     nameOf: NameOf;
     subtaskCounts?: { total: number; done: number };
     dependsOn?: string[];
+    /** The dependencies not done yet (`TasksService.waitingOn`). */
+    waitingOn?: WaitingOn[];
     worktree?: WorktreeRow | undefined;
   },
 ): Record<string, unknown> {
@@ -122,6 +131,9 @@ export function toTask(
         : null,
     archived_at: row.archivedAt?.toISOString() ?? null,
     attachment_ids: row.attachmentIds,
+    waiting_on: extras.waitingOn ?? [],
+    // Only a running task can be stuck; a marker left on any other is not shown.
+    stuck_since: row.status === 'running' ? (row.stuckAt?.toISOString() ?? null) : null,
   };
 }
 

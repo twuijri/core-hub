@@ -22,6 +22,7 @@ import {
   type RecorderState,
 } from './recorder.js';
 import { dictationErrorOf, transcribe } from './speech-api.js';
+import { desktopBridge } from '../desktop/desktop.js';
 
 /** The part of the Web Speech API this client uses (not in TypeScript's DOM library). */
 interface Recognition {
@@ -45,6 +46,9 @@ type RecognitionConstructor = new () => Recognition;
 
 export function browserRecognizer(): RecognitionConstructor | null {
   if (typeof window === 'undefined') return null;
+  // Electron has the constructor but no Google speech service behind it: every take would end
+  // in a "network" error. In the desktop app dictation goes through the hub only (B11).
+  if (desktopBridge()) return null;
   const scope = window as unknown as {
     SpeechRecognition?: RecognitionConstructor;
     webkitSpeechRecognition?: RecognitionConstructor;

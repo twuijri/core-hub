@@ -40,6 +40,9 @@ export const CHANNELS = {
   updatesGet: 'updates:get',
   updatesCheck: 'updates:check',
   updatesAuto: 'updates:auto',
+  voiceMic: 'voice:mic',
+  voiceMicAsk: 'voice:mic-ask',
+  voiceMicSettings: 'voice:mic-settings',
 } as const;
 
 export interface WelcomeInit {

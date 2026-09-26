@@ -1,12 +1,10 @@
 package hub.core.android.phone
 
 import android.content.Intent
-import hub.core.android.AppLanguage
 import hub.core.android.MemoryPrefs
 import hub.core.client.infrastructure.Serializer
 import hub.core.client.model.Notice
 import java.io.File
-import java.util.Locale
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
@@ -50,23 +48,28 @@ class PhoneTest {
         assertNull(Share.textOf(Intent.ACTION_SEND, "text/plain", " ", ""))
     }
 
-    @Test fun `dictation follows the app language unless one is chosen, and replies are read in their own`() {
-        assertEquals("ar-SA", DictationLanguage.tag(Dictation.APP, AppLanguage.AR))
-        assertEquals("en-US", DictationLanguage.tag(Dictation.APP, AppLanguage.EN))
-        assertEquals("en-US", DictationLanguage.tag(Dictation.EN, AppLanguage.AR))
-        assertEquals("ar-SA", DictationLanguage.tag(Dictation.AR, AppLanguage.EN))
-        assertEquals(Locale.forLanguageTag("ar"), DictationLanguage.speechLocale(rtl = true))
+    @Test fun `dictation is Auto by default and an old choice reads as it did, except the app's language`() {
+        // «As the app» made an English app hear Arabic as English: it reads as Auto now.
+        assertEquals(DictationLanguage.AUTO, DictationLanguage.stored(null))
+        assertEquals(DictationLanguage.AUTO, DictationLanguage.stored("APP"))
+        assertEquals("ar", DictationLanguage.stored("AR"))
+        assertEquals("en", DictationLanguage.stored("EN"))
+        assertEquals("fr-FR", DictationLanguage.stored("fr-FR"))
+        // Replies are read in their own language, by their letters.
+        assertEquals("ar", DictationLanguage.replyLanguage("اكتملت الاختبارات", listOf("en-US")))
+        assertEquals("ru", DictationLanguage.replyLanguage("Все тесты прошли", listOf("en-US")))
+        assertEquals("en", DictationLanguage.replyLanguage("42", listOf("ar-SA")))
     }
 
     @Test fun `this phone's choices persist, with voice and background checks on by default`() {
         val prefs = MemoryPrefs()
         val first = DeviceSettings(prefs)
-        assertEquals(DeviceChoices(voiceInput = true, dictation = Dictation.APP, spokenReplies = false, backgroundNotices = true), first.choices.value)
-        first.update { it.copy(spokenReplies = true, dictation = Dictation.EN, backgroundNotices = false) }
+        assertEquals(DeviceChoices(voiceInput = true, dictation = DictationLanguage.AUTO, spokenReplies = false, backgroundNotices = true), first.choices.value)
+        first.update { it.copy(spokenReplies = true, dictation = "es-MX", backgroundNotices = false) }
         first.noticesSeenAt = 42
         val second = DeviceSettings(prefs)
         assertTrue(second.choices.value.spokenReplies)
-        assertEquals(Dictation.EN, second.choices.value.dictation)
+        assertEquals("es-MX", second.choices.value.dictation)
         assertFalse(second.choices.value.backgroundNotices)
         assertEquals(42L, second.noticesSeenAt)
     }

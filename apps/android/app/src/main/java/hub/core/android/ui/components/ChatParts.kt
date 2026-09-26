@@ -100,7 +100,7 @@ private val contentStyle = TextStyle(textDirection = TextDirection.Content)
  * the content inside keeps deciding its own.
  */
 @Composable
-fun TurnView(turn: Turn, youLabel: String) {
+fun TurnView(turn: Turn, youLabel: String, profile: String = "") {
     val t = LocalTokens.current
     val uiDirection = LocalLayoutDirection.current
     CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Ltr) {
@@ -118,7 +118,7 @@ fun TurnView(turn: Turn, youLabel: String) {
                 )
                 turn.messages.forEach { message ->
                     CompositionLocalProvider(LocalLayoutDirection provides uiDirection) {
-                        if (turn.fromPerson) PersonBubble(message, Modifier.widthIn(max = maxBubble)) else AgentMessage(message)
+                        if (turn.fromPerson) PersonBubble(message, Modifier.widthIn(max = maxBubble), profile) else AgentMessage(message, profile)
                     }
                 }
             }
@@ -127,7 +127,7 @@ fun TurnView(turn: Turn, youLabel: String) {
 }
 
 @Composable
-private fun PersonBubble(message: ChatMessage, modifier: Modifier) {
+private fun PersonBubble(message: ChatMessage, modifier: Modifier, profile: String) {
     val t = LocalTokens.current
     // The corner nearest the person's own side (the right, always) is the tightened one.
     val shape = AbsoluteRoundedCornerShape(topLeft = 16.dp, topRight = 4.dp, bottomRight = 16.dp, bottomLeft = 16.dp)
@@ -137,14 +137,14 @@ private fun PersonBubble(message: ChatMessage, modifier: Modifier) {
                 InContentDirection(message.text) {
                     Text(message.text, style = MaterialTheme.typography.bodyLarge.merge(contentStyle))
                 }
-                Attachments(message)
+                MessageFiles(message.attachments, profile)
             }
         }
     }
 }
 
 @Composable
-private fun AgentMessage(message: ChatMessage) {
+private fun AgentMessage(message: ChatMessage, profile: String) {
     val t = LocalTokens.current
     val clipboard = LocalClipboardManager.current
     val shape = AbsoluteRoundedCornerShape(topLeft = 4.dp, topRight = 16.dp, bottomRight = 16.dp, bottomLeft = 16.dp)
@@ -156,7 +156,7 @@ private fun AgentMessage(message: ChatMessage) {
             if (!message.streaming && message.reasoning.isNotBlank()) ReasoningFold(message.reasoning, message.reasoningMs)
             message.toolCalls.forEach { ToolCallCard(it) }
             if (message.text.isNotBlank()) MarkdownView(message.text)
-            Attachments(message)
+            MessageFiles(message.attachments, profile)
             if (!message.streaming && message.text.isNotBlank()) {
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
                     IconButton(onClick = { clipboard.setText(AnnotatedString(message.text)) }, modifier = Modifier.size(32.dp)) {
@@ -164,16 +164,6 @@ private fun AgentMessage(message: ChatMessage) {
                     }
                 }
             }
-        }
-    }
-}
-
-@Composable
-private fun Attachments(message: ChatMessage) {
-    if (message.attachments.isEmpty()) return
-    FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-        message.attachments.forEach { a ->
-            ProfileBadge(a.name ?: a.kind.value)
         }
     }
 }

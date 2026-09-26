@@ -35,6 +35,19 @@ final class AttachmentTests: XCTestCase {
         XCTAssertTrue(OutgoingMessage(text: " \n").isEmpty)
     }
 
+    func testAReplysPictureIsDrawnAndItsOtherFilesAreNamed() {
+        let photo = attachment("01J8QK3ZR2W7M5N4P6T8V9X0AA", kind: .image, name: "chart.png")
+        let pdf = attachment("01J8QK3ZR2W7M5N4P6T8V9X0AB", kind: .file, name: "report.pdf")
+        let files = MessageAttachments.files(OutgoingMessage(text: "here", attachments: [photo, pdf]).blocks)
+        XCTAssertEqual(files.map(\.name), ["chart.png", "report.pdf"])
+        XCTAssertEqual(files.map(\.isImage), [true, false], "the picture inline, the PDF as its name")
+        XCTAssertEqual(files.map(\.attachmentID), [photo.id, pdf.id])
+        // Kept under its own name, so the system viewer knows its kind; never a path out of the folder.
+        let root = URL(fileURLWithPath: "/tmp/attachments")
+        XCTAssertEqual(AttachmentFiles.place(photo.id, name: "chart.png", in: root).path, "/tmp/attachments/\(photo.id)/chart.png")
+        XCTAssertEqual(AttachmentFiles.place(pdf.id, name: "../x/y.pdf", in: root).lastPathComponent, ".._x_y.pdf")
+    }
+
     func testPhotosShrinkToTheLongerSideLimitAndNeverGrow() {
         XCTAssertEqual(AttachmentRules.fitted(CGSize(width: 4032, height: 3024)), CGSize(width: 2048, height: 1536))
         XCTAssertEqual(AttachmentRules.fitted(CGSize(width: 3024, height: 4032)), CGSize(width: 1536, height: 2048))
@@ -317,6 +330,15 @@ final class VoiceSourceTests: XCTestCase {
             }
         }
         XCTAssertEqual(L10n(.ar)("device.voice_phone"), "الجوال")
+    }
+
+    func testTheHubIsAskedForSpeechTheIPhonePlaysInTheRepliesOwnLanguage() {
+        // The iPhone cannot play Ogg (DECISIONS §91).
+        XCTAssertEqual(Voice.hubFormat, .mp3)
+        XCTAssertEqual(Voice.language(of: "اكتملت الاختبارات بنجاح"), "ar")
+        XCTAssertEqual(Voice.language(of: "Все тесты прошли"), "ru")
+        XCTAssertEqual(Voice.language(of: "सभी परीक्षण पास हुए"), "hi")
+        XCTAssertEqual(Voice.language(of: "42"), "en")
     }
 
     func testLongRepliesAreSpokenInPartsTheHubTakes() {

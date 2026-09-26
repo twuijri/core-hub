@@ -21,6 +21,7 @@ import type {
   ProviderAdapter,
   ProviderContext,
   ProviderTestResult,
+  SpeechFormat,
   SynthesizeRequest,
   SynthesizeResult,
   TranscribeRequest,
@@ -28,6 +29,15 @@ import type {
   DiscoveredModel,
 } from './types.js';
 import type { ModelCapability, ModelKind, ModelPricing } from '../schema.js';
+import { documentedVoices } from '../speech/documented.js';
+
+/** The media type of each `SpeechFormat`, for the `accept` header and a missing `Content-Type`. */
+const AUDIO_MIME: Record<SpeechFormat, string> = {
+  mp3: 'audio/mpeg',
+  aac: 'audio/aac',
+  wav: 'audio/wav',
+  ogg: 'audio/ogg',
+};
 
 function authHeaders(ctx: ProviderContext): Record<string, string> {
   return {
@@ -48,7 +58,8 @@ function kindOf(id: string): ModelKind {
   const lower = id.toLowerCase();
   if (lower.includes('embedding') || lower.includes('embed')) return 'embedding';
   if (lower.includes('whisper') || lower.includes('transcribe')) return 'stt';
-  if (lower.includes('tts') || lower.includes('speech')) return 'tts';
+  // Groq names its speech models after the model family, not the task (`canopylabs/orpheus-…`).
+  if (lower.includes('tts') || lower.includes('speech') || lower.includes('orpheus')) return 'tts';
   return 'chat';
 }
 
@@ -273,14 +284,16 @@ export const openAiAdapter: ProviderAdapter = {
     return { supported: true, models };
   },
 
-  listVoices(_ctx: ProviderContext): Promise<ListVoicesResult> {
-    // OpenAI's voices are a fixed set named in its documentation, not an endpoint. The
-    // contract allows an empty list for "providers that take free-form voice ids", which
-    // is the honest answer: the field is typed by hand.
-    return Promise.resolve({
-      supported: false,
-      reason: 'this provider has no voice list endpoint; type the voice id',
-    });
+  listVoices(ctx: ProviderContext): Promise<ListVoicesResult> {
+    // OpenAI's voices are a fixed set named in its documentation, not an endpoint: the
+    // documented list is answered and labelled as such (decision §94). Somebody's own
+    // OpenAI-compatible speech server has neither, and its voice is typed by hand.
+    return Promise.resolve(
+      documentedVoices(ctx.slug) ?? {
+        supported: false,
+        reason: 'this provider has no voice list endpoint; type the voice id',
+      },
+    );
   },
 
   async synthesize(ctx: ProviderContext, request: SynthesizeRequest): Promise<SynthesizeResult> {
@@ -292,12 +305,13 @@ export const openAiAdapter: ProviderAdapter = {
     const answer = await requestBytes({
       url: joinUrl(ctx.baseUrl, 'audio/speech'),
       method: 'POST',
-      headers: { ...authHeaders(ctx), accept: 'audio/mpeg' },
+      headers: { ...authHeaders(ctx), accept: AUDIO_MIME[request.format ?? 'mp3'] },
       body: {
-        model: ctx.settings.model ?? 'gpt-4o-mini-tts',
+        model: request.model ?? ctx.settings.model ?? 'gpt-4o-mini-tts',
         input: request.text,
         voice,
-        response_format: 'mp3',
+        // The client's format when it asked for one (DECISIONS §91); OpenAI calls Ogg Opus `opus`.
+        response_format: request.format === 'ogg' ? 'opus' : (request.format ?? 'mp3'),
       },
       fetchImpl: ctx.fetchImpl,
     });
@@ -311,7 +325,7 @@ export const openAiAdapter: ProviderAdapter = {
     return {
       supported: true,
       audio: answer.bytes,
-      contentType: answer.contentType ?? 'audio/mpeg',
+      contentType: answer.contentType ?? AUDIO_MIME[request.format ?? 'mp3'],
     };
   },
   /**

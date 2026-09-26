@@ -403,62 +403,7 @@ hub reports the fact; the client warns and suggests `host.docker.internal`.
 Rewriting the URL silently was rejected — a hub that edits what you typed is a
 hub you cannot debug.
 
-## 26. Changing a conversation's agent is a fork; changing its model is a patch
-
-Owner direction, 2026-09-22. Mid-conversation, "talk to a different agent" and
-"run on a different model" look like the same gesture and are not the same act.
-
-A model is a setting of the running conversation: the same agent, the same
-tools, the same memory, a different engine behind the next turn. It stays
-`PATCH /sessions/{id}` (`SessionPatch.model`, `provider`) and the transcript is
-untouched.
-
-An agent is *who* the conversation is with. Its tools, its permissions, its
-notion of a session and its side of the transcript all change. Rewriting
-`Session.agent_id` in place would leave a transcript half of which was produced
-by an agent the row no longer names, and would abandon the first agent's live
-session with no way back. So it forks: `POST /sessions/{id}/fork` gained
-optional `agent_id`, `model` and `provider`. The fork copies the messages, sets
-the agent, starts **no** run, and points `parent_session_id` at the original,
-which is left exactly as it was — the person can go back to it.
-
-The refusals are explicit rather than silent: an unknown `agent_id` is `404
-not_found`, and an agent the hub has not installed is `422 agent_unavailable`
-with the agent id and its status in `details`. A fork with no `agent_id` is the
-fork that existed before this entry, unchanged.
-
-Rejected: a dedicated `POST /sessions/{id}/handoff`. It would be `fork` with one
-more field and a second copy of the copy-the-transcript rule, and §7's shape
-rules do not want a second verb under `/sessions/{id}` for an act the existing
-one already performs.
-
-### The hub names a session, unless a person did
-
-`Session.title` stays `null` until something names it, and "New chat" in a
-sidebar of twenty rows is a list with no information in it. After the first
-assistant reply of a session completes, the hub asks the session's *own* agent
-for a short title in the conversation's language, through a separate one-shot
-call that is not a run: no `Run` row, no job, no `/rt/sessions` run events, and
-a failure costs the caller nothing. The fallback, whenever that call is refused
-or unsupported by the adapter, is the first user message trimmed on a word
-boundary.
-
-The one-shot offers the model **no tools** and leaves nothing in the agent's
-history (2026-09-26): a title is not worth a model writing a file or sending a
-message on its way to six words. Hermes answers it with its own tool-free
-`llm.oneshot` on the conversation's model (the open conversation lends it, or a
-throwaway session in the same profile does, and no prompt is ever submitted);
-an agent without such a call is not handed a turn — the conversation's model is
-asked directly through the provider the hub knows, and without one the fallback
-names it.
-
-No field was added for it. A person's own title is one they sent in
-`SessionPatch.title`, so the hub marks the row when the patch carries a
-non-empty string and never overwrites it afterwards; `title: null` hands the
-naming back and the hub names it again, emitting `session.updated` on
-`/rt/sessions`. Rejected: a `title_source` enum on `Session`. Every client would
-have to render a state nobody displays, and the one question a client actually
-asks — "may I ask for a new title?" — is answered by sending `title: null`.
+> The second entry numbered 26 here — *Changing a conversation's agent is a fork; changing its model is a patch*, with *The hub names a session, unless a person did* — is now **§92** (renumbered 2026-09-27; code and records that say “§26” for forking or naming mean §92).
 
 ## 28. A list may span every profile the caller may enter (`profiles=all`)
 
@@ -1738,7 +1683,7 @@ because the hub had no multipart reader where the models module could use it. It
   words in `details.detail`. A silent take: `400 validation_failed`, `details.reason: no_speech`.
 - **One protocol for now: the OpenAI-shaped `audio/transcriptions`** (OpenAI, Groq, and any
   self-hosted OpenAI-compatible speech server). A custom endpoint added as a speech provider
-  needs no key — it is asked without one, like a custom chat endpoint (§26) — for both
+  needs no key — it is asked without one, like a custom chat endpoint (§27) — for both
   transcription and `models.synthesize`.
 - **No streaming.** Neither side streams: the web's voice mode is turn by turn (record → one
   transcription → the run streams its reply → the reply is spoken sentence by sentence as the
@@ -2446,7 +2391,7 @@ The owner, 2026-09-25, on the rest of the 501 inventory:
   to work both ways — connected to a server, or local — and a desktop-local person without a
   server may later want their phone to reach it from outside. That is what the relay is for.
   Options when it is built: the person's own Cloudflare Tunnel, or Tailscale. Not a service run
-  for them. Not built now; the operations stay 501.
+  for them. Not built now; the operations stay 501. *Built on 2026-09-27: §95.*
 - **Presets** (`agents.listPresets`, `getPreset`, `deletePreset`, `activatePreset`) and **hub
   peers** (`devices.listPeers`, `requestPeer`, `updatePeer`, `deletePeer`, `createPeerInvite`):
   «خلها بعدين اخاف تفتحلنا ثغرات» — later; the owner is wary of the security surface they open
@@ -2784,3 +2729,215 @@ owner to confirm:
 
 Rejected: the bearer in the URL (it would reach logs and history); a service worker that adds the
 header (one more moving part, absent on first load, and the push worker is optional).
+
+## 91. A client asks for speech in a format it can play
+
+The owner (2026-09-27): the iPhone cannot play the hub's Ogg speech and falls back to the phone's
+own voice. `models.synthesize` had no way to say what the client plays, so each provider sent its
+own format. Proposed, owner to confirm:
+
+- **`SpeechRequest.format`** (`SpeechFormat`: `mp3`, `aac`, `wav`, `ogg` — Ogg Opus), optional.
+  The hub asks the provider for it where the provider lets it choose (the OpenAI-shaped protocol's
+  `response_format`, where Ogg Opus is `opus`); a provider that cannot choose sends its own format.
+  The response `Content-Type` always says what came, and `audio/aac` joins the declared types.
+- **Omitted or null is the provider's default**, as before: nothing changes for a client that does
+  not ask.
+- The iPhone and Android apps ask for `mp3`, which both play natively and every speech provider the
+  hub drives can produce; the web keeps not asking.
+
+Rejected: converting the audio on the hub (a transcoder in the image for one client's gap), and a
+per-provider setting (the format is the listener's constraint, not the provider's).
+
+## 92. Changing a conversation's agent is a fork; changing its model is a patch
+
+Owner direction, 2026-09-22. Mid-conversation, "talk to a different agent" and
+"run on a different model" look like the same gesture and are not the same act.
+
+A model is a setting of the running conversation: the same agent, the same
+tools, the same memory, a different engine behind the next turn. It stays
+`PATCH /sessions/{id}` (`SessionPatch.model`, `provider`) and the transcript is
+untouched.
+
+An agent is *who* the conversation is with. Its tools, its permissions, its
+notion of a session and its side of the transcript all change. Rewriting
+`Session.agent_id` in place would leave a transcript half of which was produced
+by an agent the row no longer names, and would abandon the first agent's live
+session with no way back. So it forks: `POST /sessions/{id}/fork` gained
+optional `agent_id`, `model` and `provider`. The fork copies the messages, sets
+the agent, starts **no** run, and points `parent_session_id` at the original,
+which is left exactly as it was — the person can go back to it.
+
+The refusals are explicit rather than silent: an unknown `agent_id` is `404
+not_found`, and an agent the hub has not installed is `422 agent_unavailable`
+with the agent id and its status in `details`. A fork with no `agent_id` is the
+fork that existed before this entry, unchanged.
+
+Rejected: a dedicated `POST /sessions/{id}/handoff`. It would be `fork` with one
+more field and a second copy of the copy-the-transcript rule, and §7's shape
+rules do not want a second verb under `/sessions/{id}` for an act the existing
+one already performs.
+
+### The hub names a session, unless a person did
+
+`Session.title` stays `null` until something names it, and "New chat" in a
+sidebar of twenty rows is a list with no information in it. After the first
+assistant reply of a session completes, the hub asks the session's *own* agent
+for a short title in the conversation's language, through a separate one-shot
+call that is not a run: no `Run` row, no job, no `/rt/sessions` run events, and
+a failure costs the caller nothing. The fallback, whenever that call is refused
+or unsupported by the adapter, is the first user message trimmed on a word
+boundary.
+
+The one-shot offers the model **no tools** and leaves nothing in the agent's
+history (2026-09-26): a title is not worth a model writing a file or sending a
+message on its way to six words. Hermes answers it with its own tool-free
+`llm.oneshot` on the conversation's model (the open conversation lends it, or a
+throwaway session in the same profile does, and no prompt is ever submitted);
+an agent without such a call is not handed a turn — the conversation's model is
+asked directly through the provider the hub knows, and without one the fallback
+names it.
+
+No field was added for it. A person's own title is one they sent in
+`SessionPatch.title`, so the hub marks the row when the patch carries a
+non-empty string and never overwrites it afterwards; `title: null` hands the
+naming back and the hub names it again, emitting `session.updated` on
+`/rt/sessions`. Rejected: a `title_source` enum on `Session`. Every client would
+have to render a state nobody displays, and the one question a client actually
+asks — "may I ask for a new title?" — is answered by sending `title: null`.
+
+## 93. Tasks run in order: `auto_start` waits for dependencies, a quiet run is marked stuck, the archive is counted
+
+Proposed — owner to confirm (2026-09-27, the night's "tasks run in order" batch). Four things the
+Tasks section promised or needed, each with the smallest contract change that says it.
+
+**Auto-start waits for what a task depends on.** A task with `auto_start` that is `ready` and given
+to an agent does not start on its own while any task of its `depends_on` is not done, and starts
+itself when the last of them reaches `done` (the move to `done` looks again, as a move to `ready`
+already did). "Done" is `done`, or `archived` after `done` — the weekly archive keeps
+`completed_at`; a task archived by hand has none and is not done. A person's "assign and start" is
+**not** held back: the person decides, and the clients warn first, naming what is not done. So
+that a card and its details can say what it waits for, `Task` gained `waiting_on`: the
+dependencies not done yet, each `{ id, title, status }` (`TaskDependencyState`) — the ids alone
+would leave a client to find titles among tasks it may not have loaded (the archive, another
+profile's board). Rejected: blocking a manual start with `409` — the owner's rule is that a
+person can always start a task by hand.
+
+**A stuck-task watchdog, on the scheduler's clock.** A `running` task of the hub's own whose run
+has shown no activity — no event on `/rt/sessions` that names the run: text, reasoning, a tool
+call, a step — for `COREHUB_TASK_STUCK_MINUTES` (default **30, proposed**; `0` is off) gets
+`Task.stuck_since` (the moment it last showed any) and its owner **one** notice ("A task seems
+stuck", kind `task_moved`, opening the task; the person's "task moved" switch silences it). The
+marker goes when the run speaks again or the task leaves `running`, and it is announced as
+`task.updated`. Nothing is moved and nothing is stopped: a slow run is not a failed one, and the
+person decides. A run waiting for a person's answer (`waiting_approval`, `waiting_input`) is not
+stuck — it has already asked. The check runs on the hub scheduler's tick (`schedules` owns the
+clock, `tasks` the rule, `notify` the words; they meet in the composition root), not on a timer of
+its own. What a run last did is kept in memory: a restart ends every run and settles its task
+(§47), so nothing about it has to outlive the process. Rejected: moving a stuck task to `blocked`
+(it would undo work that was only slow) and an env var the UI cannot see being the only switch
+forever — a setting can replace it later without a contract change.
+
+**`task.moved` carries `from`, `to` and `actor`.** The event's schema always required them; the
+move route sent the task alone, so webhooks forwarded an event without them. It now sends all
+three, and a card put elsewhere in its own column is `task.updated`, not `task.moved`.
+
+**The archive is counted, not sent.** Without `include_archived`, `tasks.getColumns` answers the
+`archived` column with its real `count` (and `counts.by_status.archived`) and empty `tasks`;
+`counts.total` counts only the columns whose tasks came along. The board is read again every few
+seconds while a task runs, and the archive only grows, so clients read it with
+`include_archived=true` only when a person opens it.
+
+## 94. Speech providers: voices from the provider or its documentation, every language, long text in parts
+
+The owner asked for Groq's voices (its Saudi Arabic voice among them, chosen by the person) and
+the well-known speech services, each added in a click, with a voice picker and a preview; and,
+as for everything in Core Hub, every language — "Arabic" means "Arabic too". Proposed — owner to
+confirm:
+
+- **Presets.** Groq speaks and transcribes with its chat key (`groq-stt`: Whisper over OpenAI's
+  shape; `groq-tts`: Orpheus, English and Arabic-Saudi, WAV only, 200 characters a request, no
+  default model or voice — the person picks). ElevenLabs gains Scribe (`elevenlabs-stt`).
+  Deepgram (`deepgram-stt`, `deepgram-tts`: Nova and Aura) and Azure Speech (`azure-tts`,
+  `azure-stt`, with a resource key; the address is the region's endpoint, asked for with
+  `ProviderPreset.base_url_example`) are new families. Adding one row of a family adds its
+  siblings, and a family that already holds a key in the chosen scope lends it
+  (`ProviderPreset.key_on_file`): no key is pasted twice.
+- **Voices** (`models.listVoices`): the provider's own list when it has an endpoint
+  (`source: provider` — ElevenLabs `/v2/voices` page by page, Deepgram's `/v1/models`, Azure's
+  region voice list); its public documentation when it has none (`source: documented` — Groq,
+  OpenAI), kept in one editable file of the hub (`modules/models/speech/documented.ts`) with the
+  page and the day it was checked; `source: none` otherwise. `model` narrows the list to that
+  model's voices (`Voice.models`); `Voice.description` carries the provider's words (accent).
+- **Models** of a speech row are its provider's own list filtered to the row's kind; a provider
+  with no model endpoint (Scribe) answers its documented list with `catalogue.source: fallback`.
+- **Preview**: `SpeechRequest.model` joins `voice` and `provider_id`, so the page speaks the model
+  and voice on screen before they are saved.
+- **Long text**: a provider whose request limit is below the text (Groq 200, Deepgram 2 000,
+  OpenAI 4 096, ElevenLabs 5 000) is sent it in parts cut at sentence, then clause, then word
+  boundaries, and the parts' audio comes back as one file (WAV samples joined under one header;
+  MP3 frames concatenated).
+- **Every language**: the web offers "Detect automatically", the popular languages, then every
+  language (names from the browser in the interface language), and any id — model, voice,
+  language code — can be typed by hand.
+- **Hermes** hears the choice where it has a backend: `stt.provider` `groq` / `openai` /
+  `elevenlabs` and `tts.provider` `openai` / `elevenlabs`, with the row's model, voice and
+  language in that provider's block, written key by key. For Groq TTS (Hermes's OpenAI-shaped TTS
+  asks for MP3 or Opus, which Groq refuses), Deepgram and Azure, Hermes's own voice is left as it
+  is; the web and the phones speak through the hub's endpoints.
+
+Rejected: Google Cloud Text-to-Speech and Speech-to-Text (their authentication pages name
+Application Default Credentials and service accounts, not an API key, which the hub's one-key
+provider model needs); Microsoft Edge's read-aloud voices (an undocumented endpoint reached by
+presenting as the Edge browser, with no terms that grant a third-party server its use — Azure
+Speech offers the same neural voices with a key); a static voice list for a provider that has a
+list endpoint.
+
+## 95. The way in from outside: the person's own Cloudflare Tunnel or Tailscale, run by the desktop app
+
+The owner, 2026-09-26, on the relay parked in §80: «كل اللي قلت لك خلها بعدين… سوها». A person
+who runs the desktop app in local mode, with no server, wants their phone to reach that hub from
+outside the house. Proposed — owner to confirm:
+
+- **Where it runs.** Only a hub the desktop app started (local mode) can open a way in. The hub
+  runs nothing and keeps no secret: `devices.getRelay` / `devices.setRelay` ask the app over the
+  child's IPC channel (`apps/desktop/src/shared/hub-ipc.ts`), and the app does the work. Any other
+  hub answers `getRelay` with `available: false` and `setRelay` with `409 relay_unavailable`,
+  rather than `501`.
+- **Cloudflare Tunnel** (`route: cloudflare`). The person makes a tunnel in their own Cloudflare
+  dashboard (Zero Trust › Networks › Tunnels), gives it a public hostname whose service is
+  `http://localhost:<hub_port>`, and pastes its token. The app keeps the token sealed by the OS
+  keychain (`safeStorage`, as the device token of §89), never returns it (`token_set` and the
+  token's tunnel id only) and never logs it; the hub checks its shape (base64 of `{a, t, s}`)
+  and passes it through once. The app downloads `cloudflared` from Cloudflare's GitHub releases
+  on first use, at a pinned version (2026.9.3) whose SHA-256 is Cloudflare's published one for
+  that file — any other file is refused — keeps it in `<app data>/tools`, and runs
+  `cloudflared tunnel --no-autoupdate --metrics 127.0.0.1:<free port> run` with the token in
+  `TUNNEL_TOKEN` (never on the command line). `connected` comes from cloudflared's own `/ready`;
+  the routes the dashboard gives the tunnel come from its log (`hostnames`, with `matches: false`
+  for one that points anywhere but the hub's port). It restarts after a crash with a growing
+  pause, but not for a token Cloudflare refuses (`token_invalid`).
+- **Tailscale** (`route: tailscale`). When the computer is on a tailnet (an address in
+  100.64.0.0/10; the MagicDNS name from `tailscale status --json` when the program is where its
+  installers put it), the app listens on that address only, at the hub's port, and passes each
+  connection to the hub on the loopback. Never on 0.0.0.0 or the LAN.
+- **A stable port.** The hub of local mode asks for the port it used last
+  (`COREHUB_DESKTOP_PORT`), so a tunnel's service keeps pointing at it; another one when it is
+  taken, and the page then shows the route pointing elsewhere.
+- **Pairing.** While the way in is open, a pairing made on that hub is `connection: relay` and
+  its QR's `hub_url` is `relay_url` (`https://<hostname>`, or `http://<tailnet address>:<port>`),
+  whatever was asked: that hub listens on its own computer only, so no other address would reach
+  it. Asking for `relay` while it is closed answers `409 relay_not_connected`.
+- **Security.** The hub keeps its normal sign-in; the way in carries the hub's port and nothing
+  else. The page says, before anything is turned on, that the hub becomes reachable from the
+  internet through the person's own tunnel. Nothing starts until the person turns it on, and it
+  stops with the hub.
+
+The contract changes: `Relay` loses `hub_id` and the `official` route (no service is run for
+anyone, §80), and gains `available`, `hub_port`, `token_set`, `tunnel_id`, `hostname`,
+`hostnames`, `tailnet`, `error` (a closed list) and `error_detail`; `RelayUpdate` is the body of
+`setRelay` (`enabled`, `route`, write-only `token`, `forget_token`, `hostname`), which queues no
+job. Rejected: a relay service run for people (§80); `cloudflared` bundled in every installer (tens
+of MB for a feature few turn on, and a second program to keep current in every release); the
+token on `cloudflared`'s command line (other users of the computer can read it); `tailscale serve`
+(it needs HTTPS certificates turned on for the tailnet, and changes the person's Tailscale
+settings rather than only the app's own listener).

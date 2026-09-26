@@ -293,18 +293,25 @@ struct Composer: View {
     var attachments: AttachmentTray? = nil
     /// The profile the files are uploaded into: the chat's own.
     var profile: String = ""
+    /// The conversation's latest words: with Auto and no keyboard to go by, dictation listens
+    /// in the language they are written in.
+    var recentText: [String] = []
     @Environment(\.l10n) private var l10n
     @Environment(AppModel.self) private var app
     @FocusState private var focused: Bool
     @State private var dictation = Dictation()
     /// What was typed before dictation started; what is heard follows it.
     @State private var dictationBase = ""
+    /// The strip's Send (or Send while listening) was pressed: the message goes once the words are in.
+    @State private var sendWhenHeard = false
+    @State private var choosingLanguage = false
 
     private var hasFiles: Bool { !(attachments?.attachments.isEmpty ?? true) }
     private var canSend: Bool {
         (!text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || hasFiles)
             && !sending && !(attachments?.uploading ?? false)
     }
+    private var dictating: Bool { dictation.state == .listening || dictation.state == .transcribing }
 
     var body: some View {
         VStack(alignment: .leading, spacing: Space.s1) {
@@ -317,10 +324,44 @@ struct Composer: View {
             if let attachments, !attachments.isEmpty {
                 AttachmentChips(tray: attachments)
             }
+            if dictating {
+                DictationStrip(
+                    dictation: dictation,
+                    badge: DictationLanguage.badge(dictation.listeningIn ?? DictationLanguage.auto),
+                    onCancel: {
+                        sendWhenHeard = false
+                        dictation.cancel()
+                        text = dictationBase
+                    },
+                    onStop: { dictation.stop() },
+                    onSend: send
+                )
+                .transition(.move(edge: .bottom).combined(with: .opacity))
+            }
             field
         }
+        .animation(.easeOut(duration: Motion.fast), value: dictating)
+        .onAppear { _ = KeyboardLanguage.shared }
         .onChange(of: dictation.heard) { _, heard in
-            text = dictationBase.isEmpty ? heard : dictationBase + " " + heard
+            guard dictating || dictation.state == .idle else { return }
+            text = Dictation.join(dictationBase, heard)
+        }
+        .onChange(of: dictation.state) { _, state in
+            guard sendWhenHeard else { return }
+            switch state {
+            case .idle:
+                sendWhenHeard = false
+                if canSend { onSend() }
+            case .failed:
+                sendWhenHeard = false
+            default:
+                break
+            }
+        }
+        .sheet(isPresented: $choosingLanguage) {
+            NavigationStack {
+                DictationLanguageList(choice: Bindable(app.device).dictationLanguage)
+            }
         }
     }
 
@@ -337,29 +378,9 @@ struct Composer: View {
                 .contentDirection(of: text.isEmpty ? placeholder : text)
                 .accessibilityIdentifier("composer.input")
             if app.device.voiceInput {
-                Button {
-                    toggleDictation()
-                } label: {
-                    Group {
-                        if dictation.state == .transcribing {
-                            ProgressView().controlSize(.small)
-                        } else {
-                            Image(lucide: .mic)
-                                .resizable()
-                                .frame(width: 20, height: 20)
-                                .foregroundStyle(dictation.state == .listening ? Tone.danger : Tone.textMuted)
-                        }
-                    }
-                    .frame(width: Control.heightMd, height: Control.heightMd)
-                }
-                .disabled(dictation.state == .transcribing)
-                .accessibilityLabel(
-                    dictation.state == .transcribing ? l10n("voice.transcribing")
-                        : dictation.state == .listening ? l10n("voice.stop") : l10n("voice.dictate")
-                )
-                .accessibilityIdentifier("composer.dictate")
+                microphone
             }
-            if busy && text.isEmpty && !hasFiles {
+            if busy && text.isEmpty && !hasFiles && !dictating {
                 Button(action: onStop) {
                     Image(systemName: "stop.fill")
                         .frame(width: Control.heightMd, height: Control.heightMd)
@@ -369,14 +390,14 @@ struct Composer: View {
                 .accessibilityLabel(l10n("chat.stop"))
                 .accessibilityIdentifier("composer.stop")
             } else {
-                Button(action: onSend) {
+                Button(action: send) {
                     Image(systemName: "arrow.up")
                         .font(.system(size: FontSize.sizeMd, weight: .bold))
                         .frame(width: Control.heightMd, height: Control.heightMd)
                         .background(canSend ? Tone.accent : Tone.surface3, in: Circle())
                         .foregroundStyle(canSend ? Tone.accentText : Tone.textFaint)
                 }
-                .disabled(!canSend)
+                .disabled(!canSend && !dictating)
                 .accessibilityLabel(l10n("chat.send"))
                 .accessibilityIdentifier("composer.send")
             }
@@ -388,14 +409,92 @@ struct Composer: View {
         .frame(maxWidth: Layout.composerMax)
     }
 
+    /// A tap dictates (or stops); a long press chooses the language — Auto, the default,
+    /// follows the keyboard. A chosen language shows as a small mark on the microphone.
+    private var microphone: some View {
+        Menu {
+            Picker(l10n("voice.language"), selection: Bindable(app.device).dictationLanguage) {
+                Text(l10n("voice.language_auto")).tag(DictationLanguage.auto)
+                ForEach(menuLanguages, id: \.self) { tag in
+                    Text(DictationLanguage.name(tag, in: app.language.rawValue)).tag(tag)
+                }
+            }
+            .pickerStyle(.inline)
+            Button(l10n("voice.language_more")) { choosingLanguage = true }
+        } label: {
+            Group {
+                if dictation.state == .transcribing {
+                    ProgressView().controlSize(.small)
+                } else {
+                    Image(lucide: .mic)
+                        .resizable()
+                        .frame(width: 20, height: 20)
+                        .foregroundStyle(dictation.state == .listening ? Tone.danger : Tone.textMuted)
+                }
+            }
+            .frame(width: Control.heightMd, height: Control.heightMd)
+            .overlay(alignment: .topTrailing) {
+                if let badge = DictationLanguage.badge(app.device.dictationLanguage) {
+                    Text(badge)
+                        .font(.system(size: 8, weight: .bold))
+                        .padding(.horizontal, 3)
+                        .padding(.vertical, 1)
+                        .background(Tone.accent, in: Capsule())
+                        .foregroundStyle(Tone.accentText)
+                        .accessibilityHidden(true)
+                }
+            }
+        } primaryAction: {
+            toggleDictation()
+        }
+        .menuStyle(.button)
+        .buttonStyle(.plain)
+        .disabled(dictation.state == .transcribing)
+        .accessibilityLabel(
+            dictation.state == .transcribing ? l10n("voice.transcribing")
+                : dictation.state == .listening ? l10n("voice.stop") : l10n("voice.dictate")
+        )
+        .accessibilityValue(
+            app.device.dictationLanguage == DictationLanguage.auto ? l10n("voice.language_auto")
+                : DictationLanguage.name(app.device.dictationLanguage, in: app.language.rawValue)
+        )
+        .accessibilityHint(l10n("voice.language_hint"))
+        .accessibilityIdentifier("composer.dictate")
+    }
+
+    /// The menu's languages: the one chosen from «More», then the keyboards', then popular ones.
+    private var menuLanguages: [String] {
+        let choice = app.device.dictationLanguage
+        let offered = DictationLanguage.menu(keyboards: KeyboardLanguage.enabled, supported: nil)
+        if choice == DictationLanguage.auto || offered.contains(where: { DictationLanguage.base($0) == DictationLanguage.base(choice) }) {
+            return offered
+        }
+        return [choice] + offered
+    }
+
+    /// Send: while dictating, once the last words are in.
+    private func send() {
+        guard dictating else { return onSend() }
+        sendWhenHeard = true
+        if dictation.state == .listening { dictation.stop() }
+    }
+
     private func toggleDictation() {
         if dictation.state == .listening {
             dictation.stop()
             return
         }
         dictationBase = text
-        let locale = app.device.dictationLocale(app: app.language)
-        let language = String(locale.identifier.prefix(2))
+        let languages = DictationLanguage.candidates(
+            choice: app.device.dictationLanguage,
+            keyboard: KeyboardLanguage.shared.refresh(),
+            recent: recentText,
+            keyboards: KeyboardLanguage.enabled,
+            preferred: Locale.preferredLanguages,
+            app: app.language.rawValue
+        )
+        // With Auto the hub's model detects the language itself; a chosen one goes as its hint.
+        let language = app.device.hubDictationLanguage
         let target = profile.isEmpty ? app.currentProfile : profile
         Task {
             // The hub listens when the person chose Core Hub and the profile has a provider.
@@ -413,7 +512,86 @@ struct Composer: View {
                     }
                 }
             }
-            await dictation.start(locale: locale, l10n: l10n, hub: hub)
+            await dictation.start(languages: languages, l10n: l10n, hub: hub)
         }
+    }
+}
+
+/// Over the composer while dictating: cancel, the microphone's level, stop, and send.
+struct DictationStrip: View {
+    let dictation: Dictation
+    /// The language the phone listens in, as its short mark; nil while the hub listens.
+    let badge: String?
+    let onCancel: () -> Void
+    let onStop: () -> Void
+    let onSend: () -> Void
+    @Environment(\.l10n) private var l10n
+
+    var body: some View {
+        HStack(spacing: Space.s2) {
+            if dictation.state == .listening {
+                Button(action: onCancel) {
+                    Image(systemName: "xmark")
+                        .font(.system(size: FontSize.sizeSm, weight: .semibold))
+                        .frame(width: Control.heightSm, height: Control.heightSm)
+                        .foregroundStyle(Tone.textMuted)
+                }
+                .accessibilityLabel(l10n("voice.cancel"))
+                .accessibilityIdentifier("dictation.cancel")
+                Waveform(levels: dictation.levels)
+                if let badge {
+                    Text(badge)
+                        .font(.system(size: FontSize.sizeXs, weight: .semibold))
+                        .foregroundStyle(Tone.textMuted)
+                        .accessibilityHidden(true)
+                }
+                Button(action: onStop) {
+                    Image(systemName: "stop.fill")
+                        .frame(width: Control.heightSm, height: Control.heightSm)
+                        .foregroundStyle(Tone.danger)
+                }
+                .accessibilityLabel(l10n("voice.stop"))
+                .accessibilityIdentifier("dictation.stop")
+            } else {
+                ProgressView().controlSize(.small)
+                Text(l10n("voice.transcribing"))
+                    .font(.system(size: FontSize.sizeSm))
+                    .foregroundStyle(Tone.textMuted)
+                Spacer(minLength: 0)
+            }
+            Button(action: onSend) {
+                Image(systemName: "arrow.up")
+                    .font(.system(size: FontSize.sizeSm, weight: .bold))
+                    .frame(width: Control.heightSm, height: Control.heightSm)
+                    .background(Tone.accent, in: Circle())
+                    .foregroundStyle(Tone.accentText)
+            }
+            .accessibilityLabel(l10n("voice.send"))
+            .accessibilityIdentifier("dictation.send")
+        }
+        .padding(.horizontal, Space.s2)
+        .padding(.vertical, Space.s1)
+        .floatingChrome(cornerRadius: Radius.xl)
+        .frame(maxWidth: Layout.composerMax)
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("dictation.strip")
+    }
+}
+
+/// The microphone's loudness over the last moments, as bars.
+struct Waveform: View {
+    let levels: [Float]
+
+    var body: some View {
+        HStack(alignment: .center, spacing: 2) {
+            ForEach(Array(levels.enumerated()), id: \.offset) { _, level in
+                Capsule()
+                    .fill(Tone.accent)
+                    .frame(width: 3, height: max(3, CGFloat(level) * 22))
+            }
+        }
+        .frame(maxWidth: .infinity, minHeight: 24, maxHeight: 24)
+        .animation(.linear(duration: 0.08), value: levels)
+        .accessibilityHidden(true)
     }
 }

@@ -234,3 +234,8 @@ export function isColumnCollapsed(column: ColumnDef, state: CollapseState): bool
   if (state.dragging !== null && isDropTarget(state.dragging, column)) return false;
   return true;
 }
+
+/** Titles as a sentence lists them, in the UI's language («أ، ب» / "A, B"). */
+export function listOf(items: readonly string[], language: string): string {
+  return items.join(language === 'ar' ? '، ' : ', ');
+}

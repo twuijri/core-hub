@@ -108,7 +108,12 @@ export function AddProviderDialog({
   }, [offered, presetId]);
 
   const usingPreset = mode === 'preset' && preset !== undefined;
-  const keyOptional = usingPreset ? preset.key === 'optional' : true;
+  // A family that already holds a key in the chosen scope lends it: Groq added for chat also
+  // speaks, and adding its speech row asks for nothing (DECISIONS §94).
+  const keyOnFile = usingPreset && (preset.key_on_file ?? []).includes(scope);
+  const keyOptional = usingPreset ? preset.key === 'optional' || keyOnFile : true;
+  // A speech provider's model is chosen on its own tab, from the provider's own list.
+  const addsSpeech = usingPreset ? preset.kind !== 'llm' : customKind !== 'llm';
   // Used by signing in to an account, through Hermes (contract decision §55): no key to type
   // and no model list to fetch until the sign-in is approved on the card.
   const signInPreset = usingPreset && preset.sign_in;
@@ -307,7 +312,10 @@ export function AddProviderDialog({
                 {...props}
                 dir="ltr"
                 inputMode="url"
-                placeholder="http://host.docker.internal:1234/v1"
+                placeholder={
+                  (usingPreset ? preset.base_url_example : null) ??
+                  'http://host.docker.internal:1234/v1'
+                }
                 value={baseUrl}
                 onChange={(event) => setBaseUrl(event.target.value)}
                 required
@@ -331,7 +339,10 @@ export function AddProviderDialog({
         )}
 
         {!signInPreset && (
-          <Field label={keyOptional ? t('models.add.key_optional') : t('models.add.key_required')}>
+          <Field
+            label={keyOptional ? t('models.add.key_optional') : t('models.add.key_required')}
+            hint={keyOnFile ? t('models.add.key_on_file') : undefined}
+          >
             {(props) => (
               <span className="field-row-inline">
                 <Input
@@ -353,7 +364,7 @@ export function AddProviderDialog({
           </Field>
         )}
 
-        {!signInPreset && (
+        {!signInPreset && !addsSpeech && (
           <div className="ch-field-row">
             <Label>{t('models.add.default_model')}</Label>
             <div className="flex items-center gap-2">

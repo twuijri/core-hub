@@ -1364,6 +1364,12 @@ paths:
       description: |
         Returns a one-time code and the exact JSON to encode in a QR. The phone scans it, then calls
         `claim` with the code. The pairing expires after `ttl_seconds` (default 300, max 900).
+
+        `hub_url` in the QR is the address the phone will use. On a hub the desktop app runs
+        (local mode) with its way in from outside open (`devices.getRelay`), it is the way in's
+        `relay_url` and the pairing is `relay`, whatever was asked: that hub listens on its own
+        computer only, so no other address would reach it. Asking for `relay` when no way in is
+        open answers `409` `relay_not_connected` (DECISIONS §95).
       x-scope: global
       x-rt-events: []
       requestBody:
@@ -1395,6 +1401,8 @@ paths:
           $ref: '#/components/responses/BadRequest'
         '401':
           $ref: '#/components/responses/Unauthorized'
+        '409':
+          $ref: '#/components/responses/Conflict'
         '429':
           $ref: '#/components/responses/RateLimited'
   /auth/pairings/{pairing_id}:
@@ -9653,6 +9661,12 @@ paths:
             $ref: '#/components/schemas/Ulid'
         - name: include_archived
           in: query
+          description: >-
+            `true`: the `archived` column carries its tasks. Without it the `archived` column
+            still says how many there are (`count`, and `counts.by_status.archived`) but its
+            `tasks` is empty, so a client asks for the archive only when a person opens it
+            (contract decision §93). `counts.total` counts only the columns whose tasks are
+            included.
           schema:
             type: boolean
             default: false
@@ -13137,6 +13151,14 @@ paths:
       operationId: models.listVoices
       tags: [models]
       summary: Voices a TTS provider offers (may be empty for providers that take free-form voice ids)
+      description: >-
+        The provider's own list whenever it has an endpoint for one (`source: provider`: ElevenLabs,
+        Deepgram, Azure). A provider with no such endpoint answers the list its public
+        documentation gives (`source: documented`: Groq, OpenAI), kept in one data file of the hub
+        and labelled as such by clients. `source: none` is a provider with neither: the voice is
+        typed by hand. `model` narrows the list to the voices that model speaks with (Groq's
+        English and Arabic models have different voices; Deepgram's `aura-2` and `aura`). A
+        person may always type a voice id the list does not show (DECISIONS §94).
       parameters:
         - $ref: '#/components/parameters/Profile'
         - name: provider_id
@@ -13144,6 +13166,13 @@ paths:
           required: true
           schema:
             $ref: '#/components/schemas/Ulid'
+        - name: model
+          in: query
+          required: false
+          description: Only the voices this model speaks with. Omitted, every voice of the provider.
+          schema:
+            type: string
+            maxLength: 200
       x-rt-events: []
       responses:
         '200':
@@ -13152,18 +13181,23 @@ paths:
             application/json:
               schema:
                 type: object
-                required: [items]
+                required: [items, source]
                 properties:
                   items:
                     type: array
                     items:
                       $ref: '#/components/schemas/Voice'
+                  source:
+                    $ref: '#/components/schemas/VoiceListSource'
               example:
+                source: documented
                 items:
-                  - id: Rachel
-                    name: Rachel
-                    language: en-US
+                  - id: noura
+                    name: Noura
+                    language: ar-SA
                     gender: female
+                    description: Saudi dialect
+                    models: [canopylabs/orpheus-arabic-saudi]
         '400':
           $ref: '#/components/responses/BadRequest'
         '401':
@@ -13243,7 +13277,13 @@ paths:
       operationId: models.synthesize
       tags: [models]
       summary: Synthesize speech with the active TTS provider
-      description: Returns audio bytes; `X-Speech-Provider` says which provider actually spoke. Text over 2 000 characters is `413`.
+      description: >-
+        Returns audio bytes; `X-Speech-Provider` says which provider actually spoke. Text over
+        2 000 characters is `413`. `format` asks for audio the client can play (iOS cannot play
+        Ogg); the `Content-Type` says what came. A provider that takes less per request (Groq's
+        Orpheus: 200 characters) is sent the text in parts split at sentence, then word,
+        boundaries under its limit, and the parts' audio comes back joined in order as one file
+        (DECISIONS §94).
       parameters:
         - $ref: '#/components/parameters/Profile'
       requestBody:
@@ -13276,6 +13316,10 @@ paths:
                 type: string
                 format: binary
             audio/ogg:
+              schema:
+                type: string
+                format: binary
+            audio/aac:
               schema:
                 type: string
                 format: binary
@@ -13900,25 +13944,43 @@ paths:
     get:
       operationId: devices.getRelay
       tags: [devices]
-      summary: State of the message relay that lets phones reach the hub from outside the LAN (admin)
+      summary: The way in from outside for a hub the desktop app runs on this computer (admin)
+      description: |
+        A hub the desktop app runs on a person's own computer (local mode) listens on that
+        computer only. To let their phone reach it from outside the house, the person opens a way
+        in on an account of their own: a Cloudflare Tunnel (the desktop app runs `cloudflared`
+        with the tunnel's token) or their Tailscale network (the app listens on this computer's
+        tailnet address too). Nothing is run for them by anyone else (DECISIONS §80, §95).
+        A hub on a server has no way in to open (`available: false`): phones reach it at its
+        own address.
       x-scope: global
       x-roles: [owner, admin]
       x-rt-events: []
       responses:
         '200':
-          description: Relay state.
+          description: The way in.
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/Relay'
               example:
+                available: true
                 enabled: true
                 connected: true
                 route: cloudflare
-                relay_url: https://relay.example/h/abc123
-                hub_id: hub_7f3a
+                relay_url: https://hub.example.com
+                hub_port: 47113
+                token_set: true
+                tunnel_id: 6ff42ae2-765d-4adf-8112-31c55c1551ef
+                hostname: hub.example.com
+                hostnames:
+                  - hostname: hub.example.com
+                    service: http://localhost:47113
+                    matches: true
+                tailnet: null
                 error: null
-                connected_at: '2026-09-21T08:00:00Z'
+                error_detail: null
+                connected_at: '2026-09-27T08:00:00Z'
         '401':
           $ref: '#/components/responses/Unauthorized'
         '403':
@@ -13926,7 +13988,12 @@ paths:
     put:
       operationId: devices.setRelay
       tags: [devices]
-      summary: Enable, disable or re-route the relay (admin)
+      summary: Open, close or change the way in from outside (admin)
+      description: |
+        Only a hub the desktop app runs (local mode) can open one; any other hub answers `409`
+        `relay_unavailable`. `token` is written once and kept by the computer's keychain; it is
+        never returned and never logged. The answer is the state right after the change: the
+        connection itself follows in the background (read again for `connected`).
       x-scope: global
       x-roles: [owner, admin]
       requestBody:
@@ -13934,31 +14001,34 @@ paths:
         content:
           application/json:
             schema:
-              type: object
-              properties:
-                enabled:
-                  type: boolean
-                route:
-                  type: string
-                  enum: [official, cloudflare]
+              $ref: '#/components/schemas/RelayUpdate'
             example:
               enabled: true
-              route: official
-      x-rt-events: [job.queued]
+              route: cloudflare
+              token: eyJhIjoiYWNjb3VudCIsInQiOiJ0dW5uZWwiLCJzIjoic2VjcmV0In0=
+              hostname: hub.example.com
+      x-rt-events: []
       responses:
         '200':
-          description: Relay state (connection happens in the background).
+          description: The way in after the change (connecting happens in the background).
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/Relay'
               example:
+                available: true
                 enabled: true
                 connected: false
-                route: official
-                relay_url: null
-                hub_id: hub_7f3a
+                route: cloudflare
+                relay_url: https://hub.example.com
+                hub_port: 47113
+                token_set: true
+                tunnel_id: 6ff42ae2-765d-4adf-8112-31c55c1551ef
+                hostname: hub.example.com
+                hostnames: []
+                tailnet: null
                 error: null
+                error_detail: null
                 connected_at: null
         '400':
           $ref: '#/components/responses/BadRequest'
@@ -13966,6 +14036,10 @@ paths:
           $ref: '#/components/responses/Unauthorized'
         '403':
           $ref: '#/components/responses/Forbidden'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
   /peers:
     get:
       operationId: devices.listPeers
@@ -17594,7 +17668,7 @@ components:
     PairingConnection:
       type: string
       enum: [lan, relay]
-      description: '`lan` when the device reaches the hub directly; `relay` when it goes through the message relay.'
+      description: '`lan` when the device reaches the hub directly; `relay` when it goes through the way in from outside of a hub the desktop app runs (`devices.getRelay`, DECISIONS §95).'
     PairingCreate:
       type: object
       properties:
@@ -22115,6 +22189,40 @@ components:
                       maxLength: 64
                       description: The card's id on that board.
                 - type: 'null'
+            waiting_on:
+              type: array
+              description: >-
+                The tasks of `depends_on` that are not done yet, with their title and column, so a
+                card and its details can say what it waits for (empty when there is nothing to wait
+                for). `done` counts as done, and so does `archived` after `done` (the weekly
+                archive); archived without having been done does not. A task with `auto_start`
+                does not start on its own while this is not empty, and starts itself when the last
+                of them reaches `done`. A person's "assign and start" is not held back by it —
+                clients warn first. Always sent by the hub (contract decision §93).
+              items:
+                $ref: '#/components/schemas/TaskDependencyState'
+            stuck_since:
+              description: >-
+                Set while the task is `running` and its run has shown no activity (no text, tool
+                call or step) since this moment for longer than `COREHUB_TASK_STUCK_MINUTES` — the
+                stuck-task watchdog, which also sends the task's owner a notice once. Cleared
+                when the run shows activity again or the task leaves `running`. `null` otherwise;
+                always sent by the hub (contract decision §93).
+              oneOf:
+                - $ref: '#/components/schemas/Timestamp'
+                - type: 'null'
+    TaskDependencyState:
+      type: object
+      description: One task another task depends on, as far as waiting for it goes.
+      required: [id, title, status]
+      properties:
+        id:
+          $ref: '#/components/schemas/Ulid'
+        title:
+          type: string
+          maxLength: 300
+        status:
+          $ref: '#/components/schemas/TaskStatus'
     Subtask:
       type: object
       required: [id, task_id, index, title, status, note, blocked_reason, completed_at, updated_at]
@@ -22418,6 +22526,9 @@ components:
                 $ref: '#/components/schemas/TaskStatus'
               count:
                 type: integer
+                description: >-
+                  How many tasks the column holds. For `archived` without `include_archived`,
+                  the number in the archive while `tasks` is empty.
               tasks:
                 type: array
                 description: In `position` order.
@@ -23442,6 +23553,20 @@ components:
             adding it, `models.startProviderSignIn` shows a code and a link (decision §55).
             Only the providers whose sign-in the agent runtime can complete on the hub's behalf
             say `true`; `key` is then `optional` and a client does not ask for one.
+        base_url_example:
+          type: [string, 'null']
+          description: >-
+            An example of the address to type when `base_url` is null — the shape, never a
+            value the hub would use (Azure Speech: `https://<region>.api.cognitive.microsoft.com`).
+        key_on_file:
+          type: array
+          items:
+            type: string
+            enum: [all, profile]
+          description: >-
+            The scopes (`ProviderCreate.scope`) in which a provider of the same credential
+            family already holds a key. Added there, this provider uses that key and none need
+            be typed: Groq added for chat also speaks (DECISIONS §94).
     ProviderHost:
       type: object
       required: [containerized, loopback_alias]
@@ -23840,9 +23965,24 @@ components:
           type: string
         language:
           type: [string, 'null']
+          description: BCP-47 tag (`ar-SA`, `en-US`) or a bare language (`ar`), as the provider names it.
         gender:
           type: [string, 'null']
           enum: [female, male, neutral, null]
+        description:
+          type: [string, 'null']
+          description: The provider's own short words about the voice (accent, style), when it gives any.
+        models:
+          type: [array, 'null']
+          items:
+            type: string
+          description: The models this voice speaks with; null or absent is every model of the provider.
+    VoiceListSource:
+      type: string
+      enum: [provider, documented, none]
+      description: >-
+        Where a voice list came from: the provider's own endpoint, the provider's public
+        documentation (it has no list endpoint), or nowhere (type the voice id).
     Transcription:
       type: object
       required: [text, language, duration_ms, provider_id, model]
@@ -23871,10 +24011,30 @@ components:
         voice:
           type: [string, 'null']
           description: Overrides the provider's default voice for this request.
+        model:
+          type: [string, 'null']
+          maxLength: 200
+          description: >-
+            Overrides the provider's model for this request — how the Models page previews a
+            model and voice before saving them.
         provider_id:
           oneOf:
             - $ref: '#/components/schemas/Ulid'
             - type: 'null'
+        format:
+          oneOf:
+            - $ref: '#/components/schemas/SpeechFormat'
+            - type: 'null'
+          description: >-
+            The audio the client can play (DECISIONS §91). The hub asks the provider for it
+            where the provider lets it choose, else the provider's own format comes back; the
+            response `Content-Type` always says which. Omitted or null: the provider's default.
+    SpeechFormat:
+      type: string
+      description: >-
+        An audio format a client asks speech in: `mp3`, `aac` (in an MP4/M4A container, what
+        iOS and Android play natively), `wav`, or `ogg` (Ogg Opus).
+      enum: [mp3, aac, wav, ogg]
     # ---------------------------------------------------------------- devices
     DevicePlatform:
       type: string
@@ -24489,25 +24649,120 @@ components:
             - type: 'null'
     Relay:
       type: object
-      required: [enabled, connected, route, relay_url, hub_id, error, connected_at]
+      description: |
+        The way in from outside for a hub the desktop app runs on a person's computer
+        (DECISIONS §95). `relay_url` is the address a phone pairs with while it is open.
+      required:
+        [
+          available,
+          enabled,
+          connected,
+          route,
+          relay_url,
+          hub_port,
+          token_set,
+          tunnel_id,
+          hostname,
+          hostnames,
+          tailnet,
+          error,
+          error_detail,
+          connected_at,
+        ]
       properties:
+        available:
+          type: boolean
+          description: Whether this hub can open a way in at all (a hub the desktop app runs in local mode).
         enabled:
           type: boolean
         connected:
           type: boolean
+          description: 'Cloudflare: the tunnel holds at least one connection to Cloudflare. Tailscale: the app listens on the tailnet address.'
         route:
-          type: string
-          enum: [official, cloudflare]
+          type: [string, 'null']
+          enum: [cloudflare, tailscale, null]
         relay_url:
           type: [string, 'null']
-        hub_id:
+          description: The address a phone pairs with (`https://<hostname>` or `http://<tailnet address>:<port>`), or null.
+        hub_port:
+          type: [integer, 'null']
+          description: The port the hub listens on, on this computer; a tunnel's service is `http://localhost:<hub_port>`.
+        token_set:
+          type: boolean
+          description: A Cloudflare tunnel token is kept (sealed by the computer's keychain; never returned).
+        tunnel_id:
           type: [string, 'null']
+          description: The tunnel the kept token belongs to (read from the token; not a secret).
+        hostname:
+          type: [string, 'null']
+          description: The public hostname the person gave the tunnel in Cloudflare.
+        hostnames:
+          type: array
+          description: What Cloudflare routes to this tunnel, as `cloudflared` reports it; `matches` is false when a route points anywhere but the hub's port.
+          items:
+            type: object
+            required: [hostname, service, matches]
+            properties:
+              hostname:
+                type: string
+              service:
+                type: string
+              matches:
+                type: boolean
+        tailnet:
+          description: This computer on a Tailscale network, when it is on one.
+          oneOf:
+            - type: object
+              required: [address, dns_name]
+              properties:
+                address:
+                  type: string
+                dns_name:
+                  type: [string, 'null']
+            - type: 'null'
         error:
           type: [string, 'null']
+          enum:
+            [
+              token_invalid,
+              download_failed,
+              checksum_mismatch,
+              unsupported_platform,
+              start_failed,
+              tunnel_exited,
+              not_on_tailnet,
+              listen_failed,
+              null,
+            ]
+          description: Why the way in is not open, when it should be.
+        error_detail:
+          type: [string, 'null']
+          description: The program's own words for the error (never the token).
         connected_at:
           oneOf:
             - $ref: '#/components/schemas/Timestamp'
             - type: 'null'
+    RelayUpdate:
+      type: object
+      properties:
+        enabled:
+          type: boolean
+        route:
+          type: string
+          enum: [cloudflare, tailscale]
+        token:
+          type: string
+          minLength: 20
+          maxLength: 4096
+          writeOnly: true
+          description: The Cloudflare tunnel token (Zero Trust › Networks › Tunnels). Kept by the computer's keychain, never returned or logged.
+        forget_token:
+          type: boolean
+          description: Forget the kept token (and close the tunnel).
+        hostname:
+          type: [string, 'null']
+          maxLength: 253
+          description: The public hostname given to the tunnel in Cloudflare, without `https://`.
     Peer:
       type: object
       required:
