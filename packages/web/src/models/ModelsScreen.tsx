@@ -523,7 +523,7 @@ function ProviderCard({
           </Button>
         )}
         <Button
-          variant="danger"
+          variant="danger-quiet"
           disabled={remove.isPending}
           onClick={() => setConfirmRemove(true)}
           data-testid="provider-remove"

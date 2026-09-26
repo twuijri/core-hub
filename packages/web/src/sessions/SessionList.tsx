@@ -11,6 +11,7 @@
 //
 // Assembled from the kit (`src/ui/`): the field, the segmented scope, the row buttons, the
 // empty state and the right-click menu are all components, not markup written here.
+import { AgentFace, useAgentIdentities } from '../agents/identity.js';
 import {
   DndContext,
   KeyboardSensor,
@@ -960,6 +961,9 @@ function SessionRow({
   } = useSortable({ id: session.id });
   const style = { transform: CSS.Transform.toString(transform), transition };
   const title = sessionTitle(session, t);
+  // The chat's agent by its face, as the phones show it (agents/identity.tsx).
+  const identityOf = useAgentIdentities();
+  const agent = session.agent_id ? identityOf(session.agent_id, null, '') : null;
   const selecting = selected !== null;
   const pinLabel = session.pinned ? t('sessions.unpin') : t('sessions.pin');
   const archiveLabel = session.archived ? t('sessions.unarchive') : t('sessions.archive');
@@ -1016,6 +1020,7 @@ function SessionRow({
             className="session-link"
           >
             <span className="session-title-row">
+              {agent?.known && <AgentFace identity={agent} size="xs" testId="session-agent" />}
               {session.pinned && <IconPin size={12} label={t('sessions.pinned')} />}
               {session.status !== 'idle' && (
                 <Badge tone="accent" dot testId="session-live">

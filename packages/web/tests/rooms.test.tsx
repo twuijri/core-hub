@@ -8,6 +8,22 @@ import { insertMention, mentionQuery, mentionsIn, suggest } from '../src/rooms/m
 import { codeFrom } from '../src/rooms/queries.js';
 import { applyRoomEvent, loaded, prepend, textOf } from '../src/rooms/transcript.js';
 import type { Message } from '../src/types.js';
+import type * as attachmentQueries from '../src/attachments/queries.js';
+
+// The room composer uploads through the chat's own upload (attachments/queries.ts); here the
+// hub answers at once with the attachment it would have stored.
+vi.mock('../src/attachments/queries.js', async (original) => ({
+  ...(await original<typeof attachmentQueries>()),
+  useUploadAttachment: () => ({
+    upload: async ({ file }: { file: File }) => ({
+      id: `ATT-${file.name}`,
+      name: file.name,
+      mime: file.type,
+      size_bytes: file.size,
+      kind: file.type.startsWith('image/') ? 'image' : 'file',
+    }),
+  }),
+}));
 
 afterEach(cleanup);
 
@@ -185,9 +201,78 @@ describe('the room composer', () => {
     });
     fireEvent.keyDown(input, { key: 'Enter' });
     await vi.waitFor(() => expect(onSend).toHaveBeenCalled());
-    expect(onSend).toHaveBeenCalledWith('@Code Reviewer please look', [
-      { kind: 'seat', seat_id: 'S3' },
-    ]);
+    expect(onSend).toHaveBeenCalledWith(
+      [{ type: 'text', text: '@Code Reviewer please look' }],
+      [{ kind: 'seat', seat_id: 'S3' }],
+    );
+  });
+
+  it('sends a picture and a file with the words, and a picture alone (§99)', async () => {
+    const { onSend, input } = renderComposer();
+    const picker = screen.getByTestId('room-file-input') as HTMLInputElement;
+    expect(screen.getByTestId('room-attach').getAttribute('aria-label')).toBe('Attach files');
+    fireEvent.change(picker, {
+      target: {
+        files: [
+          new File(['png'], 'plan.png', { type: 'image/png' }),
+          new File(['pdf'], 'brief.pdf', { type: 'application/pdf' }),
+        ],
+      },
+    });
+    await vi.waitFor(() =>
+      expect(
+        [...screen.getByTestId('room-composer-attachments').querySelectorAll('li')].map((li) =>
+          li.getAttribute('data-status'),
+        ),
+      ).toEqual(['done', 'done']),
+    );
+    fireEvent.change(input, { target: { value: 'look at these', selectionStart: 13 } });
+    fireEvent.keyDown(input, { key: 'Enter' });
+    await vi.waitFor(() => expect(onSend).toHaveBeenCalledTimes(1));
+    expect(onSend).toHaveBeenLastCalledWith(
+      [
+        { type: 'text', text: 'look at these' },
+        {
+          type: 'image',
+          attachment_id: 'ATT-plan.png',
+          name: 'plan.png',
+          mime: 'image/png',
+          size_bytes: 3,
+        },
+        {
+          type: 'file',
+          attachment_id: 'ATT-brief.pdf',
+          name: 'brief.pdf',
+          mime: 'application/pdf',
+          size_bytes: 3,
+        },
+      ],
+      [],
+    );
+    // What went is gone from the tray.
+    await vi.waitFor(() => expect(screen.queryByTestId('room-composer-attachments')).toBeNull());
+
+    // Words are not required: a picture alone is a message.
+    fireEvent.change(picker, {
+      target: { files: [new File(['jpg'], 'site.jpg', { type: 'image/jpeg' })] },
+    });
+    await vi.waitFor(() =>
+      expect((screen.getByTestId('room-send') as HTMLButtonElement).disabled).toBe(false),
+    );
+    fireEvent.click(screen.getByTestId('room-send'));
+    await vi.waitFor(() => expect(onSend).toHaveBeenCalledTimes(2));
+    expect(onSend).toHaveBeenLastCalledWith(
+      [
+        {
+          type: 'image',
+          attachment_id: 'ATT-site.jpg',
+          name: 'site.jpg',
+          mime: 'image/jpeg',
+          size_bytes: 3,
+        },
+      ],
+      [],
+    );
   });
 
   it('offers @all when the room allows it', () => {

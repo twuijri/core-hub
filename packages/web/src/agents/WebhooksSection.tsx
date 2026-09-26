@@ -198,7 +198,7 @@ function WebhookRow({
           {!route.static && (
             <Button
               size="sm"
-              variant="danger"
+              variant="danger-quiet"
               icon={<IconTrash size={14} />}
               disabled={remove.isPending}
               onClick={() => {

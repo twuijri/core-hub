@@ -20,7 +20,7 @@ import {
   visibleEntries,
   webDestinations,
 } from '../navigation/manifest.js';
-import { IconDevices, IconGlobe, IconKnowledge, IconModels } from '../ui/icons.js';
+import { destinationIcons } from '../ui/icons.js';
 import { Badge, SidebarGroup, SidebarRow } from '../ui/index.js';
 import { useUnreadCount } from '../notify/queries.js';
 import { useTerminalAvailable } from '../terminal/queries.js';
@@ -48,18 +48,9 @@ export function settingsIdFromPath(pathname: string): string | null {
   return matches[0]?.[0] ?? null;
 }
 
-/** The management pages keep the icon they had, so nothing feels moved away. */
+/** Every row carries its destination's icon — the same picture the phones show for it. */
 function rowIcon(id: string) {
-  const Icon =
-    id === 'models'
-      ? IconModels
-      : id === 'device_connections'
-        ? IconDevices
-        : id === 'knowledge'
-          ? IconKnowledge
-          : id === 'linked_hubs'
-            ? IconGlobe
-            : null;
+  const Icon = destinationIcons[id];
   return Icon ? <Icon size={16} /> : null;
 }
 

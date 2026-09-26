@@ -1,5 +1,5 @@
 // Settings (destination `settings`) on a phone: the list is the page itself (NAVIGATION.md §٢),
-// its first row goes back to the chats, and each page opened from it shows the way back.
+// the navigation bar goes back to the chats, and each page opened from it shows the way back.
 import SwiftUI
 import UIKit
 import UserNotifications
@@ -13,12 +13,6 @@ struct SettingsScreen: View {
         NavigationStack {
             List {
                 Section {
-                    Button(action: backToChats) {
-                        Label(l10n("settings.back_to_chats"), systemImage: "chevron.backward")
-                    }
-                    .accessibilityIdentifier("settings.back_to_chats")
-                }
-                Section {
                     rows(NavigationMap.settingsTabs)
                 }
                 Section(l10n("settings.management")) {
@@ -29,6 +23,18 @@ struct SettingsScreen: View {
                 }
             }
             .navigationTitle(l10n("nav.settings"))
+            // The way back to the chats sits where every phone puts "back": the navigation bar,
+            // not a row that pushes the list down (docs/design/family.md, "Phone adaptations").
+            .toolbar {
+                ToolbarItem(placement: .topBarLeading) {
+                    Button(action: backToChats) {
+                        LucideIcon(.chevronLeft, size: 20)
+                            .flipsForRightToLeftLayoutDirection(true)
+                    }
+                    .accessibilityLabel(l10n("settings.back_to_chats"))
+                    .accessibilityIdentifier("settings.back_to_chats")
+                }
+            }
             .navigationDestination(for: DestinationID.self) { destination in
                 SettingsPage(destination: destination)
             }
@@ -42,7 +48,13 @@ struct SettingsScreen: View {
     private func rows(_ list: [DestinationID]) -> some View {
         ForEach(NavigationMap.visible(list, admin: app.isAdmin)) { destination in
             NavigationLink(value: destination) {
-                Label(l10n(destination.titleKey), systemImage: Icons.symbol(for: destination))
+                Label {
+                    Text(l10n(destination.titleKey))
+                        .foregroundStyle(Tone.text)
+                } icon: {
+                    LucideIcon(Icons.lucide(for: destination), size: 18)
+                        .foregroundStyle(Tone.textMuted)
+                }
             }
             .accessibilityIdentifier("settings.\(destination.rawValue)")
         }

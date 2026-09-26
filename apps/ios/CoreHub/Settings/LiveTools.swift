@@ -283,7 +283,7 @@ private struct LogsList: View {
                 Button {
                     Task { await model.refresh() }
                 } label: {
-                    Label(l10n("tools.refresh"), systemImage: "arrow.clockwise")
+                    Label { Text(l10n("tools.refresh")) } icon: { Image(lucide: .rotateCw) }
                 }
                 .accessibilityIdentifier("logs.refresh")
             }

@@ -1,5 +1,15 @@
 package hub.core.android
 
+import hub.core.android.ui.kit.ConfirmDialog
+import hub.core.android.ui.kit.ControlSize
+import hub.core.android.ui.kit.HubButton
+import hub.core.android.ui.kit.HubDialog
+import hub.core.android.ui.kit.HubIconButton
+import hub.core.android.ui.kit.HubMenu
+import hub.core.android.ui.kit.IconKind
+import hub.core.android.ui.kit.Lucide
+import hub.core.android.ui.kit.MenuItem
+import androidx.compose.foundation.layout.fillMaxWidth
 import android.content.Context
 import android.content.Intent
 import android.content.res.Configuration
@@ -12,9 +22,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.navigationBarsPadding
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -23,9 +31,8 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
-import androidx.compose.material.icons.filled.MoreVert
-import androidx.compose.material.icons.filled.Share
 import androidx.compose.ui.platform.testTag
+import androidx.compose.material.icons.filled.Share
 import androidx.compose.ui.res.stringResource
 import hub.core.android.data.DeepLink
 import hub.core.android.data.PairingRequest
@@ -84,6 +91,13 @@ class MainActivity : ComponentActivity() {
         setContent {
             val theme by graph.prefs.theme.collectAsState()
             CoreHubTheme(theme) {
+                // The system bars' icons follow the app's theme, not only the phone's.
+                val dark = hub.core.android.ui.theme.LocalDarkTheme.current
+                LaunchedEffect(dark) {
+                    val style = if (dark) androidx.activity.SystemBarStyle.dark(android.graphics.Color.TRANSPARENT)
+                    else androidx.activity.SystemBarStyle.light(android.graphics.Color.TRANSPARENT, android.graphics.Color.TRANSPARENT)
+                    enableEdgeToEdge(statusBarStyle = style, navigationBarStyle = style)
+                }
                 Box(Modifier.fillMaxSize().background(LocalTokens.current.bg)) {
                     AppRoot(pendingPairing, { pendingPairing = null }, pendingPath, { pendingPath = null })
                 }
@@ -131,14 +145,12 @@ private fun AppRoot(pendingPairing: PairingRequest?, onPairingHandled: () -> Uni
     val leave = androidx.compose.runtime.rememberCoroutineScope()
     if (pendingPairing != null) {
         // Already signed in: pairing again moves this phone to that hub, so ask first.
-        AlertDialog(
-            onDismissRequest = onPairingHandled,
-            title = { Text(stringResource(R.string.pair_switch_title)) },
-            text = { Text(stringResource(R.string.pair_switch_body, pendingPairing.hub)) },
-            confirmButton = {
-                TextButton(onClick = { leave.launch { graph.signOut(logout = false) } }) { Text(stringResource(R.string.pair_switch_confirm)) }
-            },
-            dismissButton = { TextButton(onClick = onPairingHandled) { Text(stringResource(R.string.cancel)) } },
+        ConfirmDialog(
+            title = stringResource(R.string.pair_switch_title),
+            body = stringResource(R.string.pair_switch_body, pendingPairing.hub),
+            confirm = stringResource(R.string.pair_switch_confirm),
+            onConfirm = { leave.launch { graph.signOut(logout = false) } },
+            onDismiss = onPairingHandled,
         )
     }
     val nav = remember(session?.hub, session?.user?.id) { Navigator() }
@@ -159,19 +171,27 @@ private fun AppRoot(pendingPairing: PairingRequest?, onPairingHandled: () -> Uni
 @Composable
 private fun Destination(route: Route, nav: Navigator, shell: ShellViewModel, openDrawer: () -> Unit) {
     val session by shell.session.collectAsState()
+    // Read so a profile's name replaces its slug once the list arrives (shell.profileName).
+    shell.profiles.collectAsState().value
     val s = session ?: return
-    Column(Modifier.fillMaxSize().navigationBarsPadding()) {
+    Column(Modifier.fillMaxSize().navigationBarsPadding().testTag("screen.${route.destination}")) {
         when (route) {
             Route.NewChat -> {
-                TopBar(term("new_chat"), onMenu = openDrawer, subtitle = shell.profileName(s.profile)) { PendingButton(shell, nav) }
+                // The page itself names the profile the chat will be made in (as on iOS).
+                TopBar(term("new_chat"), onMenu = openDrawer) { PendingButton(shell, nav) }
                 ChatScreen(null, s.profile, shell.profileName(s.profile), onCreated = { id, profile -> nav.go(Route.Chat(id, profile)) })
             }
             is Route.Chat -> {
                 val chats by shell.chats.collectAsState()
-                val title = chats.items.firstOrNull { it.id == route.sessionId }?.title ?: term("new_chat")
+                val chat = chats.items.firstOrNull { it.id == route.sessionId }
+                val title = chat?.title ?: term("new_chat")
+                // The top bar names the conversation and wears its agent's face (as the web's header).
+                val agents = hub.core.android.ui.components.rememberAgents(route.profile)
+                val agent = agents.firstOrNull { it.id == chat?.agentId }
                 TopBar(
                     title, onMenu = openDrawer,
-                    subtitle = if (route.profile != s.profile) shell.profileName(route.profile) else null,
+                    subtitle = listOfNotNull(agent?.name, if (route.profile != s.profile) shell.profileName(route.profile) else null)
+                        .joinToString(" · ").ifEmpty { null },
                 ) {
                     PendingButton(shell, nav)
                     ExportButton(shell, route.sessionId, route.profile, title)
@@ -249,14 +269,10 @@ private fun ExportButton(shell: ShellViewModel, sessionId: String, profile: Stri
     var open by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(false) }
     var failed by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(false) }
     androidx.compose.foundation.layout.Box {
-        androidx.compose.material3.IconButton(onClick = { open = true }, modifier = Modifier.testTag("chat.more")) {
-            androidx.compose.material3.Icon(androidx.compose.material.icons.Icons.Default.MoreVert, stringResource(R.string.chat_more))
-        }
-        androidx.compose.material3.DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
-            androidx.compose.material3.DropdownMenuItem(
-                text = { Text(stringResource(R.string.chat_export)) },
-                leadingIcon = { androidx.compose.material3.Icon(androidx.compose.material.icons.Icons.Default.Share, null) },
-                onClick = {
+        HubIconButton(Lucide.Ellipsis, stringResource(R.string.chat_more), { open = true }, kind = IconKind.Glass, modifier = Modifier.testTag("chat.more"))
+        HubMenu(open, { open = false }) {
+            MenuItem(
+                stringResource(R.string.chat_export), {
                     open = false
                     scope.launch {
                         val file = shell.exportChat(context, sessionId, profile, title)
@@ -264,15 +280,17 @@ private fun ExportButton(shell: ShellViewModel, sessionId: String, profile: Stri
                         else hub.core.android.ui.components.AttachmentFiles.share(context, file, "text/markdown")
                     }
                 },
+                icon = Lucide.Share2,
                 modifier = Modifier.testTag("chat.export"),
             )
         }
     }
     if (failed) {
-        AlertDialog(
-            onDismissRequest = { failed = false },
-            text = { Text(stringResource(R.string.chat_export_failed)) },
-            confirmButton = { TextButton(onClick = { failed = false }) { Text(stringResource(R.string.ok)) } },
-        )
+        HubDialog({ failed = false }) {
+            Text(stringResource(R.string.chat_export_failed))
+            androidx.compose.foundation.layout.Row(Modifier.fillMaxWidth(), horizontalArrangement = androidx.compose.foundation.layout.Arrangement.End) {
+                HubButton(stringResource(R.string.ok), { failed = false }, size = ControlSize.Md)
+            }
+        }
     }
 }

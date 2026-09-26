@@ -1,5 +1,25 @@
 package hub.core.android.phone
 
+import hub.core.android.generated.ControlTokens
+import hub.core.android.generated.FontTokens
+import hub.core.android.ui.kit.ButtonKind
+import hub.core.android.ui.kit.ControlSize
+import hub.core.android.ui.kit.HubButton
+import hub.core.android.ui.kit.HubDialog
+import hub.core.android.ui.kit.HubIconButton
+import hub.core.android.ui.kit.HubMenu
+import hub.core.android.ui.kit.HubTextField
+import hub.core.android.ui.kit.IconKind
+import hub.core.android.ui.kit.Lucide
+import hub.core.android.ui.kit.LucideIcon
+import hub.core.android.ui.kit.MenuDivider
+import hub.core.android.ui.kit.MenuItem
+import hub.core.android.ui.kit.MenuLabel
+import hub.core.android.ui.kit.Spinner
+import hub.core.android.ui.kit.floatingChrome
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.foundation.layout.Row
 import android.Manifest
 import android.content.Context
 import android.content.Intent
@@ -27,8 +47,6 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
@@ -37,24 +55,9 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.Check
-import androidx.compose.material.icons.filled.Close
-import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
-import androidx.compose.material3.FilledIconButton
-import androidx.compose.material3.HorizontalDivider
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
-import androidx.compose.material3.IconButtonDefaults
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -75,7 +78,6 @@ import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
-import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
@@ -87,10 +89,7 @@ import hub.core.android.R
 import hub.core.android.data.HubError
 import hub.core.android.data.hubCall
 import hub.core.android.graph
-import hub.core.android.ui.components.Glyphs
-import hub.core.android.ui.theme.LocalGlassLevel
 import hub.core.android.ui.theme.LocalTokens
-import hub.core.android.ui.theme.glass
 import java.io.File
 import java.util.Locale
 import kotlin.coroutines.resume
@@ -532,7 +531,7 @@ fun MicButton(dictation: DictationUi) {
     )
     Box {
         Box(
-            Modifier.size(48.dp).clip(CircleShape)
+            Modifier.size(ControlTokens.heightMd.dp).clip(CircleShape)
                 .combinedClickable(
                     enabled = dictation.phase != DictationPhase.TRANSCRIBING,
                     onClickLabel = label,
@@ -548,44 +547,33 @@ fun MicButton(dictation: DictationUi) {
             contentAlignment = Alignment.Center,
         ) {
             if (dictation.phase == DictationPhase.TRANSCRIBING) {
-                CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp)
+                Spinner(18.dp, t.textMuted)
             } else {
-                Icon(
-                    painterResource(R.drawable.lucide_mic), null,
-                    tint = if (dictation.phase == DictationPhase.LISTENING) t.danger else t.textMuted,
-                    modifier = Modifier.size(22.dp),
-                )
+                LucideIcon(Lucide.Mic, null, size = 20.dp, tint = if (dictation.phase == DictationPhase.LISTENING) t.danger else t.textMuted)
             }
             DictationLanguage.badge(choices.dictation)?.let { badge ->
                 Text(
                     badge,
                     fontSize = 8.sp,
                     color = t.accentText,
-                    modifier = Modifier.align(Alignment.TopEnd).padding(top = 6.dp, end = 4.dp)
+                    modifier = Modifier.align(Alignment.TopEnd).padding(top = 1.dp, end = 0.dp)
                         .background(t.accent, RoundedCornerShape(50)).padding(horizontal = 3.dp),
                 )
             }
         }
-        DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
+        HubMenu(menu, { menu = false }) {
             val options = remember(choices.dictation) { menuLanguages(context, choices.dictation) }
             fun pick(tag: String) {
                 graph.device.update { it.copy(dictation = tag) }
                 menu = false
             }
-            DropdownMenuItem(
-                text = { Text(auto) },
-                onClick = { pick(DictationLanguage.AUTO) },
-                trailingIcon = { if (choices.dictation == DictationLanguage.AUTO) Icon(Icons.Default.Check, null) },
-            )
+            MenuLabel(stringResource(R.string.voice_language))
+            MenuItem(auto, { pick(DictationLanguage.AUTO) }, checked = choices.dictation == DictationLanguage.AUTO)
             options.forEach { tag ->
-                DropdownMenuItem(
-                    text = { Text(DictationLanguage.name(tag, reader)) },
-                    onClick = { pick(tag) },
-                    trailingIcon = { if (choices.dictation.equals(tag, ignoreCase = true)) Icon(Icons.Default.Check, null) },
-                )
+                MenuItem(DictationLanguage.name(tag, reader), { pick(tag) }, checked = choices.dictation.equals(tag, ignoreCase = true))
             }
-            HorizontalDivider()
-            DropdownMenuItem(text = { Text(stringResource(R.string.voice_language_more)) }, onClick = { menu = false; more = true })
+            MenuDivider()
+            MenuItem(stringResource(R.string.voice_language_more), { menu = false; more = true }, icon = Lucide.Globe)
         }
     }
     if (more) {
@@ -604,42 +592,39 @@ private fun menuLanguages(context: Context, choice: String): List<String> {
     return listOf(choice) + offered
 }
 
-/** Over the composer while dictating: cancel, the microphone's level, stop, and send. */
+/** Over the composer while dictating: cancel, the microphone's level, stop, and send (as on iOS). */
 @Composable
 fun DictationStrip(dictation: DictationUi) {
     if (!dictation.active) return
     val t = LocalTokens.current
-    val shape = RoundedCornerShape(24.dp)
     Row(
-        Modifier.fillMaxWidth().padding(horizontal = 12.dp).glass(t, LocalGlassLevel.current, shape).padding(horizontal = 4.dp)
+        Modifier.fillMaxWidth().padding(horizontal = 12.dp).floatingChrome().padding(horizontal = 6.dp, vertical = 4.dp)
             .testTag("dictation.strip"),
         verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(4.dp),
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
     ) {
         if (dictation.phase == DictationPhase.LISTENING) {
-            IconButton(onClick = dictation::cancel, modifier = Modifier.testTag("dictation.cancel")) {
-                Icon(Icons.Default.Close, stringResource(R.string.voice_cancel), tint = t.textMuted)
-            }
+            HubIconButton(Lucide.X, stringResource(R.string.voice_cancel), dictation::cancel, size = ControlTokens.heightSm.dp, iconSize = 16.dp, modifier = Modifier.testTag("dictation.cancel"))
             Waveform(dictation.levels, t.accent, Modifier.weight(1f).height(24.dp))
-            dictation.listeningIn?.let { Text(DictationLanguage.base(it).uppercase(Locale.ROOT), fontSize = 11.sp, color = t.textMuted) }
-            IconButton(onClick = dictation::stop, modifier = Modifier.testTag("dictation.stop")) {
-                Icon(Glyphs.Stop, stringResource(R.string.voice_stop), tint = t.danger)
+            dictation.listeningIn?.let { Text(DictationLanguage.base(it).uppercase(Locale.ROOT), fontSize = 11.sp, fontWeight = FontWeight.SemiBold, color = t.textMuted) }
+            Box(
+                Modifier.size(ControlTokens.heightSm.dp).clip(CircleShape).clickable(onClickLabel = stringResource(R.string.voice_stop), onClick = dictation::stop)
+                    .testTag("dictation.stop"),
+                contentAlignment = Alignment.Center,
+            ) {
+                Box(Modifier.size(12.dp).background(t.danger, RoundedCornerShape(2.dp)))
             }
         } else {
-            CircularProgressIndicator(Modifier.padding(start = 12.dp).size(18.dp), strokeWidth = 2.dp)
+            Spinner(18.dp, t.textMuted, Modifier.padding(start = 6.dp))
             Text(
-                stringResource(R.string.voice_transcribing),
-                style = MaterialTheme.typography.bodyMedium, color = t.textMuted,
-                modifier = Modifier.weight(1f).padding(horizontal = 8.dp, vertical = 14.dp),
+                stringResource(R.string.voice_transcribing), fontSize = FontTokens.sizeSm.sp, color = t.textMuted,
+                modifier = Modifier.weight(1f).padding(horizontal = 4.dp, vertical = 6.dp),
             )
         }
-        FilledIconButton(
-            onClick = dictation::send,
-            colors = IconButtonDefaults.filledIconButtonColors(containerColor = t.accent, contentColor = t.accentText),
-            modifier = Modifier.testTag("dictation.send"),
-        ) {
-            Icon(Icons.AutoMirrored.Filled.Send, stringResource(R.string.voice_send))
-        }
+        HubIconButton(
+            Lucide.ArrowUp, stringResource(R.string.voice_send), dictation::send, kind = IconKind.Accent,
+            size = ControlTokens.heightSm.dp, iconSize = 16.dp, modifier = Modifier.testTag("dictation.send"),
+        )
     }
 }
 
@@ -682,39 +667,34 @@ fun DictationLanguageDialog(choice: String, onChoose: (String) -> Unit, onDismis
         DictationLanguage.name(it, reader).contains(words, ignoreCase = true) ||
             DictationLanguage.name(it, "en").contains(words, ignoreCase = true) || it.contains(words, ignoreCase = true)
     }
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        confirmButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.close)) } },
-        title = { Text(stringResource(R.string.voice_language)) },
-        text = {
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                OutlinedTextField(
-                    value = query, onValueChange = { query = it }, singleLine = true,
-                    placeholder = { Text(stringResource(R.string.voice_language_search)) },
-                    modifier = Modifier.fillMaxWidth().testTag("dictation.languages.search"),
-                )
-                LazyColumn(Modifier.heightIn(max = 420.dp).testTag("dictation.languages")) {
-                    if (words.isEmpty()) {
-                        item { LanguageRow(stringResource(R.string.voice_language_auto), choice == DictationLanguage.AUTO) { onChoose(DictationLanguage.AUTO) } }
-                        item { Text(stringResource(R.string.voice_language_auto_hint), style = MaterialTheme.typography.bodySmall, color = t.textMuted) }
-                        item { Heading(stringResource(R.string.voice_language_suggested)) }
-                        items(suggested, key = { "s:$it" }) { tag ->
-                            LanguageRow(DictationLanguage.name(tag, reader), choice.equals(tag, ignoreCase = true)) { onChoose(tag) }
-                        }
-                        item { Heading(stringResource(R.string.voice_language_all)) }
-                    }
-                    items(found, key = { "a:$it" }) { tag ->
-                        LanguageRow(DictationLanguage.name(tag, reader), choice.equals(tag, ignoreCase = true)) { onChoose(tag) }
-                    }
+    HubDialog(onDismiss, stringResource(R.string.voice_language)) {
+        HubTextField(
+            query, { query = it }, placeholder = stringResource(R.string.voice_language_search), leadingIcon = Lucide.Search,
+            modifier = Modifier.fillMaxWidth().testTag("dictation.languages.search"),
+        )
+        LazyColumn(Modifier.heightIn(max = 420.dp).testTag("dictation.languages")) {
+            if (words.isEmpty()) {
+                item { LanguageRow(stringResource(R.string.voice_language_auto), choice == DictationLanguage.AUTO) { onChoose(DictationLanguage.AUTO) } }
+                item { Text(stringResource(R.string.voice_language_auto_hint), fontSize = FontTokens.sizeXs.sp, color = t.textMuted) }
+                item { Heading(stringResource(R.string.voice_language_suggested)) }
+                items(suggested, key = { "s:$it" }) { tag ->
+                    LanguageRow(DictationLanguage.name(tag, reader), choice.equals(tag, ignoreCase = true)) { onChoose(tag) }
                 }
+                item { Heading(stringResource(R.string.voice_language_all)) }
             }
-        },
-    )
+            items(found, key = { "a:$it" }) { tag ->
+                LanguageRow(DictationLanguage.name(tag, reader), choice.equals(tag, ignoreCase = true)) { onChoose(tag) }
+            }
+        }
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+            HubButton(stringResource(R.string.close), onDismiss, kind = ButtonKind.Secondary, size = ControlSize.Md)
+        }
+    }
 }
 
 @Composable
 private fun Heading(text: String) {
-    Text(text, style = MaterialTheme.typography.labelLarge, color = LocalTokens.current.textMuted, modifier = Modifier.padding(top = 12.dp, bottom = 4.dp))
+    Text(text, fontSize = FontTokens.sizeXs.sp, fontWeight = FontWeight.SemiBold, color = LocalTokens.current.textMuted, modifier = Modifier.padding(top = 12.dp, bottom = 4.dp))
 }
 
 @Composable
@@ -723,8 +703,8 @@ private fun LanguageRow(name: String, selected: Boolean, onClick: () -> Unit) {
         Modifier.fillMaxWidth().clickable(onClick = onClick).padding(vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Text(name, Modifier.weight(1f))
-        if (selected) Icon(Icons.Default.Check, null, tint = LocalTokens.current.accent)
+        Text(name, Modifier.weight(1f), fontSize = FontTokens.sizeMd.sp)
+        if (selected) LucideIcon(Lucide.Check, null, size = 18.dp, tint = LocalTokens.current.accent)
     }
 }
 

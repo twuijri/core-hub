@@ -1,7 +1,25 @@
 package hub.core.android.ui.screens
 
+import hub.core.android.generated.ControlTokens
+import hub.core.android.generated.FontTokens
+import hub.core.android.ui.kit.Badge
+import hub.core.android.ui.kit.BadgeTone
+import hub.core.android.ui.kit.ButtonKind
+import hub.core.android.ui.kit.Chip
+import hub.core.android.ui.kit.ControlSize
+import hub.core.android.ui.kit.Custom
+import hub.core.android.ui.kit.GroupedList
+import hub.core.android.ui.kit.HubButton
+import hub.core.android.ui.kit.HubIconButton
+import hub.core.android.ui.kit.HubSheet
+import hub.core.android.ui.kit.IconKind
+import hub.core.android.ui.kit.Item
+import hub.core.android.ui.kit.Lucide
+import hub.core.android.ui.kit.StatusDot
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.sp
 import android.content.Intent
-import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -11,25 +29,14 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.imePadding
-import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
-import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Person
-import androidx.compose.material3.AssistChip
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.HorizontalDivider
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -63,11 +70,9 @@ import hub.core.android.ui.components.AttachButton
 import hub.core.android.ui.components.AttachmentChips
 import hub.core.android.ui.components.Composer
 import hub.core.android.ui.components.ErrorNotice
-import hub.core.android.ui.components.Glyphs
 import hub.core.android.ui.components.Loading
 import hub.core.android.ui.components.Notice
 import hub.core.android.ui.components.QuestionCard
-import hub.core.android.ui.components.StatusBadge
 import hub.core.android.ui.components.Tone
 import hub.core.android.ui.components.TurnView
 import hub.core.android.ui.components.dismissKeyboardOnTap
@@ -111,10 +116,8 @@ fun RoomScreen(roomId: String, profile: String, subtitle: String?, onMenu: () ->
         onMenu = onMenu,
         subtitle = subtitle,
     ) {
-        IconButton(onClick = { members = true }, modifier = Modifier.testTag("room.members")) {
-            Icon(Icons.Default.Person, stringResource(R.string.room_members))
-        }
         actions()
+        HubIconButton(Lucide.Users, stringResource(R.string.room_members), { members = true }, kind = IconKind.Glass, modifier = Modifier.testTag("room.members"))
     }
 
     val me = vm.me
@@ -147,7 +150,7 @@ fun RoomScreen(roomId: String, profile: String, subtitle: String?, onMenu: () ->
                 LazyColumn(
                     state = listState,
                     contentPadding = PaddingValues(horizontal = 16.dp, vertical = 12.dp),
-                    verticalArrangement = Arrangement.spacedBy(20.dp),
+                    verticalArrangement = Arrangement.spacedBy(hub.core.android.generated.LayoutTokens.turnGap.dp),
                     modifier = Modifier.fillMaxSize(),
                 ) {
                     item(key = "older") {
@@ -175,7 +178,7 @@ fun RoomScreen(roomId: String, profile: String, subtitle: String?, onMenu: () ->
             state.busySeats.forEach { seat -> SeatActivity(seat, state.stepOf(seat)) { vm.stopSeat(seat) } }
             val typing = state.typing.filterKeys { id -> state.members.none { it.id == id && it.userId == me } }.values
             if (typing.isNotEmpty()) {
-                Text(stringResource(R.string.room_typing, typing.joinToString("، ")), style = MaterialTheme.typography.labelSmall, color = t.textMuted)
+                Text(stringResource(R.string.room_typing, typing.joinToString("، ")), fontSize = FontTokens.sizeXs.sp, color = t.textMuted)
             }
         }
         // `@` offers the room's seats (and «everyone» where the room allows it).
@@ -189,9 +192,9 @@ fun RoomScreen(roomId: String, profile: String, subtitle: String?, onMenu: () ->
                     horizontalArrangement = Arrangement.spacedBy(6.dp),
                     modifier = Modifier.testTag("room.mentions"),
                 ) {
-                    if (all) item { AssistChip(onClick = { draft = RoomMentions.insert(draft, query.start, draft.length, "all").first }, label = { Text(stringResource(R.string.room_mention_all)) }) }
+                    if (all) item { Chip(stringResource(R.string.room_mention_all), false, { draft = RoomMentions.insert(draft, query.start, draft.length, "all").first }, size = ControlSize.Sm) }
                     items(options, key = { it.id }) { seat ->
-                        AssistChip(onClick = { draft = RoomMentions.insert(draft, query.start, draft.length, seat.name).first }, label = { Text("@${seat.name}") })
+                        Chip("@${seat.name}", false, { draft = RoomMentions.insert(draft, query.start, draft.length, seat.name).first }, size = ControlSize.Sm)
                     }
                 }
             }
@@ -222,17 +225,15 @@ fun RoomScreen(roomId: String, profile: String, subtitle: String?, onMenu: () ->
                 sending = ui.sending || uploading,
                 onSend = { if (dictation.active) dictation.send() else send() },
                 onStop = {},
-                extra = {
-                    AttachButton(vm.tray)
-                    MicButton(dictation)
-                },
+                leading = { AttachButton(vm.tray) },
+                trailing = { MicButton(dictation) },
                 hasAttachments = ready,
             )
         }
     }
 
     if (members) {
-        ModalBottomSheet(onDismissRequest = { members = false }) {
+        HubSheet(onDismiss = { members = false }, title = stringResource(R.string.room_members)) {
             MembersSheet(vm, ui, onClose = { members = false })
         }
     }
@@ -249,17 +250,17 @@ private fun SeatActivity(seat: Seat, step: String?, onStop: () -> Unit) {
         else -> R.string.room_seat_running
     }
     Row(Modifier.fillMaxWidth().testTag("room.seat.${seat.id}"), verticalAlignment = Alignment.CenterVertically) {
-        Box(Modifier.size(8.dp).background(t.statusRunning, CircleShape))
+        StatusDot(t.statusRunning, null)
         Spacer(Modifier.size(8.dp))
         Text(
             stringResource(label, seat.name) + (step?.let { " · $it" } ?: ""),
-            style = MaterialTheme.typography.labelMedium,
+            fontSize = FontTokens.sizeSm.sp,
             color = t.textMuted,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
             modifier = Modifier.weight(1f),
         )
-        IconButton(onClick = onStop) { Icon(Glyphs.Stop, stringResource(R.string.room_seat_stop, seat.name), tint = t.danger, modifier = Modifier.size(18.dp)) }
+        hub.core.android.ui.components.StopButton(stringResource(R.string.room_seat_stop, seat.name), onStop, size = ControlTokens.heightSm.dp)
     }
 }
 
@@ -275,63 +276,75 @@ private fun MembersSheet(vm: RoomViewModel, ui: RoomUi, onClose: () -> Unit) {
     val state = ui.state
     val room = state.room
     val me = vm.me
-    LazyColumn(Modifier.fillMaxWidth().navigationBarsPadding().testTag("room.members.sheet"), contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        item { Text(stringResource(R.string.room_seats), style = MaterialTheme.typography.titleSmall) }
-        items(state.seats, key = { "s" + it.id }) { seat ->
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                hub.core.android.ui.components.AgentAvatar(
-                    hub.core.android.ui.components.AgentIdentity.of(seat.agentId, seat.name, agents, seat.name), vm.profile, 28.dp,
-                )
-                Column(Modifier.weight(1f)) {
-                    Text("@${seat.name}", style = MaterialTheme.typography.bodyLarge)
-                    seat.description?.takeIf { it.isNotBlank() }?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = t.textMuted, maxLines = 2) }
+    LazyColumn(Modifier.fillMaxWidth().heightIn(max = 560.dp).testTag("room.members.sheet"), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        item {
+            GroupedList(title = stringResource(R.string.room_seats)) {
+                state.seats.forEach { seat ->
+                    Custom {
+                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                            hub.core.android.ui.components.AgentAvatar(
+                                hub.core.android.ui.components.AgentIdentity.of(seat.agentId, seat.name, agents, seat.name), vm.profile, 28.dp,
+                            )
+                            Column(Modifier.weight(1f)) {
+                                Text("@${seat.name}", fontSize = FontTokens.sizeMd.sp, fontWeight = FontWeight.Medium)
+                                seat.description?.takeIf { it.isNotBlank() }?.let { Text(it, fontSize = FontTokens.sizeXs.sp, color = t.textMuted, maxLines = 2) }
+                            }
+                            if (seat.id == room?.leadSeatId) Badge(stringResource(R.string.room_lead), tone = BadgeTone.Info)
+                            if (seat.status != SeatStatus.IDLE) Badge(stringResource(seatStatusLabel(seat.status)), tone = BadgeTone.Success, dot = true)
+                        }
+                    }
                 }
-                if (seat.id == room?.leadSeatId) StatusBadge(stringResource(R.string.room_lead), Tone.INFO)
-                if (seat.status != SeatStatus.IDLE) StatusBadge(stringResource(seatStatusLabel(seat.status)))
             }
         }
-        item { HorizontalDivider(color = t.border) }
-        item { Text(stringResource(R.string.room_people), style = MaterialTheme.typography.titleSmall) }
-        items(state.members, key = { "m" + it.id }) { member ->
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Box(Modifier.size(8.dp).background(if (member.online) t.statusRunning else t.textFaint, CircleShape))
-                Column(Modifier.weight(1f)) {
-                    Text(if (member.userId == me) stringResource(R.string.room_you_name, member.name) else member.name, style = MaterialTheme.typography.bodyLarge)
-                    Text(stringResource(roleLabel(member.role)), style = MaterialTheme.typography.bodySmall, color = t.textMuted)
-                }
-                if (room?.canManage == true && member.userId != me && member.role != Member.Role.OWNER) {
-                    TextButton(onClick = { vm.removeMember(member) }) { Text(stringResource(R.string.room_remove), color = t.danger) }
+        item {
+            GroupedList(title = stringResource(R.string.room_people)) {
+                state.members.forEach { member ->
+                    Item(
+                        if (member.userId == me) stringResource(R.string.room_you_name, member.name) else member.name,
+                        subtitle = stringResource(roleLabel(member.role)),
+                        trailing = {
+                            StatusDot(if (member.online) t.statusRunning else t.textFaint, null)
+                            if (room?.canManage == true && member.userId != me && member.role != Member.Role.OWNER) {
+                                HubIconButton(Lucide.Trash, stringResource(R.string.room_remove), { vm.removeMember(member) }, size = ControlTokens.heightMd.dp, iconSize = 16.dp, tint = t.danger)
+                            }
+                        },
+                    )
                 }
             }
         }
         if (room?.canManage == true) {
-            item { HorizontalDivider(color = t.border) }
-            item { Text(stringResource(R.string.room_invite), style = MaterialTheme.typography.titleSmall) }
             item {
                 val code = room.inviteCode
                 val link = ui.inviteLink ?: code?.let { c -> context.graph.store.current?.hub?.let { RoomLinks.join(it, c) } }
-                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                    if (code != null) Text(stringResource(R.string.room_invite_code, code), style = MaterialTheme.typography.bodyLarge, modifier = Modifier.testTag("room.invite.code"))
-                    Text(stringResource(R.string.room_invite_hint), style = MaterialTheme.typography.bodySmall, color = t.textMuted)
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        if (link != null) {
-                            TextButton(onClick = {
-                                val send = Intent(Intent.ACTION_SEND).setType("text/plain").putExtra(Intent.EXTRA_TEXT, link)
-                                context.startActivity(Intent.createChooser(send, room.name).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
-                            }) { Text(stringResource(R.string.room_invite_share)) }
+                GroupedList(title = stringResource(R.string.room_invite)) {
+                    Custom {
+                        if (code != null) {
+                            Text(
+                                code, fontFamily = hub.core.android.ui.theme.Mono, fontSize = FontTokens.sizeLg.sp, fontWeight = FontWeight.SemiBold,
+                                modifier = Modifier.testTag("room.invite.code"),
+                            )
                         }
-                        TextButton(onClick = vm::rotateInvite) { Text(stringResource(R.string.room_invite_rotate)) }
+                        Text(stringResource(R.string.room_invite_hint), fontSize = FontTokens.sizeXs.sp, color = t.textMuted)
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            if (link != null) {
+                                HubButton(stringResource(R.string.room_invite_share), {
+                                    val send = Intent(Intent.ACTION_SEND).setType("text/plain").putExtra(Intent.EXTRA_TEXT, link)
+                                    context.startActivity(Intent.createChooser(send, room.name).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+                                }, size = ControlSize.Md, icon = Lucide.Share2)
+                            }
+                            HubButton(stringResource(R.string.room_invite_rotate), vm::rotateInvite, kind = ButtonKind.Secondary, size = ControlSize.Md, icon = Lucide.RotateCcw)
+                        }
                     }
                 }
             }
         }
         val mine = state.members.firstOrNull { it.userId == me }
         if (mine != null && mine.role != Member.Role.OWNER) {
-            item { HorizontalDivider(color = t.border) }
             item {
-                TextButton(onClick = { vm.leave(); onClose() }, modifier = Modifier.testTag("room.leave")) {
-                    Text(stringResource(R.string.room_leave), color = t.danger)
-                }
+                HubButton(
+                    stringResource(R.string.room_leave), { vm.leave(); onClose() }, kind = ButtonKind.Danger, icon = Lucide.LogOut, fill = true,
+                    modifier = Modifier.fillMaxWidth().padding(top = 12.dp).testTag("room.leave"),
+                )
             }
         }
     }

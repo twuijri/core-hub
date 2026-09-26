@@ -300,7 +300,7 @@
   },
   "composer": {
     "label": "Message composer",
-    "placeholder": "Message the agent… (Enter to send, Shift+Enter for a new line)",
+    "placeholder": "Message the agent…",
     "disabled": "The session is not ready.",
     "send": "Send",
     "stop": "Stop the run",
@@ -350,7 +350,8 @@
       "high": "High",
       "max": "Max"
     },
-    "context_ring": "Context: {percent}% — {used} of {window} tokens"
+    "context_ring": "Context: {percent}% — {used} of {window} tokens",
+    "placeholder_agent": "Message {agent}…"
   },
   "slash": {
     "title": "Commands",
@@ -419,7 +420,7 @@
     "send": "Answer",
     "skip": "Skip (deny)",
     "waiting": "Waiting on you",
-    "answer_hint": "Type your answer… (Enter to send, Shift+Enter for a new line)"
+    "answer_hint": "Type your answer…"
   },
   "pending": {
     "open": "Waiting for you",
@@ -453,7 +454,8 @@
     "earlier": "{count} earlier",
     "hide_earlier": "Hide {count} earlier",
     "arguments": "Arguments",
-    "result": "Result"
+    "result": "Result",
+    "count_one": "1 tool"
   },
   "agents": {
     "empty": "The registry is empty.",
@@ -476,19 +478,30 @@
       "disabled": "Disabled"
     },
     "capability": {
-      "approvals": "approvals",
-      "channels": "channels",
-      "jobs": "jobs",
+      "approvals": "Approvals",
+      "channels": "Channels",
+      "jobs": "Jobs",
       "kanban": "Tasks",
       "mcp": "MCP",
-      "memory": "memory",
-      "plugins": "plugins",
-      "resume": "resume",
-      "skills": "skills",
-      "streaming": "streaming",
+      "memory": "Memory",
+      "plugins": "Plugins",
+      "resume": "Resume",
+      "skills": "Skills",
+      "streaming": "Streaming",
       "tasks": "Tasks",
-      "tools": "tools",
-      "worktrees": "worktrees"
+      "tools": "Tools",
+      "worktrees": "Worktrees",
+      "vision": "Vision",
+      "audio": "Audio",
+      "presets": "Presets",
+      "journey": "Journey",
+      "compress": "Compress",
+      "steer": "Steer",
+      "goals": "Goals",
+      "plans": "Plans",
+      "learn": "Learn",
+      "skill_commands": "Skill commands",
+      "config_files": "Config files"
     },
     "settings_of": "{name} settings",
     "settings_none": "This agent declares no settings.",
@@ -1190,7 +1203,8 @@
         "removed": "Removed",
         "error": "Git refused"
       }
-    }
+    },
+    "count_one": "1 task"
   },
   "schedules": {
     "new": "New schedule",

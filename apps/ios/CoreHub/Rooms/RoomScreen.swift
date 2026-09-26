@@ -38,7 +38,7 @@ struct RoomScreen: View {
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
-                Button { showingMembers = true } label: { Image(systemName: "person.2") }
+                Button { showingMembers = true } label: { LucideIcon(.users, size: 20) }
                     .accessibilityLabel(l10n("rooms.members_title"))
                     .accessibilityIdentifier("room.members")
             }
@@ -212,7 +212,7 @@ struct SeatActivity: View {
                 .lineLimit(1)
             Spacer(minLength: 0)
             Button(action: stop) {
-                Image(systemName: "stop.circle")
+                LucideIcon(.circleStop, size: 20)
                     .foregroundStyle(Tone.danger)
                     .frame(width: Control.heightSm, height: Control.heightSm)
             }
@@ -299,7 +299,7 @@ struct RoomMembersSheet: View {
                         .font(.system(size: FontSize.sizeXs))
                         .foregroundStyle(Tone.textMuted)
                     if let link = model.shareLink {
-                        ShareLink(item: link) { Label(l10n("rooms.invite_share"), systemImage: "square.and.arrow.up") }
+                        ShareLink(item: link) { LucideLabel(l10n("rooms.invite_share"), icon: .share) }
                     }
                     Button(l10n("rooms.invite_rotate")) { Task { await model.rotateInvite() } }
                 }

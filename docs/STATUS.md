@@ -455,6 +455,14 @@ its approval.
   selected chats, per profile, deleting after a question. **Export** a conversation: the hub's
   Markdown transcript (`sessions.export`) handed to the share sheet. Unit-tested on both; **not yet
   tried on the owner's phones or hub**.
+- **Android in the family's design** (since 2026-09-27, `docs/changes/2026-09-27-twuijri-android-redesign.md`,
+  in progress): a control kit painted by the tokens alone (`ui/kit/`: buttons, fields, segmented
+  control, chips, cards, grouped lists, menus, sheets, dialogs, top bar), Lucide icons everywhere,
+  text legible in the dark theme (the theme's content colour), the composer laid out as on iOS and
+  the web («+», the words, the mic, Send), a drawer like the iOS one (one search field with a filter
+  button for the profile and Active/Archived/All; the chats list takes most of the height), rooms and
+  the pending sheet restyled. Robolectric screenshots against the iOS demo hub's data, light and
+  dark, English and Arabic (`src/testDebug/.../shots`); **not yet tried on the owner's phone**.
 - **App Store listing for the iPhone and iPad app** (since 2026-09-26, owner's decision of
   2026-09-25; `docs/store/apple/README.md`): the listing in English and Arabic
   (`apps/ios/fastlane/metadata`, name «كور هب» in Arabic), held to App Store Connect's limits by

@@ -252,8 +252,8 @@ struct CodeBlockView: View {
                 Button {
                     UIPasteboard.general.string = code
                 } label: {
-                    Image(systemName: "doc.on.doc")
-                        .font(.system(size: FontSize.sizeXs))
+                    LucideIcon(.copy, size: 14)
+                        .hitSlop(12)
                 }
                 .accessibilityLabel(l10n("common.copy"))
             }

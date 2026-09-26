@@ -1,7 +1,7 @@
 /**
  * The one button.
  *
- * Five intents and three heights, every value a token (`--ch-control-height-*`,
+ * Six intents and three heights, every value a token (`--ch-control-height-*`,
  * `--ch-control-pad-*`, the one shadow scale, the one focus ring from `@layer base`).
  * Nothing else in the client draws a button: a screen that wants one imports this, and a
  * link that should look like one takes `buttonClass()` — same paint, same heights, one
@@ -14,7 +14,13 @@
 import { forwardRef, type ButtonHTMLAttributes, type ReactNode } from 'react';
 import { Tooltip } from './Tooltip.js';
 
-export type ButtonVariant = 'primary' | 'secondary' | 'ghost' | 'danger' | 'subtle';
+/**
+ * `danger` is solid: the one button that confirms a destructive step (the confirm dialog).
+ * `danger-quiet` is the destructive action on a card or row that *asks* first — red words on
+ * the neutral surface, so a page of cards is not a page of red blocks (docs/design/family.md).
+ */
+export type ButtonVariant =
+  'primary' | 'secondary' | 'ghost' | 'danger' | 'danger-quiet' | 'subtle';
 export type ButtonSize = 'sm' | 'md' | 'lg';
 
 export function buttonClass(

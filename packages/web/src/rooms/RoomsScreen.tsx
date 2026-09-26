@@ -11,7 +11,9 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router';
 import { useAuth } from '../auth/context.js';
 import { describeError } from '../auth/client.js';
+import { AgentFace, useAgentIdentities } from '../agents/identity.js';
 import { Markdown } from '../chat/Markdown.js';
+import { Attachments } from '../chat/MessageView.js';
 import { useI18n } from '../i18n/context.js';
 import { routeOf } from '../navigation/manifest.js';
 import { AppShell } from '../shell/AppShell.js';
@@ -176,9 +178,9 @@ function RoomView({ roomId }: { roomId: string }) {
             disabledReason={archived ? t('rooms.archived_notice') : null}
             sending={post.isPending}
             onTyping={stream.typing}
-            onSend={async (text, mentions) => {
+            onSend={async (content, mentions) => {
               try {
-                await post.mutateAsync({ text, mentions });
+                await post.mutateAsync({ content, mentions });
                 return true;
               } catch {
                 return false;
@@ -228,6 +230,7 @@ function RoomMessage({
 }) {
   const { t } = useI18n();
   const { session } = useAuth();
+  const identityOf = useAgentIdentities();
   const text = textOf(message);
   if (message.role === 'system') {
     return (
@@ -238,7 +241,17 @@ function RoomMessage({
   }
   const mine = message.author.kind === 'user' && message.author.id === session?.user.id;
   const agent = message.author.kind === 'agent';
-  const name = mine ? t('chat.you') : message.author.name;
+  // A seat's reply: the seat's own name, the face of the agent sitting in it
+  // (agents/identity.tsx) — never the hub's placeholder «agent».
+  const seat = agent ? seats.find((candidate) => candidate.id === message.seat_id) : undefined;
+  const identity = agent
+    ? identityOf(
+        seat?.agent_id ?? message.author.id,
+        seat?.name ?? message.author.name,
+        t('chat.assistant'),
+      )
+    : null;
+  const name = mine ? t('chat.you') : (identity?.name ?? message.author.name);
   const streaming = message.status === 'streaming';
   const handoffTo = message.handoff
     ? (seats.find((seat) => seat.id === message.handoff?.to_seat_id)?.name ?? null)
@@ -255,8 +268,10 @@ function RoomMessage({
       {!mine &&
         (grouped ? (
           <span className="msg-gutter" aria-hidden />
+        ) : identity ? (
+          <AgentFace identity={identity} size="sm" testId="room-agent-face" />
         ) : (
-          <Avatar name={name} size="sm" tone={agent ? 'accent' : 'neutral'} />
+          <Avatar name={name} size="sm" tone="neutral" />
         ))}
       <div className="msg-stack">
         {!grouped && (
@@ -273,9 +288,11 @@ function RoomMessage({
           </header>
         )}
         {mine ? (
-          <div className="msg-bubble msg-user">
-            <p dir="auto">{text}</p>
-          </div>
+          text ? (
+            <div className="msg-bubble msg-user">
+              <p dir="auto">{text}</p>
+            </div>
+          ) : null
         ) : agent ? (
           <div className="msg-agent-body">
             {text ? (
@@ -288,11 +305,12 @@ function RoomMessage({
               </span>
             ) : null}
           </div>
-        ) : (
+        ) : text ? (
           <div className="msg-bubble room-other">
             <p dir="auto">{text}</p>
           </div>
-        )}
+        ) : null}
+        <Attachments message={message} />
         {handoffTo && (
           <p className="text-xs text-muted" data-testid="room-handoff-note">
             {t('rooms.handoff_to', { name: handoffTo })}
@@ -585,7 +603,7 @@ function MembersPanel({ room }: { room: RoomDetail }) {
               data-testid="room-seat"
               data-seat-id={seat.id}
             >
-              <Avatar name={seat.name} size="sm" />
+              <SeatFace seat={seat} />
               <span className="flex min-w-0 flex-1 flex-col">
                 <span className="flex items-center gap-1">
                   <span className="truncate text-sm font-medium" dir="auto">
@@ -917,5 +935,17 @@ function MemorySection({ room }: { room: RoomDetail }) {
       )}
       {prompt.dialog}
     </section>
+  );
+}
+
+/** A seat's face: the agent in it, under the seat's own name. */
+function SeatFace({ seat }: { seat: Seat }) {
+  const identityOf = useAgentIdentities();
+  return (
+    <AgentFace
+      identity={identityOf(seat.agent_id, seat.name, seat.name)}
+      size="sm"
+      testId="seat-face"
+    />
   );
 }

@@ -210,7 +210,32 @@
     "status_updating": "يُحدَّث",
     "status_error": "خطأ",
     "status_limited": "محدود",
-    "status_disabled": "معطّل"
+    "status_disabled": "معطّل",
+    "capability": {
+      "streaming": "بث مباشر",
+      "tools": "أدوات",
+      "approvals": "موافقات",
+      "mcp": "MCP",
+      "skills": "مهارات",
+      "memory": "ذاكرة",
+      "channels": "قنوات",
+      "worktrees": "نسخ عمل",
+      "resume": "استئناف",
+      "plugins": "إضافات",
+      "jobs": "وظائف",
+      "tasks": "المهام",
+      "vision": "رؤية الصور",
+      "audio": "صوت",
+      "presets": "قوالب",
+      "journey": "المسار",
+      "compress": "ضغط السياق",
+      "steer": "توجيه",
+      "goals": "أهداف",
+      "plans": "خطط",
+      "learn": "تعلّم",
+      "skill_commands": "أوامر المهارات",
+      "config_files": "ملفات الإعداد"
+    }
   },
   "audit": {
     "period": "الفترة"

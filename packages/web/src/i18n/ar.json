@@ -300,7 +300,7 @@
   },
   "composer": {
     "label": "محرّر الرسالة",
-    "placeholder": "راسل الوكيل… (Enter للإرسال، Shift+Enter لسطر جديد)",
+    "placeholder": "راسل الوكيل…",
     "disabled": "الجلسة غير جاهزة.",
     "send": "إرسال",
     "stop": "إيقاف التشغيل",
@@ -350,7 +350,8 @@
       "high": "عالٍ",
       "max": "أقصى"
     },
-    "context_ring": "السياق: {percent}٪ — {used} من {window} رمز"
+    "context_ring": "السياق: {percent}٪ — {used} من {window} رمز",
+    "placeholder_agent": "راسل {agent}…"
   },
   "slash": {
     "title": "الأوامر",
@@ -419,7 +420,7 @@
     "send": "إجابة",
     "skip": "تخطٍّ (رفض)",
     "waiting": "بانتظار قرارك",
-    "answer_hint": "اكتب ردك… (Enter للإرسال، Shift+Enter لسطر جديد)"
+    "answer_hint": "اكتب ردك…"
   },
   "pending": {
     "open": "بانتظارك",
@@ -453,7 +454,8 @@
     "earlier": "{count} قبلها",
     "hide_earlier": "إخفاء {count} السابقة",
     "arguments": "المدخلات",
-    "result": "الناتج"
+    "result": "الناتج",
+    "count_one": "أداة واحدة"
   },
   "agents": {
     "empty": "السجلّ فارغ.",
@@ -488,7 +490,18 @@
       "streaming": "بث مباشر",
       "tasks": "المهام",
       "tools": "أدوات",
-      "worktrees": "نسخ عمل"
+      "worktrees": "نسخ عمل",
+      "vision": "رؤية الصور",
+      "audio": "صوت",
+      "presets": "قوالب",
+      "journey": "المسار",
+      "compress": "ضغط السياق",
+      "steer": "توجيه",
+      "goals": "أهداف",
+      "plans": "خطط",
+      "learn": "تعلّم",
+      "skill_commands": "أوامر المهارات",
+      "config_files": "ملفات الإعداد"
     },
     "settings_of": "إعدادات {name}",
     "settings_none": "هذا الوكيل لا يعلن أي إعداد.",
@@ -1190,7 +1203,8 @@
         "removed": "أُزيلت",
         "error": "رفض git"
       }
-    }
+    },
+    "count_one": "مهمة واحدة"
   },
   "schedules": {
     "new": "جدول جديد",

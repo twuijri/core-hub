@@ -11,6 +11,7 @@ import {
 } from 'react';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router';
 import { useAgents, useForkSession, usePatchSession, usePreferences } from '../hub/queries.js';
+import { agentIdentity } from '../agents/identity.js';
 import { ProfileScope, useAuth } from '../auth/context.js';
 import { describeError } from '../auth/client.js';
 import { useI18n } from '../i18n/context.js';
@@ -616,6 +617,14 @@ function OpenSessionBody({ sessionId, title: pageTitle, intro }: OpenSessionProp
                   showCost={preferences.data?.show_cost ?? false}
                   runs={runHistory}
                   slugOf={(id) => (agents.data ?? []).find((agent) => agent.id === id)?.slug}
+                  identityOf={(message) =>
+                    agentIdentity(
+                      message.author.id,
+                      message.author.name,
+                      agents.data ?? [],
+                      t('chat.assistant'),
+                    )
+                  }
                   anchor={anchor && anchor.phase !== 'missing' ? anchor : null}
                   noticeFor={(message) => {
                     const entry = failures.get(message.id);
@@ -640,6 +649,7 @@ function OpenSessionBody({ sessionId, title: pageTitle, intro }: OpenSessionProp
               {/* What the agent delegated, above the composer (§56); nothing until it has. */}
               <SubagentsPanel sessionId={sessionId} onOpenTrajectory={openStep} />
               <Composer
+                agentName={(agents.data ?? []).find((agent) => agent.id === agentId)?.name ?? null}
                 busy={busy}
                 disabled={disabledReason !== null}
                 disabledReason={disabledReason}

@@ -32,9 +32,9 @@ struct ToolCallCard: View {
                             .foregroundStyle(Tone.textFaint)
                             .monospacedDigit()
                     }
-                    Image(systemName: open ? "chevron.up" : "chevron.down")
-                        .font(.system(size: FontSize.sizeXs))
+                    LucideIcon(.chevronDown, size: 14)
                         .foregroundStyle(Tone.textFaint)
+                        .rotationEffect(.degrees(open ? 180 : 0))
                 }
                 .contentShape(Rectangle())
             }
@@ -76,13 +76,13 @@ struct ToolCallCard: View {
         case .running:
             ProgressView().controlSize(.mini)
         case .succeeded:
-            Image(systemName: "checkmark.circle.fill").foregroundStyle(Tone.statusRunning)
+            LucideIcon(.circleCheck, size: 16).foregroundStyle(Tone.statusRunning)
         case .failed:
-            Image(systemName: "xmark.circle.fill").foregroundStyle(Tone.danger)
+            LucideIcon(.circleX, size: 16).foregroundStyle(Tone.danger)
         case .interrupted:
-            Image(systemName: "stop.circle").foregroundStyle(Tone.textMuted)
+            LucideIcon(.circleStop, size: 16).foregroundStyle(Tone.textMuted)
         case .awaitingApproval:
-            Image(systemName: "hand.raised.circle").foregroundStyle(Tone.warningSoftText)
+            LucideIcon(.hand, size: 16).foregroundStyle(Tone.warningSoftText)
         }
     }
 
@@ -382,20 +382,25 @@ struct Composer: View {
             }
             if busy && text.isEmpty && !hasFiles && !dictating {
                 Button(action: onStop) {
-                    Image(systemName: "stop.fill")
+                    // The stop glyph is a filled square, drawn as a shape: an outline icon
+                    // cannot be filled (the web fills Lucide's square the same way).
+                    RoundedRectangle(cornerRadius: 2.5, style: .continuous)
+                        .fill(Tone.dangerText)
+                        .frame(width: 12, height: 12)
                         .frame(width: Control.heightMd, height: Control.heightMd)
                         .background(Tone.danger, in: Circle())
-                        .foregroundStyle(Tone.dangerText)
+                        .hitSlop()
                 }
                 .accessibilityLabel(l10n("chat.stop"))
                 .accessibilityIdentifier("composer.stop")
             } else {
                 Button(action: send) {
-                    Image(systemName: "arrow.up")
-                        .font(.system(size: FontSize.sizeMd, weight: .bold))
+                    LucideIcon(.arrowUp, size: 18)
                         .frame(width: Control.heightMd, height: Control.heightMd)
                         .background(canSend ? Tone.accent : Tone.surface3, in: Circle())
                         .foregroundStyle(canSend ? Tone.accentText : Tone.textFaint)
+                        .hitSlop()
+                        .animation(.easeOut(duration: Motion.fast), value: canSend)
                 }
                 .disabled(!canSend && !dictating)
                 .accessibilityLabel(l10n("chat.send"))
@@ -531,10 +536,10 @@ struct DictationStrip: View {
         HStack(spacing: Space.s2) {
             if dictation.state == .listening {
                 Button(action: onCancel) {
-                    Image(systemName: "xmark")
-                        .font(.system(size: FontSize.sizeSm, weight: .semibold))
+                    LucideIcon(.x, size: 16)
                         .frame(width: Control.heightSm, height: Control.heightSm)
                         .foregroundStyle(Tone.textMuted)
+                        .hitSlop(8)
                 }
                 .accessibilityLabel(l10n("voice.cancel"))
                 .accessibilityIdentifier("dictation.cancel")
@@ -546,9 +551,11 @@ struct DictationStrip: View {
                         .accessibilityHidden(true)
                 }
                 Button(action: onStop) {
-                    Image(systemName: "stop.fill")
+                    RoundedRectangle(cornerRadius: 2.5, style: .continuous)
+                        .fill(Tone.danger)
+                        .frame(width: 12, height: 12)
                         .frame(width: Control.heightSm, height: Control.heightSm)
-                        .foregroundStyle(Tone.danger)
+                        .hitSlop(8)
                 }
                 .accessibilityLabel(l10n("voice.stop"))
                 .accessibilityIdentifier("dictation.stop")
@@ -560,11 +567,11 @@ struct DictationStrip: View {
                 Spacer(minLength: 0)
             }
             Button(action: onSend) {
-                Image(systemName: "arrow.up")
-                    .font(.system(size: FontSize.sizeSm, weight: .bold))
+                LucideIcon(.arrowUp, size: 16)
                     .frame(width: Control.heightSm, height: Control.heightSm)
                     .background(Tone.accent, in: Circle())
                     .foregroundStyle(Tone.accentText)
+                    .hitSlop(8)
             }
             .accessibilityLabel(l10n("voice.send"))
             .accessibilityIdentifier("dictation.send")

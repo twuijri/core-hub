@@ -160,7 +160,7 @@ struct ScheduleRow: View {
             Button {
                 Task { await runNow() }
             } label: {
-                Label(l10n("schedules.run_now"), systemImage: "play")
+                LucideLabel(l10n("schedules.run_now"), icon: .play, size: 16)
             }
             .font(.system(size: FontSize.sizeSm))
             .disabled(busy)
