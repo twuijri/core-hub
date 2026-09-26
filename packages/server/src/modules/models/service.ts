@@ -29,7 +29,6 @@ import type {
   ChatFailureReason,
   ChatMessage,
   DiscoveredModel,
-  DiscoveredVoice,
   ProviderContext,
   SpeechFormat,
   SynthesizeResult,
@@ -70,6 +69,7 @@ import {
   writeHermesRoute,
   type HermesModelChoice,
   type HermesProviderRoute,
+  type HermesSpeechChoice,
   type PropagationState,
   type ResolvedCredential,
 } from './propagation.js';
@@ -89,6 +89,8 @@ import {
 } from './schema.js';
 import type { SecretStore } from './secrets.js';
 import { ModelsStore } from './store.js';
+import { joinAudio, type AudioPart } from './speech/audio.js';
+import { splitForSpeech } from './speech/split.js';
 import { signInStatusOf, type SignInRuntime, type SignInStatus } from './sign-in.js';
 import {
   modelKeyOf,
@@ -361,6 +363,16 @@ function signInView(record: SignInRecord): ContractProviderSignIn {
   };
 }
 
+/** One voice of `models.listVoices` (DECISIONS §94). */
+export interface ContractVoice {
+  id: string;
+  name: string;
+  language: string | null;
+  gender: 'female' | 'male' | 'neutral' | null;
+  description: string | null;
+  models: string[] | null;
+}
+
 /** One entry of `models.listProviderPresets`. */
 export interface ContractProviderPreset {
   id: string;
@@ -374,6 +386,13 @@ export interface ContractProviderPreset {
   repeatable: boolean;
   keys_url: string | null;
   sign_in: boolean;
+  /** An example of the address to type when there is nothing to prefill (DECISIONS §94). */
+  base_url_example: string | null;
+  /**
+   * The scopes (`all`, `profile`) in which a provider of the same credential family already
+   * holds a key: adding this one there needs none — the key is shared (ADR 0010, §94).
+   */
+  key_on_file: ('all' | 'profile')[];
 }
 
 export interface ProviderHostInfo {
@@ -744,7 +763,10 @@ export class ModelsService {
    * The provider *types* a person can add. Not the same list as `listProviders`, which
    * answers "what did I configure" (contract decision §26).
    */
-  listPresets(filter: { kind?: string } = {}): {
+  listPresets(
+    filter: { kind?: string } = {},
+    scope?: Pick<WorkspaceScope, 'id'>,
+  ): {
     items: ContractProviderPreset[];
     host: ProviderHostInfo;
   } {
@@ -763,8 +785,28 @@ export class ModelsService {
       repeatable: entry.repeatable === true,
       keys_url: entry.keysUrl,
       sign_in: entry.signIn === true,
+      base_url_example: entry.baseUrlExample ?? null,
+      key_on_file:
+        scope && !entry.repeatable && !entry.signIn
+          ? (['all', 'profile'] as const).filter((which) =>
+              this.familyKeyOf(this.ownerFor(scope, which === 'all'), entry.family),
+            )
+          : [],
     }));
     return { items, host: hostInfo() };
+  }
+
+  /**
+   * The key a credential family already holds in one scope, if any: the secret its rows
+   * point at (ADR 0010 — one key, many rows). A row added later to the same family uses it.
+   */
+  private familyKeyOf(owner: ProviderOwner, family: string): string | null {
+    for (const row of this.store.scopeFamilyRows(owner.workspace, owner.shared, family)) {
+      if (row.apiKeySecretId && this.options.secrets.has(owner.workspace, row.apiKeySecretId)) {
+        return row.apiKeySecretId;
+      }
+    }
+    return null;
   }
 
   /** The shared providers and this profile's own, each saying which (decision §37). */
@@ -818,7 +860,13 @@ export class ModelsService {
       throw validationFailed({ field: 'base_url', reason: 'not a URL' });
     }
     const apiKey = input.api_key?.trim() ?? '';
-    if (preset?.keyRequirement === 'required' && !apiKey) {
+    // Who it is for (decision §37): every profile (the default), or only this one.
+    const owner = this.ownerFor(scope, (input.scope ?? 'all') === 'all');
+    // A family that already holds a key in this scope lends it: Groq added for chat also
+    // speaks and transcribes without the key being pasted again (ADR 0010, §94).
+    const keyOnFile =
+      preset && !preset.repeatable && !apiKey ? this.familyKeyOf(owner, preset.family) : null;
+    if (preset?.keyRequirement === 'required' && !apiKey && !keyOnFile) {
       throw validationFailed({ field: 'api_key', reason: 'this provider needs a key to answer' });
     }
 
@@ -837,8 +885,6 @@ export class ModelsService {
     // person names each instance, and each instance owns its own key.
     const repeatable = !preset || preset.repeatable === true;
     const at = this.now();
-    // Who it is for (decision §37): every profile (the default), or only this one.
-    const owner = this.ownerFor(scope, (input.scope ?? 'all') === 'all');
     const primarySlug = repeatable ? this.freeSlug(scope.id, owner, label) : preset.slug;
     const family = repeatable ? `custom:${primarySlug}` : preset.family;
     const kind = preset && !repeatable ? preset.kind : input.kind;
@@ -896,6 +942,7 @@ export class ModelsService {
     }
 
     if (apiKey) this.storeKey(owner, actor, family, apiKey);
+    else if (keyOnFile) this.linkKey(owner, family, keyOnFile);
     // The card shows what the provider answered, without a second click on Test.
     if (verdict) this.recordCheck(primaryId, verdict);
     this.options.audit.record({
@@ -1306,10 +1353,16 @@ export class ModelsService {
             details: { reason: result.reason },
           });
         }
+        // A speech row keeps the models of its own kind: Groq's and OpenAI's lists carry
+        // their chat models too, which belong to the chat row, not the dictation tab.
+        const listed =
+          current.kind === 'llm'
+            ? result.models
+            : result.models.filter((model) => model.kind === current.kind);
         const report = this.store.replaceCatalogue(
           { workspace: row.workspace, ownerId: actor.userId },
           row.id,
-          result.models,
+          listed,
         );
         // Where the list came from (decision §83): a key provider's adapter always asks the
         // provider itself; a signed-in provider says whether it could.
@@ -1332,13 +1385,13 @@ export class ModelsService {
           })
           .where(eq(providers.id, row.id))
           .run();
-        handle.progress(100, `${result.models.length} models`);
+        handle.progress(100, `${listed.length} models`);
         // The models just arrived. If this workspace still has no chat default, the
         // provider that was added a moment ago becomes it — otherwise the owner adds a
         // provider, watches its models load, sends a message and is told by Hermes that
         // no provider is configured, with nothing in the hub having said a word.
         this.ensureChatDefault(scope, actor, row.id);
-        return { ...report, models: result.models.length };
+        return { ...report, models: listed.length };
       },
     );
   }
@@ -1994,20 +2047,43 @@ export class ModelsService {
       }
       this.db.update(providers).set(rowChanges).where(eq(providers.id, row.id)).run();
     }
-    if (keyChanged) this.propagate(scope, actor);
+    // The choice, the model, the voice and the language reach Hermes's own voice tools too,
+    // where Hermes has a backend for the provider (DECISIONS §94); a key reaches every agent.
+    void keyChanged;
+    this.propagate(scope, actor);
     return this.getSpeech(scope, actor.userId);
   }
 
-  async listVoices(scope: WorkspaceScope, providerId: string): Promise<DiscoveredVoice[]> {
+  /**
+   * `models.listVoices` (DECISIONS §94): the provider's own list when it has an endpoint, its
+   * documented list when it has none (`source` says which), narrowed to one model's voices
+   * when `model` is given. "No voice list" is an allowed answer, not an error: those
+   * providers take a voice id typed by hand.
+   */
+  async listVoices(
+    scope: WorkspaceScope,
+    providerId: string,
+    model: string | null = null,
+  ): Promise<{ items: ContractVoice[]; source: 'provider' | 'documented' | 'none' }> {
     const row = this.loadProvider(scope, providerId);
     if (row.kind !== 'tts') {
       throw validationFailed({ field: 'provider_id', reason: 'not a text-to-speech provider' });
     }
     const adapter = providerAdapter(this.entryOf(row)?.protocol ?? 'openai');
     const result = await adapter.listVoices(this.contextOf(scope, row));
-    // "No voice list" is an allowed answer in the contract, not an error: those providers
-    // take a free-form voice id.
-    return result.supported ? result.voices : [];
+    if (!result.supported) return { items: [], source: 'none' };
+    const wanted = model?.trim() || null;
+    const items = result.voices
+      .filter((voice) => !wanted || !voice.models || voice.models.includes(wanted))
+      .map((voice) => ({
+        id: voice.id,
+        name: voice.name,
+        language: voice.language,
+        gender: voice.gender,
+        description: voice.description ?? null,
+        models: voice.models ? [...voice.models] : null,
+      }));
+    return { items, source: result.source ?? 'provider' };
   }
 
   async synthesize(
@@ -2017,26 +2093,56 @@ export class ModelsService {
       text: string;
       language: string | null;
       voice: string | null;
+      /** Overrides the row's model for this request (the Models page's preview). */
+      model?: string | null;
       providerId?: string | null;
       /** The audio the client can play (`SpeechRequest.format`); the provider's own when null. */
       format?: SpeechFormat | null;
     },
   ): Promise<{ audio: Uint8Array; contentType: string; provider: string }> {
     const row = this.activeSpeechRow(scope, ownerId, 'tts', request.providerId ?? null);
-    const adapter = providerAdapter(this.entryOf(row)?.protocol ?? 'openai');
-    const result: SynthesizeResult = await adapter.synthesize(this.contextOf(scope, row), {
-      text: request.text,
-      language: request.language,
-      voice: request.voice,
-      format: request.format ?? null,
-    });
-    if (!result.supported) {
+    const entry = this.entryOf(row);
+    const adapter = providerAdapter(entry?.protocol ?? 'openai');
+    const context = this.contextOf(scope, row);
+    // A provider that takes less per request than the text is given it in parts, split at
+    // sentence and word boundaries, and the parts' audio is joined in order (DECISIONS §94).
+    const parts = splitForSpeech(request.text, entry?.speech?.maxInputChars ?? Infinity);
+    const spoken: AudioPart[] = [];
+    for (const part of parts.length > 0 ? parts : [request.text]) {
+      const result: SynthesizeResult = await adapter.synthesize(context, {
+        text: part,
+        language: request.language,
+        voice: request.voice,
+        model: request.model?.trim() || null,
+        format: request.format ?? null,
+      });
+      if (!result.supported) {
+        throw new HubError('agent_unavailable', {
+          messageKey: 'models.speech.failed',
+          details: {
+            reason: result.reason,
+            detail: result.detail ?? null,
+            provider: row.slug,
+            ...(parts.length > 1 ? { part: spoken.length + 1, parts: parts.length } : {}),
+          },
+        });
+      }
+      spoken.push({ audio: result.audio, contentType: result.contentType });
+    }
+    let joined: AudioPart;
+    try {
+      joined = joinAudio(spoken);
+    } catch (error) {
       throw new HubError('agent_unavailable', {
         messageKey: 'models.speech.failed',
-        details: { reason: result.reason, detail: result.detail ?? null, provider: row.slug },
+        details: {
+          reason: 'http_error',
+          detail: error instanceof Error ? error.message : null,
+          provider: row.slug,
+        },
       });
     }
-    return { audio: result.audio, contentType: result.contentType, provider: row.slug };
+    return { audio: joined.audio, contentType: joined.contentType, provider: row.slug };
   }
 
   /**
@@ -2344,6 +2450,10 @@ export class ModelsService {
       hermesProviders,
       imageEnv: imageEnvOf(image),
       hermesImage: image !== null,
+      hermesSpeech: {
+        stt: this.hermesSpeechChoice(workspace, 'stt'),
+        tts: this.hermesSpeechChoice(workspace, 'tts'),
+      },
       hermesModel: chat.choice,
       hermesModelBlocked: chat.blocked,
       // Owned where the model selection is (contract decision §54).
@@ -2663,6 +2773,34 @@ export class ModelsService {
     return chain;
   }
 
+  /**
+   * One side of a profile's speech choice in Hermes's words (DECISIONS §94): the provider it
+   * chose (its own, else the default profile's), when Hermes's voice tools have a backend for
+   * it (`hermesSpeech` on its catalogue entry), with the row's model, voice and language. Null
+   * — Hermes's voice left as it is — for no choice, a provider switched off, or one Hermes
+   * cannot speak (Groq TTS, Deepgram, Azure).
+   */
+  private hermesSpeechChoice(workspace: string, side: 'stt' | 'tts'): HermesSpeechChoice | null {
+    const own = this.store.speech(workspace);
+    const hubId = this.hub({ id: workspace }).id;
+    const shared = hubId === workspace ? undefined : this.store.speech(hubId);
+    const id =
+      side === 'stt'
+        ? (own?.sttProviderId ?? shared?.sttProviderId ?? null)
+        : (own?.ttsProviderId ?? shared?.ttsProviderId ?? null);
+    if (!id) return null;
+    const row = this.effectiveFor(workspace, id);
+    if (!row || row.archivedAt || !row.enabled || row.kind !== side) return null;
+    const route = this.entryOf(row)?.hermesSpeech;
+    if (!route) return null;
+    const values: Record<string, string | null> = {
+      [route.modelKey]: row.settings.model ?? null,
+    };
+    if (route.voiceKey) values[route.voiceKey] = row.settings.voice ?? null;
+    if (route.languageKey) values[route.languageKey] = row.settings.language ?? null;
+    return { provider: route.provider, section: route.section, values };
+  }
+
   /** The slug of one of this profile's providers, for naming the model that answered. */
   providerSlug(workspace: string, providerId: string): string | null {
     return this.effectiveFor(workspace, providerId)?.slug ?? null;
@@ -2837,6 +2975,7 @@ export class ModelsService {
             mine.hermesProviders,
             mine.hermesFallbacks ?? null,
             mine.hermesImage ?? null,
+            mine.hermesSpeech ?? null,
           );
       // The profile's own `image_gen` backend, where Hermes looks for it (decision §72).
       const plugin = this.installImageBackend(profileHome, mine.hermesImage === true);
@@ -3011,6 +3150,19 @@ export class ModelsService {
     );
     const at = this.now();
     for (const row of this.store.scopeFamilyRows(owner.workspace, owner.shared, family)) {
+      this.db
+        .update(providers)
+        .set({ apiKeySecretId: secretId, updatedAt: at })
+        .where(eq(providers.id, row.id))
+        .run();
+    }
+  }
+
+  /** Points every row of a family in one scope at the key it already holds. */
+  private linkKey(owner: ProviderOwner, family: string, secretId: string): void {
+    const at = this.now();
+    for (const row of this.store.scopeFamilyRows(owner.workspace, owner.shared, family)) {
+      if (row.apiKeySecretId === secretId) continue;
       this.db
         .update(providers)
         .set({ apiKeySecretId: secretId, updatedAt: at })

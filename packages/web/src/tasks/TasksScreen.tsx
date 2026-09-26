@@ -36,6 +36,7 @@ import { CSS } from '@dnd-kit/utilities';
 import { useMemo, useState, type ReactNode } from 'react';
 import { Link } from 'react-router';
 import { describeError } from '../auth/client.js';
+import { exactTime } from '../devices/format.js';
 import { agentMark } from '../ui/brand/marks.js';
 import { Tooltip } from '../ui/Tooltip.js';
 import { ProfileScope, useAuth } from '../auth/context.js';
@@ -75,6 +76,7 @@ import { HandOverDialog } from './HandOverDialog.js';
 import { ProjectDialog } from './ProjectDialog.js';
 import { TaskDialog } from './TaskDialog.js';
 import {
+  ARCHIVED_STATUS,
   COLUMNS,
   INTAKE_STATUS,
   cardFrame,
@@ -82,6 +84,7 @@ import {
   dropOptions,
   isColumnCollapsed,
   isDropTarget,
+  listOf,
   quickActionFor,
   quickActionTarget,
   showsStatusWord,
@@ -101,6 +104,7 @@ import {
   useTaskEvents,
   useUnassignTask,
   useUpdateTask,
+  type BoardFilter,
   type Task,
 } from './queries.js';
 
@@ -136,8 +140,10 @@ export function TasksScreen() {
     ? t('tasks.new_task_in', { name: profileName(homeProfile) })
     : t('tasks.new_task');
   const board = useBoard(filter);
-  // The archive behind Done, read-only: counted for its link, shown when asked for.
-  const archive = useArchive(filter);
+  // The archive behind Done, read-only: the board counts it for its link, and it is read
+  // only when a person opens it (DECISIONS §93).
+  const archivedCount =
+    board.data?.columns.find((column) => column.status === ARCHIVED_STATUS)?.count ?? 0;
   const createTask = useCreateTask();
   const move = useMoveTask();
   const update = useUpdateTask();
@@ -431,7 +437,7 @@ export function TasksScreen() {
               tasks={grouped.columns.get(column.id) ?? []}
               dragging={dragging}
               actionsFor={actionsFor}
-              {...(column.id === 'done' ? { archived: archive.data ?? [] } : {})}
+              {...(column.id === 'done' ? { archive: { count: archivedCount, filter } } : {})}
             />
           ))}
         </div>
@@ -493,14 +499,14 @@ function BoardColumn({
   tasks,
   dragging,
   actionsFor,
-  archived,
+  archive,
 }: {
   column: ColumnDef;
   tasks: Task[];
   dragging: TaskStatus | null;
   actionsFor(task: Task): CardActions;
-  /** Done only: the archive behind it, shown read-only when the person asks. */
-  archived?: Task[];
+  /** Done only: how many are archived behind it; read, and shown, when the person asks. */
+  archive?: { count: number; filter: BoardFilter };
 }) {
   const { t } = useI18n();
   const [openedByHand, setOpenedByHand] = useState(false);
@@ -552,7 +558,7 @@ function BoardColumn({
               <TaskCard key={task.id} task={task} actions={actionsFor(task)} />
             ))}
             {tasks.length === 0 && <li className="task-column-empty">{t('tasks.nothing')}</li>}
-            {archived && archived.length > 0 && (
+            {archive && archive.count > 0 && (
               <li className="task-archive">
                 <button
                   type="button"
@@ -562,16 +568,10 @@ function BoardColumn({
                   data-testid="task-archive-toggle"
                 >
                   {t(showArchived ? 'tasks.hide_archived' : 'tasks.show_archived', {
-                    count: archived.length,
+                    count: archive.count,
                   })}
                 </button>
-                {showArchived && (
-                  <ul className="task-archive-list" data-testid="task-archive">
-                    {archived.map((task) => (
-                      <ArchivedCard key={task.id} task={task} />
-                    ))}
-                  </ul>
-                )}
+                {showArchived && <ArchiveList filter={archive.filter} />}
               </li>
             )}
           </ul>
@@ -582,7 +582,7 @@ function BoardColumn({
 }
 
 export function TaskCard({ task, actions }: { task: Task; actions: CardActions }) {
-  const { t } = useI18n();
+  const { t, language } = useI18n();
   const many = useManyProfiles();
   const inLink = useProfileInLink();
   const {
@@ -605,6 +605,9 @@ export function TaskCard({ task, actions }: { task: Task; actions: CardActions }
   const fromHermes = task.external?.source === 'hermes';
   const running = task.status === 'running';
   const open = task.status !== 'done' && task.status !== 'archived';
+  // Said only while it matters: before the task runs. A running or finished task waits for
+  // nothing any more, whatever its dependencies are doing.
+  const waitingOn = open && !running && task.status !== 'review' ? (task.waiting_on ?? []) : [];
   // A task can be given to an agent until it is finished; a Hermes card is handed to
   // another workspace's Hermes profile instead, because Hermes's dispatcher runs it.
   const assignable = !fromHermes && open;
@@ -674,6 +677,31 @@ export function TaskCard({ task, actions }: { task: Task; actions: CardActions }
             <span className="text-xs text-muted">
               {task.subtask_counts.done}/{task.subtask_counts.total}
             </span>
+          )}
+          {waitingOn.length > 0 && (
+            // What it waits for, by name on hover or focus: a task set to start on its own
+            // does not start before these are done (DECISIONS §93).
+            <Tooltip
+              label={t('tasks.waiting_on_list', {
+                titles: listOf(
+                  waitingOn.map((one) => one.title),
+                  language,
+                ),
+              })}
+            >
+              <span tabIndex={0} data-testid="task-waiting-on">
+                <Badge tone="warning">{t('tasks.waiting_on', { count: waitingOn.length })}</Badge>
+              </span>
+            </Tooltip>
+          )}
+          {running && task.stuck_since && (
+            <Tooltip
+              label={t('tasks.stuck_since', { time: exactTime(task.stuck_since, language) })}
+            >
+              <span tabIndex={0} data-testid="task-stuck">
+                <Badge tone="danger">{t('tasks.stuck')}</Badge>
+              </span>
+            </Tooltip>
           )}
           {task.blocked_reason && (
             // A reason cut short on the card is read whole on hover or focus.
@@ -800,6 +828,25 @@ const STATUS_TONE: Partial<Record<TaskStatus, 'success' | 'danger' | 'warning' |
   scheduled: 'warning',
   ready: 'info',
 };
+
+/** The archive itself, read from the hub the moment a person opens it. */
+function ArchiveList({ filter }: { filter: BoardFilter }) {
+  const { t } = useI18n();
+  const archived = useArchive(filter, true);
+  if (archived.isPending) {
+    return <p className="task-column-empty">{t('common.loading')}</p>;
+  }
+  if (archived.isError) {
+    return <Notice tone="danger">{describeError(archived.error, t)}</Notice>;
+  }
+  return (
+    <ul className="task-archive-list" data-testid="task-archive">
+      {archived.data.map((task) => (
+        <ArchivedCard key={task.id} task={task} />
+      ))}
+    </ul>
+  );
+}
 
 /**
  * A card in the archive: read-only. It is there to be found again, not worked — no grip,

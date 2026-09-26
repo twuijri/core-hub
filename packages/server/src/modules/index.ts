@@ -79,9 +79,11 @@ import {
   createHermesCardApi,
   registerHermesBoard,
   registerTaskNames,
+  registerTaskNotices,
   registerTaskRunner,
   TasksService,
   tasksModule,
+  watchStuckTasks,
   type HermesCardApi,
 } from './tasks/index.js';
 import { createHermesKanban, processRunner } from './tasks/hermes-kanban.js';
@@ -89,6 +91,7 @@ import { createHermesJobs } from './schedules/hermes-jobs.js';
 import {
   registerHermesCron,
   registerScheduleRunner,
+  registerSchedulerWork,
   registerWorkflowPorts,
   schedulesModule,
   workflowBackgroundFor,
@@ -655,6 +658,28 @@ registerTaskRunner((app) => {
     },
     cancel: (scope, sessionId, runId) => runs.cancel(scope, sessionId, runId),
     outcome: (workspace, runId) => runs.outcome(workspace, runId),
+  };
+});
+
+/**
+ * The stuck-task watchdog (DECISIONS §93) runs on the scheduler's clock — `schedules` owns
+ * the clock, `tasks` the rule — and tells a stuck task's owner through `notify`, which owns
+ * the words. None of the three knows the others; they meet here.
+ */
+registerSchedulerWork((app) => (now) => watchStuckTasks(app, now));
+registerTaskNotices((app) => {
+  const notifier = createNotifier(
+    requireSqlite(app.hub.database),
+    () => app.hub.io,
+    noticePushPort(app),
+  );
+  return {
+    stuck: (input) =>
+      notifier.announce(
+        { userId: input.userId, workspace: input.workspace, profile: input.profile },
+        { kind: 'task_stuck', task: input.label, minutes: input.minutes },
+        { kind: 'task', id: input.taskId },
+      ),
   };
 });
 

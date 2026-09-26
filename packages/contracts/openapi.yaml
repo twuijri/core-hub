@@ -9353,6 +9353,12 @@ paths:
             $ref: '#/components/schemas/Ulid'
         - name: include_archived
           in: query
+          description: >-
+            `true`: the `archived` column carries its tasks. Without it the `archived` column
+            still says how many there are (`count`, and `counts.by_status.archived`) but its
+            `tasks` is empty, so a client asks for the archive only when a person opens it
+            (contract decision §93). `counts.total` counts only the columns whose tasks are
+            included.
           schema:
             type: boolean
             default: false
@@ -12837,6 +12843,14 @@ paths:
       operationId: models.listVoices
       tags: [models]
       summary: Voices a TTS provider offers (may be empty for providers that take free-form voice ids)
+      description: >-
+        The provider's own list whenever it has an endpoint for one (`source: provider`: ElevenLabs,
+        Deepgram, Azure). A provider with no such endpoint answers the list its public
+        documentation gives (`source: documented`: Groq, OpenAI), kept in one data file of the hub
+        and labelled as such by clients. `source: none` is a provider with neither: the voice is
+        typed by hand. `model` narrows the list to the voices that model speaks with (Groq's
+        English and Arabic models have different voices; Deepgram's `aura-2` and `aura`). A
+        person may always type a voice id the list does not show (DECISIONS §94).
       parameters:
         - $ref: '#/components/parameters/Profile'
         - name: provider_id
@@ -12844,6 +12858,13 @@ paths:
           required: true
           schema:
             $ref: '#/components/schemas/Ulid'
+        - name: model
+          in: query
+          required: false
+          description: Only the voices this model speaks with. Omitted, every voice of the provider.
+          schema:
+            type: string
+            maxLength: 200
       x-rt-events: []
       responses:
         '200':
@@ -12852,18 +12873,23 @@ paths:
             application/json:
               schema:
                 type: object
-                required: [items]
+                required: [items, source]
                 properties:
                   items:
                     type: array
                     items:
                       $ref: '#/components/schemas/Voice'
+                  source:
+                    $ref: '#/components/schemas/VoiceListSource'
               example:
+                source: documented
                 items:
-                  - id: Rachel
-                    name: Rachel
-                    language: en-US
+                  - id: noura
+                    name: Noura
+                    language: ar-SA
                     gender: female
+                    description: Saudi dialect
+                    models: [canopylabs/orpheus-arabic-saudi]
         '400':
           $ref: '#/components/responses/BadRequest'
         '401':
@@ -12946,7 +12972,10 @@ paths:
       description: >-
         Returns audio bytes; `X-Speech-Provider` says which provider actually spoke. Text over
         2 000 characters is `413`. `format` asks for audio the client can play (iOS cannot play
-        Ogg); the `Content-Type` says what came.
+        Ogg); the `Content-Type` says what came. A provider that takes less per request (Groq's
+        Orpheus: 200 characters) is sent the text in parts split at sentence, then word,
+        boundaries under its limit, and the parts' audio comes back joined in order as one file
+        (DECISIONS §94).
       parameters:
         - $ref: '#/components/parameters/Profile'
       requestBody:
@@ -21592,6 +21621,40 @@ components:
                       maxLength: 64
                       description: The card's id on that board.
                 - type: 'null'
+            waiting_on:
+              type: array
+              description: >-
+                The tasks of `depends_on` that are not done yet, with their title and column, so a
+                card and its details can say what it waits for (empty when there is nothing to wait
+                for). `done` counts as done, and so does `archived` after `done` (the weekly
+                archive); archived without having been done does not. A task with `auto_start`
+                does not start on its own while this is not empty, and starts itself when the last
+                of them reaches `done`. A person's "assign and start" is not held back by it —
+                clients warn first. Always sent by the hub (contract decision §93).
+              items:
+                $ref: '#/components/schemas/TaskDependencyState'
+            stuck_since:
+              description: >-
+                Set while the task is `running` and its run has shown no activity (no text, tool
+                call or step) since this moment for longer than `COREHUB_TASK_STUCK_MINUTES` — the
+                stuck-task watchdog, which also sends the task's owner a notice once. Cleared
+                when the run shows activity again or the task leaves `running`. `null` otherwise;
+                always sent by the hub (contract decision §93).
+              oneOf:
+                - $ref: '#/components/schemas/Timestamp'
+                - type: 'null'
+    TaskDependencyState:
+      type: object
+      description: One task another task depends on, as far as waiting for it goes.
+      required: [id, title, status]
+      properties:
+        id:
+          $ref: '#/components/schemas/Ulid'
+        title:
+          type: string
+          maxLength: 300
+        status:
+          $ref: '#/components/schemas/TaskStatus'
     Subtask:
       type: object
       required: [id, task_id, index, title, status, note, blocked_reason, completed_at, updated_at]
@@ -21895,6 +21958,9 @@ components:
                 $ref: '#/components/schemas/TaskStatus'
               count:
                 type: integer
+                description: >-
+                  How many tasks the column holds. For `archived` without `include_archived`,
+                  the number in the archive while `tasks` is empty.
               tasks:
                 type: array
                 description: In `position` order.
@@ -22919,6 +22985,20 @@ components:
             adding it, `models.startProviderSignIn` shows a code and a link (decision §55).
             Only the providers whose sign-in the agent runtime can complete on the hub's behalf
             say `true`; `key` is then `optional` and a client does not ask for one.
+        base_url_example:
+          type: [string, 'null']
+          description: >-
+            An example of the address to type when `base_url` is null — the shape, never a
+            value the hub would use (Azure Speech: `https://<region>.api.cognitive.microsoft.com`).
+        key_on_file:
+          type: array
+          items:
+            type: string
+            enum: [all, profile]
+          description: >-
+            The scopes (`ProviderCreate.scope`) in which a provider of the same credential
+            family already holds a key. Added there, this provider uses that key and none need
+            be typed: Groq added for chat also speaks (DECISIONS §94).
     ProviderHost:
       type: object
       required: [containerized, loopback_alias]
@@ -23311,9 +23391,24 @@ components:
           type: string
         language:
           type: [string, 'null']
+          description: BCP-47 tag (`ar-SA`, `en-US`) or a bare language (`ar`), as the provider names it.
         gender:
           type: [string, 'null']
           enum: [female, male, neutral, null]
+        description:
+          type: [string, 'null']
+          description: The provider's own short words about the voice (accent, style), when it gives any.
+        models:
+          type: [array, 'null']
+          items:
+            type: string
+          description: The models this voice speaks with; null or absent is every model of the provider.
+    VoiceListSource:
+      type: string
+      enum: [provider, documented, none]
+      description: >-
+        Where a voice list came from: the provider's own endpoint, the provider's public
+        documentation (it has no list endpoint), or nowhere (type the voice id).
     Transcription:
       type: object
       required: [text, language, duration_ms, provider_id, model]
@@ -23342,6 +23437,12 @@ components:
         voice:
           type: [string, 'null']
           description: Overrides the provider's default voice for this request.
+        model:
+          type: [string, 'null']
+          maxLength: 200
+          description: >-
+            Overrides the provider's model for this request — how the Models page previews a
+            model and voice before saving them.
         provider_id:
           oneOf:
             - $ref: '#/components/schemas/Ulid'

@@ -215,6 +215,20 @@ export function firerFor(app: FastifyInstance): ScheduleRuns {
   return created;
 }
 
+/**
+ * Work another module runs on the scheduler's clock, lent by the composition root (the tasks
+ * watchdog, DECISIONS §93): the hub keeps one clock rather than one timer per module.
+ */
+type AlongsideFactory = (app: FastifyInstance) => ((now: Date) => unknown) | null;
+const alongsideFactories: AlongsideFactory[] = [];
+export function registerSchedulerWork(factory: AlongsideFactory): () => void {
+  alongsideFactories.push(factory);
+  return () => {
+    const at = alongsideFactories.indexOf(factory);
+    if (at >= 0) alongsideFactories.splice(at, 1);
+  };
+}
+
 const schedulers = new WeakMap<SocketServer, HubScheduler>();
 /** The app's scheduler; started when the hub is ready, stopped when it closes. */
 export function schedulerFor(app: FastifyInstance): HubScheduler {
@@ -227,6 +241,10 @@ export function schedulerFor(app: FastifyInstance): HubScheduler {
     waiting: (schedule) => firerFor(app).waiting(schedule),
     stop: (schedule, lines) => firerFor(app).stop(schedule, lines),
     log: app.log,
+    alongside: () =>
+      alongsideFactories
+        .map((factory) => factory(app))
+        .filter((work): work is (now: Date) => unknown => work !== null),
   });
   schedulers.set(app.hub.io, created);
   return created;

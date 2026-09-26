@@ -506,8 +506,11 @@ export const modelsModule = defineModule({
     defineRoute(app, deps, {
       operationId: 'models.listProviderPresets',
       handler: (request, { query }) => {
-        const { service } = enter(request);
-        return service.listPresets({ ...(query.kind ? { kind: query.kind as string } : {}) });
+        const { service, scope } = enter(request);
+        return service.listPresets(
+          { ...(query.kind ? { kind: query.kind as string } : {}) },
+          scope,
+        );
       },
     });
 
@@ -744,7 +747,11 @@ export const modelsModule = defineModule({
       operationId: 'models.listVoices',
       handler: async (request, { query }) => {
         const { service, scope } = enter(request);
-        return { items: await service.listVoices(scope, query.provider_id as string) };
+        return service.listVoices(
+          scope,
+          query.provider_id as string,
+          typeof query.model === 'string' ? query.model : null,
+        );
       },
     });
 
@@ -756,6 +763,7 @@ export const modelsModule = defineModule({
           text: string;
           language?: string | null;
           voice?: string | null;
+          model?: string | null;
           provider_id?: string | null;
           format?: SpeechFormat | null;
         };
@@ -763,6 +771,7 @@ export const modelsModule = defineModule({
           text: input.text,
           language: input.language ?? null,
           voice: input.voice ?? null,
+          model: input.model ?? null,
           providerId: input.provider_id ?? null,
           format: input.format ?? null,
         });

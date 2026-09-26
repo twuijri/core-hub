@@ -90,7 +90,7 @@ name, and Hermes's own slug for it are declared.
 no providers, and `models.listProviders` answers `{ items: [] }`. What the hub
 *can* talk to is the preset list (`models.listProviderPresets`), which is where
 "visible and unconfigured, never hidden" now lives (ADR 0006's rule; contract
-decision §26). Adding a preset creates the whole credential family in one call,
+decision §27). Adding a preset creates the whole credential family in one call,
 so adding OpenAI on the chat tab puts its dictation and speech rows on theirs.
 Migration `0002_unseeded_providers.sql` removed the untouched rows the old
 lazy seeding had created — built-in, no key, no model — and left every row that
@@ -101,7 +101,7 @@ required*; it never means a key is refused, and storing one does not change it.
 Every provider accepts a key — a local proxy behind a master key is ordinary —
 and the only thing allowed to report a key as missing is the endpoint's own
 answer. A preset declares `keyRequirement: required | optional`, and that is the
-only vocabulary there is (contract decision §26; the defect of 2026-09-22).
+only vocabulary there is (contract decision §27; the defect of 2026-09-22).
 
 ## model (scoped, with its provider)
 
@@ -159,6 +159,17 @@ inherits the coding one without anybody opening that agent's settings
 One row per workspace: `stt_provider_id`, `tts_provider_id` (both → provider,
 set null). The contract's `SpeechSide.ready` is "an active provider, enabled,
 with a key"; `reason` is an i18n key, never a sentence in one language.
+
+**Speech providers** (decision §94). Groq (`groq-stt`, `groq-tts`), OpenAI, ElevenLabs
+(`elevenlabs`, `elevenlabs-stt`), Deepgram (`deepgram-stt`, `deepgram-tts`) and Azure Speech
+(`azure-tts`, `azure-stt`) are presets; each family is one key. A speech row's catalogue keeps the
+models of its own kind. Voices are the provider's own list, or — for a provider with no list
+endpoint (Groq, OpenAI) — the documented list in `modules/models/speech/documented.ts`, the one
+place to add a voice by hand. A catalogue entry's `speech.maxInputChars` is the provider's
+request limit: longer text is split (`speech/split.ts`) and the audio joined (`speech/audio.ts`).
+Its `hermesSpeech` says how Hermes's own voice tools name the provider; the chosen row's model,
+voice and language are written into Hermes's `config.yaml` (`stt.<provider>.*`,
+`tts.<provider>.*`) only for those.
 
 ## Queries the clients need
 
