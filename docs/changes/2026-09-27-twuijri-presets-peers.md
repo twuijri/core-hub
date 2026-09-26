@@ -120,7 +120,21 @@ TOTAL 347 STUBS 0 … "agents":[68,68] … "devices":[33,33]
 الحذف يُسقط المفتاح ويُبلغ الطرف الآخر، وأن كل ذلك للمشرفين فقط؛ وسجل التدقيق في الطرفين بلا نص السؤال.
 هذه الاختبارات تفشل على الشيفرة القديمة (كانت العمليات `501`).
 
-CI على #165: يُحدَّث بعد الدفع.
+CI على #165 (التشغيل 36215468721، الالتزام `27a51e63`):
+
+```
+✓ Lint, typecheck, contracts, client tests, build
+✓ Server unit tests (shard 1/3, 2/3, 3/3)
+✓ db:generate + db:migrate (SQLite and PostgreSQL)
+✓ Docker image builds and answers /health
+✓ Desktop app smoke
+X Web smoke journeys: smoke 1 و8 فقط —
+  strict mode violation: getByTestId('session-agent') resolved to 2 elements
+```
+
+فشل smoke 1 و8 ليس من هذه المهمة: معرّف `session-agent` صار في `SessionList.tsx` و`SessionAgent.tsx` معًا منذ
+`3734137d` (مهمة عائلة التصميم)؛ تكرّر محليًا بالشيفرة نفسها. رحلة `zz-design` كانت تعدّ ثلاث صفحات إدارة
+فصارت أربعًا بعد «المراكز المرتبطة» وأُصلحت هنا (نجحت محليًا وعلى CI).
 
 ## المخاطر والرجوع
 - **سطح أمني جديد** (مسارات عامة بين المراكز): مغلق بلا توقيع صالح أو دعوة حية، ومحدود المعدل، ولا يتيح إلا
