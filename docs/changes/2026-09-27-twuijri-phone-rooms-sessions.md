@@ -119,7 +119,20 @@ $ pnpm nav:check
 nav:check  OK — 38 destinations, 2 pre-auth screens (login, setup), 43 terms, ar/en complete, routes for web, ios, android, desktop
 ```
 
-CI على الفرع (`workflow_dispatch`): يُملأ أدناه.
+بعد دمج فرع الليلة: `pnpm lint` (All matched files use Prettier code style!)، `pnpm typecheck` خرج بـ0،
+`pnpm contracts:lint` (OK)، `pnpm contract:test` (390 passed)، اختبارات الغرف والجلسات في الخادم
+(5 ملفات، 42 passed)، `pnpm change-record:check` (18 record(s) valid)،
+`node scripts/icons/agent-marks-mobile.mjs --check` (9 mark(s) up to date).
+
+CI على الفرع (`workflow_dispatch`):
+
+```
+Android  run 36211588019  success — assembleDebug، testDebugUnitTest (منها RoomsTest وAgentIdentityTest
+         والتكافؤ)، lintDebug؛ BUILD SUCCESSFUL in 4m 24s، Debug APK 17M
+iOS      run 36211621752  success — Executed 133 tests, with 0 failures؛ منها RoomsTests (١٥)
+         وAgentIdentityTests (٤) وNavigationParityTests
+```
+(تشغيلان سابقان فشلا وأُصلحا: استيراد أيقونتي `MoreVert`/`Share` في أندرويد، واسم اختبار فيه `;`.)
 
 ## المخاطر والرجوع
 - لم يُجرَّب على جوالَي المالك ولا على مركزه؛ الاختبارات وحدات ونماذج عرض، لا واجهات حقيقية.
