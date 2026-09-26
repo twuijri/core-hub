@@ -114,7 +114,7 @@ class DemoHub(private val extra: Map<String, String> = emptyMap()) {
         MockResponse().setResponseCode(status).setHeader("Content-Type", "application/json").setBody(body)
 
     companion object {
-        /** The contract's base path under the hub (the generated client's `defaultBasePath`). */
-        const val API_BASE = "/api/v1"
+        /** The contract's base path under the hub: the generated client's own, never typed here (ADR 0003). */
+        val API_BASE: String = hub.core.client.api.MetaApi.defaultBasePath.trimEnd('/')
     }
 }

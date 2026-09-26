@@ -109,7 +109,7 @@ BUILD SUCCESSFUL in 11s
 
 $ ./gradlew --no-daemon --max-workers=2 assembleDebug test lint     (apps/android، المرحلة الثانية)
 BUILD SUCCESSFUL in 1m 9s
-tests 286 skipped 4 failed 0      # debug + release، ومنها ScreenShots (2 ثيم × 2 لغة) وThemeContrastTest وKitTest وUiKitPolicyTest
+tests 286 skipped 4 failed 0      # بعد الدمج أيضًا؛ debug + release، ومنها ScreenShots (2 ثيم × 2 لغة) وThemeContrastTest وKitTest وUiKitPolicyTest
 lint: 0 errors, 33 warnings       # كانت 42 قبل المرحلة الثانية
 
 # UiKitPolicyTest على الشيفرة قبل التصميم:
@@ -124,8 +124,12 @@ All matched files use Prettier code style!
 $ pnpm i18n:check
 i18n:check  OK
 $ pnpm change-record:check
-change-record  OK — 18 record(s) valid
+change-record  OK — 21 record(s) valid
+$ pnpm contracts:check-clients      # بعد إصلاح المسار المكتوب باليد في DemoHub (أسقط المرحلة الأولى في CI)
+check-clients  OK — 733 client file(s) scanned, 250 contract path(s) known.
 ```
+بعد دمج الفرع الليلي: `NavigationParityTest` فشل لأن `linked_hubs` (صفحة ويب وسطح مكتب فقط) دخلت `settingsManagement` في
+navigation.json، والاختبار وحده بين أخواته لم يرشّح بسطح أندرويد؛ أضيف له الترشيح `.filter { it in ids }` مثل البقية.
 `ScreenShots` يتحقق أيضًا من ترتيب المحرّر («+»، النص، المايك، الإرسال من بداية القراءة إلى نهايتها، بالعربية والإنجليزية)
 ومن أن أول صف محادثة يبدأ في النصف الأعلى من الدرج.
 
