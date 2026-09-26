@@ -5,7 +5,7 @@
 // browser), push registration, the push senders (Web Push with the hub's own VAPID keys,
 // FCM, APNs) and a test push; and capability requests (DECISIONS §14, §74; `requests.ts`).
 // The way in from outside for a hub the desktop app runs (`getRelay` / `setRelay`, DECISIONS
-// §95; `outside.ts`). Peers stay 501 (DECISIONS §80).
+// §95; `outside.ts`). Linked hubs (ADR 0026, DECISIONS §101; `peers.ts`).
 //
 // `auth` imports this module (pairing creates the device row), so this module does not
 // import `auth`: what it needs from it — the route guards, revoking a token, reaching a
