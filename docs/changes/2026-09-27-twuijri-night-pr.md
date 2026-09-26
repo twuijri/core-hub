@@ -22,6 +22,7 @@
 - مزوّدو الصوت: Groq (أصوات Orpheus الإنجليزية والسعودية)، ElevenLabs Scribe، Deepgram، Azure Speech؛ الأصوات من المزوّد أو وثائقه، كل اللغات، المعاينة قبل الحفظ، تقسيم النص الطويل، واختيار الصوت في هرمز (§94) — `feat/voice-providers` — `docs/changes/2026-09-27-twuijri-voice-providers.md`
 - صوت سطح المكتب (الميكروفون، الإملاء والقراءة عبر المركز، قسم الصوت، نقل `corehub.app` القديم إلى السلة) والوصول من خارج البيت لمركز الحاسوب عبر نفق Cloudflare أو Tailscale الخاص بالشخص (§95) — `feat/desktop-voice-relay` — `docs/changes/2026-09-27-twuijri-desktop-voice-relay.md`
 - App Store: تجهيز إصدار iOS للمراجعة عبر واجهة App Store Connect (ربط البناء، التصنيف العمري، مجاني ومتاح عدا الصين القارية — مقترح، حقوق المحتوى، نشر يدوي) وقائمة ما ينقص، والإرسال بمفتاح `submit` فقط عند الاكتمال (`ios-submit.yml`) — `ci/app-store-submit` — `docs/changes/2026-09-27-twuijri-app-store-submit.md`
+- أمان: `X-Forwarded-For` من البروكسي الموثوق فقط (`COREHUB_TRUST_PROXY`، الافتراضي loopback والنطاقات الخاصة)، فلا يتجاوز العميل قفل تسجيل الدخول بعنوان مزيّف، والمقبس يحسب العنوان نفسه (§96) — `fix/trust-proxy` — `docs/changes/2026-09-27-twuijri-trust-proxy.md`
 
 ## الملفات والتأثير
 هذا الملف فقط (فهرس). ملفات كل مهمة في سجلها.

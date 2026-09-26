@@ -36,6 +36,7 @@ describe('config', () => {
       'COREHUB_PUSH_RELAY',
       'COREHUB_WEB_TERMINAL',
       'COREHUB_WEB_TERMINAL_IDLE_MINUTES',
+      'COREHUB_TRUST_PROXY',
     ]);
     const picked = pickEnv({
       DATA_DIR: '/x',
