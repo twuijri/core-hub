@@ -3396,3 +3396,37 @@ Rejected: subscribing a browser on sign-in without a subscription it already hol
 person's choice on the Notifications page); the Secure Enclave for the iOS key (not in the simulator
 the CI tests on, and the relay's risk model — ADR 0024 §6 — does not need a key that cannot leave
 the phone).
+
+## 108. The Android APK finds, downloads and installs a newer release from GitHub by itself
+
+Proposed — owner to confirm (2026-09-26; the owner's request «خل الاندرويد … يكتشفون التحديث اذا نزل
+تحديث»; docs/changes/2026-09-26-twuijri-android-updates.md). No path or schema changes.
+
+- **The source is GitHub, not the hub's `updates` shelf**: `GET
+  https://api.github.com/repos/twuijri/core-hub/releases/latest`, no token, only
+  `CoreHub-Android/<version>` in the User-Agent — the same source as the desktop app (ADR 0023) and
+  the download page. The phone no longer asks the hub's shelf; `updates.*` stays in the contract for
+  the other clients and a later second source.
+- **When**: each time the app comes to the front, at most once every **six hours** (the last check is
+  kept on the phone), and whenever the person presses *Check for updates* on This device. A rate
+  limit counts as a check; no network does not (asked again on the next return).
+- **What counts**: not a draft, not a pre-release, a plain `X.Y.Z` tag newer than `versionName`
+  (semantic order), carrying `Core-Hub-X.Y.Z-android.apk` under this repository's release downloads.
+- **What the person sees**: a compact card on New chat (*Update* / *Later*), a row in Settings and a
+  part of This device (installed version, the new one, *What's new* on GitHub, *Check for updates*).
+  **Later hides that version's card until a newer one**; Settings and This device still offer it.
+- **Update downloads and installs** — unlike the desktop, which only links the installer: the APK
+  goes to the app's cache with a progress bar, is kept only when its size equals the release's (and
+  its SHA-256 equals GitHub's `digest` when listed), then goes to Android's installer through the
+  FileProvider, which asks the person. Without *Install unknown apps* the card opens that setting and
+  says so in one line. An install needs the same signing key as the installed app.
+- **No background notification**: the check only runs with the app in front, so nothing is posted;
+  a notification for a release found while closed would need a background worker — not added.
+- **Switchable per build for Google Play**: `-Pcorehub.selfUpdate=false` /
+  `COREHUB_ANDROID_SELF_UPDATE=false` sets `BuildConfig.SELF_UPDATE = false` (never asks, never
+  offers; This device says Play keeps it up to date) and removes `REQUEST_INSTALL_PACKAGES` from the
+  manifest. The GitHub APK keeps it on by default.
+
+Rejected: Play's in-app updates API (not for an APK outside Play); a silent install (Android always
+asks, and the owner has not decided silent updates); checking on every return (GitHub allows 60
+calls an hour per address without a token).

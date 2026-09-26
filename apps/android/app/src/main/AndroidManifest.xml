@@ -11,7 +11,9 @@
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
     <!-- Notices from the hub, shown while no screen of the app is open (Android 13+ asks). -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
-    <!-- Self-update: hand an APK the hub published (and whose SHA-256 matched) to the installer. -->
+    <!-- Self-update: hand the APK of a newer GitHub release (its size and SHA-256 checked) to the
+         installer (phone/SelfUpdate.kt). A build without self-update (Google Play) removes it
+         (src/noSelfUpdate/AndroidManifest.xml). -->
     <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
 
     <!-- Voice input uses the phone's own speech recognizer. -->
