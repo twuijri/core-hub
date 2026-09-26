@@ -316,12 +316,14 @@ describe('Link Telegram', () => {
     });
     fireEvent.click(screen.getByTestId('telegram-link-close'));
 
-    // The row names the bot; its card says how to start, with the bot one click away.
+    // The row names the bot; «كيف تبدأ» in its card says how to start, the bot one click away.
     await waitFor(() =>
       expect(screen.getByTestId('channel-account-telegram').textContent).toContain(
         '@office_helper_bot',
       ),
     );
+    expect(screen.queryByTestId('telegram-how-to-use')).toBeNull();
+    fireEvent.click(screen.getByTestId('channel-guide-telegram'));
     const open = screen.getByTestId('telegram-bot-link') as HTMLAnchorElement;
     expect(open.href).toBe('https://t.me/office_helper_bot');
     expect(screen.getByTestId('channel-list').contains(open)).toBe(true);
