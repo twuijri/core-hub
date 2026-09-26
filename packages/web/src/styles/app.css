@@ -1155,10 +1155,15 @@
   color: var(--ch-color-text-faint);
   background: var(--ch-color-bg-raised);
 }
-/* The header of the group being scrolled through, held above its rows. */
+/* The header of the group being scrolled through, laid over the top of the list once its own
+   row has scrolled away — never beside it, so a header is never read twice. */
+.ch-combo-body {
+  position: relative;
+}
 .ch-combo-sticky {
-  position: sticky;
+  position: absolute;
   inset-block-start: 0;
+  inset-inline: 0;
   z-index: 1;
   block-size: 26px;
   border-block-end: 1px solid var(--ch-color-border);

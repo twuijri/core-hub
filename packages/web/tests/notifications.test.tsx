@@ -2,7 +2,7 @@
 // record, so an empty one stays empty, and every switch writes a whole preferences
 // object rather than the one field that changed.
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { cleanup, render, screen, waitFor } from '@testing-library/react';
+import { cleanup, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router';
 import { afterEach, describe, expect, it } from 'vitest';
@@ -12,6 +12,7 @@ import { ThemeProvider } from '../src/design/theme.js';
 import { I18nProvider } from '../src/i18n/context.js';
 import { RealtimeProvider } from '../src/realtime/context.js';
 import { NotificationsTab } from '../src/notify/NotificationsTab.js';
+import { NOTICE_KINDS } from '../src/notify/queries.js';
 
 function memoryStorage(): Storage {
   const map = new Map<string, string>();
@@ -149,6 +150,39 @@ describe('the Notifications page', () => {
     expect(screen.getByTestId('notify-kind-run_completed').getAttribute('data-state')).toBe(
       'checked',
     );
+  });
+
+  it('is a table: one row per event, and the two switches under «في الهب» and «على الأجهزة»', async () => {
+    // Owner, 2026-09-26: two unlabelled-looking switches a row, and "Push to devices" said
+    // seven times, read as noise. The columns say it once.
+    const { fetchImpl } = hub([]);
+    mount(fetchImpl);
+    const table = await screen.findByTestId('notify-events');
+    const headers = within(table)
+      .getAllByRole('columnheader')
+      .map((th) => th.textContent);
+    expect(headers).toEqual([
+      expect.stringMatching(/Event|الحدث/),
+      expect.stringMatching(/In the hub|في الهب/),
+      expect.stringMatching(/On devices|على الأجهزة/),
+    ]);
+    const rows = within(table).getAllByRole('row').slice(1);
+    expect(rows).toHaveLength(NOTICE_KINDS.length);
+    // Each row: the event's name once, its two switches in its own cells, named for a reader.
+    const first = rows[0] as HTMLElement;
+    const cells = within(first).getAllByRole('cell');
+    expect(cells).toHaveLength(3);
+    expect(within(cells[1] as HTMLElement).getByRole('switch')).toHaveAccessibleName(
+      /(In the hub|في الهب)$/,
+    );
+    expect(within(cells[2] as HTMLElement).getByRole('switch')).toHaveAccessibleName(
+      /(On devices|على الأجهزة)$/,
+    );
+    // The words "push to devices" no longer repeat on every row.
+    expect(screen.queryAllByText(/Push to devices|إرسال إلى الأجهزة/)).toHaveLength(0);
+    // Quiet hours come after the table.
+    const quiet = screen.getByTestId('notify-quiet');
+    expect(table.compareDocumentPosition(quiet) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 
   it('turning a kind off sends the whole preferences object, quiet hours included', async () => {

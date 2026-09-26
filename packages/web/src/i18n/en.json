@@ -992,7 +992,8 @@
     "none": "No models in this list.",
     "no_match": "Nothing matches “{query}”.",
     "error": "The list could not be fetched.",
-    "count": "{count} models"
+    "count": "{count} models",
+    "all": "All"
   },
   "ui": {
     "close": "Close",
@@ -1580,7 +1581,6 @@
       "update_available": "An update is available",
       "system": "System messages"
     },
-    "push_switch": "Push to devices",
     "test": "Send a test notification",
     "test_sent": "Sent. Check this browser and your devices.",
     "browser": {
@@ -1592,7 +1592,10 @@
       "denied": "The browser blocks notifications for this site. Allow them in the browser's site settings, then try again.",
       "unsupported": "This browser cannot receive push notifications.",
       "no_key": "Web Push is switched off on this hub. An admin can switch it on."
-    }
+    },
+    "col_event": "Event",
+    "col_in_hub": "In the hub",
+    "col_on_devices": "On devices"
   },
   "webhooks": {
     "intro": "Addresses this hub calls on its own, signed so the receiver can check the sender. Webhooks belong to the profile you are in.",

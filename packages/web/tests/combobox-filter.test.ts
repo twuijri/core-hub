@@ -99,13 +99,62 @@ describe('the rows', () => {
     expect(rows('zzzz')).toEqual([]);
   });
 
-  it('puts the recently chosen at the top, under their own header, and keeps them below too', () => {
+  it('puts the recently chosen at the top, under their own header, and lists each row once', () => {
     const out = rows('', ['openai/gpt-5']);
     expect(out[0]).toMatchObject({ kind: 'group', label: 'Recent' });
     expect(out[1]).toMatchObject({ kind: 'option' });
     expect((out[1] as { option: ComboboxOption }).option.value).toBe('openai/gpt-5');
-    // Still listed under its provider, so the catalogue reads normally.
-    expect(out.filter((r) => r.kind === 'option')).toHaveLength(5);
+    // Not repeated under its provider (owner, 2026-09-26: the recent model showed twice).
+    const values = out.flatMap((r) => (r.kind === 'option' ? [r.option.value] : []));
+    expect(values).toHaveLength(4);
+    expect(new Set(values).size).toBe(4);
+    // openai has nothing left below, so it has no header either.
+    expect(
+      out.filter((r) => r.kind === 'group').map((r) => (r as { label: string }).label),
+    ).toEqual(['Recent', 'anthropic', 'google']);
+  });
+
+  it('gives the rest a header under Recent even with one provider, and "Recent" is said once', () => {
+    // The Images tab: one provider, a recent model and another.
+    const images = [
+      option('openai/gpt-image-2', 'gpt-image-2', 'openai'),
+      option('openai/gpt-image-1', 'gpt-image-1', 'openai'),
+    ];
+    const out = buildRows({
+      options: images,
+      query: '',
+      recent: ['openai/gpt-image-2'],
+      recentLabel: 'Recent',
+      restLabel: 'All',
+    });
+    expect(out.map((r) => (r.kind === 'group' ? `# ${r.label}` : r.option.value))).toEqual([
+      '# Recent',
+      'openai/gpt-image-2',
+      '# openai',
+      'openai/gpt-image-1',
+    ]);
+    // Options that name no provider get the caller's word for "the rest".
+    const plain = buildRows({
+      options: [option('a', 'A'), option('b', 'B')],
+      query: '',
+      recent: ['b'],
+      recentLabel: 'Recent',
+      restLabel: 'All',
+    });
+    expect(plain.map((r) => (r.kind === 'group' ? `# ${r.label}` : r.option.value))).toEqual([
+      '# Recent',
+      'b',
+      '# All',
+      'a',
+    ]);
+    // Only the recent one left: nothing below, so no second header.
+    const only = buildRows({
+      options: [images[0]!],
+      query: '',
+      recent: ['openai/gpt-image-2'],
+      recentLabel: 'Recent',
+    });
+    expect(only.map((r) => r.kind)).toEqual(['group', 'option']);
   });
 
   it('drops a recent entry that the query filtered out, and one that no longer exists', () => {
