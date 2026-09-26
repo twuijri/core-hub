@@ -25,7 +25,7 @@ final class KeyboardLanguage {
         let center = NotificationCenter.default
         for name in [UITextInputMode.currentInputModeDidChangeNotification, UIResponder.keyboardDidShowNotification] {
             observers.append(center.addObserver(forName: name, object: nil, queue: .main) { [weak self] _ in
-                MainActor.assumeIsolated { self?.refresh() }
+                MainActor.assumeIsolated { _ = self?.refresh() }
             })
         }
     }
