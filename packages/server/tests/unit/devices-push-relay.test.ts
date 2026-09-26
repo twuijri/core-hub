@@ -4,7 +4,7 @@
  * with signed calls, forgets what the relay calls gone, tells it what it let go of, keeps
  * private push private — and never touches it when local credentials exist or it is off.
  */
-import { generateKeyPairSync } from 'node:crypto';
+import { generateKeyPairSync, sign, type KeyObject } from 'node:crypto';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { eq } from 'drizzle-orm';
 import { requireSqlite } from '../../src/lib/db.js';
@@ -265,6 +265,96 @@ describe('push relay: zero setup', () => {
       error: 'relay: this phone is bound to another hub',
     });
     expect(relay.pushed).toHaveLength(0);
+  });
+});
+
+/** An install's proof key, the way the apps make it: P-256, the point raw, the signature r||s. */
+function installKey() {
+  const { privateKey, publicKey } = generateKeyPairSync('ec', { namedCurve: 'P-256' });
+  const jwk = publicKey.export({ format: 'jwk' }) as { x: string; y: string };
+  const raw = Buffer.concat([
+    Buffer.from([4]),
+    Buffer.from(jwk.x, 'base64url'),
+    Buffer.from(jwk.y, 'base64url'),
+  ]);
+  return { privateKey, key: raw.toString('base64url') };
+}
+
+function proofOf(
+  install: { privateKey: KeyObject; key: string },
+  platform: string,
+  token: string,
+  signedAt: number,
+) {
+  const message = ['corehub-push-bind-v1', platform, token, String(signedAt)].join('\n');
+  const signature = sign('sha256', Buffer.from(message), {
+    key: install.privateKey,
+    dsaEncoding: 'ieee-p1363',
+  });
+  return { key: install.key, signed_at: signedAt, signature: signature.toString('base64url') };
+}
+
+async function registerWithProof(
+  hub: Hub,
+  phone: { appToken: string; deviceId: string },
+  proof: unknown,
+) {
+  const response = await authed(hub, phone.appToken, {
+    method: 'PUT',
+    url: `/api/v1/devices/${phone.deviceId}/push`,
+    payload: { provider: 'apns', token: APNS, locale: 'en', relay_proof: proof },
+  });
+  expect(response.statusCode, response.body).toBe(200);
+}
+
+describe('push relay: the device proof', () => {
+  it('forwards the app’s proof to the relay unread, which records the device’s key', async () => {
+    const { hub, relay } = await relayHub();
+    const phone = await pairPhone(hub);
+    const install = installKey();
+    const proof = proofOf(install, 'apns', APNS, Math.floor(Date.now() / 1000));
+    await registerWithProof(hub, phone, proof);
+    expect(relay.proofs).toEqual([proof]);
+    expect(relay.deviceKeys.get(`apns:${APNS}`)).toMatchObject({ signedAt: proof.signed_at });
+  });
+
+  it('moves a phone to its new hub at once with a newer proof from the same key', async () => {
+    const { hub: first, relay } = await relayHub();
+    const second = await signedInHub({ COREHUB_PUSH_RELAY_URL: relay.url });
+    cleanups.push(() => second.close());
+    const install = installKey();
+    const at = Math.floor(Date.now() / 1000);
+
+    // The phone signed in to the first hub, then to the second without signing out.
+    await registerWithProof(first, await pairPhone(first), proofOf(install, 'apns', APNS, at - 60));
+    const firstId = relayRow(first)!.hubId!;
+    expect(relay.bindings.get(`apns:${APNS}`)).toBe(firstId);
+    const moved = await pairPhone(second);
+
+    // Without a proof (an older app) the first hub keeps it.
+    await registerApns(second, moved);
+    expect(relay.bindings.get(`apns:${APNS}`)).toBe(firstId);
+    // Another install's key moves nothing.
+    await registerWithProof(second, moved, proofOf(installKey(), 'apns', APNS, at));
+    expect(relay.bindings.get(`apns:${APNS}`)).toBe(firstId);
+
+    await registerWithProof(second, moved, proofOf(install, 'apns', APNS, at));
+    const secondId = relayRow(second)!.hubId!;
+    expect(relay.bindings.get(`apns:${APNS}`)).toBe(secondId);
+    await testNotice(second);
+    await vi.waitFor(() => expect(relay.pushed).toHaveLength(1));
+    expect(relay.pushed[0]).toMatchObject({ platform: 'apns', token: APNS });
+  });
+
+  it('keeps the registration when a proof does not verify, and binds at the first send', async () => {
+    const { hub, relay } = await relayHub();
+    const phone = await pairPhone(hub);
+    const proof = proofOf(installKey(), 'apns', 'b'.repeat(64), Math.floor(Date.now() / 1000));
+    await registerWithProof(hub, phone, proof);
+    expect(relay.bindings.size).toBe(0);
+    await testNotice(hub);
+    await vi.waitFor(() => expect(relay.pushed).toHaveLength(1));
+    expect(relay.bindings.has(`apns:${APNS}`)).toBe(true);
   });
 });
 

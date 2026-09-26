@@ -29,6 +29,7 @@ device, the device answers, the result stays in the request for the waiting run
 | push_provider | enum(none, fcm, apns, webpush) | |
 | push_token | text? | **ENCRYPTED** (sealed with the data key as `{v,c,n,k}` JSON). FCM token, APNs hex token, or a Web Push subscription as JSON; refreshed by the client; cleared on revoke and when the service says it is dead |
 | push_locale, push_registered_at | | the contract's `PushStatus` |
+| push_session_id | ulid? → auth.app_token | the sign-in (or pairing token) that registered the push token — a phone's and, since 2026-09-27, a browser's. When it ends, however it ends, the registration is forgotten and `device.updated` announces it (docs/changes/2026-09-27-twuijri-push-followups.md) |
 | capabilities | json<DeviceCapability[]> | `{ kind, enabled, consentAt }` per `CapabilityKind` (location, camera, microphone, notifications, clipboard, screen, files, apps, calendar, reminders, health) |
 | profiles | json<string[]>? | the profiles whose agents may ask it; null = every profile of its person (DECISIONS §89). Only the person changes it |
 | helper | json<DeviceHelper>? | what a computer's local helper offers agents, as the desktop app reported it: shared folders (the default `~/Core Hub` marked), opening allowed, programs switched on with their profiles and tools (ADR 0025). Only the device writes it; null while the helper is off |
@@ -113,7 +114,11 @@ FCM or APNs with no credentials on this hub (environment or Settings) is deliver
 relay, unless it is off; local credentials always win. A phone's token is bound to this hub at
 the relay when it registers; what the hub lets go of reaches the relay through the next sync
 (on an unregister or unlink at once, otherwise within a minute when the set of tokens changed,
-and once a day regardless).
+and once a day regardless). The apps send the relay's device proof with each registration
+(`PushRegistration.relay_proof`, ADR 0024 §6): a P-256 key made once per install, kept in the
+iOS Keychain or the Android Keystore, signs `corehub-push-bind-v1`, the platform, the token and
+the time. The hub forwards it unread to the relay's bind; a registration the relay could not
+bind at that moment is bound later without it (a proof is good for ten minutes only).
 
 ## Linked hubs (ADR 0026, DECISIONS §101; migration `0031`)
 

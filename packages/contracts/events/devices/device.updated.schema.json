@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://github.com/twuijri/core-hub/blob/main/packages/contracts/events/devices/device.updated.schema.json",
   "title": "/rt/devices · device.updated",
-  "description": "User-level. Emitted by: devices module (rename, capabilities, push registration, token renewal).",
+  "description": "User-level. Emitted by: devices module (rename, capabilities, push registration, token renewal, and a push registration the hub dropped on its own: the sign-in that made it ended, or the push service called the token dead).",
   "type": "object",
   "required": ["event", "namespace", "profile", "ts", "seq", "payload"],
   "properties": {

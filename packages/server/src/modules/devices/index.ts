@@ -148,6 +148,56 @@ const RELAY_SYNC_TICK_MS = 60_000;
 const services = new WeakMap<SocketServer, PushService>();
 /** Each hub's database, for the socket handlers (a socket has no request). */
 const databases = new WeakMap<SocketServer, ModuleDb>();
+/** The hubs running in this process, so a dropped registration is announced on the right one. */
+const liveHubs = new Set<SocketServer>();
+
+// ------------------------------------------------------------------ dropped registrations
+
+const droppedPush = new Set<string>();
+let dropFlush: ReturnType<typeof setImmediate> | null = null;
+
+/**
+ * The hub forgot a device's push registration on its own — a sign-in ended (auth), or the
+ * push service called the token dead — so the web's device list hears `device.updated`.
+ * Announced on the next turn, after the caller's transaction settled, and from the row as it
+ * then is: a transaction that rolled back announces the registration it kept, which is true.
+ * Device ids are unique to one hub's database, so each hub announces only its own rows.
+ */
+function pushDropped(deviceIds: readonly string[]): void {
+  if (deviceIds.length === 0) return;
+  for (const id of deviceIds) droppedPush.add(id);
+  dropFlush ??= setImmediate(flushDroppedPush);
+}
+
+function flushDroppedPush(): void {
+  dropFlush = null;
+  const ids = [...droppedPush];
+  droppedPush.clear();
+  if (!ports || ids.length === 0) return;
+  for (const io of liveHubs) {
+    const db = databases.get(io);
+    if (!db) continue;
+    let rows: DeviceRow[];
+    try {
+      rows = db.select().from(devices).where(inArray(devices.id, ids)).all();
+    } catch {
+      continue; // The hub is closing.
+    }
+    const online = onlineDevices(io);
+    for (const row of rows) {
+      // A revoked device was announced by whoever revoked it (`device.unlinked` or a logout).
+      if (row.status !== 'paired') continue;
+      ports.emitToUser(
+        io,
+        row.ownerId,
+        REALTIME_NAMESPACES.devices,
+        'device.updated',
+        { device: serializeDevice(row, { online: online.has(row.id), thisDevice: false }) },
+        now(),
+      );
+    }
+  }
+}
 
 /** The push service of one hub. `notify` reaches it through the composition root. */
 export function pushFor(app: FastifyInstance): PushService {
@@ -162,6 +212,7 @@ export function pushFor(app: FastifyInstance): PushService {
     env: (app.hub.config as { push?: PushEnvInput }).push,
     sealer: lent.sealer(app),
     sessionLive: (tokenId, at) => lent.sessionLive(requireSqlite(app.hub.database), tokenId, at),
+    onTokenForgotten: (deviceId) => pushDropped([deviceId]),
     checkEndpoint: async (endpoint) => {
       if (!allowPrivate && !endpoint.startsWith('https://')) return 'the endpoint is not https';
       const verdict = await lent.checkAddress(endpoint, allowPrivate);
@@ -274,13 +325,14 @@ const REVOKED_PUSH = {
 
 /**
  * A sign-in ended (sign-out, a revoked token, a password change, a re-pair): the push
- * registrations it made are forgotten, so nothing reaches a phone that is no longer signed
- * in. A row registered before `push_session_id` existed answers to its pairing token.
- * Returns the devices that lost their registration.
+ * registrations it made are forgotten, so nothing reaches a phone or a browser that is no
+ * longer signed in. A row registered before `push_session_id` existed answers to its pairing
+ * token. Returns the devices that lost their registration; each is announced
+ * (`device.updated`).
  */
 export function endPushForSessions(db: ModuleDb, tokenIds: readonly string[]): DeviceRow[] {
   if (tokenIds.length === 0) return [];
-  return db
+  const rows = db
     .update(devices)
     .set(REVOKED_PUSH)
     .where(
@@ -294,6 +346,8 @@ export function endPushForSessions(db: ModuleDb, tokenIds: readonly string[]): D
     )
     .returning()
     .all();
+  pushDropped(rows.map((row) => row.id));
+  return rows;
 }
 
 /**
@@ -302,12 +356,14 @@ export function endPushForSessions(db: ModuleDb, tokenIds: readonly string[]): D
  */
 export function endPushForOwners(db: ModuleDb, userIds: readonly string[]): DeviceRow[] {
   if (userIds.length === 0) return [];
-  return db
+  const rows = db
     .update(devices)
     .set(REVOKED_PUSH)
     .where(and(ne(devices.pushProvider, 'none'), inArray(devices.ownerId, [...userIds])))
     .returning()
     .all();
+  pushDropped(rows.map((row) => row.id));
+  return rows;
 }
 
 /** Marks the device revoked when its pairing token is revoked; null when no device holds it. */
@@ -490,6 +546,7 @@ export function createDevicesModule(lent: DevicesPorts): HubModule {
       if (!document) throw new Error('packages/contracts/openapi.yaml is required (ADR 0003)');
       const deps = { contract: createContractIndex(document), guards: lent.guards };
       databases.set(app.hub.io, requireSqlite(app.hub.database));
+      liveHubs.add(app.hub.io);
       // Clean-ups that end a sign-in (auth) do not call the relay; a quiet re-statement of the
       // hub's tokens every few minutes lets go of theirs there (ADR 0024 §6).
       const relaySync = setInterval(() => {
@@ -501,6 +558,7 @@ export function createDevicesModule(lent: DevicesPorts): HubModule {
       }, RELAY_SYNC_TICK_MS);
       relaySync.unref();
       app.addHook('onClose', async () => {
+        liveHubs.delete(app.hub.io);
         clearInterval(relaySync);
         services.get(app.hub.io)?.close();
         closeRequests(app);
@@ -812,9 +870,9 @@ export function createDevicesModule(lent: DevicesPorts): HubModule {
             .set({
               pushProvider: input.provider,
               pushToken: push.sealToken(token),
-              // A phone's token lives as long as the sign-in that registered it. A browser's
-              // subscription is the browser's own: it stays until turned off or unlinked.
-              pushSessionId: input.provider === 'webpush' ? null : principal.tokenId,
+              // A token lives as long as the sign-in that registered it: a phone's, and a
+              // browser's too — the web registers its subscription again after each sign-in.
+              pushSessionId: principal.tokenId,
               pushLocale: input.locale ?? principal.user.locale ?? 'ar',
               pushRegisteredAt: new Date(at),
               lastSeenAt: new Date(at),
