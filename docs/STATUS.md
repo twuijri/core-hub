@@ -517,6 +517,15 @@ its approval.
   location** for an agent that asks (§105: a run may ask, the hub's `devices.locate` tool, a
   one-time consent on the phone). Unit and view-model tests on both; **not yet tried on the owner's
   phones**; the Android drag is hand-made in Compose.
+- **A turn's tool activity, all three clients** (since 2026-09-26, DECISIONS §111, proposed — owner
+  to confirm; `docs/changes/2026-09-26-twuijri-tool-activity-collapse.md`): while the agent works,
+  only the latest steps are in view — four on the web, two on the phones — plus any step still
+  running or that failed, with the rest behind one "+k earlier steps" line; a new step slides in
+  (nothing moves under reduced motion). When the turn ends every step folds into one row — how
+  many, how long, how many failed in red, the latest tools' names — that opens to the full list.
+  Web: unit tests and a browser journey; Android: JVM tests and Robolectric pictures of the live
+  window and the folded row; iOS: unit tests in CI (not built locally). **Not yet tried on the
+  owner's phones.**
 - **App Store listing for the iPhone and iPad app** (since 2026-09-26, owner's decision of
   2026-09-25; `docs/store/apple/README.md`): the listing in English and Arabic
   (`apps/ios/fastlane/metadata`, name «كور هب» in Arabic), held to App Store Connect's limits by

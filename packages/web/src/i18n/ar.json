@@ -473,6 +473,35 @@
     "no_agent": "لا وكيل مثبّت في هذا البروفايل بعد، فلا أحد تحادثه."
   },
   "tool": {
+    "activity": {
+      "steps": {
+        "zero": "لا خطوات",
+        "one": "خطوة واحدة",
+        "two": "خطوتان",
+        "few": "{count} خطوات",
+        "many": "{count} خطوة",
+        "other": "{count} خطوة"
+      },
+      "failed": {
+        "zero": "لم تفشل أي خطوة",
+        "one": "فشلت خطوة",
+        "two": "فشلت خطوتان",
+        "few": "فشلت {count} خطوات",
+        "many": "فشلت {count} خطوة",
+        "other": "فشلت {count} خطوة"
+      },
+      "earlier": {
+        "zero": "لا خطوات سابقة",
+        "one": "+ خطوة سابقة",
+        "two": "+ خطوتان سابقتان",
+        "few": "+ {count} خطوات سابقة",
+        "many": "+ {count} خطوة سابقة",
+        "other": "+ {count} خطوة سابقة"
+      },
+      "hide_earlier": "إخفاء الخطوات السابقة",
+      "seconds": "{seconds} ث",
+      "minutes": "{minutes} د {seconds} ث"
+    },
     "status": {
       "running": "يعمل",
       "succeeded": "تم",
@@ -481,13 +510,8 @@
       "awaiting_approval": "بانتظار الموافقة"
     },
     "truncated": "المخرجات مقتطعة",
-    "count": "الأدوات: {count}",
-    "failed_count": "فشل {count}",
-    "earlier": "{count} قبلها",
-    "hide_earlier": "إخفاء {count} السابقة",
     "arguments": "المدخلات",
-    "result": "الناتج",
-    "count_one": "أداة واحدة"
+    "result": "الناتج"
   },
   "agents": {
     "empty": "السجلّ فارغ.",

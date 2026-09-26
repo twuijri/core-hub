@@ -473,6 +473,35 @@
     "no_agent": "No agent is installed in this profile yet, so there is no one to talk to."
   },
   "tool": {
+    "activity": {
+      "steps": {
+        "zero": "No steps",
+        "one": "1 step",
+        "two": "2 steps",
+        "few": "{count} steps",
+        "many": "{count} steps",
+        "other": "{count} steps"
+      },
+      "failed": {
+        "zero": "none failed",
+        "one": "1 failed",
+        "two": "2 failed",
+        "few": "{count} failed",
+        "many": "{count} failed",
+        "other": "{count} failed"
+      },
+      "earlier": {
+        "zero": "No earlier steps",
+        "one": "+1 earlier step",
+        "two": "+2 earlier steps",
+        "few": "+{count} earlier steps",
+        "many": "+{count} earlier steps",
+        "other": "+{count} earlier steps"
+      },
+      "hide_earlier": "Hide the earlier steps",
+      "seconds": "{seconds}s",
+      "minutes": "{minutes}m {seconds}s"
+    },
     "status": {
       "running": "running",
       "succeeded": "done",
@@ -481,13 +510,8 @@
       "awaiting_approval": "awaiting approval"
     },
     "truncated": "output truncated",
-    "count": "{count} tools",
-    "failed_count": "{count} failed",
-    "earlier": "{count} earlier",
-    "hide_earlier": "Hide {count} earlier",
     "arguments": "Arguments",
-    "result": "Result",
-    "count_one": "1 tool"
+    "result": "Result"
   },
   "agents": {
     "empty": "The registry is empty.",
