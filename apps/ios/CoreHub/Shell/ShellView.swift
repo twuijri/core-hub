@@ -74,6 +74,18 @@ struct ShellView: View {
                 openGlobalAgent: { navigate(.destination(.globalAgent)) }
             )
         }
+        // An agent asked where this phone is: the person answers here, once or for good (§103).
+        .sheet(isPresented: Binding(
+            get: { !LocationRequests.shared.waiting.isEmpty },
+            set: { shown in
+                // Swiped away: no, this time only.
+                if !shown, let first = LocationRequests.shared.waiting.first {
+                    Task { await LocationRequests.shared.decide(first, allow: false, remember: false) }
+                }
+            }
+        )) {
+            if let request = LocationRequests.shared.waiting.first { LocationConsentSheet(request: request) }
+        }
         .sheet(isPresented: $showingPending) {
             if let pending {
                 NavigationStack { PendingSheet(model: pending, go: navigate) }

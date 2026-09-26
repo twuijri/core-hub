@@ -76,6 +76,8 @@ targets:
         UIBackgroundModes: [fetch]
         BGTaskSchedulerPermittedIdentifiers: [com.twuijri.corehub.notices]
         NSMicrophoneUsageDescription: Core Hub listens while you dictate a message.
+        # An agent may ask where the phone is; Core Hub asks the person first (contract decision §103).
+        NSLocationWhenInUseUsageDescription: Core Hub tells an agent where this phone is when the agent asks and you allow it.
         NSSpeechRecognitionUsageDescription: Core Hub turns what you dictate into text.
         # A self-hosted hub is often reached over plain http on a LAN or a VPN address
         # (proposed — owner to confirm; README.md).

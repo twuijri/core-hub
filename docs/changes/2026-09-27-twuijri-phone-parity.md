@@ -65,12 +65,25 @@
   ثم حسب النموذج والوكيل). السجلات كانت أصلية في الجهازين.
 - الطرفية تبقى على الويب وحده (`surfaces: [web]`)، ولا يعرضها الجوال.
 
+**٦. الوكيل يسأل الجوال عن موقعه (B8، DECISIONS §103 — مقترح، للمالك أن يؤكد)** — العقد أولًا:
+- رمز تشغيل الوكيل صار يستطيع إنشاء طلب `location` لجهاز شخصه (كان `files` و`apps` فقط، §89)؛ غير ذلك يبقى بصلاحية
+  `device`. الانتظار الافتراضي لطلب الموقع 90 ث (ليقرأ الشخص ويجيب).
+- أداة جديدة في مجموعة `devices` من أدوات المركز: `devices.locate` (قراءة): الجوال المسمّى، أو الذي يعلن `location`
+  مفعّلًا ويُسأل في هذا البروفايل، المتصل أولًا ثم الأحدث ظهورًا؛ الجواب `{device, latitude, longitude, accuracy_m,
+  captured_at}`، و`why` يصير `purpose` الذي يقرؤه الشخص؛ الرفض أو عدم الجواب أو عدم وجود جوال رفضٌ يقرؤه الوكيل.
+- الجوالان يعلنان `location` في التسجيل والتقرير عند كل تشغيل (مفعّلًا ما لم يقل الشخص «أبدًا»)، ويسمعان
+  `request.created` على `/rt/devices` ويلحقان بالمعلّق (`listRequests?status=pending`) عند العودة؛ أول مرة نافذة موافقة:
+  «اسمح في كل مرة» أو «هذه المرة فقط» أو «لا تسمح»، ثم إذن النظام للموقع؛ و«هذا الجهاز» فيه «الموقع للوكلاء»: اسأل /
+  دائمًا / أبدًا. أندرويد يقرأ الموقع من خدمة النظام نفسها (بلا خدمات Play)، والآيفون من CoreLocation مع نص
+  `NSLocationWhenInUseUsageDescription` بالعربية والإنجليزية (مولَّد من `i18n`).
+
 **أنماط مقترحة — للمالك أن يؤكد:** حالة سير العمل والتشغيل والمزوّد والجهاز نقطة لا كلمة؛ إجراءات البطاقة الثانوية في «⋯»؛
 «شغّل» و«أضف» إجراء أساسي واحد في كل لوح.
 
 ## العقد (ما تغيّر في packages/contracts، أو «لا شيء»)
-لا شيء حتى الآن (المجموعات ١–٥). `docs/clients/navigation.json`: `agent_config_files` على الأسطح الأربعة ومساراتها في
-`surfaceRoutes.ios` و`android`.
+- `devices.createRequest`: رمز تشغيل الوكيل يُنشئ `location` أيضًا (وصف العملية)، وDECISIONS §103. لا عملية ولا حدث جديد؛
+  الأداة `devices.locate` في كتالوج أدوات المركز (الخادم).
+- `docs/clients/navigation.json`: `agent_config_files` على الأسطح الأربعة ومساراتها في `surfaceRoutes.ios` و`android`.
 
 ## الملفات والتأثير
 - أندرويد (`apps/android/app/src/main/java/hub/core/android/ui/screens/`): `WorkflowsScreen.kt`، `TasksBoard.kt`،
@@ -87,9 +100,16 @@
 - أيقونات Lucide مشتركة جديدة (`scripts/icons/lucide-mobile.json`): workflow، map-pin، file-cog، grip-vertical، volume-2،
   mail، وصار key-round وuser-plus وtrash وclock وpause وexternal-link وlist-filter وrefresh-cw وlink وpencil وarrow-left
   مشتركة.
+- الخادم: `modules/devices/requests.ts` (`AGENT_CAPABILITIES` و مهلة الموقع)، `modules/devices/index.ts` (تعليق)،
+  `modules/agents/hub-tools/catalog.ts` (`devices.locate`، `phoneToLocate`)؛ الاختبارات `tests/unit/device-helper.test.ts`
+  و`hub-tools.test.ts`.
+- الموقع: أندرويد `phone/Locate.kt` (جديد)، `phone/ThisDevice.kt`، `phone/PushService.kt`، `AppGraph.kt`،
+  `MainActivity.kt`، `AndroidManifest.xml` (إذنا الموقع)؛ الآيفون `Phone/Locate.swift` (جديد)، `App/AppModel.swift`،
+  `Shell/ShellView.swift`، `Settings/SettingsPages.swift`، `scripts/generate-swift.mjs` و`InfoPlist.strings`.
+- `docs/STATUS.md`: سطر «أقسام الجوال الناقصة»، وسطرا `devices` و`agents` عن `location` و`devices.locate`.
 - الاختبارات: أندرويد `src/test/.../parity/` (`WorkflowsTest`، `BoardTest`، `AgentPagesTest`، `ShareFilesTest`،
-  `ModelsAdminTest` — بعضها أمام مركز مُبرمج `MockWebServer`)، و`PhoneTest` (تعليق الصورة)؛ الآيفون `WorkflowsTests`،
-  `BoardTests`، `AgentPagesTests`، `ShareFilesTests`، `ModelsAdminTests`، و`FamilyTests` (أيقونة ملفات الإعداد).
+  `ModelsAdminTest`، `LocateTest` — بعضها أمام مركز مُبرمج `MockWebServer`)، و`PhoneTest` (تعليق الصورة)؛ الآيفون `WorkflowsTests`،
+  `BoardTests`، `AgentPagesTests`، `ShareFilesTests`، `ModelsAdminTests`، `LocateTests`، و`FamilyTests` (أيقونة ملفات الإعداد).
 
 ## الفحوص (الأوامر ونواتجها الفعلية)
 ```
@@ -131,4 +151,4 @@ iOS      36219113898  success   (المجموعات ١–٤)
 - الرجوع: استرجاع دمج هذا الفرع من الفرع الليلي.
 
 ## التسليم والخطوة التالية
-المجموعات ١–٥ مبنية في الجهازين؛ الباقي: ٦ (موقع الجوال للوكيل، العقد أولًا)، ثم الدمج في `night/2026-09-27` وCI على #165.
+المجموعات الست مبنية في الجهازين؛ الدمج في `night/2026-09-27` وCI على #165.

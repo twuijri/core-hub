@@ -178,7 +178,8 @@
     "local_network": "Core Hub connects to your hub on your local network.",
     "microphone": "Core Hub listens while you dictate a message.",
     "speech": "Core Hub turns what you dictate into text.",
-    "photos": "Core Hub attaches the photos you choose to your messages."
+    "photos": "Core Hub attaches the photos you choose to your messages.",
+    "location": "Core Hub tells an agent where this phone is when the agent asks and you allow it."
   },
   "about": {
     "app_version": "App version",
@@ -767,5 +768,18 @@
     "by_model": "By model",
     "by_agent": "By agent",
     "none": "Nothing used in this time."
+  },
+  "locate": {
+    "title": "An agent asks where this phone is",
+    "body": "Your answer goes to the agent that asked, once. It is not kept by the hub.",
+    "why": "Why: {why}",
+    "always": "Allow every time",
+    "once": "Only this time",
+    "never": "Don't allow",
+    "heading": "Location for agents",
+    "ask": "Ask",
+    "choice_always": "Always",
+    "choice_never": "Never",
+    "hint": "When an agent needs to know where you are, this phone asks you first, answers every time, or never does."
   }
 }

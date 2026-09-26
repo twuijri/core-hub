@@ -208,7 +208,7 @@ final class AppModel {
             appVersion: described.appVersion,
             osVersion: described.osVersion,
             pushBlocker: pushBlocker,
-            capabilities: [.camera, .microphone, .notifications, .clipboard]
+            capabilities: [.camera, .microphone, .notifications, .clipboard, .location]
         )
     }
 
@@ -217,7 +217,8 @@ final class AppModel {
     func thisDeviceReport(pushBlocker: PushBlocker?) -> DevicePatch {
         let described = DeviceInfo.current(appVersion: appVersion)
         return DevicePatch(brand: "Apple", model: described.model, osVersion: described.osVersion,
-                           appVersion: described.appVersion, pushBlocker: pushBlocker)
+                           appVersion: described.appVersion, pushBlocker: pushBlocker,
+                           capabilities: [Locating.capability(Locating.storedChoice())])
     }
 
     /// Claims a pairing the web made (Settings → Device connections → App).
@@ -273,6 +274,8 @@ final class AppModel {
             await self?.handshake(all: true) ?? [:]
         }
         LocalNotices.shared.start(app: self)
+        // An agent may ask where this phone is (§103): requests reach `/rt/devices`.
+        LocationRequests.shared.start(app: self)
         takeShared()
     }
 
@@ -447,6 +450,7 @@ final class AppModel {
         #endif
         realtime.resume()
         takeShared()
+        Task { await LocationRequests.shared.catchUp() }
         Task {
             if let stored = await keeper.credentials, stored.needsRenewal() { _ = await keeper.refresh() }
             // Not asked yet, turned on in Settings, or the hub has a sender now: try again.

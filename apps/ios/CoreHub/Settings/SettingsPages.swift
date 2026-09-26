@@ -310,6 +310,8 @@ struct ThisDevicePage: View {
                 .font(.system(size: FontSize.sizeSm))
             }
             ThisDeviceExtras()
+            // Whether an agent may ask where this phone is (§103).
+            LocationChoiceSection()
             Section {
                 Button(l10n("nav.sign_out"), role: .destructive) { Task { await app.signOut() } }
             }
