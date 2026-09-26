@@ -1,5 +1,34 @@
 package hub.core.android.ui.screens
 
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.getValue
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextDirection
+import androidx.compose.ui.unit.sp
+import hub.core.android.generated.FontTokens
+import hub.core.android.ui.components.AgentAvatar
+import hub.core.android.ui.components.AgentIdentity
+import hub.core.android.ui.kit.Badge
+import hub.core.android.ui.kit.BadgeTone
+import hub.core.android.ui.kit.ButtonKind
+import hub.core.android.ui.kit.Chip
+import hub.core.android.ui.kit.ControlSize
+import hub.core.android.ui.kit.HubButton
+import hub.core.android.ui.kit.HubCard
+import hub.core.android.ui.kit.HubDialog
+import hub.core.android.ui.kit.HubTextField
+import hub.core.android.ui.kit.ItemShape
+import hub.core.android.ui.kit.Lucide
+import hub.core.android.ui.kit.LucideIcon
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -11,20 +40,12 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.FilterChip
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
-import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
@@ -146,7 +167,7 @@ class RoomsViewModel(private val graph: AppGraph) : ViewModel() {
 }
 
 @Composable
-fun RoomsPanel(nav: Navigator, onOpen: () -> Unit) {
+fun RoomsPanel(nav: Navigator, header: @Composable () -> Unit = {}, onOpen: () -> Unit) {
     val context = LocalContext.current
     val vm: RoomsViewModel = viewModel { RoomsViewModel(context.graph) }
     val ui by vm.ui.collectAsState()
@@ -156,32 +177,49 @@ fun RoomsPanel(nav: Navigator, onOpen: () -> Unit) {
     var joining by remember { mutableStateOf(false) }
     LaunchedEffect(session?.profile) { vm.load() }
     val open: (Room) -> Unit = { room -> nav.go(Route.Room(room.id, room.profile)); onOpen() }
-    Column(Modifier.fillMaxSize()) {
-        Row(Modifier.padding(horizontal = 8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            TextButton(onClick = { vm.resetDialog(); making = true }, modifier = Modifier.testTag("rooms.new")) { Text(term("new_room")) }
-            TextButton(onClick = { vm.resetDialog(); joining = true }, modifier = Modifier.testTag("rooms.join")) { Text(term("join_by_code")) }
+    LazyColumn(Modifier.fillMaxSize().testTag("rooms.list"), contentPadding = PaddingValues(bottom = 8.dp)) {
+        item(key = "header") { header() }
+        item(key = "actions") {
+            // The two actions of the Rooms segment (navigation.json `rooms.actions`): the first is
+            // the one to take, the second sits beside it quieter.
+            Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                HubButton(
+                    term("new_room"), { vm.resetDialog(); making = true }, kind = ButtonKind.Subtle, size = ControlSize.Md,
+                    icon = Lucide.Plus, fill = true, modifier = Modifier.weight(1f).testTag("rooms.new"),
+                )
+                HubButton(
+                    term("join_by_code"), { vm.resetDialog(); joining = true }, kind = ButtonKind.Secondary, size = ControlSize.Md,
+                    icon = Lucide.Hash, fill = true, modifier = Modifier.weight(1f).testTag("rooms.join"),
+                )
+            }
         }
-        ErrorNotice(ui.error, Modifier.padding(horizontal = 16.dp))
-        LazyColumn(Modifier.fillMaxSize()) {
-            items(ui.rooms.orEmpty(), key = { it.id }) { room ->
-                val selected = (nav.current as? Route.Room)?.roomId == room.id
-                Row(
-                    Modifier.fillMaxWidth().padding(horizontal = 8.dp)
-                        .clickable { open(room) }
-                        .padding(horizontal = 8.dp, vertical = 10.dp)
-                        .testTag("room.row.${room.id}"),
-                ) {
-                    Column(Modifier.weight(1f)) {
-                        Text(room.name, style = MaterialTheme.typography.bodyMedium, maxLines = 1, overflow = TextOverflow.Ellipsis, color = if (selected) t.accent else t.text)
-                        Text(
-                            stringResource(R.string.rooms_counts, room.seats.size, room.memberCount),
-                            style = MaterialTheme.typography.bodySmall, color = t.textMuted,
-                        )
-                    }
+        ui.error?.let { error -> item(key = "error") { ErrorNotice(error, Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) } }
+        items(ui.rooms.orEmpty(), key = { it.id }) { room ->
+            val selected = (nav.current as? Route.Room)?.roomId == room.id
+            Row(
+                Modifier.fillMaxWidth().padding(horizontal = 8.dp).clip(ItemShape)
+                    .background(if (selected) t.surface2 else Color.Transparent, ItemShape)
+                    .clickable { open(room) }
+                    .padding(horizontal = 8.dp, vertical = 7.dp)
+                    .testTag("room.row.${room.id}"),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
+            ) {
+                Box(Modifier.size(24.dp).background(t.accentSoft, CircleShape), contentAlignment = Alignment.Center) {
+                    LucideIcon(Lucide.Users, null, size = 14.dp, tint = t.accentSoftText)
+                }
+                Column(Modifier.weight(1f)) {
+                    Text(
+                        room.name, fontSize = FontTokens.sizeSm.sp, fontWeight = FontWeight.Medium, maxLines = 1, overflow = TextOverflow.Ellipsis,
+                        style = TextStyle(textDirection = TextDirection.Content),
+                    )
+                    Text(stringResource(R.string.rooms_counts, room.seats.size, room.memberCount), fontSize = FontTokens.sizeXs.sp, color = t.textMuted)
                 }
             }
-            if (ui.rooms?.isEmpty() == true) {
-                item { Text(stringResource(R.string.rooms_empty), color = t.textMuted, modifier = Modifier.padding(16.dp)) }
+        }
+        if (ui.rooms?.isEmpty() == true) {
+            item(key = "empty") {
+                Text(stringResource(R.string.rooms_empty), fontSize = FontTokens.sizeSm.sp, color = t.textMuted, modifier = Modifier.padding(horizontal = 20.dp, vertical = 16.dp))
             }
         }
     }
@@ -192,80 +230,68 @@ fun RoomsPanel(nav: Navigator, onOpen: () -> Unit) {
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun NewRoomDialog(ui: RoomsUi, onCancel: () -> Unit, onMake: (String, List<Agent>) -> Unit) {
+    val t = LocalTokens.current
     var name by remember { mutableStateOf("") }
     var chosen by remember { mutableStateOf(listOf<String>()) }
-    AlertDialog(
-        onDismissRequest = onCancel,
-        title = { Text(term("new_room")) },
-        text = {
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                OutlinedTextField(
-                    value = name, onValueChange = { name = it.take(120) }, singleLine = true,
-                    label = { Text(stringResource(R.string.room_name)) },
-                    modifier = Modifier.fillMaxWidth().testTag("rooms.new.name"),
+    HubDialog(onCancel, term("new_room")) {
+        HubTextField(
+            name, { name = it.take(120) }, label = stringResource(R.string.room_name),
+            modifier = Modifier.fillMaxWidth().testTag("rooms.new.name"),
+        )
+        Text(stringResource(R.string.room_pick_agents), fontSize = FontTokens.sizeSm.sp, color = t.textMuted)
+        if (ui.agents.isEmpty()) Text(stringResource(R.string.chat_no_agents_body), fontSize = FontTokens.sizeSm.sp, color = t.textMuted)
+        FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            ui.agents.forEach { agent ->
+                Chip(
+                    agent.name, selected = agent.id in chosen,
+                    onClick = { chosen = if (agent.id in chosen) chosen - agent.id else chosen + agent.id },
+                    leading = { AgentAvatar(AgentIdentity.of(agent), agent.profile, 20.dp) },
                 )
-                Text(stringResource(R.string.room_pick_agents), style = MaterialTheme.typography.labelMedium)
-                if (ui.agents.isEmpty()) Text(stringResource(R.string.chat_no_agents_body), style = MaterialTheme.typography.bodySmall)
-                FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    ui.agents.forEach { agent ->
-                        FilterChip(
-                            selected = agent.id in chosen,
-                            onClick = { chosen = if (agent.id in chosen) chosen - agent.id else chosen + agent.id },
-                            label = { Text(agent.name) },
-                            leadingIcon = { hub.core.android.ui.components.AgentAvatar(hub.core.android.ui.components.AgentIdentity.of(agent), agent.profile, 20.dp) },
-                        )
-                    }
-                }
-                Text(stringResource(R.string.room_lead_hint), style = MaterialTheme.typography.bodySmall, color = LocalTokens.current.textMuted)
-                ErrorNotice(ui.dialogError)
             }
-        },
-        confirmButton = {
-            TextButton(
-                onClick = { onMake(name, chosen.mapNotNull { id -> ui.agents.firstOrNull { it.id == id } }) },
-                enabled = name.isNotBlank() && !ui.busy,
-                modifier = Modifier.testTag("rooms.new.make"),
-            ) { Text(stringResource(R.string.room_make)) }
-        },
-        dismissButton = { TextButton(onClick = onCancel) { Text(stringResource(R.string.cancel)) } },
-        shape = RoundedCornerShape(20.dp),
-    )
+        }
+        Text(stringResource(R.string.room_lead_hint), fontSize = FontTokens.sizeXs.sp, color = t.textMuted)
+        ErrorNotice(ui.dialogError)
+        Row(Modifier.fillMaxWidth().padding(top = 4.dp), horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.End)) {
+            HubButton(stringResource(R.string.cancel), onCancel, kind = ButtonKind.Secondary, size = ControlSize.Md)
+            HubButton(
+                stringResource(R.string.room_make), { onMake(name, chosen.mapNotNull { id -> ui.agents.firstOrNull { it.id == id } }) },
+                size = ControlSize.Md, enabled = name.isNotBlank() && !ui.busy, loading = ui.busy, modifier = Modifier.testTag("rooms.new.make"),
+            )
+        }
+    }
 }
 
 @Composable
 private fun JoinRoomDialog(ui: RoomsUi, onPreview: (String) -> Unit, onCancel: () -> Unit, onJoin: (String) -> Unit) {
+    val t = LocalTokens.current
     var input by remember { mutableStateOf("") }
     val code = RoomLinks.codeOf(input)
-    AlertDialog(
-        onDismissRequest = onCancel,
-        title = { Text(term("join_by_code")) },
-        text = {
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                OutlinedTextField(
-                    value = input, onValueChange = { input = it }, singleLine = true,
-                    label = { Text(stringResource(R.string.room_code)) },
-                    placeholder = { Text(stringResource(R.string.room_code_hint)) },
-                    modifier = Modifier.fillMaxWidth().testTag("rooms.join.code"),
-                )
-                ui.preview?.let { p ->
-                    Text(p.name, style = MaterialTheme.typography.titleSmall)
-                    Text(stringResource(R.string.rooms_counts, p.seatCount, p.memberCount), style = MaterialTheme.typography.bodySmall)
-                    if (p.alreadyMember) Text(stringResource(R.string.room_already_member), style = MaterialTheme.typography.bodySmall)
-                }
-                ErrorNotice(ui.dialogError)
+    HubDialog(onCancel, term("join_by_code")) {
+        HubTextField(
+            input, { input = it }, label = stringResource(R.string.room_code), placeholder = stringResource(R.string.room_code_hint),
+            mono = true, modifier = Modifier.fillMaxWidth().testTag("rooms.join.code"),
+        )
+        ui.preview?.let { p ->
+            HubCard(padding = 12.dp) {
+                Text(p.name, fontSize = FontTokens.sizeMd.sp, fontWeight = FontWeight.SemiBold)
+                Text(stringResource(R.string.rooms_counts, p.seatCount, p.memberCount), fontSize = FontTokens.sizeSm.sp, color = t.textMuted)
+                if (p.alreadyMember) Badge(stringResource(R.string.room_already_member), tone = BadgeTone.Info)
             }
-        },
-        confirmButton = {
+        }
+        ErrorNotice(ui.dialogError)
+        Row(Modifier.fillMaxWidth().padding(top = 4.dp), horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.End)) {
+            HubButton(stringResource(R.string.cancel), onCancel, kind = ButtonKind.Secondary, size = ControlSize.Md)
             if (ui.preview == null) {
-                TextButton(onClick = { code?.let(onPreview) }, enabled = code != null && !ui.busy, modifier = Modifier.testTag("rooms.join.preview")) {
-                    Text(stringResource(R.string.room_find))
-                }
+                HubButton(
+                    stringResource(R.string.room_find), { code?.let(onPreview) }, size = ControlSize.Md,
+                    enabled = code != null && !ui.busy, loading = ui.busy, modifier = Modifier.testTag("rooms.join.preview"),
+                )
             } else {
-                TextButton(onClick = { code?.let(onJoin) }, enabled = code != null && !ui.busy, modifier = Modifier.testTag("rooms.join.go")) {
-                    Text(stringResource(if (ui.preview.alreadyMember) R.string.room_open else R.string.room_join))
-                }
+                HubButton(
+                    stringResource(if (ui.preview.alreadyMember) R.string.room_open else R.string.room_join), { code?.let(onJoin) }, size = ControlSize.Md,
+                    enabled = code != null && !ui.busy, loading = ui.busy, modifier = Modifier.testTag("rooms.join.go"),
+                )
             }
-        },
-        dismissButton = { TextButton(onClick = onCancel) { Text(stringResource(R.string.cancel)) } },
-    )
+        }
+    }
 }

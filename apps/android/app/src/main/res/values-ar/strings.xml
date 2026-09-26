@@ -343,4 +343,13 @@
     <string name="chat_export">تصدير</string>
     <string name="chat_export_failed">تعذّر تصدير المحادثة. حاول مرة أخرى.</string>
     <string name="agent_fallback">الوكيل</string>
+    <!-- The redesign (docs/changes/2026-09-27-twuijri-android-redesign.md). -->
+    <string name="chats_filter">تصفية المحادثات</string>
+    <string name="chats_filter_show">عرض</string>
+    <string name="shell_connected">متصل بالمركز</string>
+    <string name="shell_offline">غير متصل بالمركز</string>
+    <string name="shell_language">اللغة</string>
+    <string name="pending_count">%1$d بانتظارك</string>
+    <string name="chat_new_in_profile">محادثة جديدة في %1$s</string>
+    <string name="chat_start_hint">اسأل ما شئت. تبدأ المحادثة مع أول رسالة.</string>
 </resources>

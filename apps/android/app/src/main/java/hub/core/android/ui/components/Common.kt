@@ -1,18 +1,18 @@
 package hub.core.android.ui.components
 
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.sp
+import hub.core.android.generated.FontTokens
+import hub.core.android.ui.kit.Badge
+import hub.core.android.ui.kit.BadgeTone
+import hub.core.android.ui.kit.NoticeBox
+import hub.core.android.ui.kit.Spinner
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -20,7 +20,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import hub.core.android.R
 import hub.core.android.data.HubError
@@ -41,16 +40,16 @@ enum class Tone { DANGER, WARNING, INFO, SUCCESS }
 
 @Composable
 fun Notice(text: String, tone: Tone = Tone.DANGER, modifier: Modifier = Modifier) {
-    val t = LocalTokens.current
-    val (bg, fg) = when (tone) {
-        Tone.DANGER -> t.dangerSoft to t.dangerSoftText
-        Tone.WARNING -> t.warningSoft to t.warningSoftText
-        Tone.INFO -> t.infoSoft to t.infoSoftText
-        Tone.SUCCESS -> t.successSoft to t.successSoftText
-    }
-    Surface(color = bg, contentColor = fg, shape = MaterialTheme.shapes.medium, modifier = modifier.fillMaxWidth()) {
-        Text(text, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(12.dp))
-    }
+    NoticeBox(
+        text,
+        when (tone) {
+            Tone.DANGER -> BadgeTone.Danger
+            Tone.WARNING -> BadgeTone.Warning
+            Tone.INFO -> BadgeTone.Info
+            Tone.SUCCESS -> BadgeTone.Success
+        },
+        modifier,
+    )
 }
 
 @Composable
@@ -73,34 +72,19 @@ fun BrandMark(size: Int = 28) {
 fun BrandName(modifier: Modifier = Modifier) {
     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = modifier) {
         BrandMark()
-        Text(stringResource(R.string.app_name), style = MaterialTheme.typography.titleMedium)
+        Text(stringResource(R.string.app_name), fontSize = FontTokens.sizeLg.sp, fontWeight = FontWeight.Bold, color = LocalTokens.current.text)
     }
 }
 
 /** A small pill naming the profile an item lives in (lists that show more than one profile). */
 @Composable
-fun ProfileBadge(name: String, modifier: Modifier = Modifier) {
-    val t = LocalTokens.current
-    Surface(color = t.surface2, contentColor = t.textMuted, shape = CircleShape, modifier = modifier) {
-        Text(name, style = MaterialTheme.typography.labelSmall, modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp))
-    }
-}
+fun ProfileBadge(name: String, modifier: Modifier = Modifier) = Badge(name, modifier, tone = BadgeTone.Accent)
 
 @Composable
 fun Loading(modifier: Modifier = Modifier) {
-    Box(modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
+    Box(modifier.fillMaxSize(), contentAlignment = Alignment.Center) { Spinner(24.dp, LocalTokens.current.textMuted) }
 }
 
 @Composable
-fun EmptyState(title: String, body: String? = null, modifier: Modifier = Modifier) {
-    Column(
-        modifier.fillMaxWidth().padding(32.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(8.dp),
-    ) {
-        Text(title, style = MaterialTheme.typography.titleSmall, textAlign = TextAlign.Center)
-        if (body != null) {
-            Text(body, style = MaterialTheme.typography.bodyMedium, color = LocalTokens.current.textMuted, textAlign = TextAlign.Center)
-        }
-    }
-}
+fun EmptyState(title: String, body: String? = null, modifier: Modifier = Modifier) =
+    hub.core.android.ui.kit.EmptyState(title, modifier, body = body)

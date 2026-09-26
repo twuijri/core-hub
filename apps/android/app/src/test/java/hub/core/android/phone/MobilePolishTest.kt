@@ -301,8 +301,11 @@ class NotificationStatusTest {
 class LucideDrawablesTest {
     @Test
     fun everyListedIconIsADrawableAndNothingElse() {
-        val listed = JSONObject(File(repoRoot, "scripts/icons/lucide-mobile.json").readText()).getJSONArray("icons")
-            .let { a -> (0 until a.length()).map { "lucide_" + a.getString(it).replace('-', '_') + ".xml" } }.toSet()
+        // The shared icons and the Android app's own (`android`, the redesign's).
+        val list = JSONObject(File(repoRoot, "scripts/icons/lucide-mobile.json").readText())
+        val listed = listOf("icons", "android").flatMap { key ->
+            list.optJSONArray(key)?.let { a -> (0 until a.length()).map { "lucide_" + a.getString(it).replace('-', '_') + ".xml" } }.orEmpty()
+        }.toSet()
         val drawables = File(repoRoot, "apps/android/app/src/main/res/drawable").list()!!.filter { it.startsWith("lucide_") }.toSet()
         assertEquals(listed, drawables)
         drawables.forEach { name ->

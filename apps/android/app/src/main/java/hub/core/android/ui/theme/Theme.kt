@@ -6,6 +6,9 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.selection.LocalTextSelectionColors
+import androidx.compose.foundation.text.selection.TextSelectionColors
+import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Shapes
 import androidx.compose.material3.Typography
@@ -40,6 +43,9 @@ val LocalTokens = staticCompositionLocalOf { LightTokens }
 
 /** The glass level floating chrome uses here: 0 when the person asked for less transparency. */
 val LocalGlassLevel = staticCompositionLocalOf { Glass.DEFAULT }
+
+/** True while the dark tokens are in use (status-bar icons, images that need a dark variant). */
+val LocalDarkTheme = staticCompositionLocalOf { false }
 
 /** True when the person turned animations off; the thinking dots stop, the count does not. */
 val LocalReducedMotion = staticCompositionLocalOf { false }
@@ -111,8 +117,22 @@ fun CoreHubTheme(choice: ThemeChoice, content: @Composable () -> Unit) {
     val context = LocalContext.current
     val motion = remember { reducedMotion(context) }
     val glass = remember { if (reducedTransparency(context)) 0 else Glass.DEFAULT }
-    CompositionLocalProvider(LocalTokens provides t, LocalReducedMotion provides motion, LocalGlassLevel provides glass) {
-        MaterialTheme(colorScheme = scheme, typography = typography, shapes = shapes, content = content)
+    CompositionLocalProvider(
+        LocalTokens provides t,
+        LocalDarkTheme provides dark,
+        LocalReducedMotion provides motion,
+        LocalGlassLevel provides glass,
+    ) {
+        MaterialTheme(colorScheme = scheme, typography = typography, shapes = shapes) {
+            // Text drawn outside a Surface takes LocalContentColor, which Compose leaves black:
+            // on the dark tokens every such title vanished (owner, 2026-09-27). The theme gives
+            // every screen the token text colour, and the selection handles the accent.
+            CompositionLocalProvider(
+                LocalContentColor provides t.text,
+                LocalTextSelectionColors provides TextSelectionColors(handleColor = t.accent, backgroundColor = t.accent.copy(alpha = 0.3f)),
+                content = content,
+            )
+        }
     }
 }
 

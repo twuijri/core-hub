@@ -1,5 +1,7 @@
 package hub.core.android.ui.components
 
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.getValue
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.infiniteRepeatable
@@ -13,9 +15,10 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
@@ -25,64 +28,63 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.AbsoluteRoundedCornerShape
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.Send
-import androidx.compose.material.icons.filled.Check
-import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.KeyboardArrowDown
-import androidx.compose.material.icons.filled.KeyboardArrowUp
-import androidx.compose.material.icons.filled.Warning
-import androidx.compose.material3.Button
-import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.FilledIconButton
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
-import androidx.compose.material3.IconButtonDefaults
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
-import androidx.compose.material3.TextField
-import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalLayoutDirection
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextDirection
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.em
+import androidx.compose.ui.unit.sp
 import hub.core.android.R
 import hub.core.android.chat.ChatMessage
 import hub.core.android.chat.Turn
+import hub.core.android.generated.ControlTokens
+import hub.core.android.generated.FontTokens
 import hub.core.android.generated.LayoutTokens
-import hub.core.android.ui.theme.LocalGlassLevel
+import hub.core.android.generated.RadiusTokens
+import hub.core.android.ui.kit.Badge
+import hub.core.android.ui.kit.BadgeTone
+import hub.core.android.ui.kit.ButtonKind
+import hub.core.android.ui.kit.ControlSize
+import hub.core.android.ui.kit.HubButton
+import hub.core.android.ui.kit.HubIconButton
+import hub.core.android.ui.kit.HubTextField
+import hub.core.android.ui.kit.IconKind
+import hub.core.android.ui.kit.ItemShape
+import hub.core.android.ui.kit.Lucide
+import hub.core.android.ui.kit.LucideIcon
+import hub.core.android.ui.kit.Spinner
+import hub.core.android.ui.kit.floatingChrome
 import hub.core.android.ui.theme.LocalReducedMotion
 import hub.core.android.ui.theme.LocalTokens
 import hub.core.android.ui.theme.Mono
-import hub.core.android.ui.theme.glass
 import hub.core.client.model.Approval
 import hub.core.client.model.ApprovalDecision
 import hub.core.client.model.ApprovalKind
@@ -93,11 +95,14 @@ import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
 
 private val contentStyle = TextStyle(textDirection = TextDirection.Content)
+private val big = RadiusTokens.lg.dp
+private val small = RadiusTokens.sm.dp
 
 /**
  * One turn. **The person is always on the right, the agent always on the left, in every
  * locale** (DESIGN.md, owner decision 2026-09-22): the row fixes its own direction to LTR and
- * the content inside keeps deciding its own.
+ * the content inside keeps deciding its own. As on iOS: the header once per turn — «You», or the
+ * agent's face and name — then the person's filled bubbles or the agent's solid cards.
  */
 @Composable
 fun TurnView(turn: Turn, youLabel: String, profile: String = "", mine: Boolean = turn.fromPerson, agent: AgentIdentity? = null) {
@@ -113,19 +118,18 @@ fun TurnView(turn: Turn, youLabel: String, profile: String = "", mine: Boolean =
             ) {
                 // An agent's turn wears its face and its registry name (never the placeholder
                 // «agent»); in a room another person is on the left under their own name.
-                if (!mine && agent != null) {
-                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                        AgentAvatar(agent, profile, 22.dp)
-                        CompositionLocalProvider(LocalLayoutDirection provides uiDirection) {
-                            Text(agent.name, style = MaterialTheme.typography.labelMedium, color = t.textMuted)
-                        }
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    if (!mine && agent != null) AgentAvatar(agent, profile, LayoutTokens.avatarSm.dp)
+                    CompositionLocalProvider(LocalLayoutDirection provides uiDirection) {
+                        Text(
+                            when {
+                                mine -> youLabel
+                                agent != null -> agent.name
+                                else -> turn.authorName
+                            },
+                            fontSize = FontTokens.sizeSm.sp, fontWeight = FontWeight.SemiBold, color = t.textMuted,
+                        )
                     }
-                } else {
-                    Text(
-                        if (mine) youLabel else turn.authorName,
-                        style = MaterialTheme.typography.labelMedium,
-                        color = t.textMuted,
-                    )
                 }
                 turn.messages.forEach { message ->
                     CompositionLocalProvider(LocalLayoutDirection provides uiDirection) {
@@ -141,15 +145,19 @@ fun TurnView(turn: Turn, youLabel: String, profile: String = "", mine: Boolean =
 private fun PersonBubble(message: ChatMessage, modifier: Modifier, profile: String) {
     val t = LocalTokens.current
     // The corner nearest the person's own side (the right, always) is the tightened one.
-    val shape = AbsoluteRoundedCornerShape(topLeft = 16.dp, topRight = 4.dp, bottomRight = 16.dp, bottomLeft = 16.dp)
+    val shape = AbsoluteRoundedCornerShape(topLeft = big, topRight = small, bottomRight = big, bottomLeft = big)
     CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Ltr) {
-        Surface(color = t.userBubble, contentColor = t.userBubbleText, shape = shape, modifier = modifier.border(0.5.dp, t.userBubbleBorder, shape)) {
-            Column(Modifier.padding(horizontal = 14.dp, vertical = 10.dp)) {
+        Column(
+            modifier.background(t.userBubble, shape).border(1.dp, t.userBubbleBorder, shape)
+                .padding(horizontal = 12.dp, vertical = 8.dp).testTag("message.user"),
+            verticalArrangement = Arrangement.spacedBy(6.dp),
+        ) {
+            if (message.text.isNotEmpty()) {
                 InContentDirection(message.text) {
-                    Text(message.text, style = MaterialTheme.typography.bodyLarge.merge(contentStyle))
+                    Text(message.text, fontSize = FontTokens.sizeMd.sp, color = t.userBubbleText, style = contentStyle, lineHeight = FontTokens.leadingNormal.em)
                 }
-                MessageFiles(message.attachments, profile)
             }
+            MessageFiles(message.attachments, profile)
         }
     }
 }
@@ -158,21 +166,23 @@ private fun PersonBubble(message: ChatMessage, modifier: Modifier, profile: Stri
 private fun AgentMessage(message: ChatMessage, profile: String) {
     val t = LocalTokens.current
     val clipboard = LocalClipboardManager.current
-    val shape = AbsoluteRoundedCornerShape(topLeft = 4.dp, topRight = 16.dp, bottomRight = 16.dp, bottomLeft = 16.dp)
-    Surface(
-        color = t.agentBubble, contentColor = t.agentBubbleText, shape = shape,
-        modifier = Modifier.fillMaxWidth().border(0.5.dp, t.agentBubbleBorder, shape),
+    val shape = AbsoluteRoundedCornerShape(topLeft = small, topRight = big, bottomRight = big, bottomLeft = big)
+    Column(
+        Modifier.fillMaxWidth().background(t.agentBubble, shape).border(1.dp, t.agentBubbleBorder, shape)
+            .padding(12.dp).testTag("message.agent"),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
-        Column(Modifier.padding(horizontal = 14.dp, vertical = 10.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        CompositionLocalProvider(androidx.compose.material3.LocalContentColor provides t.agentBubbleText) {
             if (!message.streaming && message.reasoning.isNotBlank()) ReasoningFold(message.reasoning, message.reasoningMs)
             message.toolCalls.forEach { ToolCallCard(it) }
             if (message.text.isNotBlank()) MarkdownView(message.text)
             MessageFiles(message.attachments, profile)
             if (!message.streaming && message.text.isNotBlank()) {
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
-                    IconButton(onClick = { clipboard.setText(AnnotatedString(message.text)) }, modifier = Modifier.size(32.dp)) {
-                        Icon(Glyphs.Copy, contentDescription = stringResource(R.string.chat_copy), modifier = Modifier.size(16.dp), tint = t.textFaint)
-                    }
+                    HubIconButton(
+                        Lucide.Copy, stringResource(R.string.chat_copy), { clipboard.setText(AnnotatedString(message.text)) },
+                        size = ControlTokens.heightSm.dp, iconSize = 14.dp, tint = t.textFaint,
+                    )
                 }
             }
         }
@@ -186,19 +196,19 @@ private fun ReasoningFold(text: String, durationMs: Int?) {
     var open by rememberSaveable { mutableStateOf(false) }
     Column {
         Row(
-            Modifier.clickable { open = !open }.padding(vertical = 2.dp),
+            Modifier.fillMaxWidth().clickable { open = !open }.padding(vertical = 2.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Text(
                 if (durationMs != null) stringResource(R.string.chat_thought_for, (durationMs + 500) / 1000)
                 else stringResource(R.string.chat_reasoning),
-                style = MaterialTheme.typography.labelMedium, color = t.textMuted,
+                fontSize = FontTokens.sizeSm.sp, color = t.textMuted, modifier = Modifier.weight(1f),
             )
-            Icon(if (open) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown, null, tint = t.textMuted, modifier = Modifier.size(16.dp))
+            LucideIcon(if (open) Lucide.ChevronDown else Lucide.ChevronRight, null, size = 16.dp, tint = t.textMuted)
         }
         if (open) {
             InContentDirection(text) {
-                Text(text, style = MaterialTheme.typography.bodyMedium.merge(contentStyle), color = t.textMuted)
+                Text(text, fontSize = FontTokens.sizeSm.sp, color = t.textMuted, style = contentStyle, modifier = Modifier.padding(top = 4.dp))
             }
         }
     }
@@ -206,40 +216,45 @@ private fun ReasoningFold(text: String, durationMs: Int?) {
 
 private val pretty = Json { prettyPrint = true }
 
-/** A tool call: its name and one-line preview, its state; opened, the arguments and the output. */
+/**
+ * A tool call, as on iOS: its state as an icon, its name in mono, a one-line preview and the
+ * time it took; opened, the arguments and the output.
+ */
 @Composable
 fun ToolCallCard(call: ToolCall) {
     val t = LocalTokens.current
     var open by rememberSaveable(call.id) { mutableStateOf(false) }
     CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Ltr) {
-        Surface(color = t.surface2, shape = MaterialTheme.shapes.medium, modifier = Modifier.fillMaxWidth()) {
-            Column(Modifier.clickable { open = !open }.padding(horizontal = 10.dp, vertical = 8.dp)) {
-                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Icon(Glyphs.Tool, null, modifier = Modifier.size(16.dp), tint = t.textMuted)
-                    Text(call.name, style = MaterialTheme.typography.labelLarge)
-                    Text(
-                        call.preview.orEmpty(), fontFamily = Mono, style = MaterialTheme.typography.bodySmall, color = t.textMuted,
-                        maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f),
-                    )
-                    when (call.status) {
-                        ToolCallStatus.RUNNING, ToolCallStatus.AWAITING_APPROVAL ->
-                            CircularProgressIndicator(Modifier.size(14.dp), strokeWidth = 2.dp)
-                        ToolCallStatus.SUCCEEDED -> Icon(Icons.Default.Check, stringResource(R.string.chat_tool_done), tint = t.statusRunning, modifier = Modifier.size(16.dp))
-                        else -> Icon(Icons.Default.Warning, stringResource(R.string.chat_tool_failed), tint = t.danger, modifier = Modifier.size(16.dp))
-                    }
-                    call.durationMs?.let {
-                        Text(stringResource(R.string.chat_seconds, it / 1000.0), style = MaterialTheme.typography.labelSmall, color = t.textFaint)
-                    }
+        Column(
+            Modifier.fillMaxWidth().background(t.surface2, RoundedCornerShape(RadiusTokens.md.dp))
+                .clickable { open = !open }.padding(horizontal = 8.dp, vertical = 7.dp).testTag("tool.${call.name}"),
+            verticalArrangement = Arrangement.spacedBy(6.dp),
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                when (call.status) {
+                    ToolCallStatus.RUNNING -> Spinner(16.dp, t.textMuted)
+                    ToolCallStatus.AWAITING_APPROVAL -> LucideIcon(Lucide.Hand, null, size = 16.dp, tint = t.warningSoftText)
+                    ToolCallStatus.SUCCEEDED -> LucideIcon(Lucide.CircleCheck, stringResource(R.string.chat_tool_done), size = 16.dp, tint = t.statusRunning)
+                    else -> LucideIcon(Lucide.CircleX, stringResource(R.string.chat_tool_failed), size = 16.dp, tint = t.danger)
                 }
-                if (open) {
-                    call.arguments?.takeIf { it.isNotEmpty() }?.let { args ->
-                        Text(stringResource(R.string.chat_tool_arguments), style = MaterialTheme.typography.labelSmall, color = t.textMuted, modifier = Modifier.padding(top = 8.dp))
-                        CodeText(pretty.encodeToString(JsonObject.serializer(), JsonObject(args)))
-                    }
-                    call.output?.takeIf { it.isNotEmpty() }?.let { out ->
-                        Text(stringResource(R.string.chat_tool_output), style = MaterialTheme.typography.labelSmall, color = t.textMuted, modifier = Modifier.padding(top = 8.dp))
-                        CodeText(out + if (call.outputTruncated) "\n…" else "")
-                    }
+                Text(call.name, fontFamily = Mono, fontWeight = FontWeight.SemiBold, fontSize = FontTokens.sizeSm.sp, color = t.text)
+                Text(
+                    call.preview.orEmpty(), fontFamily = Mono, fontSize = FontTokens.sizeXs.sp, color = t.textMuted,
+                    maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f),
+                )
+                call.durationMs?.let {
+                    Text(stringResource(R.string.chat_seconds, it / 1000.0), fontSize = FontTokens.sizeXs.sp, color = t.textFaint)
+                }
+                LucideIcon(if (open) Lucide.ChevronUp else Lucide.ChevronDown, null, size = 14.dp, tint = t.textFaint)
+            }
+            if (open) {
+                call.arguments?.takeIf { it.isNotEmpty() }?.let { args ->
+                    Text(stringResource(R.string.chat_tool_arguments), fontSize = FontTokens.sizeXs.sp, fontWeight = FontWeight.SemiBold, color = t.textMuted)
+                    CodeText(pretty.encodeToString(JsonObject.serializer(), JsonObject(args)))
+                }
+                call.output?.takeIf { it.isNotEmpty() }?.let { out ->
+                    Text(stringResource(R.string.chat_tool_output), fontSize = FontTokens.sizeXs.sp, fontWeight = FontWeight.SemiBold, color = t.textMuted)
+                    CodeText(out + if (call.outputTruncated) "\n…" else "")
                 }
             }
         }
@@ -249,10 +264,13 @@ fun ToolCallCard(call: ToolCall) {
 @Composable
 private fun CodeText(text: String) {
     val t = LocalTokens.current
-    Box(Modifier.fillMaxWidth().heightIn(max = 240.dp).background(t.codeBg, MaterialTheme.shapes.small).verticalScroll(rememberScrollState())) {
+    Box(
+        Modifier.fillMaxWidth().heightIn(max = 240.dp).background(t.codeBg, RoundedCornerShape(RadiusTokens.sm.dp))
+            .verticalScroll(rememberScrollState()),
+    ) {
         Text(
-            text, fontFamily = Mono, color = t.codeText, softWrap = false,
-            style = MaterialTheme.typography.bodySmall.copy(textDirection = TextDirection.Ltr),
+            text, fontFamily = Mono, color = t.codeText, softWrap = false, fontSize = FontTokens.sizeXs.sp,
+            style = TextStyle(textDirection = TextDirection.Ltr),
             modifier = Modifier.horizontalScroll(rememberScrollState()).padding(8.dp),
         )
     }
@@ -282,7 +300,7 @@ fun ThinkingIndicator(startedAt: Long?, step: String?, queued: Boolean) {
     val seconds = rememberElapsedSeconds(startedAt)
     val reduced = LocalReducedMotion.current
     Row(
-        Modifier.padding(horizontal = 16.dp, vertical = 4.dp).semantics { liveRegion = LiveRegionMode.Polite },
+        Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp).semantics { liveRegion = LiveRegionMode.Polite }.testTag("chat.thinking"),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
@@ -292,7 +310,7 @@ fun ThinkingIndicator(startedAt: Long?, step: String?, queued: Boolean) {
             if (seconds != null) add(stringResource(R.string.chat_seconds_short, seconds))
             if (!step.isNullOrBlank()) add(step)
         }
-        Text(parts.joinToString(" · "), style = MaterialTheme.typography.labelMedium, color = t.textMuted)
+        Text(parts.joinToString(" · "), fontSize = FontTokens.sizeSm.sp, color = t.textMuted, maxLines = 1, overflow = TextOverflow.Ellipsis)
     }
 }
 
@@ -303,7 +321,7 @@ private fun Dots(reduced: Boolean) {
     Row(horizontalArrangement = Arrangement.spacedBy(3.dp)) {
         repeat(3) { i ->
             val alpha = if (reduced) 1f else transition.animateFloat(
-                initialValue = 0.25f, targetValue = 1f,
+                initialValue = 0.35f, targetValue = 1f,
                 animationSpec = infiniteRepeatable(tween(600, delayMillis = i * 150), RepeatMode.Reverse), label = "dot$i",
             ).value
             Box(Modifier.size(6.dp).alpha(alpha).background(t.thinking, CircleShape))
@@ -311,12 +329,22 @@ private fun Dots(reduced: Boolean) {
     }
 }
 
-/** A decision the agent is blocked on: the exact command, and allow once / in this chat / always / deny. */
+/**
+ * A decision the agent is blocked on, as on iOS: who asks and what, the exact command, then
+ * «allow once» as the one primary action and the others quieter beside it — deny in red.
+ */
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun ApprovalCard(approval: Approval, onRespond: (ApprovalDecision) -> Unit) {
     val t = LocalTokens.current
-    Surface(color = t.warningSoft, contentColor = t.warningSoftText, shape = MaterialTheme.shapes.large, modifier = Modifier.fillMaxWidth()) {
-        Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+    val shape = RoundedCornerShape(RadiusTokens.lg.dp)
+    Column(
+        Modifier.fillMaxWidth().background(t.surface, shape).background(t.warningSoft.copy(alpha = 0.35f), shape)
+            .border(1.dp, t.border, shape).padding(12.dp).testTag("approval.${approval.id}"),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            LucideIcon(Lucide.Hand, null, size = 14.dp, tint = t.warningSoftText)
             Text(
                 stringResource(
                     when (approval.kind) {
@@ -328,21 +356,23 @@ fun ApprovalCard(approval: Approval, onRespond: (ApprovalDecision) -> Unit) {
                     },
                     approval.agent.name,
                 ),
-                style = MaterialTheme.typography.labelMedium,
+                fontSize = FontTokens.sizeXs.sp, fontWeight = FontWeight.SemiBold, color = t.warningSoftText,
             )
-            InContentDirection(approval.title) { Text(approval.title, style = MaterialTheme.typography.titleSmall.merge(contentStyle)) }
-            approval.description?.takeIf { it.isNotBlank() }?.let { d ->
-                InContentDirection(d) { Text(d, style = MaterialTheme.typography.bodyMedium.merge(contentStyle)) }
+        }
+        InContentDirection(approval.title) {
+            Text(approval.title, fontSize = FontTokens.sizeMd.sp, fontWeight = FontWeight.SemiBold, color = t.text, style = contentStyle)
+        }
+        approval.description?.takeIf { it.isNotBlank() }?.let { d ->
+            InContentDirection(d) { Text(d, fontSize = FontTokens.sizeSm.sp, color = t.textMuted, style = contentStyle) }
+        }
+        approval.command?.takeIf { it.isNotBlank() }?.let { CodeText(it) }
+        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            HubButton(stringResource(R.string.approval_once), { onRespond(ApprovalDecision.APPROVE_ONCE) }, size = ControlSize.Md)
+            HubButton(stringResource(R.string.approval_session), { onRespond(ApprovalDecision.APPROVE_SESSION) }, kind = ButtonKind.Secondary, size = ControlSize.Md)
+            if (approval.allowAlways) {
+                HubButton(stringResource(R.string.approval_always), { onRespond(ApprovalDecision.APPROVE_ALWAYS) }, kind = ButtonKind.Secondary, size = ControlSize.Md)
             }
-            approval.command?.takeIf { it.isNotBlank() }?.let { CodeText(it) }
-            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                Button(onClick = { onRespond(ApprovalDecision.APPROVE_ONCE) }) { Text(stringResource(R.string.approval_once)) }
-                OutlinedButton(onClick = { onRespond(ApprovalDecision.APPROVE_SESSION) }) { Text(stringResource(R.string.approval_session)) }
-                if (approval.allowAlways) {
-                    OutlinedButton(onClick = { onRespond(ApprovalDecision.APPROVE_ALWAYS) }) { Text(stringResource(R.string.approval_always)) }
-                }
-                TextButton(onClick = { onRespond(ApprovalDecision.DENY) }) { Text(stringResource(R.string.approval_deny), color = t.danger) }
-            }
+            HubButton(stringResource(R.string.approval_deny), { onRespond(ApprovalDecision.DENY) }, kind = ButtonKind.Danger, size = ControlSize.Md)
         }
     }
 }
@@ -364,49 +394,53 @@ fun QuestionCard(approval: Approval, onAnswer: (String) -> Unit, onSkip: () -> U
     var now by remember { mutableLongStateOf(System.currentTimeMillis()) }
     LaunchedEffect(approval.id) { while (true) { now = System.currentTimeMillis(); delay(1_000) } }
     val left = approval.expiresAt?.let { ((it.toInstant().toEpochMilli() - now) / 1000).coerceAtLeast(0) }
-    Surface(color = t.surface, shape = MaterialTheme.shapes.large, modifier = Modifier.fillMaxWidth().border(0.5.dp, t.borderStrong, MaterialTheme.shapes.large)) {
-        Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Icon(Glyphs.Help, null, modifier = Modifier.size(16.dp), tint = t.accent)
-                Spacer(Modifier.size(6.dp))
-                Text(stringResource(R.string.question_title), style = MaterialTheme.typography.labelMedium, modifier = Modifier.weight(1f))
-                if (left != null) Text(stringResource(R.string.question_left, countdown(left)), style = MaterialTheme.typography.labelSmall, color = t.textMuted)
-                IconButton(onClick = onSkip) { Icon(Icons.Default.Close, stringResource(R.string.question_skip), modifier = Modifier.size(16.dp)) }
-            }
-            InContentDirection(approval.title) { Text(approval.title, style = MaterialTheme.typography.titleSmall.merge(contentStyle)) }
-            approval.choices.forEachIndexed { index, choice ->
-                val recommended = RECOMMENDED.containsMatchIn(choice.label)
-                Surface(color = t.surface2, shape = MaterialTheme.shapes.medium, modifier = Modifier.fillMaxWidth().clickable { onAnswer(choice.value) }) {
-                    Row(Modifier.padding(10.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Text("${index + 1}", style = MaterialTheme.typography.labelLarge, color = t.accent)
-                        val label = choice.label.replace(RECOMMENDED, "")
-                        InContentDirection(label) {
-                            Text(label, style = MaterialTheme.typography.bodyMedium.merge(contentStyle), modifier = Modifier.weight(1f))
-                        }
-                        if (recommended) ProfileBadge(stringResource(R.string.question_recommended))
-                    }
+    val shape = RoundedCornerShape(RadiusTokens.lg.dp)
+    Column(
+        Modifier.fillMaxWidth().background(t.surface, shape).border(1.dp, t.borderStrong.copy(alpha = 0.6f), shape).padding(12.dp)
+            .testTag("question.${approval.id}"),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            LucideIcon(Lucide.CircleQuestionMark, null, size = 16.dp, tint = t.accent)
+            Text(stringResource(R.string.question_title), fontSize = FontTokens.sizeXs.sp, fontWeight = FontWeight.SemiBold, color = t.textMuted, modifier = Modifier.weight(1f))
+            if (left != null) Badge(stringResource(R.string.question_left, countdown(left)), tone = BadgeTone.Neutral)
+            HubIconButton(Lucide.X, stringResource(R.string.question_skip), onSkip, size = ControlTokens.heightSm.dp, iconSize = 14.dp)
+        }
+        InContentDirection(approval.title) {
+            Text(approval.title, fontSize = FontTokens.sizeMd.sp, fontWeight = FontWeight.SemiBold, style = contentStyle)
+        }
+        approval.choices.forEachIndexed { index, choice ->
+            val recommended = RECOMMENDED.containsMatchIn(choice.label)
+            Row(
+                Modifier.fillMaxWidth().background(t.surface2, ItemShape).clickable { onAnswer(choice.value) }.padding(10.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
+            ) {
+                Text("${index + 1}", fontSize = FontTokens.sizeSm.sp, fontWeight = FontWeight.SemiBold, color = t.accent)
+                val label = choice.label.replace(RECOMMENDED, "")
+                InContentDirection(label) {
+                    Text(label, fontSize = FontTokens.sizeSm.sp, style = contentStyle, modifier = Modifier.weight(1f))
                 }
+                if (recommended) Badge(stringResource(R.string.question_recommended), tone = BadgeTone.Accent)
             }
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                OutlinedTextField(
-                    value = own, onValueChange = { own = it }, singleLine = true,
-                    placeholder = { Text(stringResource(R.string.question_own)) },
-                    textStyle = MaterialTheme.typography.bodyMedium.merge(contentStyle),
-                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Send),
-                    keyboardActions = KeyboardActions(onSend = { if (own.isNotBlank()) onAnswer(own.trim()) }),
-                    modifier = Modifier.weight(1f),
-                )
-                TextButton(onClick = { if (own.isNotBlank()) onAnswer(own.trim()) }, enabled = own.isNotBlank()) {
-                    Text(stringResource(R.string.question_send))
-                }
-            }
+        }
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            HubTextField(
+                own, { own = it }, placeholder = stringResource(R.string.question_own), size = ControlSize.Md,
+                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Send),
+                keyboardActions = KeyboardActions(onSend = { if (own.isNotBlank()) onAnswer(own.trim()) }),
+                modifier = Modifier.weight(1f),
+            )
+            HubButton(stringResource(R.string.question_send), { if (own.isNotBlank()) onAnswer(own.trim()) }, size = ControlSize.Md, enabled = own.isNotBlank())
         }
     }
 }
 
 /**
- * The floating composer (glass, DESIGN.md). While a run is alive Stop sits beside Send; a
- * message sent then waits in the hub's queue behind the run.
+ * The floating composer (glass, DESIGN.md), laid out as on iOS and the web: «+» at the start,
+ * the text, then the microphone and Send at the end — Send an accent disc with an arrow when
+ * there is something to send, a quiet disc otherwise. While a run is alive and nothing is typed,
+ * Stop takes Send's place; a message sent then waits in the hub's queue behind the run.
  */
 @Composable
 fun Composer(
@@ -417,41 +451,59 @@ fun Composer(
     sending: Boolean,
     onSend: () -> Unit,
     onStop: () -> Unit,
-    extra: @Composable () -> Unit = {},
+    /** The «+» (files and photos); at the start of the field. */
+    leading: @Composable () -> Unit = {},
+    /** The microphone; at the end, before Send. */
+    trailing: @Composable () -> Unit = {},
     /** Files are attached and uploaded: the message may go without words. */
     hasAttachments: Boolean = false,
 ) {
     val t = LocalTokens.current
-    val shape = RoundedCornerShape(24.dp)
+    val canSend = (text.isNotBlank() || hasAttachments) && !sending
+    val style = TextStyle(color = t.text, fontSize = FontTokens.sizeMd.sp, textDirection = TextDirection.Content, lineHeight = 1.4.em)
     Row(
-        Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp).glass(t, LocalGlassLevel.current, shape).padding(4.dp),
+        Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp).floatingChrome()
+            .padding(horizontal = 4.dp, vertical = 4.dp).testTag("composer"),
         verticalAlignment = Alignment.Bottom,
+        horizontalArrangement = Arrangement.spacedBy(2.dp),
     ) {
-        extra()
-        TextField(
+        leading()
+        BasicTextField(
             value = text,
             onValueChange = onText,
-            placeholder = { Text(placeholder, maxLines = 1, overflow = TextOverflow.Ellipsis) },
-            textStyle = MaterialTheme.typography.bodyLarge.merge(contentStyle),
+            textStyle = style,
             maxLines = 6,
-            colors = TextFieldDefaults.colors(
-                focusedContainerColor = androidx.compose.ui.graphics.Color.Transparent,
-                unfocusedContainerColor = androidx.compose.ui.graphics.Color.Transparent,
-                disabledContainerColor = androidx.compose.ui.graphics.Color.Transparent,
-                focusedIndicatorColor = androidx.compose.ui.graphics.Color.Transparent,
-                unfocusedIndicatorColor = androidx.compose.ui.graphics.Color.Transparent,
-            ),
-            modifier = Modifier.weight(1f),
+            cursorBrush = SolidColor(t.accent),
+            modifier = Modifier.weight(1f).defaultMinSize(minHeight = ControlTokens.heightMd.dp).testTag("composer.input"),
+            decorationBox = { inner ->
+                Box(Modifier.defaultMinSize(minHeight = ControlTokens.heightMd.dp).padding(horizontal = 6.dp, vertical = 6.dp), contentAlignment = Alignment.CenterStart) {
+                    if (text.isEmpty()) Text(placeholder, style = style.copy(color = t.textFaint), maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    inner()
+                }
+            },
         )
-        if (running) {
-            IconButton(onClick = onStop) { Icon(Glyphs.Stop, stringResource(R.string.chat_stop), tint = t.danger) }
+        trailing()
+        if (running && text.isBlank() && !hasAttachments) {
+            StopButton(stringResource(R.string.chat_stop), onStop, Modifier.testTag("composer.stop"))
+        } else {
+            HubIconButton(
+                Lucide.ArrowUp, stringResource(R.string.chat_send), onSend,
+                kind = IconKind.Accent, enabled = canSend, size = ControlTokens.heightMd.dp, iconSize = 18.dp,
+                modifier = Modifier.testTag("composer.send"),
+            )
         }
-        FilledIconButton(
-            onClick = onSend,
-            enabled = (text.isNotBlank() || hasAttachments) && !sending,
-            colors = IconButtonDefaults.filledIconButtonColors(containerColor = t.accent, contentColor = t.accentText),
-        ) {
-            Icon(Icons.AutoMirrored.Filled.Send, stringResource(R.string.chat_send))
-        }
+    }
+}
+
+/** Stop: a filled square on the danger disc, the size of Send. */
+@Composable
+fun StopButton(label: String, onClick: () -> Unit, modifier: Modifier = Modifier, size: androidx.compose.ui.unit.Dp = ControlTokens.heightMd.dp) {
+    val t = LocalTokens.current
+    Box(
+        modifier.size(size).background(t.danger, CircleShape).clickable(onClickLabel = label, role = androidx.compose.ui.semantics.Role.Button, onClick = onClick)
+            .semantics { contentDescription = label },
+        contentAlignment = Alignment.Center,
+    ) {
+        Box(Modifier.size(size * 0.34f).background(t.dangerText, RoundedCornerShape(2.dp)))
     }
 }
