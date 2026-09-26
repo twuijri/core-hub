@@ -241,4 +241,15 @@
     <string name="usage_row">%1$s tokens · %2$d runs</string>
     <string name="usage_none">Nothing used in this time.</string>
     <string name="search">Search</string>
+    <string name="locate_title">An agent asks where this phone is</string>
+    <string name="locate_body">Your answer goes to the agent that asked, once. It is not kept by the hub.</string>
+    <string name="locate_why">Why: %1$s</string>
+    <string name="locate_always">Allow every time</string>
+    <string name="locate_once">Only this time</string>
+    <string name="locate_never">Don\'t allow</string>
+    <string name="locate_heading">Location for agents</string>
+    <string name="locate_ask">Ask</string>
+    <string name="locate_choice_always">Always</string>
+    <string name="locate_choice_never">Never</string>
+    <string name="locate_hint">When an agent needs to know where you are, this phone asks you first, answers every time, or never does.</string>
 </resources>

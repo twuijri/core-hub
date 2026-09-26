@@ -124,10 +124,20 @@ class AppGraph(context: Context, sealer: hub.core.android.data.Sealer = Keystore
         sdk = android.os.Build.VERSION.SDK_INT,
     )
 
-    /** Tells the hub what this phone is now; at each launch and after the permission answer. */
+    /** Tells the hub what this phone is now; at each launch, after the permission answer, and when the location choice changes. */
     fun reportDevice() {
-        scope.launch { push.registrar.report(thisPhoneReport(pushBlocker(), DeviceInfos.current(appContext))) }
+        val capabilities = listOf(hub.core.android.phone.Locating.capability(locationChoices.choice.value))
+        scope.launch { push.registrar.report(thisPhoneReport(pushBlocker(), DeviceInfos.current(appContext), capabilities)) }
     }
+
+    /** Whether agents may ask where this phone is (§103): asked once, kept here. */
+    val locationChoices = hub.core.android.phone.LocationChoices(context.getSharedPreferences("corehub.device", Context.MODE_PRIVATE))
+
+    /** Location requests to answer, from `/rt/devices` and the catch-up when the app comes back. */
+    val locations = hub.core.android.phone.LocationRequests(
+        { store.current?.let { apis(it) to it } },
+        locationChoices,
+    ) { hub.core.android.phone.PhoneLocation.read(appContext) }
 
     /** True while a screen of the app is visible. */
     fun inForeground(): Boolean = ProcessLifecycleOwner.get().lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED)
@@ -137,6 +147,7 @@ class AppGraph(context: Context, sealer: hub.core.android.data.Sealer = Keystore
         // While the process lives, a notice the hub announces becomes a notification when no screen shows it.
         scope.launch {
             realtime.events.collect { e ->
+                hub.core.android.phone.Locating.requestOf(e)?.let { request -> launch { locations.heard(request) } }
                 if (e.namespace != DEVICES_NAMESPACE || e.event != "notice.created") return@collect
                 val notice = e.payload["notice"]?.let {
                     runCatching { Serializer.kotlinxSerializationJson.decodeFromJsonElement(Notice.serializer(), it) }.getOrNull()
@@ -212,6 +223,8 @@ class AppGraph(context: Context, sealer: hub.core.android.data.Sealer = Keystore
                 ) {
                     push.refresh()
                 }
+                // A location request asked while the app was closed waits to be answered.
+                if (event == Lifecycle.Event.ON_START && store.current != null) scope.launch { locations.catchUp() }
             },
         )
         // The background check runs while someone is signed in, This device allows it, and push

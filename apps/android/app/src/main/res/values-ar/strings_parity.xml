@@ -241,4 +241,15 @@
     <string name="usage_row">%1$s رمز · %2$d تشغيلات</string>
     <string name="usage_none">لا استخدام في هذه المدة.</string>
     <string name="search">بحث</string>
+    <string name="locate_title">وكيل يسأل عن موقع هذا الجوال</string>
+    <string name="locate_body">يذهب جوابك إلى الوكيل الذي سأل، مرة واحدة، ولا يحفظه المركز.</string>
+    <string name="locate_why">السبب: %1$s</string>
+    <string name="locate_always">اسمح في كل مرة</string>
+    <string name="locate_once">هذه المرة فقط</string>
+    <string name="locate_never">لا تسمح</string>
+    <string name="locate_heading">الموقع للوكلاء</string>
+    <string name="locate_ask">اسأل</string>
+    <string name="locate_choice_always">دائمًا</string>
+    <string name="locate_choice_never">أبدًا</string>
+    <string name="locate_hint">حين يحتاج وكيل أن يعرف أين أنت، يسألك هذا الجوال أولًا، أو يجيب دائمًا، أو لا يجيب أبدًا.</string>
 </resources>

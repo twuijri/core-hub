@@ -37,8 +37,8 @@ final class ModelsAdminTests: XCTestCase {
 
     func testVoicesInThePersonsLanguagesComeFirstAndEveryLanguageStays() {
         let all = [
-            Voice(id: "Zeina", name: "Zeina", language: "ar-SA"), Voice(id: "Amy", name: "Amy", language: "en-GB"),
-            Voice(id: "Hans", name: "Hans", language: "de-DE"), Voice(id: "Aria", name: "Aria", language: "en-US"), Voice(id: "X", name: "X"),
+            CoreHubClient.Voice(id: "Zeina", name: "Zeina", language: "ar-SA"), CoreHubClient.Voice(id: "Amy", name: "Amy", language: "en-GB"),
+            CoreHubClient.Voice(id: "Hans", name: "Hans", language: "de-DE"), CoreHubClient.Voice(id: "Aria", name: "Aria", language: "en-US"), CoreHubClient.Voice(id: "X", name: "X"),
         ]
         XCTAssertEqual(ModelLogic.voices(all, preferred: ["ar", "en"], query: "").map(\.id), ["Zeina", "Amy", "Aria", "Hans", "X"])
         XCTAssertEqual(ModelLogic.voices(all, preferred: ["en"], query: "").map(\.id), ["Amy", "Aria", "Zeina", "Hans", "X"])

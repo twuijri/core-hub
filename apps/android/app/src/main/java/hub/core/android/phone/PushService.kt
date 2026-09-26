@@ -46,16 +46,22 @@ fun thisPhone(
     appVersion = info.appVersion,
     osVersion = info.osVersion,
     pushBlocker = blocker,
-    capabilities = emptyList(),
+    // Where it is, when an agent asks and its person agrees (§103).
+    capabilities = listOf(hub.core.client.model.CapabilityKind.LOCATION),
 )
 
 /** What the app sends at each launch: everything the phone says about itself except its name. */
-fun thisPhoneReport(blocker: PushBlocker?, info: DeviceInfo = DeviceInfos.current()) = DevicePatch(
+fun thisPhoneReport(
+    blocker: PushBlocker?,
+    info: DeviceInfo = DeviceInfos.current(),
+    capabilities: List<hub.core.client.model.DeviceCapability>? = null,
+) = DevicePatch(
     brand = info.brand,
     model = info.model,
     osVersion = info.osVersion,
     appVersion = info.appVersion,
     pushBlocker = blocker,
+    capabilities = capabilities,
 )
 
 /**

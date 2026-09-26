@@ -40,10 +40,10 @@ enum ModelLogic {
     static func settled(_ signIn: ProviderSignIn) -> Bool { signIn.status != .pending }
 
     /// Voices in the person's languages first, then by language and name; every language stays.
-    static func voices(_ all: [Voice], preferred: [String], query: String) -> [Voice] {
+    static func voices(_ all: [CoreHubClient.Voice], preferred: [String], query: String) -> [CoreHubClient.Voice] {
         let q = query.trimmingCharacters(in: .whitespaces).lowercased()
         let wanted = preferred.map { $0.lowercased().components(separatedBy: "-")[0] }
-        func rank(_ v: Voice) -> Int {
+        func rank(_ v: CoreHubClient.Voice) -> Int {
             guard let lang = v.language?.lowercased().components(separatedBy: "-").first else { return wanted.count + 1 }
             return wanted.firstIndex(of: lang) ?? wanted.count
         }
@@ -74,8 +74,11 @@ enum ModelLogic {
     }
 
     static func imageModels(_ providers: [Provider]) -> [Model] {
-        providers.filter { $0.enabled && $0.drawsImages == true }.flatMap { $0.models.filter { !$0.disabled } }
-            .sorted { ($0.imageOnly == true ? 0 : 1) < ($1.imageOnly == true ? 0 : 1) }
+        let drawing: [Provider] = providers.filter { $0.enabled && $0.drawsImages == true }
+        let models: [Model] = drawing.flatMap { provider in provider.models.filter { !$0.disabled } }
+        let only: [Model] = models.filter { $0.imageOnly == true }
+        let rest: [Model] = models.filter { $0.imageOnly != true }
+        return only + rest
     }
 
     static func label(_ ref: ModelRef?, _ providers: [Provider]) -> String? {
@@ -703,7 +706,7 @@ private struct VoicePickerView: View {
     @Environment(AppModel.self) private var app
     @Environment(\.l10n) private var l10n
     @Environment(\.dismiss) private var dismiss
-    @State private var voices: [Voice]?
+    @State private var voices: [CoreHubClient.Voice]?
     @State private var query = ""
     @State private var error: String?
     @State private var player: AVAudioPlayer?
@@ -763,7 +766,7 @@ private struct VoicePickerView: View {
         }
     }
 
-    private func preview(_ voice: Voice) async {
+    private func preview(_ voice: CoreHubClient.Voice) async {
         let profile = app.currentProfile
         let request = SpeechRequest(text: ModelLogic.sample(voice.language, fallback: l10n("models_page.voice_sample")), language: voice.language, voice: voice.id, providerId: provider.id, format: .mp3)
         playing = voice.id
@@ -779,7 +782,7 @@ private struct VoicePickerView: View {
         if playing == voice.id { playing = nil }
     }
 
-    private func choose(_ voice: Voice) async {
+    private func choose(_ voice: CoreHubClient.Voice) async {
         let profile = app.currentProfile
         let patch = SpeechSettingsPatch(providers: [SpeechSettingsPatchProvidersInner(id: provider.id, settings: ["voice": .string(voice.id)])])
         do {

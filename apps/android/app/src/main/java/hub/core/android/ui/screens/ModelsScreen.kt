@@ -636,7 +636,8 @@ private fun VoicePicker(ops: ModelOps, provider: SpeechProvider, onPicked: () ->
     var playing by remember { mutableStateOf<String?>(null) }
     var error by remember { mutableStateOf<HubError?>(null) }
     val app = context.graph.prefs.effectiveLanguage
-    val preferred = listOf(app.tag) + listOf(Locale.getDefault().language).filter { it != app.tag } + listOf("en")
+    val phone = androidx.compose.ui.platform.LocalConfiguration.current.locales[0].language
+    val preferred = listOf(app.tag) + listOf(phone).filter { it != app.tag } + listOf("en")
     val fallbackSample = stringResource(R.string.models_voice_sample)
     val player = remember { android.media.MediaPlayer() }
     androidx.compose.runtime.DisposableEffect(Unit) { onDispose { runCatching { player.release() } } }

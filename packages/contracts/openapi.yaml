@@ -13925,8 +13925,8 @@ paths:
         carries only `{request_id, status}`: what the device sends stays in the request, which
         only its person and the device read. Only the device's own person may ask it — their web
         session, a token of theirs with the `device` scope, or the run token of one of their
-        agent runs for `files` and `apps` only (DECISIONS §89; the request then carries the
-        run's id) — else `403`; anyone else's device, an admin's included, is `404`. A device
+        agent runs for `files`, `apps` (DECISIONS §89) and `location` (§103) only — the request
+        then carries the run's id — else `403`; anyone else's device, an admin's included, is `404`. A device
         whose `profiles` leave out the profile asked in is `403` with `details.reason =
         device_not_in_profile`. A device that lacks the capability, or switched it off, is
         answered `denied` with `unavailable` by the hub at once, without being asked; a `files`,
