@@ -257,9 +257,7 @@ describe('«ويب هوك» on the Channels page', () => {
     expect(secret.textContent).toBe(SECRET);
     fireEvent.click(within(row).getByTestId('webhook-copy-url-github-issues'));
     fireEvent.click(within(row).getByTestId('webhook-copy-secret-github-issues'));
-    expect(writeText).toHaveBeenCalledWith(
-      `${origin}${door('github-issues')}`,
-    );
+    expect(writeText).toHaveBeenCalledWith(`${origin}${door('github-issues')}`);
     expect(writeText).toHaveBeenCalledWith(SECRET);
     // A route from config.yaml: listed, marked, not deletable here.
     const statik = screen.getByTestId('webhook-from-config');
