@@ -2672,3 +2672,21 @@ Rejected: `reply_prefix` in the platform's `config.yaml` — the adapter hands i
 while the environment variable is also set, so it adds nothing; faking "no header" with a
 zero-width prefix (Hermes's own code notes WhatsApp renders those as stray characters) or a
 blank-line prefix.
+
+## 87. A client asks for speech in a format it can play
+
+The owner (2026-09-27): the iPhone cannot play the hub's Ogg speech and falls back to the phone's
+own voice. `models.synthesize` had no way to say what the client plays, so each provider sent its
+own format. Proposed, owner to confirm:
+
+- **`SpeechRequest.format`** (`SpeechFormat`: `mp3`, `aac`, `wav`, `ogg` — Ogg Opus), optional.
+  The hub asks the provider for it where the provider lets it choose (the OpenAI-shaped protocol's
+  `response_format`, where Ogg Opus is `opus`); a provider that cannot choose sends its own format.
+  The response `Content-Type` always says what came, and `audio/aac` joins the declared types.
+- **Omitted or null is the provider's default**, as before: nothing changes for a client that does
+  not ask.
+- The iPhone and Android apps ask for `mp3`, which both play natively and every speech provider the
+  hub drives can produce; the web keeps not asking.
+
+Rejected: converting the audio on the hub (a transcoder in the image for one client's gap), and a
+per-provider setting (the format is the listener's constraint, not the provider's).

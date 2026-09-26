@@ -12777,7 +12777,10 @@ paths:
       operationId: models.synthesize
       tags: [models]
       summary: Synthesize speech with the active TTS provider
-      description: Returns audio bytes; `X-Speech-Provider` says which provider actually spoke. Text over 2 000 characters is `413`.
+      description: >-
+        Returns audio bytes; `X-Speech-Provider` says which provider actually spoke. Text over
+        2 000 characters is `413`. `format` asks for audio the client can play (iOS cannot play
+        Ogg); the `Content-Type` says what came.
       parameters:
         - $ref: '#/components/parameters/Profile'
       requestBody:
@@ -12810,6 +12813,10 @@ paths:
                 type: string
                 format: binary
             audio/ogg:
+              schema:
+                type: string
+                format: binary
+            audio/aac:
               schema:
                 type: string
                 format: binary
@@ -23114,6 +23121,20 @@ components:
           oneOf:
             - $ref: '#/components/schemas/Ulid'
             - type: 'null'
+        format:
+          oneOf:
+            - $ref: '#/components/schemas/SpeechFormat'
+            - type: 'null'
+          description: >-
+            The audio the client can play (DECISIONS §87). The hub asks the provider for it
+            where the provider lets it choose, else the provider's own format comes back; the
+            response `Content-Type` always says which. Omitted or null: the provider's default.
+    SpeechFormat:
+      type: string
+      description: >-
+        An audio format a client asks speech in: `mp3`, `aac` (in an MP4/M4A container, what
+        iOS and Android play natively), `wav`, or `ogg` (Ogg Opus).
+      enum: [mp3, aac, wav, ogg]
     # ---------------------------------------------------------------- devices
     DevicePlatform:
       type: string

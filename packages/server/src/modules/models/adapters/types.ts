@@ -83,10 +83,19 @@ export interface DiscoveredVoice {
 export type ListVoicesResult =
   { supported: true; voices: DiscoveredVoice[] } | { supported: false; reason: string };
 
+/** `SpeechFormat` in the contract: the audio a client can play (`ogg` is Ogg Opus). */
+export type SpeechFormat = 'mp3' | 'aac' | 'wav' | 'ogg';
+
 export interface SynthesizeRequest {
   text: string;
   language: string | null;
   voice: string | null;
+  /**
+   * The audio the client asked for (`SpeechRequest.format`, DECISIONS §87). An adapter asks
+   * its provider for it when the provider lets it choose; otherwise it returns its own format
+   * and says so in `contentType`. Absent or null: the adapter's default.
+   */
+  format?: SpeechFormat | null;
 }
 
 export type SynthesizeResult =

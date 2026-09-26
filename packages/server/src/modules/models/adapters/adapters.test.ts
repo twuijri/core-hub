@@ -191,6 +191,32 @@ describe('models adapters: OpenAI-shaped', () => {
     expect(voiceless).toEqual({ supported: false, reason: 'no_voice' });
   });
 
+  it('asks for the audio format the client can play (DECISIONS §87)', async () => {
+    const { fetchImpl, calls } = scripted([
+      { bytes: new Uint8Array([1]), contentType: 'audio/aac' },
+      { bytes: new Uint8Array([2]), contentType: 'audio/ogg' },
+      { bytes: new Uint8Array([3]), contentType: 'audio/mpeg' },
+    ]);
+    const ctx = context({ fetchImpl, settings: { voice: 'alloy' } });
+
+    // iOS cannot play Ogg: it asks for AAC.
+    const aac = await openAiAdapter.synthesize(ctx, {
+      text: 'x',
+      language: null,
+      voice: null,
+      format: 'aac',
+    });
+    expect(aac).toMatchObject({ supported: true, contentType: 'audio/aac' });
+    expect(calls[0]!.body).toMatchObject({ response_format: 'aac' });
+    expect(calls[0]!.headers.accept).toBe('audio/aac');
+    // OpenAI calls Ogg Opus `opus`.
+    await openAiAdapter.synthesize(ctx, { text: 'x', language: null, voice: null, format: 'ogg' });
+    expect(calls[1]!.body).toMatchObject({ response_format: 'opus' });
+    // Nothing asked: MP3, as before.
+    await openAiAdapter.synthesize(ctx, { text: 'x', language: null, voice: null });
+    expect(calls[2]!.body).toMatchObject({ response_format: 'mp3' });
+  });
+
   it('has no voice list, and says so instead of inventing one', async () => {
     const result = await openAiAdapter.listVoices(context());
     expect(result.supported).toBe(false);
