@@ -5407,6 +5407,91 @@ paths:
           $ref: '#/components/responses/Forbidden'
         '404':
           $ref: '#/components/responses/NotFound'
+  /agents/{agent_id}/sign-in:
+    parameters:
+      - $ref: '#/components/parameters/Profile'
+      - $ref: '#/components/parameters/AgentId'
+    post:
+      operationId: agents.startSignIn
+      tags: [agents]
+      summary: Sign an installed agent in to its own vendor account by device code (admin)
+      description: >-
+        Only for an agent whose `install.sign_in` is true (Kimi Code, Grok Build): the hub runs
+        the agent's own device-code sign-in (`kimi login`, `grok login --device-auth`), answers
+        with the link and code it printed, and the client polls `agents.getSignIn` until
+        `status` is no longer `pending`. The agent keeps the credential in its own folder under
+        the hub user's home, for every profile; no token passes through the hub. Starting again
+        stops the one before. Any other agent is `409 state_invalid` with
+        `details.reason = sign_in_unsupported`; one not installed, `details.reason =
+        not_installed`. A CLI that prints no link in time is `503`.
+      x-roles: [owner, admin]
+      x-rt-events: []
+      responses:
+        '201':
+          description: The pending sign-in; show `user_code` and `verification_url`, then poll.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProviderSignIn'
+              example:
+                id: 01J8QK3ZR2W7M5N4P6T8V9X0SN
+                status: pending
+                user_code: RL0S-YSZ9
+                verification_url: https://www.kimi.ai/code/authorize_device?user_code=RL0S-YSZ9
+                accepts_code: false
+                expires_at: '2026-09-26T13:25:00Z'
+                error: null
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
+  /agents/{agent_id}/sign-in/{sign_in_id}:
+    parameters:
+      - $ref: '#/components/parameters/Profile'
+      - $ref: '#/components/parameters/AgentId'
+      - name: sign_in_id
+        in: path
+        required: true
+        schema:
+          $ref: '#/components/schemas/Ulid'
+    get:
+      operationId: agents.getSignIn
+      tags: [agents]
+      summary: Poll an agent's sign-in (admin)
+      description: >-
+        How the agent's sign-in stands: `pending` while its command waits, `approved` once it
+        stored the credential, `denied` when the person declined, `expired` when the code ran
+        out, `failed` with the command's last line otherwise. A sign-in the hub no longer holds
+        (the hub restarted, or another was started) is `404`.
+      x-roles: [owner, admin]
+      x-rt-events: []
+      responses:
+        '200':
+          description: The sign-in.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProviderSignIn'
+              example:
+                id: 01J8QK3ZR2W7M5N4P6T8V9X0SN
+                status: approved
+                user_code: RL0S-YSZ9
+                verification_url: https://www.kimi.ai/code/authorize_device?user_code=RL0S-YSZ9
+                accepts_code: false
+                expires_at: '2026-09-26T13:25:00Z'
+                error: null
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
   /agents/{agent_id}/restart:
     parameters:
       - $ref: '#/components/parameters/Profile'
@@ -20660,7 +20745,9 @@ components:
           type: [string, 'null']
         package:
           type: [string, 'null']
-          description: npm/pip package the hub installs.
+          description: >-
+            npm/pip package the hub installs; `null` for an agent installed from a pinned release
+            download (Goose, Grok Build), which has no registry to update from.
         command:
           type: [string, 'null']
         version:
@@ -20692,6 +20779,11 @@ components:
             of the agent is in flight; a run asked for during the update waits for it.
         auto_update_supported:
           type: boolean
+        sign_in:
+          type: boolean
+          description: >-
+            The agent can be signed in to its own vendor account from the hub
+            (`agents.startSignIn`), once installed. Absent means false.
         checked_at:
           oneOf:
             - $ref: '#/components/schemas/Timestamp'

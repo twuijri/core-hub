@@ -550,7 +550,7 @@ describe('agents: the curated catalog (ADR 0006)', () => {
     const ids = CATALOG.map((entry) => entry.id);
     expect(new Set(ids).size).toBe(ids.length);
     for (const entry of INSTALLABLE) {
-      expect(entry.install.kind).toBe('npm');
+      expect(['npm', 'download']).toContain(entry.install.kind);
       expect(ACCEPTED_LICENCES).toContain(entry.licence);
       for (const pin of pinnedPackages(entry)) expect(pin.version).toMatch(/^\d+\.\d+\.\d+$/);
     }

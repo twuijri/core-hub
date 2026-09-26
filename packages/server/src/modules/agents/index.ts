@@ -60,7 +60,7 @@ import {
 import { auditFor, jobRunnerFor } from '../audit/index.js';
 import { createAdapterSet, type AdapterSet, type AdapterSetOptions } from './adapters/index.js';
 import type { AdapterKind, AgentTarget } from './adapters/types.js';
-import { HERMES_ENTRY } from './catalog/index.js';
+import { HERMES_ENTRY, catalogEntry } from './catalog/index.js';
 import { HermesRuntime, type HermesRuntimeStatus, type Spawner } from './hermes-runtime.js';
 import { HermesDashboard, type DashboardSpawner } from './hermes-dashboard.js';
 import { QR_PLATFORMS, pairWhatsApp, testMcpServer, type HermesApiCall } from './hermes-tools.js';
@@ -116,6 +116,8 @@ import {
 import { hermesProfileName, profileHome } from './profile-home.js';
 import { SkillImportError, installPack, planImport, type UploadedFile } from './skill-import.js';
 import { createNpmInstaller, managedBinDirs, type AgentInstaller } from './installer.js';
+import { AgentSignIns, type SpawnSignIn } from './agent-sign-in.js';
+import { agentEnvironment } from './adapters/acp.js';
 import type { AgentDirectoryPort, AgentInfo, AgentModelsPort, AgentRunnerPort } from './ports.js';
 import { AgentRunner } from './runner.js';
 import { ConfigFileError, ConfigFileStore } from './config-files.js';
@@ -337,6 +339,8 @@ export interface AgentsOverrides {
   };
   /** The home coding agents read their config files from (`config-files.ts`), for the tests. */
   agentHome?: string;
+  /** How an agent's own sign-in command is started (`agent-sign-in.ts`), scripted in tests. */
+  signIn?: { spawnImpl?: SpawnSignIn; promptTimeoutMs?: number };
 }
 
 /** Platforms linked by pasting a bot token (`agents.linkChannel`). */
@@ -439,6 +443,10 @@ interface AgentsContext {
   channelProbe: ProbeOptions;
   /** The coding agents' own config files, one set for the hub (decision §78). */
   configFiles: ConfigFileStore;
+  /** Agents signing in to their own vendor account (catalog `signIn`). */
+  signIns: AgentSignIns;
+  /** The environment a coding agent's process inherits, before its own variables. */
+  agentInherited: NodeJS.ProcessEnv;
 }
 
 /**
@@ -811,6 +819,13 @@ function contextOf(app: FastifyInstance): AgentsContext {
       ...(own.agentHome ? { home: own.agentHome } : {}),
       dataDir: hub.config.dataDir,
     }),
+    signIns: new AgentSignIns({
+      ...(own.signIn?.spawnImpl ? { spawnImpl: own.signIn.spawnImpl } : {}),
+      ...(own.signIn?.promptTimeoutMs !== undefined
+        ? { promptTimeoutMs: own.signIn.promptTimeoutMs }
+        : {}),
+    }),
+    agentInherited: host.inherited ?? {},
   };
   // The home coding agents read their files from exists before anything is spawned: the
   // image's `/data/home` is made on the first boot of a volume that predates it.
@@ -1046,6 +1061,7 @@ export const agentsModule = defineModule({
     });
     app.addHook('onClose', async () => {
       ctx.updates.stop();
+      ctx.signIns.close();
       await ctx.runner.closeAll();
       await ctx.dashboard.close();
       await ctx.runtime.stop();
@@ -1768,6 +1784,59 @@ export const agentsModule = defineModule({
           return configFileFault(error, agentId, key);
         }
       },
+    });
+
+    // An installed agent signing in to its own vendor account (catalog `signIn`): the hub runs
+    // the agent's device-code command and relays its link and code; the agent keeps the token.
+    defineRoute(app, deps, {
+      operationId: 'agents.startSignIn',
+      status: 201,
+      handler: async (request, { params }) => {
+        const agentId = params.agent_id as string;
+        const row = service.loadAgent(agentId);
+        const entry = catalogEntry(row.slug);
+        if (!entry?.signIn) {
+          throw new HubError('state_invalid', {
+            details: { agent_id: agentId, reason: 'sign_in_unsupported' },
+          });
+        }
+        if (row.installState !== 'installed' || !row.executablePath) {
+          throw new HubError('state_invalid', {
+            details: { agent_id: agentId, reason: 'not_installed' },
+          });
+        }
+        const ctx = contextOf(request.server);
+        const env = agentEnvironment(ctx.agentInherited, { executablePath: row.executablePath });
+        const started = await ctx.signIns.start(
+          agentId,
+          [row.executablePath, ...entry.signIn.args],
+          env,
+        );
+        const scope = scopeOf(request);
+        const actor = actorOf(request).userId;
+        auditFor(request.server).record({
+          workspace: scope.id,
+          ownerId: actor,
+          actorKind: 'user',
+          actorId: actor,
+          action: 'agent.sign_in_started',
+          entityKind: 'agent',
+          entityId: agentId,
+          summary: `sign-in of ${row.slug} started`,
+          data: { agent: row.slug },
+          requestId: String(request.id),
+        });
+        return started;
+      },
+    });
+
+    defineRoute(app, deps, {
+      operationId: 'agents.getSignIn',
+      handler: (request, { params }) =>
+        contextOf(request.server).signIns.get(
+          params.agent_id as string,
+          params.sign_in_id as string,
+        ),
     });
 
     registerHubToolRoutes(app, deps, {

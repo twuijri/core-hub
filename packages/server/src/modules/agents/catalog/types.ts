@@ -32,9 +32,65 @@ export type InstallRecipe =
       companions?: readonly { package: string; version: string }[];
     }
   | {
+      /**
+       * A release the vendor publishes as a file rather than an npm package (a Rust or Go
+       * binary): one download per platform, each pinned by its SHA-256. The hub downloads the
+       * file for the platform it runs on, refuses it unless the hash matches, unpacks the one
+       * executable and puts it in `${DATA_DIR}/agents/<id>/bin`. There is no registry to ask for
+       * a newer version: moving the pin is a pull request that changes the version and every
+       * hash together, checked against the vendor's release page.
+       */
+      kind: 'download';
+      /** **Pinned.** The release the hashes belong to; every asset URL names it. */
+      version: string;
+      /** At least one platform; a platform with no asset cannot install the agent. */
+      assets: Partial<Record<DownloadPlatform, DownloadAsset>>;
+    }
+  | {
       /** Shipped inside the image (Hermes). The hub never installs or removes it. */
       kind: 'bundled';
     };
+
+/** `process.platform`-`process.arch`, for the platforms a release is published for. */
+export type DownloadPlatform =
+  | 'linux-x64'
+  | 'linux-arm64'
+  | 'darwin-x64'
+  | 'darwin-arm64'
+  | 'win32-x64';
+
+export const DOWNLOAD_PLATFORMS: readonly DownloadPlatform[] = [
+  'linux-x64',
+  'linux-arm64',
+  'darwin-x64',
+  'darwin-arm64',
+  'win32-x64',
+];
+
+/** One platform's release file. */
+export interface DownloadAsset {
+  /** `https://` only; the vendor's own release URL, naming the pinned version. */
+  url: string;
+  /** Lower-case hex SHA-256 of the file at `url`, exactly as downloaded. */
+  sha256: string;
+  /**
+   * How the executable is packed: `raw` is the executable itself, `gz` the executable
+   * gzipped, `tar.gz` a gzipped tarball holding it at `extract`.
+   */
+  format: 'raw' | 'gz' | 'tar.gz';
+  /** `tar.gz` only: the executable's path inside the archive (relative, no `..`). */
+  extract?: string;
+}
+
+/**
+ * Signing an installed agent in to its own vendor account by device code, headless: the hub
+ * runs `binary ...args`, shows the link and code the CLI prints, and waits for it to exit.
+ * The CLI keeps the credential in its own folder under the hub user's home; no token passes
+ * through the hub.
+ */
+export interface AgentSignInRecipe {
+  args: string[];
+}
 
 /** How the hub decides whether an installed agent actually works. */
 export type HealthCheck =
@@ -104,11 +160,13 @@ export interface CatalogEntry {
    * §56), as its protocol actually carries it — checked against the pinned version.
    */
   subagents: 'full' | 'observe' | 'none';
+  /** Present when the agent can be signed in to its vendor account from the hub. */
+  signIn?: AgentSignInRecipe;
 }
 
 /** The pinned version an entry should be at, or null when the hub does not install it. */
 export function pinnedVersion(entry: CatalogEntry): string | null {
-  return entry.install.kind === 'npm' ? entry.install.version : null;
+  return entry.install.kind === 'bundled' ? null : entry.install.version;
 }
 
 /** Every package an entry installs, the agent's own first, each at its pin. */
@@ -122,5 +180,14 @@ export function pinnedPackages(entry: CatalogEntry): { package: string; version:
 
 /** True when the hub is allowed to install and remove this entry. */
 export function isManaged(entry: CatalogEntry): boolean {
-  return entry.install.kind === 'npm';
+  return entry.install.kind === 'npm' || entry.install.kind === 'download';
+}
+
+/** The platform key this host's release is published under, or null for any other. */
+export function downloadPlatform(
+  platform: string = process.platform,
+  arch: string = process.arch,
+): DownloadPlatform | null {
+  const key = `${platform}-${arch}`;
+  return (DOWNLOAD_PLATFORMS as readonly string[]).includes(key) ? (key as DownloadPlatform) : null;
 }

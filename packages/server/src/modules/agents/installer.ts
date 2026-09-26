@@ -22,7 +22,15 @@
 import { existsSync, readdirSync, rmSync } from 'node:fs';
 import path from 'node:path';
 import { runCommand, whichSync, type HostEnvironment } from './adapters/host.js';
-import { isManaged, pinnedPackages, pinnedVersion, type CatalogEntry } from './catalog/index.js';
+import {
+  downloadPlatform,
+  isManaged,
+  pinnedPackages,
+  pinnedVersion,
+  type CatalogEntry,
+  type DownloadPlatform,
+} from './catalog/index.js';
+import { installDownload } from './download-install.js';
 import { agentUnavailable, HubError } from '../../lib/errors.js';
 import { isStableVersion } from './update-policy.js';
 
@@ -67,6 +75,12 @@ export interface NpmInstallerOptions {
   host: HostEnvironment;
   /** Milliseconds; an npm install of a large CLI is slow on a small box. */
   timeoutMs?: number;
+  /** The release a `download` recipe takes; the host's own by default. Tests pin one. */
+  platform?: DownloadPlatform | null;
+  /** How a `download` recipe fetches its file; the global `fetch` by default. */
+  fetchImpl?: typeof fetch;
+  /** Largest file a `download` recipe may fetch (bytes); 1 GiB by default. */
+  maxDownloadBytes?: number;
 }
 
 /** `<DATA_DIR>/agents` — the parent of every installed agent (ADR 0006). */
@@ -115,15 +129,16 @@ export function createNpmInstaller(options: NpmInstallerOptions): AgentInstaller
     return found;
   };
 
-  const requireManaged = (entry: CatalogEntry): { package: string; version: string } => {
-    if (entry.install.kind !== 'npm') {
+  const requireManaged = (entry: CatalogEntry): void => {
+    if (!isManaged(entry)) {
       throw agentUnavailable({
         agent: entry.id,
         reason: 'this agent ships inside the image; the hub does not install or remove it',
       });
     }
-    return { package: entry.install.package, version: entry.install.version };
   };
+  const platform =
+    options.platform === undefined ? downloadPlatform() : (options.platform ?? null);
 
   const binaryIn = (entry: CatalogEntry, binary: string = entry.binary): string | null =>
     whichSync(binary, {
@@ -143,7 +158,32 @@ export function createNpmInstaller(options: NpmInstallerOptions): AgentInstaller
     },
 
     async install(entry, report, versions) {
-      const recipe = requireManaged(entry);
+      requireManaged(entry);
+      if (entry.install.kind === 'download') {
+        // A download is its pin and its hashes; there is no "newer exact version" to take.
+        await installDownload(entry, entry.install, {
+          prefix: agentPrefix(options.dataDir, entry.id),
+          platform,
+          report,
+          host: options.host,
+          timeoutMs,
+          fetchImpl: options.fetchImpl ?? fetch,
+          maxBytes: options.maxDownloadBytes ?? 1024 * 1024 * 1024,
+        });
+        await report(80, 'running the health check');
+        const health = await this.health(entry);
+        if (!health.ok) {
+          throw new HubError('internal', {
+            message: health.error ?? `${entry.name} was installed but its health check failed`,
+          });
+        }
+        return {
+          version: health.version ?? entry.install.version,
+          executablePath: binaryIn(entry),
+        };
+      }
+      if (entry.install.kind !== 'npm') throw new Error('unreachable');
+      const recipe = entry.install;
       // Always an exact version per package — the pin, or the exact one an update names.
       // Anything else (a tag, a range, a path) is refused before npm is even looked for.
       for (const [name, version] of Object.entries(versions ?? {})) {
