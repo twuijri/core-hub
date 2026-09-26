@@ -452,7 +452,7 @@ export const PROVIDER_CATALOGUE: readonly ProviderCatalogueEntry[] = [
     baseUrl: 'https://api.openai.com/v1',
     capabilities: { stt: true, listModels: true },
     // A new row starts on `gpt-transcribe`: OpenAI retires `whisper-1` on 2027-02-26 (DECISIONS
-    // §111). A preset's settings are copied into a row once, when it is created, so a row that
+    // §112). A preset's settings are copied into a row once, when it is created, so a row that
     // already holds `whisper-1` — or any model somebody chose — keeps it.
     settings: { model: OPENAI_STT_DEFAULT_MODEL, language: null, voice: null },
     hermesSpeech: {

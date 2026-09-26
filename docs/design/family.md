@@ -75,7 +75,8 @@ this table:
 Shared controls: back `chevron-left`/`arrow-left` (mirrored in RTL), close `x`, more `ellipsis`,
 send `arrow-up`, stop a filled square, attach `paperclip` / `plus`, copy `copy`, restart
 `rotate-cw`, profile `layout-grid`, theme `sun` · `moon` · `sun-moon` (system), language `globe`,
-sign out `log-out`, share `share`.
+sign out `log-out`, share `share`, fold the sidebar / open it `panel-left-close` / `panel-left-open`
+(mirrored in RTL; web and desktop only — a phone has no rail).
 
 Every row of a navigation list carries its icon — the rail, the settings list, an agent's pages.
 
