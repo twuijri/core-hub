@@ -232,7 +232,8 @@ test.describe('the rebuilt screens', () => {
     await page.getByRole('link', { name: 'الإعدادات' }).first().click();
     await page.getByTestId('settings-nav').getByRole('link', { name: 'الحساب' }).click();
     await expect(page.getByTestId('settings-tabs')).toBeVisible();
-    await expect(page.getByTestId('settings-management').getByRole('link')).toHaveCount(3);
+    // Four since «المراكز المرتبطة» / Linked hubs joined them (ADR 0026).
+    await expect(page.getByTestId('settings-management').getByRole('link')).toHaveCount(4);
     // Nine tools since «الملفات» / Files joined them (DECISIONS §65) beside Skills usage (§50).
     await expect(page.getByTestId('settings-tools').getByRole('link')).toHaveCount(9);
     await shot(page, 'design-settings-ar-light');
