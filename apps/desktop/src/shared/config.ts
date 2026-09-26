@@ -61,12 +61,12 @@ export interface DesktopConfig {
   helper: HelperConfig;
   /** Device connections, by hub origin: this computer paired with that hub (ADR 0025). */
   links: Record<string, DeviceLinkConfig>;
-  /** The update check (ADR 0023): a notice and a link, never an install. */
+  /** New versions (DECISIONS §109): download and ask to restart, or a notice and a link. */
   updates: {
-    /** Look once a day on its own (a request to GitHub's API, nothing else). */
+    /** Look on its own: about ten seconds after start, then every six hours. */
     auto: boolean;
     lastCheckedAt: string | null;
-    /** The version the OS was last told about, so it is said once. */
+    /** What the OS was last told (`available:1.2.0`, `ready:1.2.0`), so it is said once. */
     notified: string | null;
   };
   /**
