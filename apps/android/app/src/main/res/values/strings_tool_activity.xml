@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- A turn's tool activity (owner, 2026-09-26): the live window and the folded row. -->
+<resources>
+    <string name="tool_activity_hide_earlier">Hide the earlier steps</string>
+    <string name="tool_activity_show">Show the steps</string>
+    <string name="tool_activity_hide">Hide the steps</string>
+    <string name="tool_activity_seconds">%1$ds</string>
+    <string name="tool_activity_minutes">%1$dm %2$02ds</string>
+    <plurals name="tool_activity_steps">
+        <item quantity="one">%1$d step</item>
+        <item quantity="other">%1$d steps</item>
+    </plurals>
+    <plurals name="tool_activity_failed">
+        <item quantity="one">%1$d failed</item>
+        <item quantity="other">%1$d failed</item>
+    </plurals>
+    <plurals name="tool_activity_earlier">
+        <item quantity="one">+%1$d earlier step</item>
+        <item quantity="other">+%1$d earlier steps</item>
+    </plurals>
+</resources>

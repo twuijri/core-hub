@@ -86,6 +86,7 @@
     "volume-2",
     "webhook",
     "workflow",
+    "wrench",
     "x"
   ],
   "android": [
@@ -114,7 +115,6 @@
     "rotate-ccw",
     "share-2",
     "shield",
-    "wand-sparkles",
-    "wrench"
+    "wand-sparkles"
   ]
 }

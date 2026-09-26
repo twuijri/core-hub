@@ -174,7 +174,7 @@ private fun AgentMessage(message: ChatMessage, profile: String) {
     ) {
         CompositionLocalProvider(androidx.compose.material3.LocalContentColor provides t.agentBubbleText) {
             if (!message.streaming && message.reasoning.isNotBlank()) ReasoningFold(message.reasoning, message.reasoningMs)
-            message.toolCalls.forEach { ToolCallCard(it) }
+            ToolActivityView(message.toolCalls, live = message.streaming)
             if (message.text.isNotBlank()) MarkdownView(message.text)
             MessageFiles(message.attachments, profile)
             if (!message.streaming && message.text.isNotBlank()) {
