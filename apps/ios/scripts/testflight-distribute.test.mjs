@@ -4,7 +4,13 @@ import { generateKeyPairSync, verify } from 'node:crypto';
 import { createServer } from 'node:http';
 import { after, before, beforeEach, describe, it } from 'node:test';
 
-import { createClient, distribute, makeToken, parseGroups } from './testflight-distribute.mjs';
+import {
+  createClient,
+  distribute,
+  groupKey,
+  makeToken,
+  parseGroups,
+} from './testflight-distribute.mjs';
 
 const { privateKey, publicKey } = generateKeyPairSync('ec', { namedCurve: 'prime256v1' });
 const pem = privateKey.export({ type: 'pkcs8', format: 'pem' });
@@ -163,6 +169,16 @@ function run(overrides = {}) {
 const posts = () => fake.requests.filter((r) => r.method === 'POST');
 const has = (lines, level, text) => lines.some((l) => l.level === level && l.m.includes(text));
 
+describe('groupKey', () => {
+  it('ignores invisible direction marks, spaces and case', () => {
+    // App Store Connect kept the owner's group as "Owner" + U+2069, pasted from Arabic text.
+    assert.equal(groupKey('Owner\u2069'), 'owner');
+    assert.equal(groupKey('\u200F Owner\u200E '), 'owner');
+    assert.equal(groupKey('\u2068Friends\u2069'), 'friends');
+    assert.notEqual(groupKey('Owners'), groupKey('Owner'));
+  });
+});
+
 describe('distribute', () => {
   it('finds the app, waits for processing, and adds the build to the group', async () => {
     fake.builds = [
@@ -259,6 +275,14 @@ describe('distribute', () => {
     assert.deepEqual(posts()[0].body, { data: [{ type: 'betaGroups', id: 'g-owner' }] });
     assert.ok(has(lines, 'error', 'No TestFlight group named "Nobody"'));
     assert.ok(has(lines, 'error', '"Owner", "Friends"'));
+  });
+
+  it('finds a group whose stored name carries an invisible mark', async () => {
+    fake.builds = [{ processingState: 'VALID', internalBuildState: 'READY_FOR_BETA_TESTING' }];
+    fake.groups[0].attributes.name = 'Owner\u2069';
+    const { code } = await run({ groups: 'Owner' });
+    assert.equal(code, 0);
+    assert.deepEqual(posts()[0].body, { data: [{ type: 'betaGroups', id: 'g-owner' }] });
   });
 
   it('fails when the app is not in App Store Connect', async () => {

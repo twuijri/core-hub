@@ -147,7 +147,19 @@ export async function waitForBuild(
   }
 }
 
-/** Matches group names (case-insensitive) to the app's beta groups. */
+/**
+ * A group name as a person means it: invisible direction and joiner marks (U+200B–U+200F,
+ * U+202A–U+202E, U+2060–U+2069, U+FEFF) dropped, spaces trimmed, case ignored. A name pasted from
+ * right-to-left text carries such marks (the owner's "Owner" group did: "Owner" + U+2069), which
+ * App Store Connect keeps and a person cannot see.
+ */
+export const groupKey = (name) =>
+  String(name ?? '')
+    .replace(/[\u200B-\u200F\u202A-\u202E\u2060-\u2069\uFEFF]/g, '')
+    .trim()
+    .toLowerCase();
+
+/** Matches group names (see groupKey) to the app's beta groups. */
 export async function resolveGroups(api, appId, names) {
   const res = await api('GET', `/apps/${q(appId)}/betaGroups?limit=200`);
   const groups = res.data ?? [];
@@ -155,7 +167,7 @@ export async function resolveGroups(api, appId, names) {
   const missing = [];
   for (const name of names) {
     const group = groups.find(
-      (g) => (g.attributes?.name ?? '').trim().toLowerCase() === name.toLowerCase(),
+      (g) => groupKey(g.attributes?.name) === groupKey(name),
     );
     if (group) {
       found.push({
