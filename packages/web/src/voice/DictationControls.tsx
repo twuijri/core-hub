@@ -4,7 +4,7 @@
  *
  * - The mic records while pressed once and transcribes when pressed again; the words land in
  *   the composer for the person to read before sending. Nothing is sent by dictating.
- * - The menu holds the dictation language (auto, Arabic, English), «اقرأ الردود تلقائيًا»,
+ * - The menu holds the dictation language (auto, then the popular languages), «اقرأ الردود تلقائيًا»,
  *   and voice mode where the screen offers it.
  * - With no speech-to-text provider on the hub the browser's own recognizer is used and the
  *   line says so; with neither, the line says what is missing and links to Models.
@@ -18,6 +18,7 @@ import { Menu, MenuChoice, MenuItem, MenuNote, MenuSeparator } from '../ui/Menu.
 import { Notice } from '../ui/Notice.js';
 import { Tooltip } from '../ui/Tooltip.js';
 import { useVoicePreferences, type DictationLanguage } from './context.js';
+import { POPULAR_LANGUAGES, languageName } from './languages.js';
 import { isLive, pressStarts, type RecorderState } from './recorder.js';
 import type { Dictation } from './useDictation.js';
 
@@ -68,7 +69,14 @@ export function MicButton({ dictation, disabled }: { dictation: Dictation; disab
   );
 }
 
-const LANGUAGES: DictationLanguage[] = ['auto', 'ar', 'en'];
+/**
+ * Detect automatically, then the popular languages (DECISIONS §87: every language, not two),
+ * and the one the person chose when it is none of those.
+ */
+function dictationLanguages(current: string): DictationLanguage[] {
+  const listed: DictationLanguage[] = ['auto', ...POPULAR_LANGUAGES];
+  return listed.includes(current) ? listed : [...listed, current];
+}
 
 export function VoiceMenu({
   disabled,
@@ -98,13 +106,17 @@ export function VoiceMenu({
       }
     >
       <MenuNote>{t('voice.language')}</MenuNote>
-      {LANGUAGES.map((value) => (
+      {dictationLanguages(current).map((value) => (
         <MenuChoice
           key={value}
           checked={current === value}
           onSelect={() => preferences.setDictationLanguage(value)}
         >
-          {t(`voice.language_${value}`)}
+          {value === 'auto' ? (
+            t('voice.language_auto')
+          ) : (
+            <span lang={value}>{languageName(value, ui)}</span>
+          )}
         </MenuChoice>
       ))}
       <MenuSeparator />

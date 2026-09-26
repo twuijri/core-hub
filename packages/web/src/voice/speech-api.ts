@@ -40,11 +40,24 @@ export async function transcribe(
 
 export async function synthesize(
   client: HubClient,
-  request: { text: string; language: string | null },
+  request: {
+    text: string;
+    language: string | null;
+    /** A preview names what it previews (DECISIONS §87); a reply uses the saved choice. */
+    providerId?: string | null;
+    model?: string | null;
+    voice?: string | null;
+  },
   signal?: AbortSignal,
 ): Promise<Blob> {
   const response = await client.raw('post', '/models/speech/speech', {
-    body: { text: request.text, language: request.language },
+    body: {
+      text: request.text,
+      language: request.language,
+      ...(request.providerId ? { provider_id: request.providerId } : {}),
+      ...(request.model ? { model: request.model } : {}),
+      ...(request.voice ? { voice: request.voice } : {}),
+    },
     responseKind: 'bytes',
     ...(signal ? { signal } : {}),
   });
