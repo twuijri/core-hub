@@ -27,7 +27,10 @@ $summary = @()
 
 function Target([string]$link) { $shell.CreateShortcut($link).TargetPath }
 function Expect([bool]$ok, [string]$what) {
-  if (-not $ok) { throw "upgrade: $what" }
+  if (-not $ok) {
+    Write-Output "FAILED: $what"
+    throw "upgrade: $what"
+  }
   Write-Output "ok: $what"
 }
 function UninstallEntries {
@@ -68,7 +71,13 @@ Expect ((Target $desktopLink) -eq $newExe) "the desktop shortcut opens $newExe"
 $entries = UninstallEntries
 Expect ($entries.Count -eq 1) "one uninstall entry (found $($entries.Count))"
 Expect ($entries[0].DisplayName -eq "Core Hub $Version") "the uninstall entry is 'Core Hub $Version' ($($entries[0].DisplayName))"
-Expect ($entries[0].InstallLocation -eq $newDir) "the uninstall entry points at $newDir ($($entries[0].InstallLocation))"
+$uninstallString = "$($entries[0].UninstallString)"
+Expect ($uninstallString.StartsWith("`"$newDir\Uninstall Core Hub.exe`"")) "the uninstall entry runs the new uninstaller ($uninstallString)"
+Expect ($entries[0].DisplayIcon -eq "$newExe,0") "the uninstall entry shows the new .exe's icon ($($entries[0].DisplayIcon))"
+$remembered = @(Get-ChildItem 'HKCU:\Software' -ErrorAction SilentlyContinue |
+    ForEach-Object { Get-ItemProperty $_.PSPath -ErrorAction SilentlyContinue } |
+    Where-Object { $_.ShortcutName -eq 'Core Hub' })
+Expect ($remembered.Count -eq 1 -and $remembered[0].InstallLocation -eq $newDir) "the next upgrade finds $newDir ($($remembered.InstallLocation))"
 $command = (Get-Item $protocolKey).GetValue('')
 Expect ($command -eq "`"$newExe`" `"%1`"") "corehub:// opens the new .exe before its first start ($command)"
 $summary += "| Upgrade from 1.1.1 | ``$newExe``, old folder removed, shortcuts, uninstall entry and corehub:// on the new .exe |"
