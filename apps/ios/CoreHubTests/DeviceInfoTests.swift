@@ -65,7 +65,7 @@ private final class ReportingBackend: PushBackend {
         return paired
     }
 
-    func registerPush(deviceID: String, token: String, locale: HubLocale) async throws {}
+    func registerPush(deviceID: String, token: String, locale: HubLocale, proof: PushRelayProof?) async throws {}
     func unregisterPush(deviceID: String) async throws {}
 
     func update(deviceID: String, patch: DevicePatch) async throws {

@@ -3358,3 +3358,41 @@ own vendor account rather than reading a provider key.
 Rejected: running a vendor's install script (`curl … | bash`: it takes "latest" and checks
 nothing); following a "latest" link (the hash would stop meaning anything); unpacking the whole
 archive into the agent's folder (only the executable the entry names is taken).
+
+## 107. Push follow-ups: a browser's Web Push ends with its sign-in, dropped registrations are announced, the apps prove the device to the relay
+
+Proposed — owner to confirm (2026-09-27, B16; docs/changes/2026-09-27-twuijri-push-followups.md).
+No path or schema changes; `device.updated` names one more cause.
+
+- **A browser's Web Push lives as long as the sign-in that registered it**, like a phone's
+  (docs/changes/2026-09-26-twuijri-push-cleanup-mobile-logs.md): `devices.registerPush` records the
+  sign-in for every provider, and every way a sign-in ends forgets the registration. A browser
+  subscribed before this keeps its registration until it is turned off or unlinked.
+- **The web hands the subscription back after a sign-in**, silently, only while the browser's
+  permission is granted, it still holds a subscription, and the person signing in is the one who
+  turned push on in that browser (remembered in the browser's storage). Another person signing in
+  to the same browser is not subscribed; they turn it on themselves. Never on a page load that was
+  already signed in (its registration stands) and never with a permission prompt.
+- **`device.updated` when the hub drops a registration on its own** — the sign-in that made it
+  ended, or the push service called the token dead — to the device's person, from the row as it is
+  after the change (announced on the next turn, so a transaction that rolled back announces what it
+  kept). A device revoked at the same time is announced by whoever revoked it (`device.unlinked`, or
+  `device.updated` on a logout).
+- **The apps send `PushRegistration.relay_proof`** (ADR 0024 §6) with every registration: a P-256
+  key made once per install — a software key kept in the iOS Keychain (this device only, after first
+  unlock), a Keystore key on Android whose private half never leaves it — signs
+  `corehub-push-bind-v1`, the platform, the token and the unix time. No key, no proof: the
+  registration goes on without one. The hub forwards it unread (unchanged since §82). A registration
+  the relay could not bind at that moment is bound later without it: a proof is good for ten minutes.
+- **The FCM installation id is not used**: neither ADR 0024 nor the push records depend on it; the
+  hub and the relay address FCM registration tokens (HTTP v1 `message.token`), and the device proof
+  already identifies the install to the relay.
+- **iOS, signed out by the hub** (a 401 at launch or on a call): the app forgets the token it held
+  and unregisters from APNs, so APNs refuses the old token to any hub or relay still holding it; the
+  next sign-in registers again. The proof key stays (it is the install's). Signing out on purpose
+  still tells the hub first and leaves APNs registered.
+
+Rejected: subscribing a browser on sign-in without a subscription it already holds (that is the
+person's choice on the Notifications page); the Secure Enclave for the iOS key (not in the simulator
+the CI tests on, and the relay's risk model — ADR 0024 §6 — does not need a key that cannot leave
+the phone).
