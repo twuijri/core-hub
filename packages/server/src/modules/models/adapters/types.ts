@@ -76,7 +76,7 @@ export type ListModelsResult =
       models: DiscoveredModel[];
       /**
        * `fallback` when the list is not the provider's answer (decision §83) — for a speech
-       * provider with no model endpoint, its documented list (§92), with `reason` saying so.
+       * provider with no model endpoint, its documented list (§94), with `reason` saying so.
        */
       source?: 'provider' | 'fallback';
       reason?: string;
@@ -95,7 +95,7 @@ export interface DiscoveredVoice {
 }
 
 /**
- * Where a voice list came from (DECISIONS §92): the provider's own endpoint, or — for a
+ * Where a voice list came from (DECISIONS §94): the provider's own endpoint, or — for a
  * provider that has none — its public documentation (`speech/documented.ts`).
  */
 export type VoiceSource = 'provider' | 'documented';

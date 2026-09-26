@@ -1,5 +1,5 @@
 /**
- * Long text for a provider with a small request limit (DECISIONS §92): cut at the best
+ * Long text for a provider with a small request limit (DECISIONS §94): cut at the best
  * boundary, in order, and the parts' audio joined into one file.
  */
 import { describe, expect, it } from 'vitest';

@@ -9,7 +9,7 @@
  * - `POST /v1/text-to-speech/{voice_id}` answers the audio;
  * - `POST /v1/speech-to-text` takes the recording as `file` with `model_id` (Scribe) and an
  *   optional `language_code`, and answers `text`, `language_code`, `audio_duration_secs`.
- *   Scribe has no model list endpoint, so its documented list answers (decision §92).
+ *   Scribe has no model list endpoint, so its documented list answers (decision §94).
  */
 import {
   detailOf,
@@ -110,7 +110,7 @@ export const elevenLabsAdapter: ElevenLabsAdapter = {
   },
 
   async listModels(ctx: ProviderContext): Promise<ListModelsResult> {
-    // Scribe (speech to text) has no model endpoint: its documented list (decision §92).
+    // Scribe (speech to text) has no model endpoint: its documented list (decision §94).
     const documented = documentedModels(ctx.slug);
     if (documented) return documented;
     const answer = await requestJson({

@@ -109,7 +109,7 @@ export interface PropagationState {
    */
   hermesImage?: boolean;
   /**
-   * The profile's speech-to-text and text-to-speech choices in Hermes's words (DECISIONS §92),
+   * The profile's speech-to-text and text-to-speech choices in Hermes's words (DECISIONS §94),
    * for Hermes's own voice tools (a voice note on a channel, a spoken reply). Null for a side
    * whose provider Hermes has no backend for, or that has no choice: that side of Hermes's
    * `config.yaml` is then left as it is. Absent leaves both alone.
@@ -490,7 +490,7 @@ function applyImage(
 }
 
 /**
- * One side of Hermes's voice (DECISIONS §92): `<side>.provider` and the keys of that provider's
+ * One side of Hermes's voice (DECISIONS §94): `<side>.provider` and the keys of that provider's
  * block, written one key at a time so everything else under `stt:` / `tts:` — `stt.enabled`
  * from the channel settings, another provider's block somebody wrote — survives. Read from
  * Hermes's MIT source (`tools/transcription_tools.py` §_get_provider, `tools/tts_tool.py`

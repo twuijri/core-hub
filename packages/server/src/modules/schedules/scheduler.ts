@@ -50,6 +50,12 @@ export interface SchedulerDeps {
   stop: (schedule: ScheduleRow, lines: ScheduleRunRow[]) => Promise<unknown>;
   log: FastifyBaseLogger;
   tickMs?: number;
+  /**
+   * Other work that runs on this clock, after the schedules of each look (the tasks
+   * watchdog, DECISIONS §93). Each is given the look's `now`; one that fails is logged and
+   * never stops the schedules or the others.
+   */
+  alongside?: () => ReadonlyArray<(now: Date) => unknown>;
 }
 
 export class HubScheduler {
@@ -127,6 +133,13 @@ export class HubScheduler {
         started += 1;
       } catch (error) {
         this.deps.log.warn({ err: error, scheduleId: row.id }, 'schedules: firing failed');
+      }
+    }
+    for (const work of this.deps.alongside?.() ?? []) {
+      try {
+        await work(now);
+      } catch (error) {
+        this.deps.log.warn({ err: error }, 'schedules: work on the scheduler clock failed');
       }
     }
     return started;

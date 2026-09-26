@@ -1112,18 +1112,25 @@
       "start": "Assign and start",
       "only": "Assign only",
       "no_agents": "No agent on this hub can take a task yet. Install or enable one in Agents.",
-      "not_started": "Handed to this agent's own board: it starts the task from there, not the hub."
+      "not_started": "Handed to this agent's own board: it starts the task from there, not the hub.",
+      "waiting": "This task depends on tasks that are not done yet: {titles}. “Assign and start” starts it now anyway."
     },
     "stop": "Stop",
     "unassign": "Unassign",
     "open_session": "Open the conversation",
     "show_archived": "Show archived ({count})",
     "hide_archived": "Hide archived ({count})",
+    "waiting_on": "Waiting on {count}",
+    "waiting_on_list": "Waiting on: {titles}",
+    "stuck": "Stuck",
+    "stuck_since": "No activity from its run since {time}",
     "details": {
       "open": "Details…",
       "title": "Task details",
       "description": "Description",
       "priority": "Priority",
+      "waiting_on": "Waiting on",
+      "waiting_hint": "It starts on its own only when all of these are done.",
       "comments": "Comments",
       "no_comments": "No comments yet.",
       "add_comment": "Add a comment",
@@ -1159,7 +1166,7 @@
     },
     "auto_start": {
       "label": "Start automatically",
-      "hint": "Starts on its own once it is in Ready and given to an agent. Stopping it turns this off."
+      "hint": "Starts on its own once it is in Ready, given to an agent, and everything it depends on is done. Stopping it turns this off."
     },
     "worktree": {
       "title": "Worktree",

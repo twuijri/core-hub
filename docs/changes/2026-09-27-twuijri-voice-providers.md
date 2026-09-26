@@ -14,7 +14,7 @@ groq.com، لا Grok من xAI): «جروك الثاني، وفيه صوت سعو
 حسب اللغة وبحث، والأشهر أولًا و«كل اللغات» خلف مرشّح، وإدخال يدوي للمعرّف؛ وفي الإملاء: اكتشاف تلقائي ثم أي لغة.
 
 ## القرار والموافقات
-قرار العقد §92 في `docs/contracts/DECISIONS.md` — **مقترح، للمالك أن يؤكد**. ما تحققت منه في الوثائق العامة
+قرار العقد §94 في `docs/contracts/DECISIONS.md` — **مقترح، للمالك أن يؤكد**. ما تحققت منه في الوثائق العامة
 (٢٠٢٦-٠٩-٢٦)، بكلماتي:
 
 - **Groq**: الإملاء `POST /openai/v1/audio/transcriptions` بشكل OpenAI بنموذجَي `whisper-large-v3-turbo` و
@@ -81,10 +81,10 @@ OpenAI) في ملف واحد قابل للتحرير `packages/server/src/module
   `Voice.description` و`Voice.models` اختياريان.
 - `SpeechRequest.model` (اختياري)، ووصف التقسيم في `models.synthesize` (بجانب `format` من §91).
 - `ProviderPreset.base_url_example` و`ProviderPreset.key_on_file` (اختياريان).
-- DECISIONS §92.
+- DECISIONS §94.
 
 ## الملفات والتأثير
-- العقد: `packages/contracts/openapi.yaml`، `docs/contracts/DECISIONS.md` §92.
+- العقد: `packages/contracts/openapi.yaml`، `docs/contracts/DECISIONS.md` §94.
 - الخادم (`packages/server/src/modules/models/`): `catalogue.ts` (القوالب الجديدة، `speech`، `hermesSpeech`،
   `baseUrlExample`، العائلتان `deepgram` و`azure-speech`)؛ `adapters/groq.ts` و`deepgram.ts` و`azure.ts` (جديدة)،
   `adapters/elevenlabs.ts` (v2 للأصوات، `/v1/models`، Scribe)، `adapters/openai.ts` (الأصوات الموثّقة، `orpheus` نموذج
@@ -102,10 +102,10 @@ OpenAI) في ملف واحد قابل للتحرير `packages/server/src/module
 - الوثائق: `docs/STATUS.md`، `docs/domain/models.md`.
 
 ## الفحوص (الأوامر ونواتجها الفعلية)
-كلها عبر `mj-run`، واحدًا بعد الآخر، في `corehub-wt-voice` بعد دمج `origin/night/2026-09-27`. دُمج الفرع مرتين: في
-الثانية كان طلب الجوال قد أخذ §91 (`SpeechRequest.format`)، فصار قرار هذه المهمة §92، ودُمج `format` مع `model` في
+كلها عبر `mj-run`، واحدًا بعد الآخر، في `corehub-wt-voice` بعد دمج `origin/night/2026-09-27`. دُمج الفرع ثلاث مرات: في
+الثانية كان طلب الجوال قد أخذ §91 (`SpeechRequest.format`)، وفي الثالثة أُخذ §92 و§93، فصار قرار هذه المهمة §94، ودُمج `format` مع `model` في
 `models.synthesize`، وصارت محوّلات Deepgram وAzure وElevenLabs تحترم الصيغة المطلوبة حيث يسمح المزوّد (Groq ‏WAV فقط؛
-Azure بلا AAC فيجيب MP3؛ والنوع في `Content-Type`). النتائج أدناه بعد الدمج الثاني:
+Azure بلا AAC فيجيب MP3؛ والنوع في `Content-Type`). النتائج أدناه بعد الدمج الثاني، وأُعيد بعد الثالث ما مسّه (انظر آخر الكتلة):
 
 ```
 $ pnpm lint
@@ -140,6 +140,16 @@ $ pnpm build                            → exit 0   (قبل الدمج الثا
 $ COREHUB_E2E_PORT=8871 … PLAYWRIGHT_CHANNEL=chrome pnpm --filter @corehub/web exec playwright test e2e/zzzzzzz-voice.spec.ts --workers=1
   ✓  1 [chromium] › e2e/zzzzzzz-voice.spec.ts:51:1 › 32. dictation lands in the composer, a reply is read aloud, and voice mode goes round (5.8s)
   1 passed (14.8s)
+
+# بعد الدمج الثالث (القرار §94):
+$ pnpm lint / pnpm typecheck / pnpm contracts:lint / pnpm i18n:check / pnpm change-record:check   → exit 0 كلها
+$ (server) vitest run --project unit src/modules/models/
+ Test Files  14 passed | 1 skipped (15)
+      Tests  199 passed | 3 skipped (202)
+$ (server) vitest run --project contract tests/contract/speech.contract.test.ts
+      Tests  6 passed (6)
+$ (web) vitest run tests/speech-voice-picker.test.tsx tests/models-screen.test.tsx
+      Tests  35 passed (35)
 
 # الاختبارات الجديدة على الكود القديم (catalogue.ts وSpeechCard.tsx من night/2026-09-27 قبل المهمة):
      × adds with the chat key, lists its own models per tab and its documented voices per model
@@ -178,7 +188,7 @@ CI على #165: يُكمل بعد الدفع.
 - الرجوع: revert لهذا الفرع؛ لا ترحيل قاعدة بيانات. صفوف الكلام المضافة تبقى بلا أثر إن رُجع (القوالب تختفي فقط).
 
 ## التسليم والخطوة التالية
-- للمالك أن يؤكد §92: قائمة المزوّدين، عدم وجود صوت افتراضي لـGroq، قائمة «اللغات الأشهر»، الكتابة في `stt:`/`tts:`
+- للمالك أن يؤكد §94: قائمة المزوّدين، عدم وجود صوت افتراضي لـGroq، قائمة «اللغات الأشهر»، الكتابة في `stt:`/`tts:`
   في هرمز، وترك Google وEdge.
 - التالي: تجربة بمفاتيح حقيقية على ستاك التست (Groq أولًا: الصوت السعودي والتقسيم)، وتجربة كتابة الصوت في دور هرمز حقيقي
   (رسالة صوتية على تيليجرام)، وGemini TTS حين تستقر واجهته، وربما مزوّد TTS لهرمز يمرّ بالهب ليصل Groq وAzure إلى القنوات.

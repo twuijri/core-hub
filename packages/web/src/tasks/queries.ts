@@ -91,6 +91,20 @@ export interface Task {
   auto_start?: boolean;
   /** The task's git worktree, when its project has a repository and it was made. */
   worktree?: Worktree | null;
+  /**
+   * What it depends on that is not done yet (DECISIONS §93). A task set to start on its own
+   * waits for all of these; a person may still start it by hand, after a warning.
+   */
+  waiting_on?: TaskDependencyState[];
+  /** Set while it runs and its run has been silent too long: the stuck-task watchdog. */
+  stuck_since?: string | null;
+}
+
+/** A dependency, as far as waiting for it goes (contract `TaskDependencyState`). */
+export interface TaskDependencyState {
+  id: string;
+  title: string;
+  status: TaskStatus;
 }
 
 /** What `tasks.assignTask` answers: real ids when the task started, `null` when it did not. */
@@ -191,8 +205,11 @@ export function useBoard(filter: BoardFilter) {
  * archived column. A separate query on purpose — the board is asked again every few
  * seconds while something runs, and the archive only grows, so it is not dragged along on
  * every one of those. Its key starts with the board's, so every write refreshes it too.
+ *
+ * Asked for only while `open` — when a person opens the archive (DECISIONS §93). Until then
+ * the board's own `archived` column says how many there are, which is all the link needs.
  */
-export function useArchive(filter: BoardFilter) {
+export function useArchive(filter: BoardFilter, open: boolean) {
   const { client, session } = useAuth();
   return useQuery({
     queryKey: [...taskKeys.board(filter), 'archived'] as const,
@@ -209,7 +226,7 @@ export function useArchive(filter: BoardFilter) {
       ).data as unknown as { columns: Column[] };
       return board.columns.find((column) => column.status === 'archived')?.tasks ?? [];
     },
-    enabled: !!session,
+    enabled: !!session && open,
   });
 }
 

@@ -35,6 +35,7 @@ sets:
 | `COREHUB_SETUP_OPEN_MINUTES` | Optional. Minutes after the hub starts, while it has no owner, in which setup is open without the token. Default `60`; `0` = token only (§2). |
 | `COREHUB_RESET_OWNER` | Optional, recovery only. `1` disables the owner on the next boot and reopens setup (§2). Remove it afterwards. |
 | `COREHUB_TASK_AUTO_START_MAX` | Optional. How many task runs the hub starts **by itself** (a task's "Start automatically") at once in one profile; the rest wait their turn. Default `2`. A person's "Assign and start" is never held back by it. |
+| `COREHUB_TASK_STUCK_MINUTES` | Optional. After how many minutes without any activity from its run a running task is marked **stuck** and its owner gets a notice (the task is not stopped). Default `30` (proposed); `0` switches the watchdog off. |
 | `COREHUB_WEB_TERMINAL` | Optional, **off by default**. `1` gives the owner — and only the owner — a shell on this host from Settings → Terminal (§3c). Read the risk first. |
 | `COREHUB_WEB_TERMINAL_IDLE_MINUTES` | Optional. A web terminal nobody types in closes after this many minutes. Default `15`. |
 

@@ -70,7 +70,7 @@ export function MicButton({ dictation, disabled }: { dictation: Dictation; disab
 }
 
 /**
- * Detect automatically, then the popular languages (DECISIONS §92: every language, not two),
+ * Detect automatically, then the popular languages (DECISIONS §94: every language, not two),
  * and the one the person chose when it is none of those.
  */
 function dictationLanguages(current: string): DictationLanguage[] {

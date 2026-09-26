@@ -403,62 +403,7 @@ hub reports the fact; the client warns and suggests `host.docker.internal`.
 Rewriting the URL silently was rejected — a hub that edits what you typed is a
 hub you cannot debug.
 
-## 26. Changing a conversation's agent is a fork; changing its model is a patch
-
-Owner direction, 2026-09-22. Mid-conversation, "talk to a different agent" and
-"run on a different model" look like the same gesture and are not the same act.
-
-A model is a setting of the running conversation: the same agent, the same
-tools, the same memory, a different engine behind the next turn. It stays
-`PATCH /sessions/{id}` (`SessionPatch.model`, `provider`) and the transcript is
-untouched.
-
-An agent is *who* the conversation is with. Its tools, its permissions, its
-notion of a session and its side of the transcript all change. Rewriting
-`Session.agent_id` in place would leave a transcript half of which was produced
-by an agent the row no longer names, and would abandon the first agent's live
-session with no way back. So it forks: `POST /sessions/{id}/fork` gained
-optional `agent_id`, `model` and `provider`. The fork copies the messages, sets
-the agent, starts **no** run, and points `parent_session_id` at the original,
-which is left exactly as it was — the person can go back to it.
-
-The refusals are explicit rather than silent: an unknown `agent_id` is `404
-not_found`, and an agent the hub has not installed is `422 agent_unavailable`
-with the agent id and its status in `details`. A fork with no `agent_id` is the
-fork that existed before this entry, unchanged.
-
-Rejected: a dedicated `POST /sessions/{id}/handoff`. It would be `fork` with one
-more field and a second copy of the copy-the-transcript rule, and §7's shape
-rules do not want a second verb under `/sessions/{id}` for an act the existing
-one already performs.
-
-### The hub names a session, unless a person did
-
-`Session.title` stays `null` until something names it, and "New chat" in a
-sidebar of twenty rows is a list with no information in it. After the first
-assistant reply of a session completes, the hub asks the session's *own* agent
-for a short title in the conversation's language, through a separate one-shot
-call that is not a run: no `Run` row, no job, no `/rt/sessions` run events, and
-a failure costs the caller nothing. The fallback, whenever that call is refused
-or unsupported by the adapter, is the first user message trimmed on a word
-boundary.
-
-The one-shot offers the model **no tools** and leaves nothing in the agent's
-history (2026-09-26): a title is not worth a model writing a file or sending a
-message on its way to six words. Hermes answers it with its own tool-free
-`llm.oneshot` on the conversation's model (the open conversation lends it, or a
-throwaway session in the same profile does, and no prompt is ever submitted);
-an agent without such a call is not handed a turn — the conversation's model is
-asked directly through the provider the hub knows, and without one the fallback
-names it.
-
-No field was added for it. A person's own title is one they sent in
-`SessionPatch.title`, so the hub marks the row when the patch carries a
-non-empty string and never overwrites it afterwards; `title: null` hands the
-naming back and the hub names it again, emitting `session.updated` on
-`/rt/sessions`. Rejected: a `title_source` enum on `Session`. Every client would
-have to render a state nobody displays, and the one question a client actually
-asks — "may I ask for a new title?" — is answered by sending `title: null`.
+> The second entry numbered 26 here — *Changing a conversation's agent is a fork; changing its model is a patch*, with *The hub names a session, unless a person did* — is now **§92** (renumbered 2026-09-27; code and records that say “§26” for forking or naming mean §92).
 
 ## 28. A list may span every profile the caller may enter (`profiles=all`)
 
@@ -1738,7 +1683,7 @@ because the hub had no multipart reader where the models module could use it. It
   words in `details.detail`. A silent take: `400 validation_failed`, `details.reason: no_speech`.
 - **One protocol for now: the OpenAI-shaped `audio/transcriptions`** (OpenAI, Groq, and any
   self-hosted OpenAI-compatible speech server). A custom endpoint added as a speech provider
-  needs no key — it is asked without one, like a custom chat endpoint (§26) — for both
+  needs no key — it is asked without one, like a custom chat endpoint (§27) — for both
   transcription and `models.synthesize`.
 - **No streaming.** Neither side streams: the web's voice mode is turn by turn (record → one
   transcription → the run streams its reply → the reply is spoken sentence by sentence as the
@@ -2803,7 +2748,106 @@ own format. Proposed, owner to confirm:
 Rejected: converting the audio on the hub (a transcoder in the image for one client's gap), and a
 per-provider setting (the format is the listener's constraint, not the provider's).
 
-## 92. Speech providers: voices from the provider or its documentation, every language, long text in parts
+## 92. Changing a conversation's agent is a fork; changing its model is a patch
+
+Owner direction, 2026-09-22. Mid-conversation, "talk to a different agent" and
+"run on a different model" look like the same gesture and are not the same act.
+
+A model is a setting of the running conversation: the same agent, the same
+tools, the same memory, a different engine behind the next turn. It stays
+`PATCH /sessions/{id}` (`SessionPatch.model`, `provider`) and the transcript is
+untouched.
+
+An agent is *who* the conversation is with. Its tools, its permissions, its
+notion of a session and its side of the transcript all change. Rewriting
+`Session.agent_id` in place would leave a transcript half of which was produced
+by an agent the row no longer names, and would abandon the first agent's live
+session with no way back. So it forks: `POST /sessions/{id}/fork` gained
+optional `agent_id`, `model` and `provider`. The fork copies the messages, sets
+the agent, starts **no** run, and points `parent_session_id` at the original,
+which is left exactly as it was — the person can go back to it.
+
+The refusals are explicit rather than silent: an unknown `agent_id` is `404
+not_found`, and an agent the hub has not installed is `422 agent_unavailable`
+with the agent id and its status in `details`. A fork with no `agent_id` is the
+fork that existed before this entry, unchanged.
+
+Rejected: a dedicated `POST /sessions/{id}/handoff`. It would be `fork` with one
+more field and a second copy of the copy-the-transcript rule, and §7's shape
+rules do not want a second verb under `/sessions/{id}` for an act the existing
+one already performs.
+
+### The hub names a session, unless a person did
+
+`Session.title` stays `null` until something names it, and "New chat" in a
+sidebar of twenty rows is a list with no information in it. After the first
+assistant reply of a session completes, the hub asks the session's *own* agent
+for a short title in the conversation's language, through a separate one-shot
+call that is not a run: no `Run` row, no job, no `/rt/sessions` run events, and
+a failure costs the caller nothing. The fallback, whenever that call is refused
+or unsupported by the adapter, is the first user message trimmed on a word
+boundary.
+
+The one-shot offers the model **no tools** and leaves nothing in the agent's
+history (2026-09-26): a title is not worth a model writing a file or sending a
+message on its way to six words. Hermes answers it with its own tool-free
+`llm.oneshot` on the conversation's model (the open conversation lends it, or a
+throwaway session in the same profile does, and no prompt is ever submitted);
+an agent without such a call is not handed a turn — the conversation's model is
+asked directly through the provider the hub knows, and without one the fallback
+names it.
+
+No field was added for it. A person's own title is one they sent in
+`SessionPatch.title`, so the hub marks the row when the patch carries a
+non-empty string and never overwrites it afterwards; `title: null` hands the
+naming back and the hub names it again, emitting `session.updated` on
+`/rt/sessions`. Rejected: a `title_source` enum on `Session`. Every client would
+have to render a state nobody displays, and the one question a client actually
+asks — "may I ask for a new title?" — is answered by sending `title: null`.
+
+## 93. Tasks run in order: `auto_start` waits for dependencies, a quiet run is marked stuck, the archive is counted
+
+Proposed — owner to confirm (2026-09-27, the night's "tasks run in order" batch). Four things the
+Tasks section promised or needed, each with the smallest contract change that says it.
+
+**Auto-start waits for what a task depends on.** A task with `auto_start` that is `ready` and given
+to an agent does not start on its own while any task of its `depends_on` is not done, and starts
+itself when the last of them reaches `done` (the move to `done` looks again, as a move to `ready`
+already did). "Done" is `done`, or `archived` after `done` — the weekly archive keeps
+`completed_at`; a task archived by hand has none and is not done. A person's "assign and start" is
+**not** held back: the person decides, and the clients warn first, naming what is not done. So
+that a card and its details can say what it waits for, `Task` gained `waiting_on`: the
+dependencies not done yet, each `{ id, title, status }` (`TaskDependencyState`) — the ids alone
+would leave a client to find titles among tasks it may not have loaded (the archive, another
+profile's board). Rejected: blocking a manual start with `409` — the owner's rule is that a
+person can always start a task by hand.
+
+**A stuck-task watchdog, on the scheduler's clock.** A `running` task of the hub's own whose run
+has shown no activity — no event on `/rt/sessions` that names the run: text, reasoning, a tool
+call, a step — for `COREHUB_TASK_STUCK_MINUTES` (default **30, proposed**; `0` is off) gets
+`Task.stuck_since` (the moment it last showed any) and its owner **one** notice ("A task seems
+stuck", kind `task_moved`, opening the task; the person's "task moved" switch silences it). The
+marker goes when the run speaks again or the task leaves `running`, and it is announced as
+`task.updated`. Nothing is moved and nothing is stopped: a slow run is not a failed one, and the
+person decides. A run waiting for a person's answer (`waiting_approval`, `waiting_input`) is not
+stuck — it has already asked. The check runs on the hub scheduler's tick (`schedules` owns the
+clock, `tasks` the rule, `notify` the words; they meet in the composition root), not on a timer of
+its own. What a run last did is kept in memory: a restart ends every run and settles its task
+(§47), so nothing about it has to outlive the process. Rejected: moving a stuck task to `blocked`
+(it would undo work that was only slow) and an env var the UI cannot see being the only switch
+forever — a setting can replace it later without a contract change.
+
+**`task.moved` carries `from`, `to` and `actor`.** The event's schema always required them; the
+move route sent the task alone, so webhooks forwarded an event without them. It now sends all
+three, and a card put elsewhere in its own column is `task.updated`, not `task.moved`.
+
+**The archive is counted, not sent.** Without `include_archived`, `tasks.getColumns` answers the
+`archived` column with its real `count` (and `counts.by_status.archived`) and empty `tasks`;
+`counts.total` counts only the columns whose tasks came along. The board is read again every few
+seconds while a task runs, and the archive only grows, so clients read it with
+`include_archived=true` only when a person opens it.
+
+## 94. Speech providers: voices from the provider or its documentation, every language, long text in parts
 
 The owner asked for Groq's voices (its Saudi Arabic voice among them, chosen by the person) and
 the well-known speech services, each added in a click, with a voice picker and a preview; and,

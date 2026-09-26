@@ -132,7 +132,22 @@ $ PLAYWRIGHT_CHANNEL=chrome playwright test zz-agent-tools.spec.ts
 الاختبارات الجديدة تفشل على الكود القديم: إعادة تشغيل البوابة الافتراضية بعد الربط، `mode` في الربط والنتيجة، مسار
 `setChannelMode`، `restart_needed`، خطوة الوضع في النافذة، لوحة «الموافقات»، وأزرار الصندوق.
 
-CI: (يُملأ بعد الدفع.)
+CI على طلب الدمج #157 (الالتزام c9f47403): كل الفحوص ناجحة —
+```
+Lint, typecheck, contracts, client tests, build            pass
+Server unit tests (shard 1/3, 2/3, 3/3)                    pass
+Web smoke journeys (Playwright against the real hub)       pass
+Docker image builds and answers /health                    pass
+Desktop app smoke (Electron under Xvfb against the real hub) pass
+Android build, unit tests, lint                            pass
+Build and test on the iOS simulator                        pass
+Generate the Swift client (CoreHubClient)                  pass
+db:generate + db:migrate (SQLite and PostgreSQL)           pass
+Store listing and demo hub checks                          pass
+PR adds or updates a change record                         pass
+PR leaves graphify-out/ to the code-map bot                pass
+Upload the listing to App Store Connect                    skipping
+```
 
 ## المخاطر والرجوع
 - إعادة تشغيل البوابة الافتراضية بعد الربط تقطع خادم الواجهة (8642) ورسائل القنوات لثوانٍ؛ الدردشة عبر TUI لا تتأثر.

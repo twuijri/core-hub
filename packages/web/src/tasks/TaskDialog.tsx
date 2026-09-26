@@ -98,6 +98,11 @@ export function TaskDialog({ task, onClose }: { task: Task | null; onClose(): vo
   const comments = detail.data?.comments ?? [];
   const worktree = shown?.worktree ?? null;
   const autoStart = shown?.auto_start === true;
+  // What it still waits for (DECISIONS §93) — listed while the task has not run to the end.
+  const waitingOn =
+    shown && !['running', 'review', 'done', 'archived'].includes(shown.status)
+      ? (shown.waiting_on ?? [])
+      : [];
   const flipAutoStart = (next: boolean) => {
     if (!task) return;
     toggle.mutate(
@@ -192,6 +197,27 @@ export function TaskDialog({ task, onClose }: { task: Task | null; onClose(): vo
           />
         )}
         {toggle.isError && <Notice tone="danger">{describeTaskError(toggle.error, t)}</Notice>}
+
+        {waitingOn.length > 0 && (
+          <section
+            aria-label={t('tasks.details.waiting_on')}
+            className="flex flex-col gap-1"
+            data-testid="task-dialog-waiting-on"
+          >
+            <h3 className="text-sm font-medium">{t('tasks.details.waiting_on')}</h3>
+            <ul className="flex flex-col gap-1">
+              {waitingOn.map((one) => (
+                <li key={one.id} className="flex items-center gap-2 text-sm">
+                  <span className="truncate" dir="auto">
+                    {one.title}
+                  </span>
+                  <span className="text-xs text-muted">{t(`tasks.status.${one.status}`)}</span>
+                </li>
+              ))}
+            </ul>
+            {autoStart && <p className="text-xs text-muted">{t('tasks.details.waiting_hint')}</p>}
+          </section>
+        )}
 
         {worktree && (
           <WorktreeSection

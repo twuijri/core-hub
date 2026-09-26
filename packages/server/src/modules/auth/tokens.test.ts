@@ -17,6 +17,19 @@ import {
   verifyAccessToken,
 } from './tokens.js';
 
+/**
+ * The token with its signature's **first** character changed. Changing the last characters
+ * is not a change at all one time in a thousand: a 32-byte signature is 43 base64url
+ * characters, and the low bits of the last one are padding the decoder drops — so
+ * `…xx` sometimes decoded to the very same signature and the "tampered" token verified
+ * (CI run 36199485661). The first character carries six real bits.
+ */
+function tamper(jwt: string): string {
+  const cut = jwt.lastIndexOf('.') + 1;
+  const first = jwt[cut] === 'A' ? 'B' : 'A';
+  return `${jwt.slice(0, cut)}${first}${jwt.slice(cut + 1)}`;
+}
+
 const dataDir = mkdtempSync(path.join(tmpdir(), 'corehub-tokens-'));
 afterAll(() => rmSync(dataDir, { recursive: true, force: true }));
 
@@ -41,12 +54,20 @@ describe('auth: tokens', () => {
 
   it('rejects an expired token with token_expired and a tampered one with unauthorized', async () => {
     const key = loadOrCreateSigningKey(dataDir);
-    const now = Date.now();
+    // An explicit clock: nothing here depends on when the test happens to run.
+    const now = Date.UTC(2026, 8, 1, 12, 0, 0);
     const jwt = await signAccessToken(key, { userId: 'U1', role: 'member', sessionId: 'S1' }, now);
     await expect(
       verifyAccessToken(key, jwt, now + (ACCESS_TOKEN_TTL_SECONDS + 5) * 1000),
     ).rejects.toMatchObject({ code: 'token_expired' });
-    const tampered = `${jwt.slice(0, -2)}xx`;
+    // One second before the end it is still good, and at the end it is not.
+    await expect(
+      verifyAccessToken(key, jwt, now + (ACCESS_TOKEN_TTL_SECONDS - 1) * 1000),
+    ).resolves.toMatchObject({ sub: 'U1' });
+    await expect(
+      verifyAccessToken(key, jwt, now + ACCESS_TOKEN_TTL_SECONDS * 1000),
+    ).rejects.toMatchObject({ code: 'token_expired' });
+    const tampered = tamper(jwt);
     await expect(verifyAccessToken(key, tampered, now)).rejects.toBeInstanceOf(HubError);
     await expect(verifyAccessToken(key, tampered, now)).rejects.toMatchObject({
       code: 'unauthorized',

@@ -33,7 +33,7 @@ import { requireSqlite } from '../../lib/db.js';
 import { HubError, notFound } from '../../lib/errors.js';
 import { defineModule, REALTIME_NAMESPACES } from '../../lib/module.js';
 import { clampLimit, decodeCursor, encodeCursor } from '../../lib/pagination.js';
-import { createRealtime, type Realtime } from '../../lib/realtime.js';
+import { createRealtime, tapRealtime, type Realtime } from '../../lib/realtime.js';
 import { defineRoute } from '../../lib/route.js';
 import { HermesRefusal } from './hermes-kanban.js';
 import {
@@ -237,6 +237,13 @@ export function taskRunsFor(app: FastifyInstance): TaskRuns {
       renderTask(new TasksService(requireSqlite(app.hub.database)), scope, id, namesOf(app)),
     app.log,
   );
+  // Every event of a session that names a run is that run showing signs of life: what the
+  // stuck-task watchdog reads (DECISIONS §93). Only the runs this worker follows are kept.
+  tapRealtime(app.hub.io, (event) => {
+    if (event.namespace !== REALTIME_NAMESPACES.sessions) return;
+    const runId = runIdOf(event.payload);
+    if (runId) created.noteActivity(runId);
+  });
   // A run's ending moved its task: read the worktree's numbers again (what the agent
   // changed), then let the next task waiting to start on its own take the freed place.
   created.afterSettle = (scope, taskId) => {
@@ -247,6 +254,104 @@ export function taskRunsFor(app: FastifyInstance): TaskRuns {
   };
   workers.set(app.hub.io, created);
   return created;
+}
+
+/** The run a `/rt/sessions` payload is about: `run_id`, or the id of its `run` or `message`. */
+function runIdOf(payload: unknown): string | null {
+  if (!payload || typeof payload !== 'object') return null;
+  const record = payload as Record<string, unknown>;
+  if (typeof record.run_id === 'string') return record.run_id;
+  for (const key of ['run', 'message', 'subagent', 'approval'] as const) {
+    const inner = record[key];
+    if (inner && typeof inner === 'object') {
+      const nested = inner as Record<string, unknown>;
+      if (key === 'run' && typeof nested.id === 'string') return nested.id;
+      if (typeof nested.run_id === 'string') return nested.run_id;
+    }
+  }
+  return null;
+}
+
+// ------------------------------------------------------------------ the watchdog
+
+/**
+ * What `tasks` needs from `notify` to tell a task's owner it is stuck. Filled by the
+ * composition root; without it the marker is still set, and nobody is told.
+ */
+export interface TaskNoticePort {
+  stuck(input: {
+    userId: string;
+    workspace: string;
+    profile: string;
+    taskId: string;
+    /** How the board names the task: "HUB-12 · the title". */
+    label: string;
+    minutes: number;
+  }): void;
+}
+let taskNoticesFactory: ((app: FastifyInstance) => TaskNoticePort | null) | null = null;
+export function registerTaskNotices(
+  factory: ((app: FastifyInstance) => TaskNoticePort | null) | null,
+): ((app: FastifyInstance) => TaskNoticePort | null) | null {
+  const previous = taskNoticesFactory;
+  taskNoticesFactory = factory;
+  return previous;
+}
+
+/**
+ * The stuck-task watchdog (DECISIONS §93, proposed — owner to confirm), run on the
+ * scheduler's clock. A task of the hub's own that is `running` and whose run has shown no
+ * activity for `COREHUB_TASK_STUCK_MINUTES` gets the stuck marker (`stuck_since`, the moment
+ * it last showed any) and its owner one notice; the marker goes again when the run speaks.
+ *
+ * Nothing is moved and nothing is stopped: a run can be slow for good reasons, and the
+ * person decides. A run waiting for a person's answer is not stuck — it has already asked.
+ */
+export function watchStuckTasks(
+  app: FastifyInstance,
+  now: Date = new Date(),
+): { marked: number; cleared: number } {
+  const minutes = app.hub.config.taskStuckMinutes;
+  const counts = { marked: 0, cleared: 0 };
+  if (!minutes || minutes <= 0) return counts;
+  const db = requireSqlite(app.hub.database);
+  const service = new TasksService(db);
+  const runs = taskRunsFor(app);
+  const limitMs = minutes * 60_000;
+  for (const row of service.runningEverywhere()) {
+    if (!row.currentRunId) continue;
+    const status = runs.runStatus(row.workspace, row.currentRunId);
+    const waiting = status === 'waiting_approval' || status === 'waiting_input';
+    const last = runs.lastActivity(row.currentRunId) ?? row.updatedAt.getTime();
+    const stuck = !waiting && now.getTime() - last > limitMs;
+    if (stuck === (row.stuckAt !== null)) continue;
+    const home = findWorkspace(db, row.workspace);
+    if (!home) continue;
+    const scope: Scope = { workspace: row.workspace, profile: home.slug, userId: row.ownerId };
+    service.markStuck(row.id, stuck ? new Date(last) : null);
+    emitTasks(app, home.slug, 'task.updated', {
+      task: renderTask(service, scope, row.id, namesOf(app)),
+    });
+    if (!stuck) {
+      counts.cleared += 1;
+      continue;
+    }
+    counts.marked += 1;
+    try {
+      const project = service.project(scope, row.projectId);
+      taskNoticesFactory?.(app)?.stuck({
+        userId: row.ownerId,
+        workspace: row.workspace,
+        profile: home.slug,
+        taskId: row.id,
+        label: `${project.key}-${row.number} · ${row.title}`,
+        minutes,
+      });
+    } catch (error) {
+      app.log.warn({ err: error, taskId: row.id }, 'tasks: could not tell anyone a task is stuck');
+    }
+  }
+  return counts;
 }
 
 function emitTasks(
@@ -588,6 +693,7 @@ function renderTask(
     nameOf,
     subtaskCounts: service.subtaskCounts(row.id),
     dependsOn: service.dependenciesOf(row.id),
+    waitingOn: service.waitingOn(row.id),
     worktree: service.worktreeOf(row.id),
   });
 }
@@ -1078,6 +1184,16 @@ export const tasksModule = defineModule({
 
         const nameOf = namesOf(request.server);
         const columns = TASK_STATUSES.map((status) => {
+          // The archive only grows, and the board is asked again every few seconds while a
+          // task runs: without `include_archived` it says how many, and sends none of them
+          // (DECISIONS §93). The client asks for them when a person opens the archive.
+          if (status === 'archived' && !includeArchived) {
+            return {
+              status,
+              count: service.archivedCount(ids, { projectId, agentId }),
+              tasks: [] as Record<string, unknown>[],
+            };
+          }
           const rows = service.columnAcross(ids, { projectId, agentId }, status, includeArchived);
           return {
             status,
@@ -1087,12 +1203,14 @@ export const tasksModule = defineModule({
                 nameOf,
                 subtaskCounts: service.subtaskCounts(row.id),
                 dependsOn: service.dependenciesOf(row.id),
+                waitingOn: service.waitingOn(row.id),
                 worktree: service.worktreeOf(row.id),
               }),
             ),
           };
         });
-        const total = columns.reduce((sum, column) => sum + column.count, 0);
+        // The columns whose tasks came along; an archive only counted is not in the total.
+        const total = columns.reduce((sum, column) => sum + column.tasks.length, 0);
         return {
           project_id: projectId ?? null,
           columns,
@@ -1209,6 +1327,7 @@ export const tasksModule = defineModule({
               nameOf,
               subtaskCounts: service.subtaskCounts(row.id),
               dependsOn: service.dependenciesOf(row.id),
+              waitingOn: service.waitingOn(row.id),
               worktree: service.worktreeOf(row.id),
             }),
           ),
@@ -1312,7 +1431,7 @@ export const tasksModule = defineModule({
           }
         }
         announce(request, 'task.updated', { task_ids: input.task_ids });
-        if (input.patch.auto_start === true) {
+        if (input.patch.auto_start === true || input.patch.status === 'done') {
           kickAutoStart(request.server, scope.workspace, runScopeOf(request).language);
         }
         return { results };
@@ -1379,6 +1498,7 @@ export const tasksModule = defineModule({
             nameOf: namesOf(request.server),
             subtaskCounts: service.subtaskCounts(id),
             dependsOn: service.dependenciesOf(id),
+            waitingOn: service.waitingOn(id),
             worktree: service.worktreeOf(id),
           }),
           subtasks: service.subtasksOf(id).map(toSubtask),
@@ -1446,7 +1566,11 @@ export const tasksModule = defineModule({
         const updated = task(request, service, scope, params.task_id as string);
         announce(request, 'task.updated', { task: updated });
         // Switched to start on its own while already ready and given to an agent: it starts.
-        if (patch.auto_start === true && !HermesMirror.isHermes(current)) {
+        // Marked done: a task that waited for this one may start now.
+        if (
+          (patch.auto_start === true || (patch.status === 'done' && current.status !== 'done')) &&
+          !HermesMirror.isHermes(current)
+        ) {
           kickAutoStart(request.server, scope.workspace, runScopeOf(request).language);
         }
         return updated;
@@ -1524,8 +1648,25 @@ export const tasksModule = defineModule({
           );
         }
         const moved = task(request, service, scope, params.task_id as string);
-        announce(request, 'task.moved', { task: moved });
-        if (move.status === 'ready' && !HermesMirror.isHermes(current)) {
+        // `task.moved` says from where, to where and who (the event's schema requires all
+        // three, and webhooks forward it as it is); a card put elsewhere in the same column
+        // has not moved column, so that is an update.
+        if (moved.status !== current.status) {
+          announce(request, 'task.moved', {
+            task: moved,
+            from: current.status,
+            to: moved.status,
+            actor: authorOf(actorOf(request)),
+          });
+        } else {
+          announce(request, 'task.updated', { task: moved });
+        }
+        // Moved to Ready by a person: a task set to start on its own starts. Moved to Done:
+        // a task that waited for this one may start now (DECISIONS §93).
+        if (
+          (move.status === 'ready' || move.status === 'done') &&
+          !HermesMirror.isHermes(current)
+        ) {
           kickAutoStart(request.server, scope.workspace, runScopeOf(request).language);
         }
         return moved;
@@ -1656,6 +1797,10 @@ export const tasksModule = defineModule({
         service.setDependencies(scope, id, (body as { depends_on: string[] }).depends_on ?? []);
         const updated = task(request, service, scope, id);
         announce(request, 'task.updated', { task: updated });
+        // Nothing left to wait for (a dependency taken off): it may start on its own now.
+        if (updated.auto_start === true && (updated.waiting_on as unknown[]).length === 0) {
+          kickAutoStart(request.server, scope.workspace, runScopeOf(request).language);
+        }
         return updated;
       },
     });

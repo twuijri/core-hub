@@ -43,7 +43,7 @@ export async function synthesize(
   request: {
     text: string;
     language: string | null;
-    /** A preview names what it previews (DECISIONS §92); a reply uses the saved choice. */
+    /** A preview names what it previews (DECISIONS §94); a reply uses the saved choice. */
     providerId?: string | null;
     model?: string | null;
     voice?: string | null;

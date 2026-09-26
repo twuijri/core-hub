@@ -9345,6 +9345,12 @@ paths:
             $ref: '#/components/schemas/Ulid'
         - name: include_archived
           in: query
+          description: >-
+            `true`: the `archived` column carries its tasks. Without it the `archived` column
+            still says how many there are (`count`, and `counts.by_status.archived`) but its
+            `tasks` is empty, so a client asks for the archive only when a person opens it
+            (contract decision §93). `counts.total` counts only the columns whose tasks are
+            included.
           schema:
             type: boolean
             default: false
@@ -12836,7 +12842,7 @@ paths:
         and labelled as such by clients. `source: none` is a provider with neither: the voice is
         typed by hand. `model` narrows the list to the voices that model speaks with (Groq's
         English and Arabic models have different voices; Deepgram's `aura-2` and `aura`). A
-        person may always type a voice id the list does not show (DECISIONS §92).
+        person may always type a voice id the list does not show (DECISIONS §94).
       parameters:
         - $ref: '#/components/parameters/Profile'
         - name: provider_id
@@ -12961,7 +12967,7 @@ paths:
         Ogg); the `Content-Type` says what came. A provider that takes less per request (Groq's
         Orpheus: 200 characters) is sent the text in parts split at sentence, then word,
         boundaries under its limit, and the parts' audio comes back joined in order as one file
-        (DECISIONS §92).
+        (DECISIONS §94).
       parameters:
         - $ref: '#/components/parameters/Profile'
       requestBody:
@@ -21577,6 +21583,40 @@ components:
                       maxLength: 64
                       description: The card's id on that board.
                 - type: 'null'
+            waiting_on:
+              type: array
+              description: >-
+                The tasks of `depends_on` that are not done yet, with their title and column, so a
+                card and its details can say what it waits for (empty when there is nothing to wait
+                for). `done` counts as done, and so does `archived` after `done` (the weekly
+                archive); archived without having been done does not. A task with `auto_start`
+                does not start on its own while this is not empty, and starts itself when the last
+                of them reaches `done`. A person's "assign and start" is not held back by it —
+                clients warn first. Always sent by the hub (contract decision §93).
+              items:
+                $ref: '#/components/schemas/TaskDependencyState'
+            stuck_since:
+              description: >-
+                Set while the task is `running` and its run has shown no activity (no text, tool
+                call or step) since this moment for longer than `COREHUB_TASK_STUCK_MINUTES` — the
+                stuck-task watchdog, which also sends the task's owner a notice once. Cleared
+                when the run shows activity again or the task leaves `running`. `null` otherwise;
+                always sent by the hub (contract decision §93).
+              oneOf:
+                - $ref: '#/components/schemas/Timestamp'
+                - type: 'null'
+    TaskDependencyState:
+      type: object
+      description: One task another task depends on, as far as waiting for it goes.
+      required: [id, title, status]
+      properties:
+        id:
+          $ref: '#/components/schemas/Ulid'
+        title:
+          type: string
+          maxLength: 300
+        status:
+          $ref: '#/components/schemas/TaskStatus'
     Subtask:
       type: object
       required: [id, task_id, index, title, status, note, blocked_reason, completed_at, updated_at]
@@ -21880,6 +21920,9 @@ components:
                 $ref: '#/components/schemas/TaskStatus'
               count:
                 type: integer
+                description: >-
+                  How many tasks the column holds. For `archived` without `include_archived`,
+                  the number in the archive while `tasks` is empty.
               tasks:
                 type: array
                 description: In `position` order.
@@ -22917,7 +22960,7 @@ components:
           description: >-
             The scopes (`ProviderCreate.scope`) in which a provider of the same credential
             family already holds a key. Added there, this provider uses that key and none need
-            be typed: Groq added for chat also speaks (DECISIONS §92).
+            be typed: Groq added for chat also speaks (DECISIONS §94).
     ProviderHost:
       type: object
       required: [containerized, loopback_alias]
