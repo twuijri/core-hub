@@ -21,9 +21,11 @@
  *   the contract declares.
  */
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
-import { createReadStream } from 'node:fs';
+import { closeSync, createReadStream } from 'node:fs';
 import { z } from 'zod';
 import { HubError, notFound } from '../../lib/errors.js';
+import { rangeReply } from '../../lib/byte-range.js';
+import { streamed } from '../../lib/route.js';
 import { parse } from '../../lib/validate.js';
 import type { EngineScope } from './engine.js';
 import type { ScopeResolver } from './scope.js';
@@ -322,16 +324,39 @@ export function registerSessionRoutes(app: FastifyInstance, deps: RouteDeps): vo
     );
     const file = deps.service(request).openFile(scope, session_id, query.path, query.download);
     const name = file.relative.split('/').at(-1) ?? 'file';
+    // One byte range, for a player that seeks (decision §98); past the end is `416`.
+    let window: ReturnType<typeof rangeReply>;
+    try {
+      window = rangeReply(request.headers.range, file.size);
+    } catch (error) {
+      closeSync(file.fd);
+      throw error;
+    }
     // Opened directly, an HTML file still runs nothing in the hub's origin: the sandbox
     // gives it an origin of its own and `default-src 'none'` loads nothing (decision §48).
-    return reply
+    reply
+      .status(window.status)
+      .headers(window.headers)
       .header('content-type', file.type.contentType)
-      .header('content-length', String(file.size))
       .header('x-content-type-options', 'nosniff')
       .header('content-security-policy', "sandbox; default-src 'none'")
       .header('cache-control', 'no-store')
       .header('content-disposition', contentDisposition(query.download, name))
-      .send(createReadStream('', { fd: file.fd, start: 0, end: Math.max(0, file.size - 1) }));
+      .send(createReadStream('', { fd: file.fd, start: window.start, end: window.end }));
+    // A reader that stops half-way (a player that seeks) is not an error (`lib/route.ts`).
+    return streamed(request, reply);
+  });
+
+  app.post('/sessions/:session_id/files/stream', async (request, reply: FastifyReply) => {
+    const scope = await scopeOf(request);
+    const session_id = pathId(request.params, 'session_id', 'session');
+    const body = parse(
+      z.object({ path: z.string().min(1).max(4096) }).strict(),
+      request.body ?? {},
+    );
+    return reply
+      .status(201)
+      .send(deps.service(request).createFileStream(scope, session_id, body.path));
   });
 
   // ---------------------------------------------------------- run changes

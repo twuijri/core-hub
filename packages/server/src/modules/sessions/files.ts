@@ -42,9 +42,16 @@ export type PreviewKind =
   | 'xlsx'
   | 'docx'
   | 'pptx'
+  | 'video'
+  | 'audio'
   | 'none';
 
 const MiB = 1024 * 1024;
+/**
+ * A video or a sound is played from a stream address, a range at a time (decision §98): nothing
+ * holds the whole file, so its size is not what stops it. The cap only keeps the number honest.
+ */
+export const MEDIA_MAX_BYTES = 64 * 1024 * MiB;
 
 /**
  * The largest file of each kind sent for preview. Text is small because a client renders
@@ -61,6 +68,8 @@ export const PREVIEW_MAX_BYTES: Record<PreviewKind, number> = {
   xlsx: 15 * MiB,
   docx: 15 * MiB,
   pptx: 15 * MiB,
+  video: MEDIA_MAX_BYTES,
+  audio: MEDIA_MAX_BYTES,
   none: 0,
 };
 
@@ -100,6 +109,22 @@ const BY_EXTENSION: Record<string, { kind: PreviewKind; mime: string }> = {
   log: { kind: 'text', mime: 'text/plain' },
   text: { kind: 'text', mime: 'text/plain' },
   rst: { kind: 'text', mime: 'text/plain' },
+  // Played by the client's own player; whether it can decode the format is its call (§98).
+  mp4: { kind: 'video', mime: 'video/mp4' },
+  m4v: { kind: 'video', mime: 'video/mp4' },
+  webm: { kind: 'video', mime: 'video/webm' },
+  ogv: { kind: 'video', mime: 'video/ogg' },
+  mov: { kind: 'video', mime: 'video/quicktime' },
+  mkv: { kind: 'video', mime: 'video/x-matroska' },
+  mp3: { kind: 'audio', mime: 'audio/mpeg' },
+  m4a: { kind: 'audio', mime: 'audio/mp4' },
+  aac: { kind: 'audio', mime: 'audio/aac' },
+  wav: { kind: 'audio', mime: 'audio/wav' },
+  oga: { kind: 'audio', mime: 'audio/ogg' },
+  ogg: { kind: 'audio', mime: 'audio/ogg' },
+  opus: { kind: 'audio', mime: 'audio/ogg' },
+  flac: { kind: 'audio', mime: 'audio/flac' },
+  weba: { kind: 'audio', mime: 'audio/webm' },
 };
 
 /** Source code: shown highlighted, sent as plain text so a browser never runs it. */
@@ -453,8 +478,18 @@ export function listSessionFiles(input: {
     const key = `attachment:${attachment.id}`;
     if (entries.has(key)) continue;
     const type = fileTypeOf(attachment.name);
-    // The stored type wins when the name says nothing (a pasted picture named `image`).
-    const kind = type.kind === 'none' && attachment.mime.startsWith('image/') ? 'image' : type.kind;
+    // The stored type wins when the name says nothing (a pasted picture named `image`, a
+    // recording named `voice`).
+    const kind: PreviewKind =
+      type.kind !== 'none'
+        ? type.kind
+        : attachment.mime.startsWith('image/')
+          ? 'image'
+          : attachment.mime.startsWith('video/')
+            ? 'video'
+            : attachment.mime.startsWith('audio/')
+              ? 'audio'
+              : 'none';
     entries.set(key, {
       key,
       name: attachment.name,

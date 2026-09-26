@@ -146,7 +146,10 @@ const WHATSAPP_UNPAIRED: Row = {
   fields: [],
 };
 
-/** Written into the file by hand, outside the catalog: listed, it is set up. */
+/**
+ * Written into the file by hand, outside the catalog: it is set up — and it is Hermes's webhook
+ * receiver, which has its own «ويب هوك» section under the list (§97), not a card in it.
+ */
 const WEBHOOK_BY_HAND: Row = {
   platform: 'webhook',
   label: 'webhook',
@@ -246,7 +249,8 @@ describe('The Channels page lists only what is linked', () => {
     const rows = [...list.querySelectorAll('[data-testid^="channel-toggle-"]')].map((node) =>
       node.getAttribute('data-testid'),
     );
-    expect(rows).toEqual(['channel-toggle-telegram', 'channel-toggle-webhook']);
+    expect(rows).toEqual(['channel-toggle-telegram']);
+    expect(await screen.findByTestId('webhooks')).toBeTruthy();
     expect(within(list).getByTestId('channel-account-telegram').textContent).toContain(
       '@office_helper_bot',
     );

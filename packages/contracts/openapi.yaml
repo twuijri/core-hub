@@ -3694,6 +3694,11 @@ paths:
         and every answer carries `Content-Security-Policy: sandbox; default-src 'none'` and
         `Cache-Control: no-store`, so an HTML file opened directly runs nothing in the hub's
         origin. A client renders HTML in a sandboxed frame of its own.
+
+        One `Range: bytes=…` is honoured (`Accept-Ranges: bytes`): `206` with `Content-Range`
+        and only those bytes. A range that starts past the end is `416` with
+        `Content-Range: bytes */<size>`; a header that is not one byte range is ignored and the
+        whole file sent (DECISIONS §98).
       parameters:
         - name: path
           in: query
@@ -3710,10 +3715,22 @@ paths:
           schema:
             type: boolean
             default: false
+        - $ref: '#/components/parameters/ByteRange'
       x-rt-events: []
       responses:
         '200':
           description: The file.
+          content:
+            '*/*':
+              schema:
+                type: string
+                format: binary
+        '206':
+          description: The requested byte range.
+          headers:
+            Content-Range:
+              schema:
+                type: string
           content:
             '*/*':
               schema:
@@ -3727,6 +3744,55 @@ paths:
           $ref: '#/components/responses/NotFound'
         '413':
           $ref: '#/components/responses/PayloadTooLarge'
+        '416':
+          $ref: '#/components/responses/RangeNotSatisfiable'
+  /sessions/{session_id}/files/stream:
+    parameters:
+      - $ref: '#/components/parameters/Profile'
+      - $ref: '#/components/parameters/SessionId'
+    post:
+      operationId: sessions.createFileStream
+      tags: [sessions]
+      summary: A short-lived address a media element can play one file of the working folder from
+      description: >-
+        What `sessions.createAttachmentStream` is for an attachment (DECISIONS §90), for a file of
+        the session's working folder (DECISIONS §98): a random one-hour ticket in the path of
+        `knowledge.streamFile`, for this one file only, read-only, answered with byte ranges.
+        The path is checked now as `sessions.readFile` checks it (outside the folder, a link, not
+        a file: `400`; not there: `404`) and again on every read. It stops when the person who
+        asked may no longer enter the profile. It is not the bearer and grants nothing else.
+      x-rt-events: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [path]
+              additionalProperties: false
+              properties:
+                path:
+                  type: string
+                  minLength: 1
+                  maxLength: 4096
+            example:
+              path: renders/final.mp4
+      responses:
+        '201':
+          description: The address.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AttachmentStream'
+              example:
+                url: /api/v1/file-streams/9d2c4e6f8a0b1c3d5e7f9a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d
+                expires_at: '2026-09-27T02:14:50Z'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
   # ---------------------------------------------------------------- approvals
   /approvals:
     get:
@@ -7630,6 +7696,248 @@ paths:
           $ref: '#/components/responses/NotFound'
         '409':
           $ref: '#/components/responses/Conflict'
+  # ---------------------------------------------------------------- Hermes incoming webhooks
+  /agents/{agent_id}/webhooks:
+    parameters:
+      - $ref: '#/components/parameters/Profile'
+      - $ref: '#/components/parameters/AgentId'
+    get:
+      operationId: agents.listWebhooks
+      tags: [agents]
+      summary: The agent's incoming webhook routes in the selected profile, with their secrets (admin)
+      description: >-
+        Hermes's webhook receiver (its `webhook` platform, observed in its MIT source and described
+        in our words in DECISIONS §97): a named route lets an outside service — GitHub, a form, a
+        script — start a run of the agent by POSTing to the route's address, signed with the
+        route's secret; the route's prompt says what the agent is asked, with `{dot.path}` values
+        taken from the posted JSON. Routes the hub or `hermes webhook subscribe` made live in the
+        profile's `webhook_subscriptions.json` and can be deleted here; routes written in
+        `config.yaml` by hand are listed with `static: true` and are not. `listener` says whether
+        the profile's gateway is listening; `path` of each route is on this hub — the hub passes
+        what it receives there to the profile's listener on its own machine, so an outside service
+        needs the hub's address to be public.
+      x-roles: [owner, admin]
+      x-rt-events: []
+      responses:
+        '200':
+          description: The routes, by name.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HermesWebhookList'
+              example:
+                listener:
+                  enabled: true
+                  port: 18650
+                  status: online
+                  error: null
+                items:
+                  - name: github-issues
+                    description: New issues on the repository
+                    prompt: 'A new issue was opened: {issue.title}'
+                    events: [issues]
+                    deliver: log
+                    secret: 'Zq3xV9b4mN0pR7sT2wY5aC8dF1gH6jK9LmN3pQ5rS7'
+                    path: /api/v1/hermes-webhooks/default/github-issues
+                    static: false
+                    created_at: '2026-09-27T01:20:00Z'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+    post:
+      operationId: agents.createWebhook
+      tags: [agents]
+      summary: Create an incoming webhook route with its prompt (admin)
+      description: >-
+        Writes the route into the profile's `webhook_subscriptions.json` (mode 0600, as Hermes
+        writes it) with a new random secret, and switches the profile's webhook listener on in its
+        `config.yaml` when it is not yet: bound to this machine only (`127.0.0.1`) on a port of
+        its own, so two profiles never share one. The profile's gateway starts or restarts to
+        listen, as after any channel change (`agents.listChannels` `gateway.applies`); Hermes reads
+        new routes on the next POST without a restart. A name already taken is `409`
+        (`details.reason = webhook_exists`). The answer carries the secret.
+      x-roles: [owner, admin]
+      x-rt-events: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/HermesWebhookCreate'
+            example:
+              name: github-issues
+              prompt: 'A new issue was opened: {issue.title}'
+              description: New issues on the repository
+              events: [issues]
+      responses:
+        '201':
+          description: Created.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HermesWebhook'
+              example:
+                name: github-issues
+                description: New issues on the repository
+                prompt: 'A new issue was opened: {issue.title}'
+                events: [issues]
+                deliver: log
+                secret: 'Zq3xV9b4mN0pR7sT2wY5aC8dF1gH6jK9LmN3pQ5rS7'
+                path: /api/v1/hermes-webhooks/default/github-issues
+                static: false
+                created_at: '2026-09-27T01:20:00Z'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+  /agents/{agent_id}/webhooks/{route_name}:
+    parameters:
+      - $ref: '#/components/parameters/Profile'
+      - $ref: '#/components/parameters/AgentId'
+      - $ref: '#/components/parameters/WebhookRouteName'
+    delete:
+      operationId: agents.deleteWebhook
+      tags: [agents]
+      summary: Delete an incoming webhook route (admin)
+      description: >-
+        Removes the route from `webhook_subscriptions.json`; Hermes stops accepting it on the next
+        POST. A route from `config.yaml` is `409` (`details.reason = webhook_static`). When no
+        route is left the profile's listener is switched off again and its gateway follows.
+      x-roles: [owner, admin]
+      x-rt-events: []
+      responses:
+        '204':
+          description: Deleted.
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+  /agents/{agent_id}/webhooks/{route_name}/test:
+    parameters:
+      - $ref: '#/components/parameters/Profile'
+      - $ref: '#/components/parameters/AgentId'
+      - $ref: '#/components/parameters/WebhookRouteName'
+    post:
+      operationId: agents.testWebhook
+      tags: [agents]
+      summary: Send the route a signed test POST from this machine (admin)
+      description: >-
+        What `hermes webhook test` does: a POST to the profile's listener on this machine, signed
+        with the route's secret (`X-Hub-Signature-256`) and marked as the `test` event, with
+        `{"test": true, "event_type": "test", "message": …}` as the body — so the agent runs once
+        with the route's prompt. It proves the route and the listener, not the public address.
+        `status` and `body` are the listener's answer (`202` accepted); a listener that is not up
+        is `503`.
+      x-roles: [owner, admin]
+      x-rt-events: []
+      responses:
+        '200':
+          description: What the listener answered.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HermesWebhookTestResult'
+              example:
+                status: 202
+                body:
+                  status: accepted
+                  route: github-issues
+                  event: test
+                  delivery_id: corehub-test-01J8QK3ZR2W7M5N4P6T8V9X0WH
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
+  /hermes-webhooks/{profile}/{route_name}:
+    parameters:
+      - name: profile
+        in: path
+        required: true
+        description: The profile's slug on this hub.
+        schema:
+          $ref: '#/components/schemas/ProfileSlug'
+        example: default
+      - $ref: '#/components/parameters/WebhookRouteName'
+    post:
+      operationId: agents.receiveWebhook
+      tags: [agents]
+      summary: The public address of a webhook route; what an outside service POSTs to
+      description: >-
+        Not a client API. No bearer: the route's secret is the permission, checked by Hermes. The
+        hub passes the body as received, byte for byte (at most 1 MiB), with the headers Hermes
+        reads a signature and an event from (`X-Hub-Signature-256`, `X-GitHub-Event`,
+        `X-GitHub-Delivery`, `X-Gitlab-Token`, `X-GitLab-Event`, `svix-*`, `webhook-*`,
+        `Linear-Signature`, `X-Webhook-Signature`, `X-Webhook-Signature-V2`,
+        `X-Webhook-Timestamp`, `X-Request-ID`, `Content-Type`), to the profile's listener on
+        this machine, and answers what it answered: `202` when the agent's run was started, `200`
+        when the event was ignored by the route's filter or was a repeat of a delivery already
+        taken. Hermes's refusals come back in the hub's error envelope with Hermes's words:
+        `401` a missing or wrong signature, `404` no such route, `413` too large, `429` more than
+        the route's rate. `503` when the profile's listener is not up.
+      security: []
+      x-scope: global
+      requestBody:
+        required: true
+        content:
+          '*/*':
+            schema: {}
+      x-rt-events: []
+      responses:
+        '200':
+          description: Received and ignored (filtered, or a delivery already taken).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HermesWebhookReceipt'
+              example:
+                status: duplicate
+                delivery_id: 72d3162e-cc78-11e3-81ab-4c9367dc0958
+        '202':
+          description: Accepted; the agent's run started.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HermesWebhookReceipt'
+              example:
+                status: accepted
+                route: github-issues
+                event: issues
+                delivery_id: 72d3162e-cc78-11e3-81ab-4c9367dc0958
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '413':
+          $ref: '#/components/responses/PayloadTooLarge'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
   # ---------------------------------------------------------------- pairing (who may message the agent)
   /agents/{agent_id}/pairing:
     parameters:
@@ -15113,9 +15421,10 @@ paths:
       summary: The bytes of one file (owner and admin)
       description: |
         Streams the file with its media type and an `ETag`. `disposition=inline` lets a
-        client show an image or a PDF; `attachment` (the default) saves it under its name.
-        A folder is `400 validation_failed` (`details.reason = not_a_file`); use
-        `knowledge.downloadWorkspaceFolder` for a folder.
+        client show an image, a PDF, a video or a sound; `attachment` (the default) saves it
+        under its name. A folder is `400 validation_failed` (`details.reason = not_a_file`); use
+        `knowledge.downloadWorkspaceFolder` for a folder. One `Range: bytes=…` is honoured as
+        `sessions.readFile` honours it (`206`, or `416` past the end; DECISIONS §98).
       parameters:
         - $ref: '#/components/parameters/Profile'
         - $ref: '#/components/parameters/WorkspaceFilePath'
@@ -15126,6 +15435,7 @@ paths:
             type: string
             enum: [inline, attachment]
             default: attachment
+        - $ref: '#/components/parameters/ByteRange'
       x-roles: [owner, admin]
       x-rt-events: []
       responses:
@@ -15141,6 +15451,17 @@ paths:
               schema:
                 type: string
                 format: binary
+        '206':
+          description: The requested byte range.
+          headers:
+            Content-Range:
+              schema:
+                type: string
+          content:
+            '*/*':
+              schema:
+                type: string
+                format: binary
         '400':
           $ref: '#/components/responses/BadRequest'
         '401':
@@ -15149,6 +15470,86 @@ paths:
           $ref: '#/components/responses/Forbidden'
         '404':
           $ref: '#/components/responses/NotFound'
+        '416':
+          $ref: '#/components/responses/RangeNotSatisfiable'
+  /workspace-files/stream:
+    post:
+      operationId: knowledge.createWorkspaceFileStream
+      tags: [knowledge]
+      summary: A short-lived address a media element can play one working file from (owner and admin)
+      description: >-
+        A one-hour ticket for this one file of the profile's working files, served by
+        `knowledge.streamFile` with byte ranges and no bearer (DECISIONS §98, after §90). The path
+        is checked now and on every read; the ticket stops when the person who asked may no
+        longer enter the profile or is no longer an owner or admin.
+      parameters:
+        - $ref: '#/components/parameters/Profile'
+        - $ref: '#/components/parameters/WorkspaceFilePath'
+      x-roles: [owner, admin]
+      x-rt-events: []
+      responses:
+        '201':
+          description: The address.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AttachmentStream'
+              example:
+                url: /api/v1/file-streams/9d2c4e6f8a0b1c3d5e7f9a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d
+                expires_at: '2026-09-27T02:14:50Z'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /file-streams/{ticket}:
+    parameters:
+      - name: ticket
+        in: path
+        required: true
+        schema:
+          type: string
+          pattern: '^[0-9a-f]{64}$'
+        example: 9d2c4e6f8a0b1c3d5e7f9a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d
+    get:
+      operationId: knowledge.streamFile
+      tags: [knowledge]
+      summary: Stream the file a ticket names (supports `Range`)
+      description: >-
+        No bearer; the ticket from `sessions.createFileStream` or
+        `knowledge.createWorkspaceFileStream` is the permission. The type is chosen from the
+        name, `inline`, `nosniff`, sandboxed and `Cache-Control: private, no-store`. An unknown,
+        expired or withdrawn ticket, or a file no longer there, is `404`.
+      security: []
+      parameters:
+        - $ref: '#/components/parameters/ByteRange'
+      x-rt-events: []
+      responses:
+        '200':
+          description: The whole file.
+          content:
+            '*/*':
+              schema:
+                type: string
+                format: binary
+        '206':
+          description: The requested byte range.
+          headers:
+            Content-Range:
+              schema:
+                type: string
+          content:
+            '*/*':
+              schema:
+                type: string
+                format: binary
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '416':
+          $ref: '#/components/responses/RangeNotSatisfiable'
   /workspace-files/archive:
     get:
       operationId: knowledge.downloadWorkspaceFolder
@@ -16115,6 +16516,22 @@ components:
       required: true
       schema:
         $ref: '#/components/schemas/Ulid'
+    ByteRange:
+      name: Range
+      in: header
+      required: false
+      description: 'One byte range, `bytes=<start>-<end>`, `bytes=<start>-` or `bytes=-<suffix>`.'
+      schema:
+        type: string
+      example: bytes=0-1048575
+    WebhookRouteName:
+      name: route_name
+      in: path
+      required: true
+      description: A webhook route's name, as Hermes takes it.
+      schema:
+        $ref: '#/components/schemas/HermesWebhookName'
+      example: github-issues
     RoomId:
       name: room_id
       in: path
@@ -16367,6 +16784,25 @@ components:
               from: done
               to: in_progress
               allowed: [archived]
+    RangeNotSatisfiable:
+      description: >-
+        The byte range starts past the end of the file (`bad_request`,
+        `details.reason = range_not_satisfiable`, `details.size_bytes`); `Content-Range:
+        bytes */<size>` says how large it is.
+      headers:
+        Content-Range:
+          schema:
+            type: string
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            error: 'نطاق البايتات خارج حجم الملف'
+            code: bad_request
+            details:
+              reason: range_not_satisfiable
+              size_bytes: 1048576
     PayloadTooLarge:
       description: The upload exceeds the limit (`payload_too_large`).
       content:
@@ -18790,10 +19226,14 @@ components:
     # ---------------------------------------------------------------- session files
     SessionFilePreview:
       type: string
-      enum: [html, pdf, image, markdown, code, text, csv, xlsx, docx, pptx, none]
+      enum: [html, pdf, image, markdown, code, text, csv, xlsx, docx, pptx, video, audio, none]
       description: |
         How a client previews the file, decided from its name. `none` is offered for download
         only. `html` is rendered in a sandboxed frame, never in the client's own origin.
+        `video` and `audio` are played by the client's own player from a stream address
+        (`sessions.createFileStream`, `sessions.createAttachmentStream`), asking for byte ranges
+        as it plays, so a long file starts at once and seeks (DECISIONS §98); a client that
+        cannot play the format offers the file for download.
     SessionFileSource:
       type: string
       enum: [tool, working_dir, attachment]
@@ -19336,7 +19776,10 @@ components:
       properties:
         url:
           type: string
-          description: A path on this hub; put it in a media element's `src` as it is.
+          description: >-
+            A path on this hub; put it in a media element's `src` as it is. The same shape answers
+            `sessions.createAttachmentStream`, `sessions.createFileStream` and
+            `knowledge.createWorkspaceFileStream`.
         expires_at:
           $ref: '#/components/schemas/Timestamp'
     UploadStart:
@@ -20552,6 +20995,131 @@ components:
           enum: [now, on_restart]
         error:
           type: [string, 'null']
+    HermesWebhookName:
+      type: string
+      pattern: '^[a-z0-9][a-z0-9_-]{0,63}$'
+      description: Lowercase letters, digits, `-` and `_`, starting with a letter or a digit (Hermes's own rule).
+      examples: [github-issues]
+    HermesWebhook:
+      type: object
+      description: >-
+        One incoming webhook route of Hermes (DECISIONS §97). A POST to `path` on this hub, signed
+        with `secret`, starts a run of the agent asked `prompt` with the posted values filled in.
+      required: [name, description, prompt, events, deliver, secret, path, static, created_at]
+      properties:
+        name:
+          $ref: '#/components/schemas/HermesWebhookName'
+        description:
+          type: [string, 'null']
+        prompt:
+          type: string
+          description: >-
+            What the agent is asked. `{dot.path}` is replaced with that value of the posted JSON
+            (`{issue.title}`), `{event_type}` with the event's name and `{__raw__}` with the whole
+            body; empty asks with the whole body.
+        events:
+          type: array
+          items:
+            type: string
+          description: The events the route takes (`X-GitHub-Event`, `X-GitLab-Event`, or the body's `event_type`/`type`); empty takes every event.
+        deliver:
+          type: string
+          description: >-
+            Where Hermes sends the agent's answer: `log` keeps it in Hermes's own record of the run;
+            a messaging platform's name (`telegram` …) sends it to that channel's home chat in the
+            profile.
+        secret:
+          type: [string, 'null']
+          description: The shared secret the sender signs with (HMAC-SHA256). `null` for a static route whose secret is the listener's global one.
+        path:
+          type: string
+          description: The route's address on this hub, to be put after the hub's public origin.
+        static:
+          type: boolean
+          description: Written in `config.yaml` by hand; listed, not deletable here.
+        created_at:
+          oneOf:
+            - $ref: '#/components/schemas/Timestamp'
+            - type: 'null'
+    HermesWebhookList:
+      type: object
+      required: [listener, items]
+      properties:
+        listener:
+          $ref: '#/components/schemas/HermesWebhookListener'
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/HermesWebhook'
+    HermesWebhookListener:
+      type: object
+      description: The profile's webhook listener (Hermes's `webhook` platform in its gateway).
+      required: [enabled, port, status, error]
+      properties:
+        enabled:
+          type: boolean
+        port:
+          type: [integer, 'null']
+          description: The port it listens on, on this machine only.
+        status:
+          type: string
+          enum: [online, offline, error, unknown]
+          description: As `Channel.status` says it for the `webhook` platform.
+        error:
+          type: [string, 'null']
+    HermesWebhookCreate:
+      type: object
+      required: [name, prompt]
+      additionalProperties: false
+      properties:
+        name:
+          $ref: '#/components/schemas/HermesWebhookName'
+        prompt:
+          type: string
+          maxLength: 8000
+        description:
+          type: [string, 'null']
+          maxLength: 200
+        events:
+          type: array
+          maxItems: 50
+          items:
+            type: string
+            minLength: 1
+            maxLength: 100
+        deliver:
+          type: string
+          pattern: '^[a-z][a-z0-9_]{0,39}$'
+          default: log
+          description: '`log`, or the name of a messaging platform switched on in the profile.'
+    HermesWebhookTestResult:
+      type: object
+      required: [status, body]
+      properties:
+        status:
+          type: integer
+          description: The listener's HTTP status.
+        body:
+          description: The listener's JSON answer; `null` when it was not JSON.
+          oneOf:
+            - type: object
+            - type: 'null'
+    HermesWebhookReceipt:
+      type: object
+      description: The listener's answer to a delivery it took.
+      required: [status]
+      properties:
+        status:
+          type: string
+          description: '`accepted`, `ignored`, `duplicate`, `delivered` (a route that only forwards).'
+        route:
+          type: string
+        event:
+          type: string
+        reason:
+          type: string
+        delivery_id:
+          type: string
     MessagingGateway:
       type: object
       description: >-
@@ -23048,6 +23616,12 @@ components:
                 type: string
               label:
                 type: string
+              image_only:
+                type: boolean
+                description: >-
+                  The model only draws (`Model.image_only`, DECISIONS §87), by the same rule the
+                  hub applies to its catalogue; clients leave it out of a chat-model picker.
+                  Absent from an older hub means `false`.
     ProviderCreate:
       type: object
       required: [label, kind]

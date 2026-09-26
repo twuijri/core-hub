@@ -63,7 +63,20 @@ lint exit: 0
 $ pnpm typecheck
 typecheck exit: 0
 ```
-CI على طلب الليلة #165: يُسجَّل بعد الدفع.
+CI على طلب الليلة #165 (الرأس `2b03bb18`، بعد دمج هذه المهمة في `e772ef71`؛ تشغيل CI الخاص بـ`e772ef71` أُلغي بدفعات لاحقة):
+```
+ ✓  unit  tests/unit/config.test.ts (10 tests) 29ms
+ ✓  unit  tests/unit/trust-proxy.test.ts (9 tests) 11893ms
+pass	Server unit tests (shard 1/3)
+pass	Server unit tests (shard 3/3)
+pass	Web smoke journeys (Playwright against the real hub)
+pass	Desktop app smoke (Electron under Xvfb against the real hub)
+pass	Docker image builds and answers /health
+fail	Server unit tests (shard 2/3)   — tests/unit/status.test.ts: "the contract grew or shrank: update docs/STATUS.md: expected 329 to be 337"
+fail	Android build, unit tests, lint — ContractExamplesTest > every response example in the contract decodes
+```
+الفشلان من تغيير العقد في مهمة أخرى دُمجت بعدي (webhooks/media، §97–§98)، لا من هذه المهمة: لم تغيّر هذه المهمة العقد ولا
+أعداد العمليات في STATUS.
 
 ## المخاطر والرجوع
 - حزمة تنشر منفذ الخادم مباشرة بلا بروكسي: جهاز في الشبكة الخاصة نفسها ما زال يستطيع كتابة عنوانه؛ الحل

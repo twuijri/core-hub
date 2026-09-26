@@ -116,6 +116,15 @@ export interface AttachmentsPort {
     scope: { workspace: string; userId: string },
     file: { name: string; mime: string; bytes: Buffer },
   ): Promise<Omit<AttachmentSummary, 'url'>>;
+  /**
+   * A one-hour address a media element plays one file of the working folder from, byte range
+   * by byte range (contract `sessions.createFileStream`, decision §98). Absent where no
+   * `knowledge` is wired: the operation is then `503`.
+   */
+  streamFile?(
+    scope: { workspace: string; profile: string; userId: string },
+    file: { root: string; relative: string; mime: string },
+  ): { url: string; expires_at: string };
 }
 
 export interface AgentRunRequest {

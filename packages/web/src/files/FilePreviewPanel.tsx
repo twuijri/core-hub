@@ -4,6 +4,9 @@
  * Drawn in the frame's split pane — docked and resizable on a desktop, the whole screen on a
  * phone (SplitPane) — and kept current: when the agent changes an open file, the list says
  * so (`modified_at`) and the tab reads it again.
+ *
+ * A video or a sound plays in the panel (§98) from a one-hour stream address, a byte range at a
+ * time, so a long file starts at once and seeks; Download saves it from the same address.
  */
 import { HubApiError } from '@corehub/contracts';
 import { lazy, Suspense, useEffect, useState } from 'react';
@@ -23,6 +26,7 @@ import { CSV_MAX_ROWS, delimiterOf, parseCsv } from './csv.js';
 import { PREVIEW_SANDBOX, sandboxedPage, withPolicy } from './html.js';
 import { formatBytes, languageOf, previewable } from './kinds.js';
 import { useFileBytes, useSaveFile, type FileBytes } from './queries.js';
+import { MediaPlayer, useMediaStream, type MediaKind } from '../chat/InlineMedia.js';
 
 // Office files need a ZIP reader; it is loaded the first time one is opened, not with the app.
 const OfficePreview = lazy(() => import('./OfficePreview.js'));
@@ -114,8 +118,27 @@ function openInNewTab(file: SessionFile, bytes: FileBytes): void {
 function FileView({ sessionId, file }: { sessionId: string; file: SessionFile }) {
   const { t, language } = useI18n();
   const canPreview = previewable(file);
-  const bytes = useFileBytes(sessionId, file, canPreview);
-  const save = useSaveFile(sessionId);
+  // A video or a sound is played from a stream address, never read whole into the page (§98).
+  const media: MediaKind | null =
+    file.preview === 'video' || file.preview === 'audio' ? file.preview : null;
+  const bytes = useFileBytes(sessionId, file, canPreview && media === null);
+  const stream = useMediaStream(
+    file.attachment_id !== null
+      ? { kind: 'attachment', attachmentId: file.attachment_id }
+      : { kind: 'path', sessionId, path: file.path ?? '' },
+    media !== null,
+  );
+  const saveFile = useSaveFile(sessionId);
+  // A long video is saved from its stream address too, so the page never holds all of it.
+  const save = async (target: SessionFile) => {
+    if (media === null || !stream.data) return saveFile(target);
+    const anchor = document.createElement('a');
+    anchor.href = stream.data.url;
+    anchor.download = target.name;
+    document.body.append(anchor);
+    anchor.click();
+    anchor.remove();
+  };
   const [source, setSource] = useState(false);
   const [saveError, setSaveError] = useState<unknown>(null);
 
@@ -178,7 +201,25 @@ function FileView({ sessionId, file }: { sessionId: string; file: SessionFile })
       </div>
       {saveError !== null && <Notice tone="danger">{describeError(saveError, t)}</Notice>}
       <div className="file-body">
-        {!canPreview ? (
+        {media !== null && canPreview ? (
+          stream.isError ? (
+            <Notice tone="danger">{describeError(stream.error, t)}</Notice>
+          ) : !stream.data ? (
+            <Spinner label={t('files.loading')} />
+          ) : (
+            <div className="file-media" data-testid="file-media">
+              <MediaPlayer
+                key={stream.data.url}
+                url={stream.data.url}
+                name={file.name}
+                kind={media}
+                className={media === 'video' ? 'file-video' : 'file-audio'}
+                testId={media === 'video' ? 'file-video' : 'file-audio'}
+                fallback={<Notice tone="info">{t('files.cannot_play')}</Notice>}
+              />
+            </div>
+          )
+        ) : !canPreview ? (
           <Notice tone="info">
             {file.preview === 'none'
               ? t('files.no_preview')
