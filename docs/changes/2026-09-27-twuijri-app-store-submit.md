@@ -37,7 +37,35 @@ App Store Connect بنصوصه وصوره (`ios-screenshots.yml`، التشغي�
 - `docs/store/apple/README.md`، `docs/RELEASING.md`، `docs/STATUS.md`.
 
 ## الفحوص (الأوامر ونواتجها الفعلية)
-تُكمَّل أدناه.
+محليًا (Node 24):
+
+```
+$ pnpm scripts:test
+  ✔ attaches the given build, sets manual release and content rights, and never submits
+  ✔ picks the newest VALID build of the version when no number is given
+  ✔ does not attach a build that is not VALID, and lists it
+  ✔ leaves an attached build, release type and content rights alone
+  ✔ answers the age rating questionnaire of the editable App Information
+  ✔ falls back to the older frequency names and lists questions App Store Connect does not know
+  ✔ makes the app free and available everywhere but the excluded territories when unset
+  ✔ leaves a price and availability that are already set
+  ✔ reports what only the owner can enter, without printing the demo password
+  ✔ lists nothing when everything the API can see is complete
+  ✔ --submit refuses while App Review Information is incomplete
+  ✔ --submit adds the version to a review submission and submits it when complete
+  ✔ changes nothing on a version that is already waiting for review
+✔ asc-prepare-submission
+ℹ tests 26
+ℹ pass 26
+ℹ fail 0
+$ pnpm lint
+All matched files use Prettier code style!
+```
+
+أثناء الكتابة كشف الاختبار خطأً حقيقيًا: مقارنة الإجابة بالاسم القديم كانت تعدّ السؤال غير المُجاب (`undefined`) مُجابًا،
+فلا يُرسل؛ صُحّح قبل الـcommit. لم يُشغَّل `actionlint` (غير مثبت)؛ صحة YAML فُحصت بـ `yaml.safe_load`.
+
+التشغيل الحقيقي: تُكمَّل أدناه.
 
 ## المخاطر والرجوع
 - التشغيل الحقيقي يغيّر حالة التطبيق في App Store Connect (البناء، التصنيف، السعر، التوفر، الحقوق، طريقة النشر)؛ كلها
