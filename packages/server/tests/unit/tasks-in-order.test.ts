@@ -1,5 +1,5 @@
 /**
- * Tasks run in order (DECISIONS §88): a task set to start on its own waits for what it
+ * Tasks run in order (DECISIONS §92): a task set to start on its own waits for what it
  * depends on, a running task whose run goes quiet is marked stuck and its owner told, and
  * the board counts the archive without sending it. Across modules — `tasks`, `sessions`
  * (played by the scripted runner), `schedules` (the clock) and `notify` (the inbox) — joined

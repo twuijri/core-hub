@@ -141,7 +141,7 @@ export function TasksScreen() {
     : t('tasks.new_task');
   const board = useBoard(filter);
   // The archive behind Done, read-only: the board counts it for its link, and it is read
-  // only when a person opens it (DECISIONS §88).
+  // only when a person opens it (DECISIONS §92).
   const archivedCount =
     board.data?.columns.find((column) => column.status === ARCHIVED_STATUS)?.count ?? 0;
   const createTask = useCreateTask();
@@ -680,7 +680,7 @@ export function TaskCard({ task, actions }: { task: Task; actions: CardActions }
           )}
           {waitingOn.length > 0 && (
             // What it waits for, by name on hover or focus: a task set to start on its own
-            // does not start before these are done (DECISIONS §88).
+            // does not start before these are done (DECISIONS §92).
             <Tooltip
               label={t('tasks.waiting_on_list', {
                 titles: listOf(

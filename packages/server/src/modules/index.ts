@@ -662,7 +662,7 @@ registerTaskRunner((app) => {
 });
 
 /**
- * The stuck-task watchdog (DECISIONS §88) runs on the scheduler's clock — `schedules` owns
+ * The stuck-task watchdog (DECISIONS §92) runs on the scheduler's clock — `schedules` owns
  * the clock, `tasks` the rule — and tells a stuck task's owner through `notify`, which owns
  * the words. None of the three knows the others; they meet here.
  */

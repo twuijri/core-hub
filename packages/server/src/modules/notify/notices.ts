@@ -33,7 +33,7 @@ export type NoticeEvent =
   | { kind: 'approval_requested'; agent: string; session: string; what: string }
   /**
    * A running task whose run has said nothing for `minutes` (the tasks watchdog, DECISIONS
-   * §88). `task` is how the board names it: "HUB-12 · the title".
+   * §92). `task` is how the board names it: "HUB-12 · the title".
    */
   | { kind: 'task_stuck'; task: string; minutes: number }
   /** Words someone else already chose — a workflow's `notify` step writes its own. */

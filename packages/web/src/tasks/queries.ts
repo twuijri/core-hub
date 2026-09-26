@@ -92,7 +92,7 @@ export interface Task {
   /** The task's git worktree, when its project has a repository and it was made. */
   worktree?: Worktree | null;
   /**
-   * What it depends on that is not done yet (DECISIONS §88). A task set to start on its own
+   * What it depends on that is not done yet (DECISIONS §92). A task set to start on its own
    * waits for all of these; a person may still start it by hand, after a warning.
    */
   waiting_on?: TaskDependencyState[];
@@ -206,7 +206,7 @@ export function useBoard(filter: BoardFilter) {
  * seconds while something runs, and the archive only grows, so it is not dragged along on
  * every one of those. Its key starts with the board's, so every write refreshes it too.
  *
- * Asked for only while `open` — when a person opens the archive (DECISIONS §88). Until then
+ * Asked for only while `open` — when a person opens the archive (DECISIONS §92). Until then
  * the board's own `archived` column says how many there are, which is all the link needs.
  */
 export function useArchive(filter: BoardFilter, open: boolean) {

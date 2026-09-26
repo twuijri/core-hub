@@ -170,7 +170,7 @@ export const tasks = sqliteTable(
     attemptCount: integer('attempt_count').notNull().default(0),
     archivedAt: timestampMs('archived_at'),
     /**
-     * The stuck-task watchdog's marker (DECISIONS §88): while the task is `running`, the
+     * The stuck-task watchdog's marker (DECISIONS §92): while the task is `running`, the
      * moment its run last showed activity, once that was longer ago than the hub allows.
      * Cleared by activity or by any move out of `running`.
      */

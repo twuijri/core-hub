@@ -98,7 +98,7 @@ export function TaskDialog({ task, onClose }: { task: Task | null; onClose(): vo
   const comments = detail.data?.comments ?? [];
   const worktree = shown?.worktree ?? null;
   const autoStart = shown?.auto_start === true;
-  // What it still waits for (DECISIONS §88) — listed while the task has not run to the end.
+  // What it still waits for (DECISIONS §92) — listed while the task has not run to the end.
   const waitingOn =
     shown && !['running', 'review', 'done', 'archived'].includes(shown.status)
       ? (shown.waiting_on ?? [])

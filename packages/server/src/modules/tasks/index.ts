@@ -238,7 +238,7 @@ export function taskRunsFor(app: FastifyInstance): TaskRuns {
     app.log,
   );
   // Every event of a session that names a run is that run showing signs of life: what the
-  // stuck-task watchdog reads (DECISIONS §88). Only the runs this worker follows are kept.
+  // stuck-task watchdog reads (DECISIONS §92). Only the runs this worker follows are kept.
   tapRealtime(app.hub.io, (event) => {
     if (event.namespace !== REALTIME_NAMESPACES.sessions) return;
     const runId = runIdOf(event.payload);
@@ -299,7 +299,7 @@ export function registerTaskNotices(
 }
 
 /**
- * The stuck-task watchdog (DECISIONS §88, proposed — owner to confirm), run on the
+ * The stuck-task watchdog (DECISIONS §92, proposed — owner to confirm), run on the
  * scheduler's clock. A task of the hub's own that is `running` and whose run has shown no
  * activity for `COREHUB_TASK_STUCK_MINUTES` gets the stuck marker (`stuck_since`, the moment
  * it last showed any) and its owner one notice; the marker goes again when the run speaks.
@@ -1186,7 +1186,7 @@ export const tasksModule = defineModule({
         const columns = TASK_STATUSES.map((status) => {
           // The archive only grows, and the board is asked again every few seconds while a
           // task runs: without `include_archived` it says how many, and sends none of them
-          // (DECISIONS §88). The client asks for them when a person opens the archive.
+          // (DECISIONS §92). The client asks for them when a person opens the archive.
           if (status === 'archived' && !includeArchived) {
             return {
               status,
@@ -1662,7 +1662,7 @@ export const tasksModule = defineModule({
           announce(request, 'task.updated', { task: moved });
         }
         // Moved to Ready by a person: a task set to start on its own starts. Moved to Done:
-        // a task that waited for this one may start now (DECISIONS §88).
+        // a task that waited for this one may start now (DECISIONS §92).
         if (
           (move.status === 'ready' || move.status === 'done') &&
           !HermesMirror.isHermes(current)

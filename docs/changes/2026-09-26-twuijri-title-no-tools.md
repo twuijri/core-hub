@@ -3,7 +3,7 @@
 
 ## المشكلة والهدف
 1. **تسمية المحادثة تعرض على النموذج كل الأدوات.** بعد أول رد يسأل الهب وكيل الجلسة «Name this
-   conversation» (قرار العقد §26). الطلب كان يصل هرمز دورًا كاملًا ومعه أدوات البروفايل كلها (١٩ أداة في تشغيل
+   conversation» (قرار العقد §91، وكان §26). الطلب كان يصل هرمز دورًا كاملًا ومعه أدوات البروفايل كلها (١٩ أداة في تشغيل
    حقيقي)، فنموذج حقيقي يستطيع أن يكتب ملفًا أو يرسل رسالة أو يرسم صورة وهو مطلوب منه عنوان فقط. المطلوب: طلب
    التسمية بلا أدوات، ولا يترك جلسة في سجل هرمز.
 2. **بقايا بعد #117:** سجل «الأداء المباشر والسجلات» (#117، DECISIONS §51) ترك فرعي `logs`/`performance` في
@@ -55,7 +55,7 @@
   تغيير في `packages/contracts` ولا توليد عملاء ولا حاجة لـ`contracts:check-clients`.
 
 ## العقد (ما تغيّر في packages/contracts، أو «لا شيء»)
-لا شيء في `packages/contracts`. فقرة جديدة تحت قرار التسمية في `docs/contracts/DECISIONS.md` (§26 «The hub names a
+لا شيء في `packages/contracts`. فقرة جديدة تحت قرار التسمية في `docs/contracts/DECISIONS.md` (§91، وكان §26، «The hub names a
 session, unless a person did»): السؤال بلا أدوات ولا يترك شيئًا في سجل الوكيل، والترتيب أعلاه. داخل الخادم:
 `OneshotRequest` و`OneshotUnavailable`، و`AgentSession.oneshot?` و`AgentAdapter.oneshot?` (اختياريان).
 
@@ -69,7 +69,7 @@ session, unless a person did»): السؤال بلا أدوات ولا يترك 
   (جديد، هرمز الحقيقي).
 - الويب: حذف `packages/web/src/settings/AuditReport.tsx`؛ `src/i18n/ar.json` و`en.json` (سبعة مفاتيح)؛
   `src/styles/screens.css` (`.log-entry*`).
-- التوثيق: `docs/contracts/DECISIONS.md` (§26)، `docs/STATUS.md` (سطر sessions)، فهرس الليلة.
+- التوثيق: `docs/contracts/DECISIONS.md` (§91، وكان §26)، `docs/STATUS.md` (سطر sessions)، فهرس الليلة.
 - لا مساس بـ`apps/android` ولا `apps/ios` ولا `.github/workflows`.
 
 ## الفحوص (الأوامر ونواتجها الفعلية)

@@ -9349,7 +9349,7 @@ paths:
             `true`: the `archived` column carries its tasks. Without it the `archived` column
             still says how many there are (`count`, and `counts.by_status.archived`) but its
             `tasks` is empty, so a client asks for the archive only when a person opens it
-            (contract decision §88). `counts.total` counts only the columns whose tasks are
+            (contract decision §92). `counts.total` counts only the columns whose tasks are
             included.
           schema:
             type: boolean
@@ -21562,7 +21562,7 @@ components:
                 archive); archived without having been done does not. A task with `auto_start`
                 does not start on its own while this is not empty, and starts itself when the last
                 of them reaches `done`. A person's "assign and start" is not held back by it —
-                clients warn first. Always sent by the hub (contract decision §88).
+                clients warn first. Always sent by the hub (contract decision §92).
               items:
                 $ref: '#/components/schemas/TaskDependencyState'
             stuck_since:
@@ -21571,7 +21571,7 @@ components:
                 call or step) since this moment for longer than `COREHUB_TASK_STUCK_MINUTES` — the
                 stuck-task watchdog, which also sends the task's owner a notice once. Cleared
                 when the run shows activity again or the task leaves `running`. `null` otherwise;
-                always sent by the hub (contract decision §88).
+                always sent by the hub (contract decision §92).
               oneOf:
                 - $ref: '#/components/schemas/Timestamp'
                 - type: 'null'
