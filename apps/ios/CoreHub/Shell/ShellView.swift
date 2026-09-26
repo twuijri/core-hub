@@ -33,6 +33,8 @@ struct ShellView: View {
     @State private var showingPending = false
 
     var body: some View {
+        // Read here, so the shell redraws when an agent's location request arrives (§105).
+        let locating = LocationRequests.shared.waiting.first
         GeometryReader { geometry in
             ZStack(alignment: .leading) {
                 page
@@ -76,15 +78,15 @@ struct ShellView: View {
         }
         // An agent asked where this phone is: the person answers here, once or for good (§105).
         .sheet(isPresented: Binding(
-            get: { !LocationRequests.shared.waiting.isEmpty },
+            get: { locating != nil },
             set: { shown in
                 // Swiped away: no, this time only.
-                if !shown, let first = LocationRequests.shared.waiting.first {
+                if !shown, let first = LocationRequests.shared.waiting.first, first.id == locating?.id {
                     Task { await LocationRequests.shared.decide(first, allow: false, remember: false) }
                 }
             }
         )) {
-            if let request = LocationRequests.shared.waiting.first { LocationConsentSheet(request: request) }
+            if let locating { LocationConsentSheet(request: locating) }
         }
         .sheet(isPresented: $showingPending) {
             if let pending {
