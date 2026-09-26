@@ -115,7 +115,21 @@ PUT /relay 200 {"available":true,"enabled":true,"connected":true,"route":"cloudf
 pairing relay https://hub.example.com
 app saw [{"op":"get"},{"op":"set","change":{"enabled":true,"route":"cloudflare","token":"<token>","hostname":"hub.example.com"}}]
 ```
-لم يُشغَّل محليًا: اختبار الدخان لسطح المكتب، والمثبّتات، وe2e الويب — يشغّلها CI على #165 (النتيجة أدناه حين تصل).
+لم يُشغَّل محليًا: اختبار الدخان لسطح المكتب، والمثبّتات، وe2e الويب — شغّلها CI على #165 عند `29f7d402`:
+```
+$ gh pr checks 165   (head 29f7d402)
+Desktop app smoke (Electron under Xvfb against the real hub) | pass
+Installers (macos-latest) | pass      # «Microphone words (macOS)»: success
+Installers (ubuntu-latest) | pass
+Installers (windows-latest) | pass
+Lint, typecheck, contracts, client tests, build | pass
+Server unit tests (shard 1/3, 2/3, 3/3) | pass
+Web smoke journeys (Playwright against the real hub) | pass
+db:generate + db:migrate (SQLite and PostgreSQL) | pass
+Android, iOS simulator, Docker /health, change record, graphify-out | pass
+$ (CI log, Microphone words (macOS)) PlistBuddy -c 'Print :NSMicrophoneUsageDescription'
+Core Hub uses the microphone when you dictate a message; the sound goes to your hub to be written out.
+```
 
 ## المخاطر والرجوع
 - **لم يُجرَّب على حقيقي:** لا نفق Cloudflare حقيقي، ولا tailnet حقيقية، ولا سؤال الميكروفون على ماك حقيقي، ولا نسخة
