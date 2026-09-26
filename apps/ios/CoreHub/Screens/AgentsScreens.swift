@@ -44,7 +44,7 @@ struct AgentsScreen: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
-                    Button(action: openMenu) { Image(systemName: "line.3.horizontal") }
+                    Button(action: openMenu) { LucideIcon(.menu, size: 20) }
                         .accessibilityLabel(l10n("shell.open_menu"))
                 }
             }
@@ -66,49 +66,99 @@ struct AgentCard: View {
     @State private var error: String?
 
     var body: some View {
-        VStack(alignment: .leading, spacing: Space.s2) {
+        VStack(alignment: .leading, spacing: Space.s3) {
             Button { open(.menu(agentID: agent.id)) } label: {
-                HStack {
-                    Text(agent.name).font(.system(size: FontSize.sizeLg, weight: .semibold)).foregroundStyle(Tone.text)
+                HStack(spacing: Space.s3) {
+                    AgentAvatar(identity: .of(agent), profile: app.currentProfile, size: Layout.avatarMd)
+                    VStack(alignment: .leading, spacing: 2) {
+                        HStack(spacing: Space.s2) {
+                            Text(agent.name)
+                                .font(.system(size: FontSize.sizeMd, weight: .semibold))
+                                .foregroundStyle(Tone.text)
+                                .lineLimit(1)
+                            // On a phone a healthy agent is a dot, not a word (docs/design/family.md).
+                            StatusDot(kind: statusKind, label: l10n("agents.status_\(agent.status.rawValue)"))
+                        }
+                        if let version = agent.install.version {
+                            Text(l10n("agents.version", ["version": version]))
+                                .font(.system(size: FontSize.sizeXs))
+                                .foregroundStyle(Tone.textMuted)
+                                .lineLimit(1)
+                        }
+                    }
+                    Spacer(minLength: Space.s2)
+                    if agent.status != .available {
+                        StatusPill(text: l10n("agents.status_\(agent.status.rawValue)"), kind: statusPillKind)
+                    }
                     if agent.limited { StatusPill(text: l10n("agents.limited"), kind: .warn) }
-                    Spacer()
-                    StatusPill(text: l10n("agents.status_\(agent.status.rawValue)"), kind: agent.status == .available ? .good : agent.status == .error ? .bad : .neutral)
+                    LucideIcon(.chevronRight, size: 16)
+                        .foregroundStyle(Tone.textFaint)
+                        .flipsForRightToLeftLayoutDirection(true)
                 }
+                .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
-            if let version = agent.install.version {
-                Text(l10n("agents.version", ["version": version]))
-                    .font(.system(size: FontSize.sizeXs)).foregroundStyle(Tone.textMuted)
-            }
-            // Capability tags are information, not buttons.
+            // Capability tags are information, not buttons: one quiet line in the person's words.
             if !agent.capabilities.isEmpty {
-                Text(agent.capabilities.map(\.rawValue).joined(separator: " · "))
-                    .font(.system(size: FontSize.sizeXs)).foregroundStyle(Tone.textFaint)
+                Text(agent.capabilities.map { capabilityName($0.rawValue) }.joined(separator: " · "))
+                    .font(.system(size: FontSize.sizeXs))
+                    .foregroundStyle(Tone.textMuted)
+                    .lineLimit(2)
             }
             FlowLayout(spacing: Space.s2) {
                 ForEach(AgentPages.menu(for: agent)) { destination in
                     Button { open(.page(agentID: agent.id, destination: destination)) } label: {
-                        Label(l10n(destination.titleKey), systemImage: "chevron.forward")
-                            .labelStyle(.titleAndIcon)
-                            .font(.system(size: FontSize.sizeSm))
+                        HStack(spacing: Space.s1) {
+                            LucideIcon(Icons.lucide(for: destination), size: 14)
+                            Text(l10n(destination.titleKey))
+                        }
                     }
-                    .buttonStyle(.bordered)
+                    .buttonStyle(ChipButtonStyle())
                     .accessibilityLabel(l10n("agents.page_of", ["page": l10n(destination.titleKey), "agent": agent.name]))
                     .accessibilityIdentifier("agent.\(agent.slug).\(destination.rawValue)")
                 }
-            }
-            if agent.runtime.state != .notApplicable {
-                Button {
-                    Task { await restart() }
-                } label: {
-                    Label(l10n("agents.restart"), systemImage: "arrow.clockwise")
+                if agent.runtime.state != .notApplicable {
+                    Button {
+                        Task { await restart() }
+                    } label: {
+                        HStack(spacing: Space.s1) {
+                            LucideIcon(.rotateCw, size: 14)
+                                .rotationEffect(.degrees(restarting ? 360 : 0))
+                                .animation(restarting ? .linear(duration: 1).repeatForever(autoreverses: false) : .default, value: restarting)
+                            Text(l10n("agents.restart"))
+                        }
+                    }
+                    .buttonStyle(ChipButtonStyle(quiet: true))
+                    .disabled(restarting)
                 }
-                .disabled(restarting)
-                .font(.system(size: FontSize.sizeSm))
             }
             if let error { NoticeView(text: error, tone: .danger) }
         }
         .padding(.vertical, Space.s2)
+    }
+
+    private var statusKind: StatusDot.Kind {
+        switch agent.status {
+        case .available: return .good
+        case .error: return .bad
+        case .installing, .updating, .limited: return .warn
+        default: return .neutral
+        }
+    }
+
+    private var statusPillKind: StatusPill.Kind {
+        switch statusKind {
+        case .good: return .good
+        case .warn: return .warn
+        case .bad: return .bad
+        case .neutral: return .neutral
+        }
+    }
+
+    /// A capability in the person's words; the catalog's own name when we have none for it.
+    private func capabilityName(_ raw: String) -> String {
+        let key = "agents.capability.\(raw)"
+        return l10n.has(key) ? l10n(key) : raw
     }
 
     private func restart() async {
@@ -155,7 +205,7 @@ struct AgentRouteView: View {
                     List {
                         ForEach(AgentPages.menu(for: agent)) { destination in
                             Button { open(.page(agentID: agent.id, destination: destination)) } label: {
-                                Label(l10n(destination.titleKey), systemImage: Icons.symbol(for: destination))
+                                LucideLabel(l10n(destination.titleKey), icon: Icons.lucide(for: destination))
                             }
                         }
                     }
@@ -177,7 +227,13 @@ struct AgentPageHeader: View {
     var body: some View {
         VStack(alignment: .leading, spacing: Space.s2) {
             Button(action: backToAgents) {
-                Label(l10n("nav.\(NavigationMap.agentBackTerm)"), systemImage: "chevron.backward")
+                HStack(spacing: Space.s1) {
+                    LucideIcon(.chevronLeft, size: 16).flipsForRightToLeftLayoutDirection(true)
+                    Text(l10n("nav.\(NavigationMap.agentBackTerm)"))
+                }
+                .font(.system(size: FontSize.sizeSm, weight: .medium))
+                .frame(minHeight: 44)
+                .contentShape(Rectangle())
             }
             .accessibilityIdentifier("agent.back")
             HStack {
@@ -228,7 +284,7 @@ struct AgentSkillsPage: View {
             List {
                 if let error { NoticeView(text: error, tone: .danger) }
                 if list.categories.allSatisfy({ $0.skills.isEmpty }) {
-                    Text(l10n("common.empty")).foregroundStyle(Tone.textMuted)
+                    EmptyRow(icon: .sparkles)
                 }
                 ForEach(list.categories, id: \.key) { category in
                     Section(category.name) {
@@ -277,7 +333,7 @@ struct AgentMcpPage: View {
             return try await app.api.call { try await AgentsAPI.agentsListMcpServers(xHubProfile: profile, agentId: agent.id, apiConfiguration: $0) }.items
         } content: { servers, reload in
             List {
-                if servers.isEmpty { Text(l10n("common.empty")).foregroundStyle(Tone.textMuted) }
+                if servers.isEmpty { EmptyRow(icon: .server) }
                 ForEach(servers, id: \.name) { server in
                     VStack(alignment: .leading, spacing: Space.s1) {
                         HStack {
@@ -324,7 +380,7 @@ struct AgentMemoryPage: View {
             return try await app.api.call { try await AgentsAPI.agentsListMemory(xHubProfile: profile, agentId: agent.id, apiConfiguration: $0) }.items
         } content: { items, reload in
             List {
-                if items.isEmpty { Text(l10n("common.empty")).foregroundStyle(Tone.textMuted) }
+                if items.isEmpty { EmptyRow(icon: .brain) }
                 ForEach(items, id: \.id) { item in
                     NavigationLink {
                         MemoryEditor(agent: agent, item: item, saved: reload)
@@ -406,7 +462,7 @@ struct AgentJobsPage: View {
             }.items
         } content: { schedules, reload in
             List {
-                if schedules.isEmpty { Text(l10n("common.empty")).foregroundStyle(Tone.textMuted) }
+                if schedules.isEmpty { EmptyRow(icon: .rotateCcwClock) }
                 ForEach(schedules, id: \.id) { schedule in
                     ScheduleRow(schedule: schedule, showProfile: false, changed: reload)
                 }
@@ -460,7 +516,7 @@ struct AgentPluginsPage: View {
             List {
                 if let error { NoticeView(text: error, tone: .danger) }
                 ForEach(list.warnings, id: \.self) { warning in NoticeView(text: warning, tone: .warning) }
-                if list.items.isEmpty { Text(l10n("common.empty")).foregroundStyle(Tone.textMuted) }
+                if list.items.isEmpty { EmptyRow(icon: .puzzle) }
                 ForEach(list.items, id: \.key) { plugin in
                     Toggle(isOn: Binding(get: { plugin.enabled }, set: { value in
                         Task { await set(plugin, enabled: value, reload: reload) }

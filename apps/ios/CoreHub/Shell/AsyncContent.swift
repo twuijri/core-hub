@@ -1,4 +1,4 @@
-// Every page that reads from the hub goes through one loader: a spinner while it loads, the
+// Every page that reads from the hub goes through one loader: skeleton rows while it loads, the
 // hub's own sentence with a retry when it fails (a 501 says which operation is missing), and
 // the content otherwise. No page is ever silently empty (TEAM-RULES §٤).
 import CoreHubClient
@@ -19,6 +19,15 @@ struct AsyncContent<Value, Content: View>: View {
         case failed(String)
     }
 
+    /// What the cross-fade between loading, failed and loaded watches.
+    private var phaseKey: Int {
+        switch phase {
+        case .loading: return 0
+        case .loaded: return 1
+        case .failed: return 2
+        }
+    }
+
     init(key: String = "", load: @escaping () async throws -> Value, @ViewBuilder content: @escaping (Value, _ reload: @escaping () -> Void) -> Content) {
         self.key = key
         self.load = load
@@ -29,19 +38,26 @@ struct AsyncContent<Value, Content: View>: View {
         Group {
             switch phase {
             case .loading:
-                ProgressView()
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                SkeletonList()
+                    .accessibilityLabel(l10n("common.loading"))
+                    .transition(.opacity)
             case .failed(let message):
-                VStack(spacing: Space.s3) {
-                    NoticeView(text: message, tone: .danger)
-                    Button(l10n("common.retry")) { generation += 1 }
-                }
-                .padding(Space.s4)
+                // The hub's own sentence, under a plain title, with the one thing to do.
+                EmptyStateView(
+                    icon: .triangleAlert,
+                    title: l10n("common.error_title"),
+                    message: message,
+                    actionTitle: l10n("common.retry"),
+                    action: { generation += 1 }
+                )
+                .padding(.top, Space.s8)
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
             case .loaded(let value):
                 content(value) { generation += 1 }
+                    .transition(.opacity)
             }
         }
+        .animation(.easeOut(duration: Motion.normal), value: phaseKey)
         .task(id: "\(key)#\(generation)") {
             do {
                 let value = try await load()

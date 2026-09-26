@@ -21,7 +21,7 @@ struct ModelsPage: View {
                     Text(l10n("models.edit_on_web")).font(.system(size: FontSize.sizeXs)).foregroundStyle(Tone.textMuted)
                 }
                 Section(l10n("models.providers")) {
-                    if loaded.0.isEmpty { Text(l10n("common.empty")).foregroundStyle(Tone.textMuted) }
+                    if loaded.0.isEmpty { EmptyRow(icon: .box) }
                     ForEach(loaded.0, id: \.id) { provider in
                         VStack(alignment: .leading, spacing: 2) {
                             HStack {
@@ -62,7 +62,7 @@ struct DeviceConnectionsPage: View {
                     try await app.api.call { try await DevicesAPI.devicesList(apiConfiguration: $0) }.items
                 } content: { devices, reload in
                     List {
-                        if devices.isEmpty { Text(l10n("common.empty")).foregroundStyle(Tone.textMuted) }
+                        if devices.isEmpty { EmptyRow(icon: .qrCode) }
                         ForEach(devices, id: \.id) { device in
                             HStack {
                                 Text(device.name)
@@ -154,7 +154,7 @@ struct KnowledgePage: View {
             return try await app.api.call { try await KnowledgeAPI.knowledgeListItems(xHubProfile: profile, limit: 100, apiConfiguration: $0) }.items
         } content: { items, reload in
             List {
-                if items.isEmpty { Text(l10n("common.empty")).foregroundStyle(Tone.textMuted) }
+                if items.isEmpty { EmptyRow(icon: .bookOpen) }
                 ForEach(items, id: \.id) { item in
                     VStack(alignment: .leading, spacing: 2) {
                         HStack {
@@ -308,7 +308,7 @@ struct HubPluginsPage: View {
             try await app.api.call { try await PluginsAPI.pluginsList(apiConfiguration: $0) }.items
         } content: { plugins, reload in
             List {
-                if plugins.isEmpty { Text(l10n("common.empty")).foregroundStyle(Tone.textMuted) }
+                if plugins.isEmpty { EmptyRow(icon: .puzzle) }
                 ForEach(plugins, id: \.id) { plugin in
                     HStack {
                         Text(plugin.name)

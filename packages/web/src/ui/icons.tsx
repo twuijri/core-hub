@@ -111,6 +111,8 @@ export const IconSignOut = lucide('log-out');
 export const IconSun = lucide('sun');
 export const IconMoon = lucide('moon');
 export const IconDisplay = lucide('monitor');
+/** The theme that follows the system: half sun, half moon — as on the phones. */
+export const IconThemeSystem = lucide('sun-moon');
 export const IconReply = lucide('reply');
 export const IconFork = lucide('git-fork');
 export const IconSpeak = lucide('volume-2');

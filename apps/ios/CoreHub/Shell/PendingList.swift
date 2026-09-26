@@ -105,7 +105,7 @@ struct PendingButton: View {
     var body: some View {
         Button(action: open) {
             ZStack(alignment: .topTrailing) {
-                Image(systemName: "bell")
+                LucideIcon(.bell, size: 20)
                 if !model.items.isEmpty {
                     Text("\(model.items.count)")
                         .font(.system(size: 10, weight: .bold))

@@ -47,11 +47,11 @@ struct ChatScreen: View {
                     Button {
                         Task { if let url = await model.exportMarkdown() { exported = SharedFile(url: url) } }
                     } label: {
-                        Label(l10n("chat.export"), systemImage: "square.and.arrow.up")
+                        Label { Text(l10n("chat.export")) } icon: { Image(lucide: .share) }
                     }
                     .accessibilityIdentifier("chat.export")
                 } label: {
-                    Image(systemName: "ellipsis.circle")
+                    LucideIcon(.ellipsis, size: 20)
                 }
                 .accessibilityLabel(l10n("chat.more"))
                 .accessibilityIdentifier("chat.more")

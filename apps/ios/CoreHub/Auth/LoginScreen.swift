@@ -84,7 +84,7 @@ struct LoginScreen: View {
                 error = nil
                 scanning = true
             } label: {
-                Label(l10n("login.scan"), systemImage: "qrcode.viewfinder")
+                LucideLabel(l10n("login.scan"), icon: .scanQrCode)
                     .frame(maxWidth: .infinity)
             }
             .buttonStyle(.borderedProminent)
@@ -95,7 +95,7 @@ struct LoginScreen: View {
                 error = nil
                 pasting = true
             } label: {
-                Label(l10n("login.paste"), systemImage: "doc.on.clipboard")
+                LucideLabel(l10n("login.paste"), icon: .clipboardPaste)
                     .frame(maxWidth: .infinity)
             }
             .buttonStyle(.bordered)
