@@ -1,5 +1,6 @@
 @testable import CoreHub
 import CoreHubClient
+import UIKit
 import XCTest
 
 /// A reply shows who answered: the registry's name and the agent's own face, never «agent».
