@@ -23,8 +23,10 @@
  * that are still exactly as the hub wrote them and releases the edited ones — they stay, as the
  * person's own. Turning it on installs the whole library again.
  *
- * Switching a skill off on the Skills page renames its `SKILL.md` to `SKILL.md.off`; the manifest
- * follows the file under either name, and an update keeps a switched-off skill off.
+ * Switching a skill off on the Skills page names it in Hermes's own `skills.disabled` list
+ * (decision §102) and leaves its files as they are; an older hub renamed its `SKILL.md` to
+ * `SKILL.md.off` instead, so the manifest still follows the file under either name, and an update
+ * keeps a switched-off skill off.
  */
 import { createHash } from 'node:crypto';
 import {

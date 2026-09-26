@@ -16,6 +16,26 @@ afterEach(() => rmSync(home, { recursive: true, force: true }));
 const idle: ProfileRunner = async () => ({ code: 0, stdout: '', stderr: '' });
 
 describe("Hermes's profiles", () => {
+  it("reads a display name as Hermes does: default's in the home, a named one's in its folder (§102)", () => {
+    home = mkdtempSync(path.join(tmpdir(), 'corehub-hermes-'));
+    const profiles = createHermesProfiles({ home, run: idle });
+    expect(profiles.displayName('default')).toBe('');
+    writeFileSync(path.join(home, 'profile.yaml'), 'display_name: "  الرئيسي  "\n');
+    mkdirSync(path.join(home, 'profiles', 'design'), { recursive: true });
+    writeFileSync(
+      path.join(home, 'profiles', 'design', 'profile.yaml'),
+      'description: Makes the pictures.\ndisplay_name: فريق التصميم\n',
+    );
+    mkdirSync(path.join(home, 'profiles', 'broken'), { recursive: true });
+    writeFileSync(path.join(home, 'profiles', 'broken', 'profile.yaml'), '- not: [a map\n');
+    expect(profiles.displayName('default')).toBe('الرئيسي');
+    expect(profiles.displayName('design')).toBe('فريق التصميم');
+    // Never an error: a file Hermes cannot read is no name, as in `hermes profile list`.
+    expect(profiles.displayName('broken')).toBe('');
+    expect(profiles.displayName('missing')).toBe('');
+    expect(profiles.displayName('../etc')).toBe('');
+  });
+
   it('lists what Hermes lists: valid ids, not default, not deleted, directories only', async () => {
     home = mkdtempSync(path.join(tmpdir(), 'corehub-hermes-'));
     const root = path.join(home, 'profiles');

@@ -7,6 +7,9 @@
  * profile is missing when it is. Then the routes, through a hub: one profile, every profile the
  * caller may enter (`profiles=all`), and one conversation's transcript.
  */
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import path from 'node:path';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { modules as defaultModules } from '../index.js';
 import { listWorkspacesFor, principalScopeResolver } from '../auth/index.js';
@@ -200,6 +203,7 @@ describe('channel conversations: the reader', () => {
     ).toEqual({
       items: [],
       unavailable: [{ profile: null, reason: 'hermes_not_managed', message: null }],
+      has_more: false,
     });
 
     let now = 1_000_000;
@@ -276,6 +280,107 @@ describe('channel conversations: the reader', () => {
     expect(opened.items).toHaveLength(500);
     expect(opened.items.at(-1)?.text).toBe('m519');
     expect(opened.has_more).toBe(true);
+    // The page before, from where this one stopped (§102).
+    expect(opened.next_offset).toBe(500);
+    const older = await new ChannelConversations(() => hermes).messages(
+      { workspace: 'w', profile: 'home' },
+      '20260925_091500_aa11bb22',
+      500,
+    );
+    expect(older.items.map((m) => m.text)).toEqual(
+      Array.from({ length: 20 }, (_, i) => `m${i}`),
+    );
+    expect(older.has_more).toBe(false);
+    expect(older.next_offset).toBeNull();
+    expect(hermes.calls.at(-1)).toContain('order=latest&limit=500&offset=500');
+  });
+
+  it('reads past Hermes’s page of 100 when asked for more, and says when there is more (§102)', async () => {
+    const many = Array.from({ length: 150 }, (_, i) =>
+      telegram(`20260925_1${String(i).padStart(5, '0')}_aa`, T0 + i),
+    );
+    const hermes = scriptedChannels(
+      { default: { sessions: many } },
+      { profileOf: () => 'default' },
+    );
+    const reader = new ChannelConversations(() => hermes);
+    const scopes = [{ workspace: 'w', profile: 'home' }];
+    const first = await reader.list(scopes);
+    expect(first.items).toHaveLength(100);
+    expect(first.has_more).toBe(true);
+    // The newest first: the oldest fifty are the ones left out.
+    expect(first.items.at(-1)?.id).toBe('20260925_100050_aa');
+    const lists = () => hermes.calls.filter((call) => call.startsWith('/api/sessions?'));
+    expect(lists()).toHaveLength(1);
+    expect(lists()[0]).not.toContain('offset');
+
+    const more = await reader.list(scopes, undefined, 200);
+    expect(more.items).toHaveLength(150);
+    expect(more.has_more).toBe(false);
+    expect(lists().at(-1)).toContain('offset=100');
+    // Asked for less again: what was read is enough, and nothing is asked of Hermes.
+    const before = lists().length;
+    expect((await reader.list(scopes)).items).toHaveLength(100);
+    expect(lists()).toHaveLength(before);
+  });
+
+  it("shows the person's pictures and drops Hermes's notes about them (§102)", async () => {
+    const hermes = scriptedChannels(
+      {
+        default: {
+          sessions: [telegram('20260925_091500_aa11bb22', T0)],
+          messages: {
+            '20260925_091500_aa11bb22': talk(
+              // Handed to a model that sees pictures (`build_native_content_parts`).
+              [
+                'user',
+                'هذه الفاتورة\n\n[Image attached at: /root/.hermes/cache/images/img_a1b2c3d4e5f6.jpg]\n[screenshot]',
+              ],
+              // Described in words first (`_enrich_message_with_vision`).
+              [
+                'user',
+                "[The user sent an image~ Here's what I can see:\nA receipt [total 40].]\n[If you need a closer look, use vision_analyze with image_url: /data/hermes/cache/images/img_0f0f0f0f0f0f.png ~]\n\nكم المجموع؟",
+              ],
+              // A picture with no words: Hermes's own caption is not the person's.
+              [
+                'user',
+                'What do you see in this image?\n\n[Image attached at: /x/image_cache/img_999999999999.webp]',
+              ],
+              ['user', '[User sent an image: /x/cache/images/../../etc/passwd]'],
+              ['assistant', 'المجموع ٤٠. [Image attached at: /x/y.png]'],
+            ),
+          },
+          pictures: { 'img_a1b2c3d4e5f6.jpg': '/tmp/img_a1b2c3d4e5f6.jpg' },
+        },
+      },
+      { profileOf: () => 'default' },
+    );
+    const reader = new ChannelConversations(() => hermes);
+    const scope = { workspace: 'w', profile: 'home' };
+    const opened = await reader.messages(scope, '20260925_091500_aa11bb22');
+    expect(opened.items.map((m) => [m.text, m.attachments])).toEqual([
+      ['هذه الفاتورة', [{ id: 'img_a1b2c3d4e5f6.jpg', kind: 'image', available: true }]],
+      ['كم المجموع؟', [{ id: 'img_0f0f0f0f0f0f.png', kind: 'image', available: false }]],
+      ['', [{ id: 'img_999999999999.webp', kind: 'image', available: false }]],
+      // Not a picture's name, so not a picture; the words are left as Hermes kept them.
+      ['[User sent an image: /x/cache/images/../../etc/passwd]', []],
+      // The agent's words are the agent's: nothing is taken out of them.
+      ['المجموع ٤٠. [Image attached at: /x/y.png]', []],
+    ]);
+    expect(reader.picture(scope, '20260925_091500_aa11bb22', 'img_a1b2c3d4e5f6.jpg')).toBe(
+      '/tmp/img_a1b2c3d4e5f6.jpg',
+    );
+    const code = (name: string) => {
+      try {
+        reader.picture(scope, '20260925_091500_aa11bb22', name);
+        return 'ok';
+      } catch (error) {
+        return error instanceof HubError ? error.code : String(error);
+      }
+    };
+    expect(code('img_0f0f0f0f0f0f.png')).toBe('not_found'); // Hermes deleted it
+    expect(code('..%2Fetc%2Fpasswd')).toBe('not_found');
+    expect(code('notes.txt')).toBe('not_found');
   });
 });
 
@@ -373,6 +478,34 @@ describe('channel conversations: the routes', () => {
   afterAll(async () => {
     registerChannelSource(previous);
     await hub.close();
+  });
+
+  it('serves a picture from Hermes’s image cache by its name only (§102)', async () => {
+    const dir = mkdtempSync(path.join(tmpdir(), 'corehub-pictures-'));
+    const file = path.join(dir, 'img_a1b2c3d4e5f6.png');
+    const png = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 1, 2, 3]);
+    writeFileSync(file, png);
+    hermesStore.default!.pictures = { 'img_a1b2c3d4e5f6.png': file };
+    try {
+      const url = '/channel-conversations/20260925_091500_aa11bb22/pictures/img_a1b2c3d4e5f6.png';
+      const got = await get(owner, url);
+      expect(got.statusCode).toBe(200);
+      expect(got.headers['content-type']).toBe('image/png');
+      expect(got.headers['cache-control']).toBe('private, no-store');
+      expect(got.headers['x-content-type-options']).toBe('nosniff');
+      expect(got.rawPayload.equals(png)).toBe(true);
+      const gone = await get(
+        owner,
+        '/channel-conversations/20260925_091500_aa11bb22/pictures/img_000000000000.png',
+      );
+      expect(gone.statusCode).toBe(404);
+      expect(gone.json()).toMatchObject({ details: { resource: 'channel_picture' } });
+      // Another profile's cache is not this one's: a member of `designer` asks there.
+      expect((await get(member, url, 'designer')).statusCode).toBe(404);
+    } finally {
+      delete hermesStore.default!.pictures;
+      rmSync(dir, { recursive: true, force: true });
+    }
   });
 
   it('lists the header profile, or every profile the caller may enter', async () => {

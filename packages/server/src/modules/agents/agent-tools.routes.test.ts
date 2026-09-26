@@ -403,7 +403,6 @@ describe("Hermes's own skills, in their category folders", () => {
     expect((read.json() as { content: string }).content).toContain('name: findmy');
 
     for (const request of [
-      { method: 'PATCH' as const, payload: { enabled: false } },
       { method: 'PUT' as const, payload: { content: '---\nname: findmy\n---\nmine\n' } },
       { method: 'DELETE' as const },
     ]) {
@@ -414,6 +413,14 @@ describe("Hermes's own skills, in their category folders", () => {
       expect(res.statusCode, `${request.method} ${res.body}`).toBe(409);
       expect(res.json()).toMatchObject({ code: 'conflict', details: { reason: 'skill_bundled' } });
     }
+    // Switched as Hermes switches it — its name in Hermes's own list — so it works (§102).
+    const off = await authed(h, h.token, {
+      method: 'PATCH',
+      url: `/api/v1/agents/${agent}/skills/findmy`,
+      payload: { enabled: false },
+    });
+    expect(off.statusCode, off.body).toBe(200);
+    expect(off.json()).toMatchObject({ key: 'findmy', source: 'builtin', enabled: false });
     // Pinning is the hub's own order, not Hermes's file: it works for every skill.
     const pinned = await authed(h, h.token, {
       method: 'PATCH',

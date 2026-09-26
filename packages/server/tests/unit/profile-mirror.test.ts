@@ -10,17 +10,18 @@ import {
   type ProfileMirror,
   type ProfileOrigin,
 } from '../../src/modules/auth/index.js';
-import { authed, signedInHub } from './helpers.js';
+import { authed, signedInHub, testHub } from './helpers.js';
 
 type Hub = Awaited<ReturnType<typeof signedInHub>>;
 
-function fakeMirror(profiles: string[] = []) {
+function fakeMirror(profiles: string[] = [], displayNames?: Record<string, string>) {
   const created: Array<{ name: string; origin: ProfileOrigin }> = [];
   const named: Array<{ name: string; displayName: string }> = [];
   let refuse: string | null = null;
   let refuseName: string | null = null;
   const mirror: ProfileMirror = {
     list: async () => [...profiles],
+    ...(displayNames ? { displayName: (name: string) => displayNames[name] ?? '' } : {}),
     async create(name, origin) {
       if (refuse) throw new ProfileMirrorError(refuse);
       created.push({ name, origin });
@@ -259,5 +260,47 @@ describe("a profile's name is Hermes's display name; its id never changes", () =
     const moved = await patch(hub, made.id, { slug: 'lab', name: 'المختبر' });
     expect(moved.statusCode).toBe(200);
     expect(moved.json()).toMatchObject({ slug: 'lab', name: 'المختبر' });
+  });
+});
+
+describe("names are read from Hermes (§102)", () => {
+  it("adds a Hermes profile under Hermes's display name, and its id when it has none", async () => {
+    registerProfileMirror(
+      () => fakeMirror(['design', 'ops'], { design: 'فريق التصميم', ops: '' }).mirror,
+    );
+    hub = await signedInHub();
+    const names = new Map((await listed(hub)).map((row) => [row.slug, row.name]));
+    expect(names.get('design')).toBe('فريق التصميم');
+    expect(names.get('ops')).toBe('ops');
+  });
+
+  it('takes a name changed on Hermes’s side, and leaves a name Hermes does not have', async () => {
+    const hermesNames: Record<string, string> = { default: '' };
+    registerProfileMirror(() => fakeMirror(['design'], hermesNames).mirror);
+    hub = await signedInHub();
+    const before = new Map((await listed(hub)).map((row) => [row.slug, row.name]));
+    // No display name on Hermes's side: the hub's own names stand.
+    expect(before.get('default')).toBe('Default');
+    expect(before.get('design')).toBe('design');
+
+    // Renamed with `hermes profile rename`, or on Hermes's dashboard.
+    hermesNames.default = 'الرئيسي';
+    hermesNames.design = 'Design Team';
+    const after = new Map((await listed(hub)).map((row) => [row.slug, row.name]));
+    expect(after.get('default')).toBe('الرئيسي');
+    expect(after.get('design')).toBe('Design Team');
+  });
+
+  it('writes the name given at first-run setup as Hermes’s name for `default`', async () => {
+    const fake = fakeMirror([], {});
+    registerProfileMirror(() => fake.mirror);
+    hub = await testHub({});
+    const made = await hub.app.inject({
+      method: 'POST',
+      url: '/api/v1/auth/setup',
+      payload: { username: 'tariq', password: 'a-good-owner-password', workspace_name: 'بيتي' },
+    });
+    expect(made.statusCode).toBe(200);
+    expect(fake.named).toEqual([{ name: 'default', displayName: 'بيتي' }]);
   });
 });

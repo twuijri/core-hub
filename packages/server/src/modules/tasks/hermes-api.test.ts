@@ -19,6 +19,8 @@ import {
   fromHermesPriority,
   toHermesPriority,
   type HermesComment,
+  type HermesEvent,
+  type HermesRun,
 } from './hermes-api.js';
 import { registerHermesBoard } from './index.js';
 import type { HermesBoardPort } from './hermes-mirror.js';
@@ -30,6 +32,9 @@ type Card = HermesTask & { current_run_id: number | null };
 class FakeBoard implements HermesKanban {
   cards = new Map<string, Card>();
   comments = new Map<string, HermesComment[]>();
+  /** Hermes's `task_events` and `task_runs` of each card, oldest first as Hermes answers. */
+  events = new Map<string, HermesEvent[]>();
+  runs = new Map<string, HermesRun[]>();
   created: Array<Record<string, unknown>> = [];
   private counter = 0;
 
@@ -115,7 +120,12 @@ class FakeServer {
     if (!card) throw new HermesRefusal(verb, `task ${id} not found`);
     switch (`${method} ${action ?? ''}`) {
       case 'GET ':
-        return { task: card, comments: this.board.comments.get(id) ?? [] } as T;
+        return {
+          task: card,
+          comments: this.board.comments.get(id) ?? [],
+          events: this.board.events.get(id) ?? [],
+          runs: this.board.runs.get(id) ?? [],
+        } as T;
       case 'PATCH ':
         if (typeof input.title === 'string') card.title = input.title.trim();
         if (typeof input.body === 'string') card.body = input.body;
@@ -420,6 +430,184 @@ describe('tasks: Hermes cards edited through Hermes', () => {
       });
       expect(offline.statusCode).toBe(200);
       expect((offline.json() as Json).title).toBe('After, on Hermes');
+    } finally {
+      await hub.close();
+    }
+  });
+
+  it("shows Hermes's own events and runs when a card is opened, newest first (§102)", async () => {
+    const card = board.add('Report', 'review');
+    board.events.set(card.id, [
+      { id: 1, kind: 'created', payload: { assignee: 'default' }, created_at: 1_790_000_000 },
+      { id: 2, kind: 'claimed', payload: null, created_at: 1_790_000_060, run_id: 4 },
+      { id: 3, kind: 'review_requested', payload: { summary: 'done' }, created_at: 1_790_000_600, run_id: 4 },
+      // Hermes wrote no time: it is left out rather than dated now.
+      { id: 4, kind: 'broken', payload: null, created_at: 0 },
+    ]);
+    board.runs.set(card.id, [
+      {
+        id: 4,
+        profile: 'default',
+        status: 'review',
+        outcome: 'review_requested',
+        summary: 'Wrote the report.',
+        error: null,
+        started_at: 1_790_000_060,
+        ended_at: 1_790_000_600,
+      },
+      { id: 5, profile: 'default', status: 'running', started_at: 1_790_000_700 },
+    ]);
+    const hub = await signedInHub();
+    try {
+      const { id } = await reflectionOf(hub, card);
+      const opened = (
+        await authed(hub, hub.token, { method: 'GET', url: `/api/v1/tasks/${id as string}` })
+      ).json() as Json;
+      expect(opened.hermes).toEqual({
+        events: [
+          {
+            id: 3,
+            kind: 'review_requested',
+            run_id: 4,
+            payload: { summary: 'done' },
+            created_at: '2026-09-21T14:23:20.000Z',
+          },
+          { id: 2, kind: 'claimed', run_id: 4, payload: null, created_at: '2026-09-21T14:14:20.000Z' },
+          {
+            id: 1,
+            kind: 'created',
+            run_id: null,
+            payload: { assignee: 'default' },
+            created_at: '2026-09-21T14:13:20.000Z',
+          },
+        ],
+        runs: [
+          {
+            id: 5,
+            profile: 'default',
+            status: 'running',
+            outcome: null,
+            summary: null,
+            error: null,
+            started_at: '2026-09-21T14:25:00.000Z',
+            ended_at: null,
+          },
+          {
+            id: 4,
+            profile: 'default',
+            status: 'review',
+            outcome: 'review_requested',
+            summary: 'Wrote the report.',
+            error: null,
+            started_at: '2026-09-21T14:14:20.000Z',
+            ended_at: '2026-09-21T14:23:20.000Z',
+          },
+        ],
+      });
+      // Hermes not answering: the card still opens, without a history it could not read.
+      server.down = true;
+      const offline = (
+        await authed(hub, hub.token, { method: 'GET', url: `/api/v1/tasks/${id as string}` })
+      ).json() as Json;
+      expect(offline.hermes).toBeNull();
+      // A hub card has none.
+      const own = await authed(hub, hub.token, {
+        method: 'POST',
+        url: '/api/v1/tasks',
+        payload: { title: 'mine' },
+      });
+      const mine = (
+        await authed(hub, hub.token, {
+          method: 'GET',
+          url: `/api/v1/tasks/${(own.json() as Json).id as string}`,
+        })
+      ).json() as Json;
+      expect(mine.hermes).toBeNull();
+    } finally {
+      await hub.close();
+    }
+  });
+
+  it("sets priority and says a comment on Hermes's cards in bulk, Hermes first (§102)", async () => {
+    const one = board.add('One', 'ready');
+    const two = board.add('Two', 'ready');
+    const hub = await signedInHub();
+    try {
+      const a = (await reflectionOf(hub, one)).id as string;
+      const b = (await reflectionOf(hub, two)).id as string;
+      const own = (
+        await authed(hub, hub.token, {
+          method: 'POST',
+          url: '/api/v1/tasks',
+          payload: { title: 'mine' },
+        })
+      ).json() as Json;
+      const bulk = await authed(hub, hub.token, {
+        method: 'PATCH',
+        url: '/api/v1/tasks',
+        payload: {
+          task_ids: [a, b, own.id],
+          patch: { priority: 'urgent', comment: 'راجعوها قبل الخميس' },
+        },
+      });
+      expect(bulk.statusCode).toBe(200);
+      expect((bulk.json() as { results: Json[] }).results.map((r) => r.ok)).toEqual([
+        true,
+        true,
+        true,
+      ]);
+      expect(one.priority).toBe(2);
+      expect(two.priority).toBe(2);
+      expect(board.comments.get(one.id)?.map((c) => c.body)).toEqual(['راجعوها قبل الخميس']);
+      expect(board.comments.get(two.id)?.map((c) => c.author)).toEqual(['Admin']);
+      // The hub's own task keeps the comment itself.
+      const mine = (
+        await authed(hub, hub.token, { method: 'GET', url: `/api/v1/tasks/${own.id as string}` })
+      ).json() as Json;
+      expect((mine.comments as Json[]).map((c) => c.content)).toEqual(['راجعوها قبل الخميس']);
+      expect(mine.priority).toBe('urgent');
+
+      // Hermes says no: that card's own result says so, in Hermes's words; the rest stand.
+      server.refuse = 'task is archived';
+      const refused = await authed(hub, hub.token, {
+        method: 'PATCH',
+        url: '/api/v1/tasks',
+        payload: { task_ids: [a, own.id], patch: { comment: 'again' } },
+      });
+      expect((refused.json() as { results: Json[] }).results).toEqual([
+        { id: a, ok: false, error: { error: 'conflict', code: 'conflict' } },
+        { id: own.id, ok: true, error: null },
+      ]);
+      expect(board.comments.get(one.id)).toHaveLength(1);
+    } finally {
+      await hub.close();
+    }
+  });
+
+  it('refuses a definition of done on a Hermes card, whose worker Hermes briefs (§103)', async () => {
+    const card = board.add('Hermes owns it', 'ready');
+    const hub = await signedInHub();
+    try {
+      const { id } = await reflectionOf(hub, card);
+      const refused = await authed(hub, hub.token, {
+        method: 'PATCH',
+        url: `/api/v1/tasks/${id as string}`,
+        payload: { definition_of_done: [{ text: 'tests pass' }] },
+      });
+      expect(refused.statusCode).toBe(409);
+      expect(refused.json()).toMatchObject({ details: { reason: 'hermes_owns_card' } });
+      expect(writes()).toEqual([]);
+      const created = await authed(hub, hub.token, {
+        method: 'POST',
+        url: '/api/v1/tasks',
+        payload: {
+          title: 'for Hermes',
+          assignee_agent_id: HERMES_AGENT,
+          constraints: [{ text: 'no new dependencies' }],
+        },
+      });
+      expect(created.statusCode).toBe(409);
+      expect(board.created).toEqual([]);
     } finally {
       await hub.close();
     }
