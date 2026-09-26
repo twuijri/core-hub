@@ -544,7 +544,7 @@ test.describe('web smoke journeys', () => {
 
     // Waiting means two things, so the menu names both rather than the code choosing.
     await card.getByTestId('task-more').click();
-    await page.getByRole('menuitem', { name: 'موقوفة' }).click();
+    await page.getByRole('menuitem', { name: 'وضعها في حالة تعثّر' }).click();
     await page.getByRole('textbox').fill('ننتظر المفتاح');
     await page.getByRole('button', { name: 'حفظ' }).click();
     await expect(page.locator('[data-column="waiting"]')).not.toHaveAttribute(

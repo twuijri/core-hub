@@ -25,6 +25,7 @@ export function WorkspaceSwitcher() {
         onValueChange={(next) => next && setProfile(next)}
         options={options}
         label={t('shell.workspace')}
+        title={null}
         testId="workspace-switcher"
       />
     </span>

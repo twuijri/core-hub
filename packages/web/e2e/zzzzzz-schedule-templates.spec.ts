@@ -53,7 +53,7 @@ test('a common schedule fills the time, and the next runs are the hub’s', asyn
   const preview = page.getByTestId('schedule-next-runs');
   await expect(preview).toHaveAttribute('data-trigger', 'cron 0 9 * * 1-5');
   await expect(preview).toHaveAttribute('data-state', 'ready');
-  await expect(preview).toContainText(`المرات القادمة (${ZONE})`);
+  await expect(preview).toContainText(`مواعيد التشغيل القادمة (${ZONE})`);
   const runs = preview.getByTestId('schedule-next-run');
   await expect(runs).toHaveCount(3);
   const times = await runs.evaluateAll((items) =>

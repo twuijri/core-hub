@@ -51,7 +51,8 @@ export function Select({
   placeholder?: string;
   icon?: ReactNode;
   disabled?: boolean;
-  title?: string | undefined;
+  /** Set to null when the label is already visible beside the control. */
+  title?: string | null | undefined;
   testId?: string;
 }) {
   // An empty string is "nothing chosen", not a nameless option.
@@ -86,7 +87,7 @@ export function Select({
       disabled={disabled}
       onValueChange={(next) => onValueChange(next === EMPTY ? null : next)}
     >
-      <Tooltip label={title ?? label}>
+      <Tooltip label={title === null ? null : (title ?? label)}>
         {/* A disabled trigger receives no pointer events, so when it is disabled the
             tooltip — which is where the reason lives — hangs off a focusable wrapper. */}
         {disabled ? (
