@@ -2391,7 +2391,7 @@ The owner, 2026-09-25, on the rest of the 501 inventory:
   to work both ways — connected to a server, or local — and a desktop-local person without a
   server may later want their phone to reach it from outside. That is what the relay is for.
   Options when it is built: the person's own Cloudflare Tunnel, or Tailscale. Not a service run
-  for them. Not built now; the operations stay 501.
+  for them. Not built now; the operations stay 501. *Built on 2026-09-27: §95.*
 - **Presets** (`agents.listPresets`, `getPreset`, `deletePreset`, `activatePreset`) and **hub
   peers** (`devices.listPeers`, `requestPeer`, `updatePeer`, `deletePeer`, `createPeerInvite`):
   «خلها بعدين اخاف تفتحلنا ثغرات» — later; the owner is wary of the security surface they open
@@ -2635,6 +2635,10 @@ failed the turn. Proposed, owner to confirm:
 - The hub does not refuse an image-only model that a profile already chose as a chat model: a
   refusal would break a saved setting without a way to see why. Hiding it is enough to stop new
   mistakes.
+
+- **The add-provider dialog's Fetch says it too** (amended 2026-09-27): each model of
+  `models.probeProvider`'s answer carries `image_only` by the same rule, since nothing is stored
+  yet that could carry capabilities, and the dialog's default-model picker leaves those out.
 
 Rejected: a new `ModelKind` value (`image`), which widens an enum the native clients decode and
 changes what every existing row of the catalogue is; a capability "text output", whose absence
@@ -2891,6 +2895,194 @@ provider model needs); Microsoft Edge's read-aloud voices (an undocumented endpo
 presenting as the Edge browser, with no terms that grant a third-party server its use — Azure
 Speech offers the same neural voices with a key); a static voice list for a provider that has a
 list endpoint.
+
+## 95. The way in from outside: the person's own Cloudflare Tunnel or Tailscale, run by the desktop app
+
+The owner, 2026-09-26, on the relay parked in §80: «كل اللي قلت لك خلها بعدين… سوها». A person
+who runs the desktop app in local mode, with no server, wants their phone to reach that hub from
+outside the house. Proposed — owner to confirm:
+
+- **Where it runs.** Only a hub the desktop app started (local mode) can open a way in. The hub
+  runs nothing and keeps no secret: `devices.getRelay` / `devices.setRelay` ask the app over the
+  child's IPC channel (`apps/desktop/src/shared/hub-ipc.ts`), and the app does the work. Any other
+  hub answers `getRelay` with `available: false` and `setRelay` with `409 relay_unavailable`,
+  rather than `501`.
+- **Cloudflare Tunnel** (`route: cloudflare`). The person makes a tunnel in their own Cloudflare
+  dashboard (Zero Trust › Networks › Tunnels), gives it a public hostname whose service is
+  `http://localhost:<hub_port>`, and pastes its token. The app keeps the token sealed by the OS
+  keychain (`safeStorage`, as the device token of §89), never returns it (`token_set` and the
+  token's tunnel id only) and never logs it; the hub checks its shape (base64 of `{a, t, s}`)
+  and passes it through once. The app downloads `cloudflared` from Cloudflare's GitHub releases
+  on first use, at a pinned version (2026.9.3) whose SHA-256 is Cloudflare's published one for
+  that file — any other file is refused — keeps it in `<app data>/tools`, and runs
+  `cloudflared tunnel --no-autoupdate --metrics 127.0.0.1:<free port> run` with the token in
+  `TUNNEL_TOKEN` (never on the command line). `connected` comes from cloudflared's own `/ready`;
+  the routes the dashboard gives the tunnel come from its log (`hostnames`, with `matches: false`
+  for one that points anywhere but the hub's port). It restarts after a crash with a growing
+  pause, but not for a token Cloudflare refuses (`token_invalid`).
+- **Tailscale** (`route: tailscale`). When the computer is on a tailnet (an address in
+  100.64.0.0/10; the MagicDNS name from `tailscale status --json` when the program is where its
+  installers put it), the app listens on that address only, at the hub's port, and passes each
+  connection to the hub on the loopback. Never on 0.0.0.0 or the LAN.
+- **A stable port.** The hub of local mode asks for the port it used last
+  (`COREHUB_DESKTOP_PORT`), so a tunnel's service keeps pointing at it; another one when it is
+  taken, and the page then shows the route pointing elsewhere.
+- **Pairing.** While the way in is open, a pairing made on that hub is `connection: relay` and
+  its QR's `hub_url` is `relay_url` (`https://<hostname>`, or `http://<tailnet address>:<port>`),
+  whatever was asked: that hub listens on its own computer only, so no other address would reach
+  it. Asking for `relay` while it is closed answers `409 relay_not_connected`.
+- **Security.** The hub keeps its normal sign-in; the way in carries the hub's port and nothing
+  else. The page says, before anything is turned on, that the hub becomes reachable from the
+  internet through the person's own tunnel. Nothing starts until the person turns it on, and it
+  stops with the hub.
+
+The contract changes: `Relay` loses `hub_id` and the `official` route (no service is run for
+anyone, §80), and gains `available`, `hub_port`, `token_set`, `tunnel_id`, `hostname`,
+`hostnames`, `tailnet`, `error` (a closed list) and `error_detail`; `RelayUpdate` is the body of
+`setRelay` (`enabled`, `route`, write-only `token`, `forget_token`, `hostname`), which queues no
+job. Rejected: a relay service run for people (§80); `cloudflared` bundled in every installer (tens
+of MB for a feature few turn on, and a second program to keep current in every release); the
+token on `cloudflared`'s command line (other users of the computer can read it); `tailscale serve`
+(it needs HTTPS certificates turned on for the tailnet, and changes the person's Tailscale
+settings rather than only the app's own listener).
+
+## 96. Who is asking: `X-Forwarded-For` only from a proxy the hub trusts
+
+Found on 2026-09-27 while opening a way in from outside (§95): the hub ran Fastify with
+`trustProxy: true`, so it believed `X-Forwarded-For` from anyone, and `request.ip` was the
+left-most address in it — the one the client writes. A client on the internet could send a new
+address with every guess and never meet the per-address lockout of passwords, app tokens and
+pairing codes. Socket.IO handshakes did the opposite: they counted the raw peer, so every
+client behind a proxy shared the proxy's address and one person's mistakes locked everyone out.
+Proposed — owner to confirm:
+
+- **The rule.** Forwarded headers are believed only from a peer the hub trusts, and the client is
+  the right-most address in `X-Forwarded-For` that is not a trusted proxy (proxy-addr's rule, the
+  one Fastify applies). Fastify's `request.ip`, `request.host` and `request.protocol` and the
+  Socket.IO handshake use one trust function (`packages/server/src/lib/client-address.ts`), so a
+  failure over HTTP and over a socket counts against the same address. The web terminal's audit
+  line (`terminal.opened`) records that address too.
+- **The setting.** `COREHUB_TRUST_PROXY`, read in `app/config.ts` only: a comma list of IP
+  addresses / CIDR ranges, `false` (nobody), or a hop count 1–10. Anything else stops the hub at
+  boot with the reason (`ConfigError`), like every other variable.
+- **The default.** Unset, the hub trusts `127.0.0.0/8`, `::1`, `10.0.0.0/8`, `172.16.0.0/12`,
+  `192.168.0.0/16` and `fc00::/7`: a Caddy/Traefik container on the stack's Docker network and a
+  `cloudflared` on the same machine connect from these, so every stack we deploy keeps working
+  by replacing the image; a client on the internet does not, so what it writes is ignored.
+  Tailscale's own addresses (`100.64.0.0/10`) are clients, not proxies.
+- **The desktop app's Tailscale route** (§95) connects to the hub from loopback, which the
+  default trusts, so it no longer passes bytes through: it forwards HTTP — requests, server-sent
+  events and WebSocket upgrades — drops the peer's own `Forwarded`, `X-Forwarded-*` and
+  `X-Real-IP`, and writes `X-Forwarded-For` with the tailnet peer's address
+  (`apps/desktop/src/main/tailnet.ts`). A machine on the person's tailnet is counted as itself.
+
+Known limits: under the default a machine on the same private network as a hub whose port is
+published directly can still write its own address — such a stack sets `false` (docs/DEPLOY.md
+§3d). Rejected: `false`
+as the default (every client behind a proxy would share one address, and one person's failed
+sign-ins would lock everyone out); a hop count as the default (a client reaching the port
+directly could claim any address); reading `CF-Connecting-IP` or `X-Real-IP` (headers a client
+can send as easily, and not what the reference proxies set).
+
+## 97. An agent's incoming webhooks are Hermes's routes, reached through the hub's own address
+
+W14 of the fork gap list: an outside service (GitHub, a form, a script) starts a run of the agent
+with a prompt. Hermes has a receiver for it; the hub had only outbound webhooks. Proposed — owner
+to confirm.
+
+**What Hermes does**, observed in its MIT source at `v2026.9.14` (`gateway/platforms/webhook.py`,
+`hermes_cli/webhook.py`) and said in our words. The receiver is a platform of the messaging
+gateway, `platforms.webhook` in a profile's `config.yaml`: switched on, the gateway serving the
+profile listens on `extra.port` (8644 when none is given) and `extra.host` (every interface when
+none is given), answering `POST /webhooks/<route>` and `GET /health`. Routes come from
+`extra.routes` in `config.yaml` (static; they win a name clash) and from
+`webhook_subscriptions.json` in the profile's home (what `hermes webhook subscribe` writes, mode
+0600), which is read again by its modification time on every POST — a new or deleted route needs
+no restart, switching the platform on does. A route has a secret (required; one without is
+skipped), a prompt template, the events it takes (empty: all), skills, and `deliver` (`log` keeps
+the answer in Hermes's record of the run; a platform's name sends it to that platform's home chat).
+A POST is capped at 1 MiB, checked against the secret (GitHub's `X-Hub-Signature-256`, GitLab's
+`X-Gitlab-Token`, Svix and Standard Webhooks, Linear, or the generic `X-Webhook-Signature` and its
+timestamped `-V2`), rate-limited per route (30 a minute), filtered by event (`X-GitHub-Event`,
+`X-GitLab-Event`, or the body's `event_type`/`type`) and de-duplicated by its delivery id for an
+hour. The prompt is rendered with `{a.b}` taken from the JSON body (a form body is read too),
+`{event_type}` and `{__raw__}`; an empty prompt asks with the whole body. The POST is answered
+`202 {status: accepted, route, event, delivery_id}` at once and the run starts; `200` says
+`ignored` or `duplicate`; refusals are `401` (signature), `404` (no such route), `403` (a route
+switched off), `413`, `429`. A route's `profile` must be `default` for a gateway that serves one
+profile, which is how the hub runs them.
+
+**What the hub does:**
+
+- **Routes on the agent's Channels page** (`agents.listWebhooks`, `createWebhook`,
+  `deleteWebhook`, `testWebhook`; owners and admins). A route the hub makes is written to
+  `webhook_subscriptions.json` in Hermes's own shape with a new 32-byte random secret, and the
+  profile's listener is switched on in `config.yaml`, **bound to `127.0.0.1`** on a port of its
+  own (from 18650 up, one no other profile's listener has and nothing on the machine holds; one
+  written by hand is kept). The profile's gateway starts or restarts to listen, as after any
+  channel change (§85); deleting the last route switches the listener off again. Static routes are
+  listed with `static: true` and are not deleted here. The page shows each route's full address
+  and its secret (hidden until shown), each with a copy button; `deliver` is `log` or a channel
+  switched on in the profile.
+- **The hub is the public door** (`agents.receiveWebhook`,
+  `POST /api/v1/hermes-webhooks/<profile slug>/<route>`, no bearer: the route's secret is the
+  permission, checked by Hermes). The hub passes the body byte for byte, with the headers Hermes
+  reads a signature, an event or a delivery id from, to the profile's listener on its own machine,
+  and answers what the listener answered: a `2xx` as it came, a refusal in the hub's envelope with
+  Hermes's words in `details.hermes_error`, `503` when nothing listens. So an outside service needs
+  only the hub's address — **which must be reachable from the internet**, and the page says so,
+  louder when the page itself was opened on a private address — and no port is opened on the host:
+  a Docker upgrade keeps working by replacing the image alone.
+- **Test** sends what `hermes webhook test` sends — a `test` event signed with the route's secret —
+  from the hub to the listener, so the agent runs once with the route's prompt. It proves the route
+  and the listener, not the public address.
+- In the channels list the `webhook` platform is shown in this section, not as a card of its own.
+
+Rejected: publishing Hermes's port on the host (a Compose change for every existing stack, and a
+second address to secure); the hub checking signatures itself (Hermes has the full set, and two
+checkers would drift); letting the page set a route's toolsets or skills (Hermes deliberately
+keeps toolsets out of `hermes webhook subscribe`, so an agent-made route cannot grant itself tools;
+skills can follow later); a route the hub serves with its own run instead of Hermes's (Hermes's
+routes are what its CLI and agents already manage).
+
+## 98. Media plays from byte ranges: conversation files and working files stream like attachments
+
+W10 of the fork gap list: a video or a sound the agent made played nowhere, and a conversation's
+files and the profile's working files were sent whole, with no ranges — only stored attachments
+had them (§90 added their stream tickets). Proposed — owner to confirm:
+
+- **One byte range** on `sessions.readFile`, `knowledge.downloadWorkspaceFile` and the stream
+  addresses: `Range: bytes=a-b`, `a-` or `-n` answers `206` with `Content-Range`; a range that
+  starts at or past the end (or `-0`) is `416` with `Content-Range: bytes */<size>`
+  (`bad_request`, `details.reason = range_not_satisfiable`); anything else — another unit, several
+  ranges, `b < a` — is ignored and the whole file sent, as RFC 9110 allows. `Accept-Ranges: bytes`
+  on every answer. Stored attachments keep §90's behaviour.
+- **`SessionFilePreview` gains `video` and `audio`**, decided from the name (`mp4`, `m4v`, `webm`,
+  `ogv`, `mov`, `mkv`; `mp3`, `m4a`, `aac`, `wav`, `oga`, `ogg`, `opus`, `flac`, `weba`) or, for an
+  attachment whose name says nothing, from its stored type. Their preview cap is 64 GiB: a player
+  reads a range at a time, so size is not what stops it; a download of one is capped the same way.
+- **Stream tickets for files** (§90's mechanism, one more kind of ticket):
+  `sessions.createFileStream` (a file of the session's working folder, checked as `readFile`
+  checks it) and `knowledge.createWorkspaceFileStream` (owners and admins) answer the same
+  `AttachmentStream`; `knowledge.streamFile` (`GET /api/v1/file-streams/<ticket>`, no bearer) serves
+  it with ranges, opening the file again by the working-file rules on every read. A ticket names
+  one file, lasts an hour, lives in memory and stops when its person may no longer enter the
+  profile (or, for working files, is no longer an owner or admin). Served in place only for video,
+  audio, pictures (not SVG) and PDF; anything else as a download. `private, no-store`, `nosniff`,
+  sandboxed.
+- **The web plays them**: in the side file panel (a `<video>` or `<audio>` with its controls, from
+  the ticket — the page never reads the file into itself; Download saves from the same address) and
+  in a reply (an attachment whose type or name says video or audio). Whether the browser can decode
+  the format is its call: when the element says it cannot, the reply shows the name and the panel a
+  note with Download.
+- **A reader that stops half-way is not an error.** A player drops the rest of a range it asked
+  for as soon as it has what it needs; the hub answered that with an error after the headers, which
+  threw out of the process (found by the journey that seeks; §90's attachment stream had the same
+  path). A route that sends on its reply now waits for it to end and never turns a closed
+  connection into an error (`lib/route.ts` §streamed).
+
+Rejected: the bearer in the media URL (§90); several ranges in one answer (`multipart/byteranges`,
+which no player asks for); a separate range route per module (one ticket route serves both kinds).
 
 ## 99. A room message carries pictures and files; a seat's question names its room
 

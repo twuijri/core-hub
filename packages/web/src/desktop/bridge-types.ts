@@ -71,6 +71,31 @@ export interface DesktopBridge {
   device: DesktopDeviceBridge;
   /** The update check (ADR 0023): a notice and a download link, never an install. */
   updates: DesktopUpdatesBridge;
+  /**
+   * The microphone as the OS sees it, for dictation (B11). Absent in an app older than it:
+   * the page then shows only what the browser itself can tell.
+   */
+  voice?: DesktopVoiceBridge;
+}
+
+/**
+ * The OS's answer about the microphone for this app: `granted`, `denied`, `restricted` (a
+ * policy), `not-determined` (macOS has not asked yet), or `unknown` (no OS switch: Linux).
+ */
+export type DesktopMicStatus = 'granted' | 'denied' | 'not-determined' | 'restricted' | 'unknown';
+
+export interface DesktopMicState {
+  status: DesktopMicStatus;
+  /** The OS has a microphone switch the app can open (macOS, Windows). */
+  canOpenSettings: boolean;
+}
+
+export interface DesktopVoiceBridge {
+  mic(): Promise<DesktopMicState>;
+  /** Asks the OS (macOS shows its question once); resolves with the answer. */
+  askMic(): Promise<DesktopMicState>;
+  /** Opens the OS's microphone privacy settings. */
+  openMicSettings(): Promise<void>;
 }
 
 export interface DesktopUpdateCheck {

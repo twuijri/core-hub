@@ -16,6 +16,7 @@ import {
   PUSH_BLOCKERS,
   revokeDeviceByToken,
   serializeDevice,
+  relayPairingUrl,
 } from '../devices/index.js';
 import { AuditService, auditFor, jobRunnerFor } from '../audit/index.js';
 import { decodeAvatarDataUrl, deleteAvatar, readAvatar } from './avatars.js';
@@ -898,13 +899,19 @@ export function registerAuthRoutes(app: FastifyInstance, ctx: AuthContext): void
   route('POST', '/auth/pairings', signedIn, async (request, reply) => {
     const body = parse(PairingCreate, request.body ?? {});
     const user = me(request);
+    // A hub the desktop app runs listens on its own computer only: while its way in from
+    // outside is open, that is the address every phone is given (DECISIONS §95).
+    const relayUrl = relayPairingUrl(request.server.hub.relayHost);
+    if (body.connection === 'relay' && !relayUrl) {
+      throw new HubError('conflict', { details: { reason: 'relay_not_connected' } });
+    }
     const row = createPairing(
       db,
       {
         userId: user.id,
-        connection: body.connection,
+        connection: relayUrl ? 'relay' : body.connection,
         ttlSeconds: body.ttl_seconds,
-        hubUrl: hubUrlOf(request),
+        hubUrl: relayUrl ?? hubUrlOf(request),
         initialWorkspaceId: user.defaultWorkspaceId ?? defaultWorkspace(db)?.id ?? null,
       },
       now(),

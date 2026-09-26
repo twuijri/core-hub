@@ -86,6 +86,15 @@ jobs:
           test -d "$mount/Core Hub.app" || status=1
           hdiutil detach "$mount" >/dev/null
           exit $status
+      # Dictation (B11): macOS asks the person with these words, and a signed build records only
+      # with the microphone entitlement (assets/entitlements.mac.plist).
+      - name: Microphone words (macOS)
+        if: runner.os == 'macOS' && hashFiles('apps/desktop/assets/entitlements.mac.plist') != ''
+        run: |
+          app=$(ls -d apps/desktop/release/mac*/*.app | head -1)
+          /usr/libexec/PlistBuddy -c 'Print :NSMicrophoneUsageDescription' "$app/Contents/Info.plist"
+          test -f "$app/Contents/Resources/ar.lproj/InfoPlist.strings"
+          grep -q NSMicrophoneUsageDescription "$app/Contents/Resources/ar.lproj/InfoPlist.strings"
       - name: Check the app name (Linux)
         if: runner.os == 'Linux' && hashFiles('apps/desktop/scripts/installer.nsh') != ''
         run: |

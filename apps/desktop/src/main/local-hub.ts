@@ -9,6 +9,7 @@
 import { fork, type ChildProcess, type ForkOptions } from 'node:child_process';
 import { mkdirSync } from 'node:fs';
 import path from 'node:path';
+import type { AppToHub } from '../shared/hub-ipc.js';
 
 export interface LocalHubOptions {
   /** `dist/hub/dist/app/hub.mjs`. */
@@ -19,6 +20,10 @@ export interface LocalHubOptions {
   pathEnv: string;
   /** Extra environment for the hub (never secrets from the app). */
   env?: NodeJS.ProcessEnv;
+  /** The port used last, asked for again (another one if it is taken; `hub/entry.ts`). */
+  preferredPort?: number | null;
+  /** What the hub asks the app besides "listening" (`shared/hub-ipc.ts`). */
+  onMessage?: (message: unknown) => void;
   /** Lines the hub writes, for the app's log. */
   onLog?: (line: string) => void;
   onExit?: (code: number | null, signal: NodeJS.Signals | null) => void;
@@ -32,6 +37,8 @@ export interface LocalHub {
   readonly origin: string;
   readonly port: number;
   readonly pid: number | undefined;
+  /** Tells the hub something (`shared/hub-ipc.ts`); dropped once it is gone. */
+  send(message: AppToHub): void;
   stop(): Promise<void>;
 }
 
@@ -59,6 +66,7 @@ export function startLocalHub(options: LocalHubOptions): Promise<LocalHub> {
       ELECTRON_RUN_AS_NODE: '1',
       DATA_DIR: options.dataDir,
       PORT: '0',
+      ...(options.preferredPort ? { COREHUB_DESKTOP_PORT: String(options.preferredPort) } : {}),
     },
     stdio: ['ignore', 'pipe', 'pipe', 'ipc'],
   });
@@ -98,12 +106,23 @@ export function startLocalHub(options: LocalHubOptions): Promise<LocalHub> {
       void stop();
       reject(new LocalHubError('The local hub did not start in time', [...tail]));
     }, options.startTimeoutMs ?? 60_000);
+    const send = (message: AppToHub) => {
+      if (exited || !child.connected) return;
+      try {
+        child.send(message);
+      } catch {
+        // Gone between the check and the send: nothing to tell.
+      }
+    };
     child.on('message', (message) => {
       const m = message as { type?: string; port?: unknown } | null;
-      if (m?.type !== 'listening' || typeof m.port !== 'number') return;
+      if (m?.type !== 'listening' || typeof m.port !== 'number') {
+        options.onMessage?.(message);
+        return;
+      }
       clearTimeout(timer);
       const port = m.port;
-      resolve({ origin: `http://127.0.0.1:${port}`, port, pid: child.pid, stop });
+      resolve({ origin: `http://127.0.0.1:${port}`, port, pid: child.pid, send, stop });
     });
     child.once('exit', (code, signal) => {
       clearTimeout(timer);

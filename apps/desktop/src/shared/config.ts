@@ -9,6 +9,7 @@
  */
 import { defaultHelper, parseHelper, randomToken, type HelperConfig } from './helper.js';
 import { normalizeHubUrl } from './hub-url.js';
+import { DEFAULT_RELAY, parseRelayConfig, type RelayConfig } from './relay.js';
 
 export type Mode = 'remote' | 'local';
 export type Language = 'ar' | 'en';
@@ -68,6 +69,15 @@ export interface DesktopConfig {
     /** The version the OS was last told about, so it is said once. */
     notified: string | null;
   };
+  /**
+   * The port the hub of local mode listened on last, asked for again at the next start so a
+   * way in pointed at it keeps working (DECISIONS §95).
+   */
+  localHubPort: number | null;
+  /** The way in from outside for that hub (`shared/relay.ts`); its token sealed. */
+  relay: RelayConfig;
+  /** macOS: the person was asked about the old `corehub.app` (asked once, ever). */
+  legacyAppAsked: boolean;
 }
 
 export const RECENT_LIMIT = 5;
@@ -90,6 +100,9 @@ export function defaultConfig(
     helper: defaultHelper(makeToken),
     links: {},
     updates: { auto: true, lastCheckedAt: null, notified: null },
+    localHubPort: null,
+    relay: { ...DEFAULT_RELAY },
+    legacyAppAsked: false,
   };
 }
 
@@ -133,14 +146,15 @@ export function parseConfig(
       )
     : [];
   const port = raw.port;
+  const userPort = (value: unknown) =>
+    typeof value === 'number' && Number.isInteger(value) && value >= 1024 && value <= 65_535
+      ? value
+      : null;
   return {
     version: 1,
     mode: raw.mode === 'remote' || raw.mode === 'local' ? raw.mode : null,
     remote: { url: origin(remote.url), recent },
-    port:
-      typeof port === 'number' && Number.isInteger(port) && port >= 1024 && port <= 65_535
-        ? port
-        : null,
+    port: userPort(port),
     language: raw.language === 'ar' || raw.language === 'en' ? raw.language : null,
     window: bounds(raw.window),
     deviceKey:
@@ -151,6 +165,9 @@ export function parseConfig(
     helper: parseHelper(raw.helper, () => base.helper.token),
     links: parseLinks(raw.links),
     updates: parseUpdates(raw.updates),
+    localHubPort: userPort(raw.localHubPort),
+    relay: parseRelayConfig(raw.relay),
+    legacyAppAsked: raw.legacyAppAsked === true,
   };
 }
 
