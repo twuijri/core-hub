@@ -62,7 +62,7 @@ export interface HubToolsPatch {
   groups?: Array<{ id: HubToolGroup; enabled?: boolean; allow_writes?: boolean }>;
 }
 
-/** A file a device sent, put on the reply of the run that asked for it (§86). */
+/** A file a device sent, put on the reply of the run that asked for it (§87). */
 export type HubToolsHandOver = (
   workspaceId: string,
   runId: string,
@@ -125,7 +125,7 @@ function newKey(): string {
 const DEFAULT_GROUP: HubToolGroupState = { enabled: true, allowWrites: false };
 /**
  * The person's own computers are a step further than the hub's data: that group waits for an
- * admin to switch it on, even where the tools already were (§86, proposed).
+ * admin to switch it on, even where the tools already were (§87, proposed).
  */
 const DEFAULT_OFF: ReadonlySet<HubToolGroup> = new Set(['devices']);
 const defaultGroup = (id: HubToolGroup): HubToolGroupState =>

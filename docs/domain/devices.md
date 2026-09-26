@@ -30,6 +30,8 @@ device, the device answers, the result stays in the request for the waiting run
 | push_token | text? | **ENCRYPTED** (sealed with the data key as `{v,c,n,k}` JSON). FCM token, APNs hex token, or a Web Push subscription as JSON; refreshed by the client; cleared on revoke and when the service says it is dead |
 | push_locale, push_registered_at | | the contract's `PushStatus` |
 | capabilities | json<DeviceCapability[]> | `{ kind, enabled, consentAt }` per `CapabilityKind` (location, camera, microphone, notifications, clipboard, screen, files, apps, calendar, reminders, health) |
+| profiles | json<string[]>? | the profiles whose agents may ask it; null = every profile of its person (DECISIONS §87). Only the person changes it |
+| helper | json<DeviceHelper>? | what a computer's local helper offers agents, as the desktop app reported it: shared folders (the default `~/Core Hub` marked), opening allowed, programs switched on with their profiles and tools (ADR 0025). Only the device writes it; null while the helper is off |
 | status | enum(paired, revoked) | |
 | app_token_id | ulid? → auth.app_token, unique | the device token issued at pairing |
 | paired_at, last_seen_at, revoked_at | | |
@@ -57,18 +59,21 @@ was never written to.
 | device_id | ulid → device (FK, cascade) | the one device asked |
 | capability | enum(`CapabilityKind`) | location, camera, microphone, … |
 | purpose | text? | shown in the device's consent sheet |
-| params | json | capability-specific (`location`: `accuracy: coarse \| precise`) |
+| params | json | capability-specific (`location`: `accuracy: coarse \| precise`; `files`: `{tool, arguments}`; `apps`: `{op: call, program, tool, arguments}` or `{op: status, call_id}`, §87) |
 | session_id, run_id | ulid? | the conversation / run waiting for it, if any |
 | job_id | ulid → audit.job | the `device_request` job; it carries only `{request_id, status}` |
 | status | enum(pending, fulfilled, denied, failed, expired, cancelled) | only `pending` is not final |
-| expires_at | ms | `created_at + timeout_ms` (default 30 s); after it, `expired` with `timeout` |
+| expires_at | ms | `created_at + timeout_ms` (default per capability: `files` 60 s, `apps` 120 s, others 30 s); after it, `expired` with `timeout` |
 | result | json? | what the device sent; a location is `{latitude, longitude, accuracy_m, captured_at}` |
 | error | json? | `{code, message}`, code from `permission_denied \| unavailable \| timeout \| cancelled \| failed` |
 | answered_at | ms? | when it became final |
 
 Lifecycle: `pending → fulfilled | denied | failed | expired | cancelled`, once. A capability
 the device did not declare, or switched off, is `denied` with `unavailable` by the hub at
-creation. Expiry runs on a timer and again on every read (a restarted hub has no timers).
+creation; a `files`, `apps` or `screen` request to a device with no live socket is `failed` with
+`unavailable` ("offline") at creation. An agent's run may ask its own person's device for
+`files` and `apps` only (the request's `run_id` is the run's), from a profile the device serves
+(§87). Expiry runs on a timer and again on every read (a restarted hub has no timers).
 
 Indexes: (device_id, status, created_at) for the device's catch-up; (workspace, owner_id,
 created_at).

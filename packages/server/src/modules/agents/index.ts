@@ -491,7 +491,7 @@ let hubToolsNotifyFactory: ((app: FastifyInstance) => HubToolsNotify) | null = n
 let hubToolsHandOverFactory: ((app: FastifyInstance) => HubToolsHandOver | null) | null = null;
 
 /**
- * `devices.fetch_file` puts what a device sent on the run's reply (§86); `sessions` owns the
+ * `devices.fetch_file` puts what a device sent on the run's reply (§87); `sessions` owns the
  * reply, so the composition root lends it here.
  */
 export function registerHubToolsHandOver(

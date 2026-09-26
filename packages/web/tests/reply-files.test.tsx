@@ -30,6 +30,7 @@ const CAT = '01M3CXDE8PXTY3W2C3DRCF0CAT';
 const OLD_CAT = '01M3CXDE8PXTY3W2C3DRCF0OLD';
 const NOTES = '01M3CXDE8PXTY3W2C3DRCF0TXT';
 const OUT = `/data/workspaces/default/${SESSION}/.corehub/runs/${RUN}/out`;
+const TICKET = 'a'.repeat(64);
 const PNG = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
 
 function attachment(id: string, name: string, mime: string, preview: SessionFile['preview']) {
@@ -126,11 +127,11 @@ function mount(message: Message, files: SessionFile[]) {
       );
     }
     if (url.pathname.endsWith('/stream')) {
-      // A stream ticket (§87): the page plays the video from it, never with the bearer.
+      // A stream ticket (§88): the page plays the video from it, never with the bearer.
       return Promise.resolve(
         new Response(
           JSON.stringify({
-            url: `/api/v1/attachment-streams/${'a'.repeat(64)}`,
+            url: `/api/v1/attachment-streams/${TICKET}`,
             expires_at: '2026-09-27T11:00:00Z',
           }),
           { status: 201, headers: { 'Content-Type': 'application/json' } },
@@ -260,7 +261,7 @@ describe('a reply that carries a video (a render a program made)', () => {
       [attachment(VIDEO, 'trip.mp4', 'video/mp4', 'none')],
     );
     const video = await screen.findByTestId('message-video');
-    expect(video).toHaveAttribute('src', `/api/v1/attachment-streams/${'a'.repeat(64)}`);
+    expect(video).toHaveAttribute('src', `/api/v1/attachment-streams/${TICKET}`);
     expect(video).toHaveAttribute('controls');
     expect(video).toHaveAttribute('aria-label', 'trip.mp4');
     expect(requests.find((r) => r.path === `/api/v1/attachments/${VIDEO}/stream`)?.auth).toBe(

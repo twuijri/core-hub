@@ -1,5 +1,5 @@
 /**
- * Media stream tickets (DECISIONS §87): a `<video>` or `<audio>` element sends no header, so it
+ * Media stream tickets (DECISIONS §88): a `<video>` or `<audio>` element sends no header, so it
  * cannot carry the bearer `sessions.downloadAttachment` wants, and a whole video fetched first
  * into a blob plays only once it has all arrived. A ticket is a random path segment that names
  * one attachment, read-only, for one hour; the element asks for byte ranges with it as it plays.

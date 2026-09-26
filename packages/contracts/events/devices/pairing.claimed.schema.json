@@ -241,7 +241,7 @@
           "items": {
             "$ref": "#/$defs/ProfileSlug"
           },
-          "description": "The profiles whose agents may ask this device for something (DECISIONS §86). `null`, the\ndefault, is every profile of the device's person; a list narrows it. Absent from a hub\nolder than the field.\n"
+          "description": "The profiles whose agents may ask this device for something (DECISIONS §87). `null`, the\ndefault, is every profile of the device's person; a list narrows it. Absent from a hub\nolder than the field.\n"
         },
         "helper": {
           "oneOf": [

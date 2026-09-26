@@ -256,7 +256,7 @@ export function sessionRunsFor(app: FastifyInstance): SessionRuns | null {
 }
 
 /**
- * Put an attachment on the reply a live run is writing (§86: a file one of the person's
+ * Put an attachment on the reply a live run is writing (§87: a file one of the person's
  * devices sent for the run). `null` when this app composes no sessions module.
  */
 export type RunHandOver = (

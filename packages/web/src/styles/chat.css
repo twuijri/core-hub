@@ -1253,7 +1253,7 @@ button.context-ring {
   background: var(--ch-color-surface-2);
   object-fit: contain;
 }
-/* A video or a sound on a message, played in place from a stream ticket (§87). */
+/* A video or a sound on a message, played in place from a stream ticket (§88). */
 .msg-attachment-media {
   display: flex;
   flex-basis: 100%;

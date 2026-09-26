@@ -96,7 +96,7 @@ interface ActiveRun {
   outputs: OutputWatcher | null;
   /** The working folder as the run started it (decision §49); `null` without one. */
   changes: ChangeTracker | null;
-  /** Attachments a tool put on the reply while the run was live (a device's file, §86). */
+  /** Attachments a tool put on the reply while the run was live (a device's file, §87). */
   handedOver: Array<{ id: string; kind: string }>;
 }
 
@@ -526,7 +526,7 @@ export class RunEngine {
    */
   /**
    * An attachment of the run's profile goes on the reply this run is writing (a file one of
-   * the person's devices sent for it, §86). False when no such run is live here.
+   * the person's devices sent for it, §87). False when no such run is live here.
    */
   handOver(workspace: string, runId: string, attachment: { id: string; kind: string }): boolean {
     const run = this.active.get(runId);

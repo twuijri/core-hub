@@ -2624,3 +2624,62 @@ owner to confirm:
 Rejected: guessing the mode from the number, which cannot be known; Hermes's own `…/apply`,
 which runs `hermes gateway restart` and in a container starts a second gateway inside the
 dashboard process.
+
+## 87. An agent's run may ask its person's own computer for files and programs; a computer says what its helper offers
+
+A hub on a server could not reach the person's computer: a run token had no way to make a device
+request, and nothing described what the computer's helper offered (ADR 0025, the owner's scope of
+2026-09-26). Proposed — owner to confirm where the owner did not name it:
+
+- **`Device.helper`** — the folders the person shared (the app's own `~/Core Hub` marked
+  `default`), whether opening is allowed, and the programs switched on with the profiles each one
+  serves and its tools (`DeviceHelper`, `DeviceProgram`, `DeviceProgramTool`). Only the device
+  itself reports it (`devices.update` with its own token; anyone else `403 not_this_device`); the
+  hub stamps `reported_at`. `null` while the helper is off.
+- **`Device.profiles`** — the profiles whose agents may ask the device; `null`, the default, is
+  every profile of its person. Only that person, from a sign-in of theirs, changes it (the device's
+  own token, a run token or an admin: `403 not_the_devices_person`). A request made in a profile
+  it leaves out is `403` with `details.reason = device_not_in_profile`.
+- **A run token may create `files` and `apps` requests** to its own person's device, and nothing
+  else (`location` and the rest still need the `device` scope); the request carries the run's id.
+  This is how the hub's `devices` tools ask (§67's group, built here).
+- **`files`** params `{tool, arguments}` (the helper's tools and `send_file`, which uploads into
+  the request's profile with the resumable upload); result `{content, is_error}` or
+  `{attachment_id, name, mime, size_bytes, kind}`. **`apps`** params `{op: call, program, tool,
+  arguments}` or `{op: status, call_id}`; result `{state: done, content, is_error}` or
+  `{state: running, call_id, progress}` — anything else is `400 not_a_program_result`.
+- **Waits per capability** when the asker gives none: `files` 60 s, `apps` 120 s, everything
+  else 30 s. **Offline at once**: a `files`, `apps` or `screen` request to a device with no live
+  `/rt/devices` socket is `failed` with `unavailable` and says the device is offline, instead of a
+  wait nobody would answer (a phone's capabilities keep §74's catch-up).
+- **The `devices` group of the hub's tools is off until an admin switches it on**, even in a
+  profile whose tools were on; its reads are `list`, `list_folder`, `read_file`, `fetch_file`,
+  `run_status`; its writes `write_file`, `open`, `run`.
+- **What a device sends for the chat goes on the reply** of the run that asked
+  (`devices.fetch_file`); the file is an attachment of the profile like any other.
+
+Migration `0028` adds `devices.profiles` and `devices.helper`.
+
+Rejected: per-program tools in the hub's tool list (Hermes lists a profile's tools before a run
+names a person); a raw pipe per program through the hub (no per-call consent, logging or timeout,
+and it would not fit §74's one-answer request).
+
+## 88. A video plays from a one-attachment stream ticket
+
+A reply can now carry a video (a render from the person's computer). The web fetched every file
+with the bearer header into a blob, so a 40 MB video played only once all of it had arrived; a
+media element cannot send the header, and the contract keeps the bearer out of URLs. Proposed —
+owner to confirm:
+
+- `sessions.createAttachmentStream` (`POST /attachments/{id}/stream`) gives a path with a random
+  64-hex ticket (`/api/v1/attachment-streams/<ticket>`), valid for one hour, for that attachment
+  only; `sessions.streamAttachment` serves it with `Range` like the download, without a bearer,
+  `Cache-Control: private, no-store`.
+- The ticket is not the bearer and grants nothing else. It is checked on every read: the person
+  who asked must still be active and able to enter the profile. Tickets live in memory; a restart
+  forgets them and the page asks again.
+- The web plays a `video/*` or `audio/*` file of a message in place from it; the name stays under
+  it and opens the preview as before.
+
+Rejected: the bearer in the URL (it would reach logs and history); a service worker that adds the
+header (one more moving part, absent on first load, and the push worker is optional).
