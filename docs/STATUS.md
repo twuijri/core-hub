@@ -439,7 +439,12 @@ its approval.
   against a demo hub inside Debug builds (`-UITestDemo YES`, answers checked against the contract),
   at iPhone 6.9" 1320 × 2868 and iPad 13" 2064 × 2752 in both languages — **28 taken and looked at
   in a run on the branch**. Uploading the listing and screenshots (fastlane deliver, never a build or
-  a submission) is behind an `upload` switch and **has not been run**; nothing has been submitted.
+  a submission) is behind an `upload` switch. `ios-submit.yml` (by hand, since 2026-09-27) readies
+  a version through the App Store Connect API — build, age rating, free price, availability
+  (without China mainland, proposed), content rights, manual release — and lists what only the
+  owner can enter (App Privacy, App Review contact and demo account); its `submit` switch submits
+  only when nothing is missing. Tested against a fake App Store Connect; see
+  `docs/changes/2026-09-27-twuijri-app-store-submit.md` for the real run.
 - **Download page** (`site/`, since 2026-09-26): one static page for
   https://twuijri.github.io/core-hub/, Arabic first with an English toggle, light and dark with the
   system, no trackers. The browser reads the latest release from the GitHub API and offers its
