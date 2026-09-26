@@ -34,6 +34,7 @@ import {
   Textarea,
 } from '../ui/index.js';
 import { IconSettings } from '../ui/icons.js';
+import { AgentSignInCard } from './AgentSignInCard.js';
 import { CompressionSettingsCard } from './CompressionSettingsCard.js';
 import { PendingWritesCard } from './PendingWritesCard.js';
 import { PresetsCard } from './PresetsCard.js';
@@ -67,6 +68,10 @@ export function AgentSettingsScreen() {
       {settings.isError && <Notice tone="danger">{describeError(settings.error, t)}</Notice>}
       {save.isError && <Notice tone="danger">{describeError(save.error, t)}</Notice>}
       {agent && <UpdatesCard agent={agent} />}
+      {/* An agent that keeps its own vendor account, once installed (Kimi Code, Grok Build). */}
+      {agent && isAdmin && agent.install.sign_in && agent.install.source === 'managed' && (
+        <AgentSignInCard agent={agent} />
+      )}
       {/* Saved bundles of these settings, to switch between (decision §100). */}
       {agent && settings.data && <PresetsCard agentId={agent.id} canWrite={isAdmin} />}
       {/* Hermes's own compression keys for this profile (decision §57). */}

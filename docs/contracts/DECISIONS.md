@@ -3320,3 +3320,41 @@ Rejected: a standing permission kept by the hub (the person decides on the devic
 location, where they can see it happen); a background location the phone keeps sending (the
 request is one answer, as §74 says).
 
+
+## 106. Catalog agents from a pinned release download; an agent signs in to its own account
+
+Proposed — owner to confirm (2026-09-27, catalog recipes, B21). Every catalog agent so far was an
+npm package. Goose and Grok Build ship as native binaries, and Kimi Code and Grok Build keep their
+own vendor account rather than reading a provider key.
+
+- **A catalog entry may install from a release download** (`install.kind = download`): one file per
+  platform (`linux-x64`, `linux-arm64`, `darwin-x64`, `darwin-arm64`, `win32-x64`), each an `https`
+  URL that names the pinned version, its SHA-256, and how the executable is packed (`raw`, `gz`, or
+  `tar.gz` with the executable's path inside). The hub fetches the file for its own platform into a
+  staging folder beside the agent's, **refuses it unless the SHA-256 matches** (before unpacking or
+  running anything), unpacks only the named executable into `bin/`, and only then replaces
+  `<DATA_DIR>/agents/<id>` — so a refused or failed download leaves the previous install as it was.
+  Still ADR 0006: the data volume, one folder per agent, no image or Compose change.
+- **Such an agent is updated only by the catalog** (a pull request that moves the version and every
+  hash together): there is no registry to ask, `install.package` is `null` and
+  `auto_update_supported` is false; `pinned_version` is the release.
+- **The catalog gains Goose 1.52.0** (Block / Agentic AI Foundation, Apache-2.0, `goose acp`) and
+  **Grok Build 1.0.41** (xAI, Apache-2.0, `grok agent --no-leader stdio`), each hash checked against
+  a fresh download of the vendor's own file (GitHub's published digests for Goose; the storage MD5
+  for Grok Build, which publishes no checksum). Windows is not offered for either (Goose publishes a
+  `.zip`, Grok Build a bare `.exe`). Goose needs `GOOSE_PROVIDER` and `GOOSE_MODEL`, set in its
+  `~/.config/goose/config.yaml`, which the Config files page now edits (§78).
+- **An agent may sign in to its own vendor account** (`agents.startSignIn`, `agents.getSignIn`,
+  `install.sign_in`): the catalog names the agent's own device-code command (Kimi Code
+  `kimi login --region global`, Grok Build `grok login --device-auth`); the hub runs it, answers
+  with the link and code it printed as a `ProviderSignIn`, and follows the process — running is
+  `pending`, exit 0 `approved`, a reported refusal `denied`, any other exit `failed` with its last
+  line, a code past its lifetime `expired` (the process is stopped). The agent keeps the credential
+  under the hub user's home, for every profile; no token passes through the hub. Admins only; one
+  at a time per agent; kept in memory like a provider sign-in.
+- **Kimi Code's region is `global` (kimi.ai)**; the mainland-China kimi.com account is not offered.
+  Kimi Code's API-key route stays its `config.toml` on the Config files page.
+
+Rejected: running a vendor's install script (`curl … | bash`: it takes "latest" and checks
+nothing); following a "latest" link (the hash would stop meaning anything); unpacking the whole
+archive into the agent's folder (only the executable the entry names is taken).
