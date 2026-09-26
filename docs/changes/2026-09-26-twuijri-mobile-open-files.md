@@ -124,7 +124,16 @@ All matched files use Prettier code style!
 $ pnpm typecheck
 exit=0
 ```
-iOS لا يُبنى على لينكس؛ `HubFilesTests` تعمل في وظيفة iOS على CI (النتيجة في طلب الدمج).
+iOS لا يُبنى على لينكس؛ نتيجة CI على طلب الدمج #179 (كل الوظائف خضراء، منها iOS وأندرويد):
+```
+Build and test on the iOS simulator	pass	6m5s
+Android build, unit tests, lint	pass	5m9s
+Executed 177 tests, with 0 failures (0 unexpected)
+Test Case '-[CoreHubTests.HubFilesTests testAnAttachmentIsFetchedWithTheBearerHeaderAndKeptUnderItsName]' passed
+Test Case '-[CoreHubTests.HubFilesTests testALinkToAnAttachmentsAddressRelativeOrOnTheHubOpensThatAttachment]' passed
+Test Case '-[CoreHubTests.HubFilesTests testSoundAndVideoPlayFromTheContractsTicketResolvedAgainstTheHub]' passed
+(والسبعة الأخرى من HubFilesTests: passed)
+```
 
 ## المخاطر والرجوع
 - لم يُجرَّب على جوال حقيقي ولا على مركز المالك؛ iOS مبني من قراءة الكود ويثبته CI فقط.
