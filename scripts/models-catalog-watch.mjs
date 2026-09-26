@@ -19,7 +19,8 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 /** CLI Proxy API (MIT, router-for-me): catalogues refreshed from its own repository. */
 export const SOURCES = {
   models: 'https://raw.githubusercontent.com/router-for-me/models/main/models.json',
-  codexClient: 'https://raw.githubusercontent.com/router-for-me/models/main/codex_client_models.json',
+  codexClient:
+    'https://raw.githubusercontent.com/router-for-me/models/main/codex_client_models.json',
   codexImages:
     'https://raw.githubusercontent.com/router-for-me/CLIProxyAPI/main/internal/registry/model_definitions.go',
 };
@@ -57,7 +58,8 @@ export function comparable(id) {
     .replace(/-(\d{8}|\d{4}-\d{2}-\d{2})$/, '');
 }
 
-const isId = (value) => typeof value === 'string' && /^[A-Za-z0-9][A-Za-z0-9._:/@+-]{0,127}$/.test(value.trim());
+const isId = (value) =>
+  typeof value === 'string' && /^[A-Za-z0-9][A-Za-z0-9._:/@+-]{0,127}$/.test(value.trim());
 
 /** CLI Proxy API's `models.json`: `{ section: [{ id }] }` → Map(section → ids). */
 export function parseSections(json) {
@@ -65,7 +67,10 @@ export function parseSections(json) {
   if (!json || typeof json !== 'object' || Array.isArray(json)) return sections;
   for (const [section, items] of Object.entries(json)) {
     if (!Array.isArray(items)) continue;
-    const ids = items.map((item) => item?.id).filter(isId).map((id) => id.trim());
+    const ids = items
+      .map((item) => item?.id)
+      .filter(isId)
+      .map((id) => id.trim());
     sections.set(section, [...new Set(ids)]);
   }
   return sections;
@@ -127,16 +132,20 @@ export function oursByKey(catalog) {
   for (const [key, entry] of Object.entries(catalog?.providers ?? {})) {
     if (Array.isArray(entry?.models)) ours.set(key, entry.models.filter(isId));
     if (Array.isArray(entry?.image_models) && entry.image_models.length > 0) {
-      ours.set(key === 'openai-codex' ? CODEX_IMAGES_KEY : `${key} (image_models)`, entry.image_models.filter(isId));
+      ours.set(
+        key === 'openai-codex' ? CODEX_IMAGES_KEY : `${key} (image_models)`,
+        entry.image_models.filter(isId),
+      );
     }
   }
   return ours;
 }
 
 /**
- * The differences, per key: `added` — ids a source lists that we neither have nor ignore;
- * `gone` — ids of ours that no source covering the key lists. Keys of ours no source covers
- * are `unwatched`.
+ * The differences, per key: `added` — ids a source lists that we do not have; `gone` — ids of
+ * ours that no source covering the key lists. An id in `ignore` (decided on already: a retired
+ * model a source still lists, or one of ours a source never will) is in neither. Keys of ours
+ * no source covers are `unwatched`.
  */
 export function compare(ours, seen, ignore = {}) {
   const changes = [];
@@ -152,8 +161,10 @@ export function compare(ours, seen, ignore = {}) {
     const mineSet = new Set(mine.map(comparable));
     const ignored = new Set((ignore[key] ?? []).map(comparable));
     const theirSet = new Set([...theirs].map(comparable));
-    const added = [...theirs].filter((id) => !mineSet.has(comparable(id)) && !ignored.has(comparable(id)));
-    const gone = mine.filter((id) => !theirSet.has(comparable(id)));
+    const added = [...theirs].filter(
+      (id) => !mineSet.has(comparable(id)) && !ignored.has(comparable(id)),
+    );
+    const gone = mine.filter((id) => !theirSet.has(comparable(id)) && !ignored.has(comparable(id)));
     // Two dated snapshots of one alias collapse to one line.
     const dedupe = (ids) => [...new Map(ids.map((id) => [comparable(id), id])).values()];
     if (added.length > 0 || gone.length > 0) {
@@ -171,7 +182,7 @@ export function render({ changes, unwatched, unknownSections, errors, checkedAt 
     '',
     'Nothing here is changed automatically. Check each id against the provider’s own',
     'documentation (and its deprecations page) before editing `catalog/models.json` by pull',
-    'request; an id we leave out on purpose goes into `catalog/watch-ignore.json`. See',
+    'request; an id already decided on goes into `catalog/watch-ignore.json`. See',
     '`catalog/README.md`.',
     '',
   ];

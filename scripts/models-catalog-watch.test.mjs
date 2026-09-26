@@ -127,6 +127,16 @@ describe('comparing with our catalogue', () => {
     assert.deepEqual(unwatched, ['mistral']);
   });
 
+  it('says nothing of an id already decided on, either way', () => {
+    const { changes } = compare(oursByKey(CATALOG), seen, {
+      anthropic: ['claude-3-7-sonnet-20250219', 'claude-new-6', 'claude-retired-1'],
+    });
+    assert.equal(
+      changes.some((change) => change.key === 'anthropic'),
+      false,
+    );
+  });
+
   it('says nothing about a key whose source could not be read', () => {
     const { changes, unwatched } = compare(oursByKey(CATALOG), new Map());
     assert.deepEqual(changes, []);

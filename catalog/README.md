@@ -10,16 +10,17 @@ no new image and no restart. A hub that cannot read it uses the lists built into
 `providers` is keyed by the name a hub looks the provider up by:
 
 - a provider used by **signing in** — its Hermes provider id: `openai-codex`, `xai-oauth`,
-  `minimax-oauth`, `nous`;
+  `minimax-oauth`;
 - every other preset — its **preset slug** from
   `packages/server/src/modules/models/catalogue.ts`: `anthropic`, `openai`, `google`, `deepseek`,
   `xai`, `groq`, `mistral`, and the speech presets `openai-stt`, `openai-tts`, `groq-stt`,
-  `groq-tts`, `elevenlabs`, `elevenlabs-stt`, `deepgram-stt`, `deepgram-tts`.
+  `groq-tts`, `elevenlabs`, `elevenlabs-stt`.
 
 Not `gemini` for Google or `openai-api` for OpenAI: those are Hermes's names, and a hub looks a key
-provider up by its preset slug. Presets whose address the person types (Ollama, LM Studio,
-LiteLLM, an OpenAI-compatible endpoint) and aggregators with a per-account or very long list
-(OpenRouter, Nous Portal) have no entry.
+provider up by its preset slug. No entry: presets whose address the person types (Ollama,
+LM Studio, LiteLLM, an OpenAI-compatible endpoint), aggregators with a per-account or very long
+list (OpenRouter; Nous Portal, whose list of 400+ ids is public without a key, so a hub can always
+ask it), Deepgram (its list is public without a key too) and Azure Speech (voices, no model ids).
 
 Each entry may hold:
 
@@ -60,7 +61,8 @@ CLI Proxy API's catalogues (`router-for-me/models`: `models.json` sections `clau
 **one** open issue, labelled `models-catalog`, listing ids seen there but not here and ids here
 that no source lists any more, and closes it when there is nothing to report. It never edits this
 file or pushes: a person checks each id against the provider's own documentation and opens a pull
-request. An id we leave out on purpose (a retired model a source still lists) goes into
-`watch-ignore.json` under its provider key, so it stops being reported.
+request. An id already decided on — a retired model a source still lists, or one of ours a
+source never lists — goes into `watch-ignore.json` under its provider key, and is no longer
+reported either way.
 
 Run it by hand: `node scripts/models-catalog-watch.mjs`.

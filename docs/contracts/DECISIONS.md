@@ -3430,3 +3430,11 @@ repository. Proposed, owner to confirm:
   catalogue's `client_version`, whichever is higher, never below `CODEX_CLIENT_VERSION`;
   `COREHUB_CODEX_CLIENT_VERSION` still pins it.
 - The catalogue changes by pull request like any file; a test checks it parses.
+- **A weekly watcher, and every provider filled** (added 2026-09-26, proposed — owner to confirm):
+  the file holds a list per provider that has a fixed public one, read from the provider's own
+  models and deprecations pages (change record `2026-09-26-twuijri-models-catalog-providers`); a
+  test fails CI on a key a hub never looks up or an id a hub would drop. A speech preset's list is
+  of its own kind, and replaces the documented list built into the image for a provider with no
+  list endpoint (§94). `.github/workflows/models-catalog-watch.yml` compares the file every Monday
+  with CLI Proxy API's public catalogues and keeps one issue (label `models-catalog`) of ids seen
+  there and not here, and ids here no source lists any more; it never edits the file or pushes.

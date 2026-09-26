@@ -87,10 +87,17 @@ describe('catalog/models.json', () => {
 
   it('keeps each speech preset’s list to that preset’s own kind of ids', () => {
     // A speech row keeps only its kind; a chat model's id in a speech list is a slip.
-    const chatLooking = /^(gpt-[0-9]|claude-|gemini-[0-9.]+-(pro|flash)$|grok-)/;
+    const chatIds = new Set(
+      Object.entries(raw.providers)
+        .filter(([key]) => lookedUp.get(key)?.kind === 'llm')
+        .flatMap(([, entry]) => entry.models as string[]),
+    );
+    const chatFamily = /^(claude-|grok-|gemini-|deepseek-|mistral-|MiniMax-)/;
     for (const [key, entry] of Object.entries(raw.providers)) {
       if (lookedUp.get(key)?.kind === 'llm') continue;
-      for (const id of entry.models as string[]) expect(chatLooking.test(id), `${key}: ${id}`).toBe(false);
+      for (const id of entry.models as string[]) {
+        expect(chatIds.has(id) || chatFamily.test(id), `${key}: ${id}`).toBe(false);
+      }
     }
   });
 });
