@@ -16,6 +16,7 @@ import { auditFor } from '../audit/index.js';
 import { contentDispositionOf, sanitiseFilename } from './media.js';
 import { toAttachment } from './serialize.js';
 import type { KnowledgeService } from './service.js';
+import type { FileTicket } from './streams.js';
 import { WORKSPACE_FILE_LIMITS, WorkspaceFiles } from './workspace-files.js';
 import { zipStream } from './zip.js';
 
@@ -41,6 +42,19 @@ const INLINE_TYPES = new Set([
   'image/x-icon',
   'application/pdf',
   'text/plain',
+  // Played in place, a range at a time (decision §92); a media type never runs as a page.
+  'video/mp4',
+  'video/webm',
+  'video/ogg',
+  'video/quicktime',
+  'video/x-matroska',
+  'audio/mpeg',
+  'audio/mp4',
+  'audio/aac',
+  'audio/wav',
+  'audio/ogg',
+  'audio/flac',
+  'audio/webm',
 ]);
 
 interface Scope {
@@ -65,6 +79,7 @@ export function registerWorkspaceFileRoutes(
   app: FastifyInstance,
   deps: RouteDeps,
   knowledge: () => KnowledgeService,
+  issueStream: (ticket: FileTicket) => { url: string; expires_at: string },
 ): void {
   const files = (scope: Scope) => workspaceFilesOf(app.hub.config.dataDir, scope.profile);
 
@@ -107,13 +122,13 @@ export function registerWorkspaceFileRoutes(
     operationId: 'knowledge.downloadWorkspaceFile',
     handler: (request, { query }, reply: FastifyReply) => {
       const scope = scopeOf(request);
-      const file = files(scope).open(pathOf(query));
+      const file = files(scope).open(pathOf(query), request.headers.range);
       const inline = query.disposition === 'inline' && INLINE_TYPES.has(file.mime);
       return reply
-        .status(200)
+        .status(file.status)
         .headers({
+          ...file.lengthHeaders,
           'content-type': inline ? file.mime : 'application/octet-stream',
-          'content-length': String(file.size),
           etag: file.etag,
           'last-modified': file.modifiedAt.toUTCString(),
           'content-disposition': inline
@@ -124,6 +139,29 @@ export function registerWorkspaceFileRoutes(
           'cache-control': 'private, no-store',
         })
         .send(file.stream);
+    },
+  });
+
+  // A media element cannot send the bearer: one file, one hour, a ticket in the path (§92).
+  defineRoute(app, deps, {
+    operationId: 'knowledge.createWorkspaceFileStream',
+    status: 201,
+    handler: (request, { query }) => {
+      const scope = scopeOf(request);
+      const folder = files(scope);
+      const entry = folder.describe(pathOf(query));
+      if (entry.kind !== 'file') {
+        throw new HubError('validation_failed', {
+          details: { field: 'path', reason: 'not_a_file', path: entry.path },
+        });
+      }
+      return issueStream({
+        ...scope,
+        root: path.join(app.hub.config.dataDir, 'workspaces', scope.profile),
+        relative: entry.path,
+        mime: entry.mime ?? 'application/octet-stream',
+        adminOnly: true,
+      });
     },
   });
 

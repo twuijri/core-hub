@@ -52,6 +52,7 @@ import path from 'node:path';
 import { Transform, type Readable } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
 import { HubError, notFound } from '../../lib/errors.js';
+import { rangeReply } from '../../lib/byte-range.js';
 import { MAX_UPLOAD_BYTES } from './limits.js';
 import type { ZipItem } from './zip.js';
 
@@ -97,6 +98,10 @@ export interface OpenedFile {
   stream: ReadStream;
   name: string;
   size: number;
+  /** `206` when one byte range of it was asked for (decision §92). */
+  status: 200 | 206;
+  /** `Accept-Ranges`, `Content-Length` and, for a range, `Content-Range`. */
+  lengthHeaders: Record<string, string>;
   mime: string;
   etag: string;
   modifiedAt: Date;
@@ -125,6 +130,14 @@ const TYPES: Readonly<Record<string, string>> = {
   '.mp4': 'video/mp4',
   '.webm': 'video/webm',
   '.mov': 'video/quicktime',
+  '.m4v': 'video/mp4',
+  '.ogv': 'video/ogg',
+  '.mkv': 'video/x-matroska',
+  '.aac': 'audio/aac',
+  '.flac': 'audio/flac',
+  '.oga': 'audio/ogg',
+  '.opus': 'audio/ogg',
+  '.weba': 'audio/webm',
   '.json': 'application/json',
   '.jsonl': 'application/x-ndjson',
   '.yaml': 'application/yaml',
@@ -473,16 +486,28 @@ export class WorkspaceFiles {
     };
   }
 
-  /** A file to stream out; the caller sends it and the stream closes the descriptor. */
-  open(raw: string): OpenedFile {
+  /**
+   * A file to stream out; the caller sends it and the stream closes the descriptor. With a
+   * `Range` header, only that range (decision §92); one past the end throws the `416`.
+   */
+  open(raw: string, rangeHeader?: unknown): OpenedFile {
     const file = this.existing(raw);
     if (!file.stats.isFile()) refuse('not_a_file', { path: file.rel });
     const fd = this.openInside(file.real, constants.O_RDONLY);
     const stats = fstatSync(fd);
+    let window: ReturnType<typeof rangeReply>;
+    try {
+      window = rangeReply(rangeHeader, stats.size);
+    } catch (error) {
+      closeSync(fd);
+      throw error;
+    }
     return {
-      stream: createReadStream('', { fd, autoClose: true }),
+      stream: createReadStream('', { fd, autoClose: true, start: window.start, end: window.end }),
       name: path.basename(file.abs),
       size: stats.size,
+      status: window.status,
+      lengthHeaders: window.headers,
       mime: mimeOf(file.abs),
       etag: `"${stats.size.toString(16)}-${Math.floor(stats.mtimeMs).toString(16)}"`,
       modifiedAt: stats.mtime,

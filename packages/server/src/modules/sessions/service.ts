@@ -5,6 +5,7 @@
  * already in the contract's wire shape (`mappers.ts`), so a route is a
  * one-liner and there is exactly one place where a rule lives.
  */
+import { closeSync } from 'node:fs';
 import { PRODUCT } from '@corehub/contracts';
 import { HubError, notFound } from '../../lib/errors.js';
 import { t, type Language } from '../../i18n/index.js';
@@ -777,7 +778,33 @@ export class SessionsService {
     const row = this.requireSession(scope, sessionId);
     if (!row.workingDir) throw notFound({ resource: 'file', id: requested });
     return openInside(row.workingDir, requested, (type) =>
-      download ? DOWNLOAD_MAX_BYTES : PREVIEW_MAX_BYTES[type.kind],
+      // A video or a sound is read a range at a time, whichever way it is asked for (§92).
+      download
+        ? Math.max(DOWNLOAD_MAX_BYTES, PREVIEW_MAX_BYTES[type.kind])
+        : PREVIEW_MAX_BYTES[type.kind],
+    );
+  }
+
+  /**
+   * A stream ticket for one file of the working folder (`sessions.createFileStream`, decision
+   * §92), after the same checks `openFile` makes; the ticket opens the file again on every read.
+   */
+  createFileStream(
+    scope: EngineScope,
+    sessionId: string,
+    requested: string,
+  ): { url: string; expires_at: string } {
+    const stream = this.ports.attachments.streamFile;
+    if (!stream) {
+      throw new HubError('service_unavailable', { details: { reason: 'attachments_not_wired' } });
+    }
+    const opened = this.openFile(scope, sessionId, requested, false);
+    closeSync(opened.fd);
+    const row = this.requireSession(scope, sessionId);
+    return stream.call(
+      this.ports.attachments,
+      { workspace: scope.workspace, profile: scope.profile, userId: scope.userId },
+      { root: row.workingDir as string, relative: opened.relative, mime: opened.type.mime },
     );
   }
 

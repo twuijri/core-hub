@@ -202,7 +202,8 @@
     "workspace_invalid_name": "This name cannot be used for a file or folder.",
     "workspace_exists": "Something with this name is already here.",
     "workspace_changed": "The file changed on disk after you opened it. Reload it, or save your text under another name.",
-    "workspace_not_text": "This file is not plain text, so it cannot be edited here. Download it instead."
+    "workspace_not_text": "This file is not plain text, so it cannot be edited here. Download it instead.",
+    "range_not_satisfiable": "The requested byte range starts past the end of the file."
   },
   "agents": {
     "mcp_test": {
@@ -220,7 +221,10 @@
       "taken": "This account is linked to someone else in Core Hub; they or an admin must unlink it first.",
       "platform_telegram": "Telegram",
       "platform_whatsapp": "WhatsApp"
-    }
+    },
+    "webhook_exists": "A webhook route with this name already exists.",
+    "webhook_static": "This route is written in config.yaml by hand, so it is not removed here.",
+    "webhook_listener_down": "This profile's webhook listener is not up yet; wait for its gateway to start, then try again."
   },
   "terminal": {
     "disabled": "The terminal is not enabled on this hub.",

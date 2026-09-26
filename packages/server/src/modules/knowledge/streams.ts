@@ -7,6 +7,9 @@
  * It is not the bearer token: it names one attachment and grants nothing else. It lives in
  * memory (a restart forgets every ticket; the page asks for a new one), and it stops working
  * the moment the person who asked may no longer read the attachment (checked on every read).
+ *
+ * The same tickets name one file of a conversation's working folder or of the profile's
+ * working files (decision §92): what the ticket carries is the caller's (`T`).
  */
 import { randomBytes } from 'node:crypto';
 
@@ -14,20 +17,37 @@ export const STREAM_TTL_MS = 60 * 60 * 1000;
 /** A hub never needs more; the oldest go first. */
 const MAX_TICKETS = 5_000;
 
-export interface StreamTicket {
-  attachmentId: string;
+/** Whose ticket it is: checked again on every read. */
+export interface StreamTicketOwner {
   workspace: string;
   profile: string;
   userId: string;
-  expiresAt: number;
 }
 
-export class StreamTickets {
-  private readonly tickets = new Map<string, StreamTicket>();
+export interface AttachmentTicket extends StreamTicketOwner {
+  attachmentId: string;
+}
+
+/** A file on disk: `relative` inside `root`, opened again by the working-file rules each read. */
+export interface FileTicket extends StreamTicketOwner {
+  root: string;
+  relative: string;
+  /** The type it is served with, chosen from its name when the ticket was made. */
+  mime: string;
+  /** The profile's working files are for owners and admins only (§65). */
+  adminOnly: boolean;
+}
+
+export type StreamTicket<T extends StreamTicketOwner = AttachmentTicket> = T & {
+  expiresAt: number;
+};
+
+export class StreamTickets<T extends StreamTicketOwner = AttachmentTicket> {
+  private readonly tickets = new Map<string, StreamTicket<T>>();
 
   constructor(private readonly now: () => number = Date.now) {}
 
-  issue(input: Omit<StreamTicket, 'expiresAt'>): { ticket: string; expiresAt: number } {
+  issue(input: T): { ticket: string; expiresAt: number } {
     this.sweep();
     const ticket = randomBytes(32).toString('hex');
     const expiresAt = this.now() + STREAM_TTL_MS;
@@ -41,7 +61,7 @@ export class StreamTickets {
   }
 
   /** The ticket, while it is good; null when unknown or expired. */
-  read(ticket: string): StreamTicket | null {
+  read(ticket: string): StreamTicket<T> | null {
     if (!/^[0-9a-f]{64}$/.test(ticket)) return null;
     const found = this.tickets.get(ticket);
     if (!found) return null;

@@ -58,6 +58,7 @@ import {
   imageEnvOf,
   imageProtocolOf,
   isImageModel,
+  isImageOnlyModel,
   type ImageChoice,
 } from './images.js';
 import {
@@ -394,7 +395,8 @@ export interface ProbeOutcome {
   reasonKey: string | null;
   detail: string | null;
   durationMs: number;
-  models: { id: string; label: string }[];
+  /** `image_only` by the catalogue's own rule (§87), for the dialog's chat-model picker. */
+  models: { id: string; label: string; image_only: boolean }[];
 }
 
 export interface ProviderPatchInput {
@@ -1248,7 +1250,11 @@ export class ModelsService {
       reasonKey: null,
       detail: null,
       durationMs,
-      models: result.models.map((model) => ({ id: model.key, label: model.label })),
+      models: result.models.map((model) => ({
+        id: model.key,
+        label: model.label,
+        image_only: isImageOnlyModel(model.key, model.capabilities ?? []),
+      })),
     };
   }
 

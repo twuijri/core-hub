@@ -43,6 +43,7 @@ import { createContractIndex } from '../../lib/contract.js';
 import { defineModule } from '../../lib/module.js';
 import { createRealtime } from '../../lib/realtime.js';
 import { defineRoute } from '../../lib/route.js';
+import { registerWebhookRoutes } from './webhook-routes.js';
 import { levelOfHermesLine } from '../../lib/log-ring.js';
 import { t } from '../../i18n/index.js';
 import {
@@ -2067,6 +2068,19 @@ export const agentsModule = defineModule({
           followChannels(request, profile);
         }
       },
+    });
+
+    // Incoming webhooks (`webhook-routes.ts`, decision §91): Hermes's `webhook` platform.
+    await registerWebhookRoutes(app, deps, {
+      toolHome: (request, agentId) => toolHome(request, agentId),
+      listenerStatus: (request, profile, home) => {
+        const channel = listChannels(home).find((entry) => entry.platform === 'webhook');
+        if (!channel) return { status: 'offline', error: null };
+        const health = channelStatus(request, profile, channel);
+        return { status: health.status, error: health.error };
+      },
+      followChannels,
+      root: (server) => contextOf(server).runtime.status().home,
     });
 
     /**
