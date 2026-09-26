@@ -1,0 +1,59 @@
+name: iOS App Store submission
+
+# Readies an App Store version of the iOS app for App Review (apps/ios/scripts/asc-prepare-submission.mjs,
+# docs/RELEASING.md → App Store submission): attaches the build, answers the age rating, makes the
+# app free and available, declares the content rights and sets a manual release, then lists what
+# the owner still has to enter in App Store Connect (App Privacy, App Review contact and demo
+# account). With `submit` ticked (off by default) it also submits the version for review, but only
+# when nothing is missing. It never writes the demo account. Only by hand.
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'App Store version; empty = the root package.json version'
+        required: false
+      build:
+        description: 'Build number to attach; empty = the newest VALID build of that version'
+        required: false
+      submit:
+        description: 'Submit for App Review when nothing is missing (off = prepare and report only)'
+        type: boolean
+        default: false
+
+concurrency:
+  group: ios-submit
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  submit:
+    name: Prepare${{ inputs.submit && ' and submit' || '' }} the App Store version
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+      - name: Write the App Store Connect API key
+        env:
+          ASC_API_KEY_ID: ${{ secrets.ASC_API_KEY_ID }}
+          ASC_API_KEY_P8: ${{ secrets.ASC_API_KEY_P8 }}
+          ASC_API_ISSUER_ID: ${{ secrets.ASC_API_ISSUER_ID }}
+        run: bash apps/ios/scripts/asc-api-key-json.sh
+      - name: Prepare${{ inputs.submit && ' and submit' || '' }}
+        env:
+          VERSION: ${{ inputs.version }}
+          BUILD: ${{ inputs.build }}
+          SUBMIT: ${{ inputs.submit }}
+        run: |
+          set -euo pipefail
+          version=${VERSION:-$(node -p "require('./package.json').version")}
+          args=(com.twuijri.corehub "$version" "${BUILD:-}")
+          if [ "$SUBMIT" = "true" ]; then args+=(--submit); fi
+          node apps/ios/scripts/asc-prepare-submission.mjs "${args[@]}"
+      - name: Remove the key
+        if: always()
+        run: rm -f "${ASC_API_KEY_JSON:-/nonexistent}"
