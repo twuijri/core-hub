@@ -271,8 +271,12 @@ store buttons, and a short "Run your own hub" section with the Docker image.
   `GET /repos/twuijri/core-hub/releases/latest` and picks each file by name
   (`site/src/releases.js`). `site/tests/releases.test.ts` checks those patterns against
   `apps/desktop/scripts/release-assets.mjs` and against the real v1.1.1 release, so renaming a file
-  there fails the test. When the API cannot be read (offline, rate-limited: 60 calls an hour per
-  visitor), every button points at the releases page instead, never at a guessed URL.
+  there fails the test. GitHub is asked on every visit and no answer is kept between visits
+  (`cache: 'no-cache'` revalidates with GitHub's ETag), so the moment `publish-release.yml` marks
+  the new release *Latest* the page offers it, and an older version never comes back from a saved
+  copy (owner, 2026-09-26). The release is only created after every platform's build passes, so
+  "Latest" always has all the files. When the API cannot be read (offline, rate-limited: 60 calls
+  an hour per visitor), every button points at the releases page instead, never at a guessed URL.
 - **Store buttons** are switched in `site/src/config.js`. Each shows *Coming soon* until its
   `enabled` is `true` and its `url` is an `https://` link:
   - **Microsoft Store:** `microsoftStore.enabled = true` once the listing is certified. The URL is

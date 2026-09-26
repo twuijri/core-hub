@@ -43,14 +43,6 @@ function initialLang() {
   return 'en';
 }
 
-function storage() {
-  try {
-    return window.sessionStorage;
-  } catch {
-    return null;
-  }
-}
-
 /** @param {string} selector */
 const all = (selector) => /** @type {HTMLElement[]} */ ([...document.querySelectorAll(selector)]);
 
@@ -228,7 +220,6 @@ async function main() {
   state.release = await loadLatest({
     repo: REPO,
     fetch: (url, init) => window.fetch(url, init),
-    storage: storage(),
   });
   state.failed = state.release === null;
   render();

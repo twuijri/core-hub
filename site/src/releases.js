@@ -147,61 +147,26 @@ export function formatSize(bytes) {
   return `${Math.max(1, Math.round(bytes / 1024))} KB`;
 }
 
-/** How long a successful answer is reused (GitHub allows 60 unauthenticated calls an hour). */
-export const CACHE_MS = 10 * 60 * 1000;
-const CACHE_KEY = 'corehub.download.latest';
-
-/**
- * @typedef {{ getItem(key: string): string | null, setItem(key: string, value: string): void }} StorageLike
- */
-
 /**
  * The latest release, or null when it cannot be read (offline, rate-limited, no release yet).
- * A fresh cached answer is used instead of calling the API again.
+ * GitHub is asked on every visit and nothing is kept between visits, so a release that was
+ * published a minute ago is what the page offers; an older answer is never reused (owner,
+ * 2026-09-26). `no-cache` lets the browser revalidate with GitHub's ETag instead of serving its
+ * own copy. When GitHub cannot be read, the page points at the releases page (always the newest).
  * @param {{
  *   repo: string,
  *   fetch: (url: string, init?: RequestInit) => Promise<Response>,
- *   storage?: StorageLike | null,
- *   now?: number,
  * }} options
  * @returns {Promise<Release | null>}
  */
-export async function loadLatest({ repo, fetch, storage = null, now = Date.now() }) {
-  try {
-    const cached = JSON.parse(storage?.getItem(CACHE_KEY) ?? 'null');
-    if (cached && cached.repo === repo && now - cached.at < CACHE_MS) {
-      const release = readRelease(cached.json, repo);
-      if (release) return release;
-    }
-  } catch {
-    // A broken or blocked cache is only a missed shortcut.
-  }
+export async function loadLatest({ repo, fetch }) {
   try {
     const response = await fetch(`https://api.github.com/repos/${repo}/releases/latest`, {
       headers: { Accept: 'application/vnd.github+json' },
+      cache: 'no-cache',
     });
     if (!response.ok) return null;
-    const json = await response.json();
-    const release = readRelease(json, repo);
-    if (release) {
-      // Only what readRelease reads, not the notes and uploader details.
-      const slim = {
-        tag_name: release.tag,
-        html_url: release.pageUrl,
-        published_at: release.publishedAt,
-        assets: Object.values(release.downloads).map((d) => ({
-          name: d.name,
-          browser_download_url: d.url,
-          size: d.size,
-        })),
-      };
-      try {
-        storage?.setItem(CACHE_KEY, JSON.stringify({ repo, at: now, json: slim }));
-      } catch {
-        // Storage full or blocked: the page works without it.
-      }
-    }
-    return release;
+    return readRelease(await response.json(), repo);
   } catch {
     return null;
   }
