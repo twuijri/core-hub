@@ -84,6 +84,21 @@ describe('the Codex CLI version the list is asked as', () => {
     expect(codexClientVersion({}, '0.999.0')).toBe('0.999.0');
   });
 
+  it('takes the shared catalogue’s version as a floor too (§110)', async () => {
+    const version = codexVersionSource({
+      env: () => ({}),
+      fetch: () => release('rust-v0.158.0'),
+      floor: () => Promise.resolve('0.160.0'),
+    });
+    expect(await version()).toBe('0.160.0');
+    const lower = codexVersionSource({
+      env: () => ({}),
+      fetch: () => release('rust-v0.158.0'),
+      floor: () => Promise.resolve('0.1.0'),
+    });
+    expect(await lower()).toBe('0.158.0');
+  });
+
   it('keeps the known version when GitHub cannot be read, and reads again only after twelve hours', async () => {
     let now = 0;
     const answers = [

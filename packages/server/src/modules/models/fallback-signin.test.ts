@@ -15,6 +15,7 @@ import path from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import YAML from 'yaml';
 import { authed, drainJobs, signedInHub, type TestHub } from '../../../tests/unit/helpers.js';
+import type { ModelsCatalog } from './models-catalog.js';
 import { writeHermesConfiguration, type PropagationState } from './propagation.js';
 import { retryableFailure } from './service.js';
 import {
@@ -178,8 +179,11 @@ function fakeHermesServer() {
   };
 }
 
-async function hubWith(signIn: SignInRuntime | null) {
-  hub = await signedInHub({}, { models: { signIn } });
+async function hubWith(
+  signIn: SignInRuntime | null,
+  catalog?: () => Promise<ModelsCatalog | null>,
+) {
+  hub = await signedInHub({}, { models: { signIn, ...(catalog ? { catalog } : {}) } });
   return hub;
 }
 
@@ -366,5 +370,44 @@ describe('signing in to a provider by device code (decision §55)', () => {
     expect(signInStatusOf(poll('error', 'superseded'), false)).toBe('failed');
     expect(signInStatusOf(poll('gone'), false)).toBe('expired');
     expect(signInStatusOf(poll('cancelled'), false)).toBe('failed');
+  });
+});
+
+describe('the shared models catalogue for a signed-in provider (decision §110)', () => {
+  it('offers the catalogue’s list, not the one built into Hermes, when the account cannot be asked', async () => {
+    const fake = fakeHermesServer();
+    const catalog = () =>
+      Promise.resolve<ModelsCatalog>({
+        providers: {
+          'openai-codex': {
+            models: ['gpt-6-sol', 'gpt-6-luna'],
+            imageModels: ['gpt-image-3'],
+            clientVersion: null,
+          },
+        },
+      });
+    const h = await hubWith(fake.runtime, catalog);
+    const provider = await addCodex(h);
+    const started = (
+      await authed(h, h.token, {
+        method: 'POST',
+        url: `/api/v1/models/providers/${provider.id}/sign-in`,
+      })
+    ).json() as { id: string };
+    fake.approve();
+    await authed(h, h.token, {
+      method: 'GET',
+      url: `/api/v1/models/providers/${provider.id}/sign-in/${started.id}`,
+    });
+    await drainJobs(h.app);
+    const listed = (
+      await authed(h, h.token, { method: 'GET', url: '/api/v1/models/providers' })
+    ).json() as { items: { id: string; models: { model: string }[] }[] };
+    const row = listed.items.find((item) => item.id === provider.id);
+    expect(row?.models.map((model) => model.model).sort()).toEqual([
+      'gpt-6-luna',
+      'gpt-6-sol',
+      'gpt-image-3',
+    ]);
   });
 });

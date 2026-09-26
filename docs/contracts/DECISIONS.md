@@ -3397,27 +3397,36 @@ person's choice on the Notifications page); the Secure Enclave for the iOS key (
 the CI tests on, and the relay's risk model — ADR 0024 §6 — does not need a key that cannot leave
 the phone).
 
-## 110. The ChatGPT subscription offers every GPT Image model, and asks its list as the newest Codex CLI
+## 110. A shared models catalogue every hub reads, every GPT Image model, and the newest Codex CLI
 
 The owner, testing hub 1.1.2 (2026-09-26): the chat models of his ChatGPT subscription now match
-CLI Proxy API's, but CLI Proxy API offers four or five image models and the hub one; and "there,
-the moment ChatGPT added models they showed up; here not". Observed in CLI Proxy API (MIT,
-router-for-me/CLIProxyAPI): the Codex backend still lists no image model; CLI Proxy API keeps
-the image names in its code (`gpt-image-1.5`, `gpt-image-2`, `gpt-image-2.5`,
-`gpt-image-2.5-flare`, `gpt-image-2.5-sunburst`) and hands the chosen one to the same
-`image_generation` tool §84 uses; its chat list is a catalogue it refreshes from its own
-repository at run time, taken from the backend as a recent Codex CLI. Proposed, owner to confirm:
+CLI Proxy API's, but CLI Proxy API offers five image models and the hub one; "there, the moment
+ChatGPT added models they showed up; here not"; and many people do not pull a new image for
+months, so a list built into the image goes stale — models missing, or gone and failing. He wants
+one file in our repository that every hub reads, for every provider, not only ChatGPT's images.
+Observed in CLI Proxy API (MIT, router-for-me/CLIProxyAPI, read only): the Codex backend lists no
+image model, and CLI Proxy API keeps `gpt-image-1.5`, `gpt-image-2`, `gpt-image-2.5`,
+`gpt-image-2.5-flare`, `gpt-image-2.5-sunburst` in its code and hands the chosen one to the same
+`image_generation` tool §84 uses; its catalogues are refreshed at run time from its own
+repository. Proposed, owner to confirm:
 
-- **Every image model the tool takes is offered** (amends §84's "one model"): the five above,
-  newest first, each with `image_output`, each drawn through `image_api.py`'s `codex` protocol
-  with that name in the tool. The backend has no list, so the names are kept by hand in
-  `CODEX_IMAGES.models`; `COREHUB_CODEX_IMAGE_MODELS` (comma-separated `gpt-image-…` names) adds
-  one before a release. A name the owner's plan refuses fails the drawing with the backend's
-  reason, as any image model does. §83's rule that a provider's list is never made up still holds
-  for chat models; images are the one exception, because the provider answers no list for them.
-- **The list is asked as the newest Codex CLI** (amends §83): the hub reads the latest
-  `rust-v*` release of github.com/openai/codex (public API, no token) at most every twelve hours
-  when a list is asked for, and uses it when it is newer than `CODEX_CLIENT_VERSION`. A model
-  OpenAI ships behind a newer CLI then shows on the next "Refresh models" without a hub release.
-  Unreadable, older or pre-release answers keep the built-in version; the hub waits at most five
-  seconds for GitHub; `COREHUB_CODEX_CLIENT_VERSION` still pins it.
+- **`catalog/models.json`, read by every hub** from
+  `https://raw.githubusercontent.com/twuijri/core-hub/main/catalog/models.json` at most every twelve
+  hours when a list is asked for (waiting at most five seconds), no token, no new image. It holds,
+  per provider (Hermes provider id for a signed-in provider, preset slug for a key provider):
+  `models`, `image_models` and `client_version`. It is data only: names must look like model ids,
+  image names like `gpt-image-…`, versions like X.Y.Z; the rest is ignored; a file that does not
+  parse is as if absent. `COREHUB_MODELS_CATALOG_URL` points a hub at its own copy (`https://`
+  only) or turns the reads off.
+- **Which list wins**: a list the provider answers for the account always does (§83). The
+  catalogue's `models` are offered only when the provider cannot be asked — instead of the list
+  built into Hermes's image, which ages with it — still marked `fallback` with the reason.
+- **Every image model the subscription's tool takes is offered** (amends §84's "one model"): the
+  catalogue's `image_models` for `openai-codex`, else the built-in five, newest first, each with
+  `image_output`; `COREHUB_CODEX_IMAGE_MODELS` adds names. A removed name disappears from every hub
+  on its next refresh. Drawing accepts any `gpt-image-…` model already on the provider.
+- **The subscription's list is asked as the newest Codex CLI** (amends §83): the latest `rust-v*`
+  release of github.com/openai/codex (public API) read at most every twelve hours, or the
+  catalogue's `client_version`, whichever is higher, never below `CODEX_CLIENT_VERSION`;
+  `COREHUB_CODEX_CLIENT_VERSION` still pins it.
+- The catalogue changes by pull request like any file; a test checks it parses.

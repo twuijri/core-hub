@@ -93,11 +93,14 @@ export const CODEX_RELEASE_TTL_MS = 12 * 60 * 60 * 1000;
  * The newest `rust-v*` release of github.com/openai/codex is read at most every twelve hours,
  * when a list is asked for. It only ever raises the version: an older, unreadable or missing
  * answer keeps {@link CODEX_CLIENT_VERSION}, and `COREHUB_CODEX_CLIENT_VERSION` in the hub's
- * environment still wins over both. A read that takes longer than `waitMs` is not waited for;
+ * environment still wins over both; the shared catalogue's `client_version` (§110) is another
+ * floor. A read that takes longer than `waitMs` is not waited for;
  * the list is asked with what is known and the next one uses the answer.
  */
 export function codexVersionSource(options: {
   env: () => NodeJS.ProcessEnv;
+  /** The shared catalogue's version (§110): a floor, like the newest release. */
+  floor?: () => Promise<string | null>;
   fetch?: (url: string, init?: RequestInit) => Promise<Response>;
   now?: () => number;
   waitMs?: number;
@@ -142,7 +145,9 @@ export function codexVersionSource(options: {
       ]);
       clearTimeout(timer);
     }
-    return codexClientVersion(options.env(), newest);
+    const floor = options.floor ? await options.floor() : null;
+    const best = floor && (!newest || compareVersions(floor, newest) > 0) ? floor : newest;
+    return codexClientVersion(options.env(), best);
   };
 }
 

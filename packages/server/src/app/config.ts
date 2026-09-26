@@ -30,6 +30,7 @@ export const ENV_KEYS = [
   'COREHUB_WEB_TERMINAL',
   'COREHUB_WEB_TERMINAL_IDLE_MINUTES',
   'COREHUB_TRUST_PROXY',
+  'COREHUB_MODELS_CATALOG_URL',
 ] as const;
 export type EnvKey = (typeof ENV_KEYS)[number];
 export type EnvSource = Partial<Record<EnvKey, string | undefined>> & {
@@ -167,7 +168,35 @@ const envSchema = z.object({
    * hub trusts loopback and the private ranges, where Docker proxies and cloudflared connect from.
    */
   COREHUB_TRUST_PROXY: z.string().trim().optional(),
+  /**
+   * Where the shared models catalogue is read (DECISIONS §110): an `https://` address, or `off`.
+   * Unset, the Core Hub repository's `catalog/models.json`.
+   */
+  COREHUB_MODELS_CATALOG_URL: z.string().trim().optional(),
 });
+
+/** The shared models catalogue every hub reads (DECISIONS §110). */
+export const DEFAULT_MODELS_CATALOG_URL =
+  'https://raw.githubusercontent.com/twuijri/core-hub/main/catalog/models.json';
+
+/** `COREHUB_MODELS_CATALOG_URL` as the hub uses it: an https address, or null for off. */
+export function parseModelsCatalogUrl(value: string | undefined): string | null {
+  const text = value?.trim() ?? '';
+  if (text === '') return DEFAULT_MODELS_CATALOG_URL;
+  if (['off', 'false', '0', 'none'].includes(text.toLowerCase())) return null;
+  let url: URL | null;
+  try {
+    url = new URL(text);
+  } catch {
+    url = null;
+  }
+  if (!url || url.protocol !== 'https:') {
+    throw new ConfigError(
+      'Invalid configuration:\n  COREHUB_MODELS_CATALOG_URL must be an https:// address or off',
+    );
+  }
+  return url.toString();
+}
 
 const TRUST_PROXY_HELP =
   'COREHUB_TRUST_PROXY must be a comma list of IP addresses / CIDR ranges, false, or a hop count (1-10)';
@@ -268,6 +297,11 @@ export interface HubConfig {
    * Absent means the default: loopback and the private ranges (`DEFAULT_TRUST_PROXY`).
    */
   trustProxy?: TrustProxySetting;
+  /**
+   * The shared models catalogue's address (`COREHUB_MODELS_CATALOG_URL`, DECISIONS §110); null
+   * or absent reads none.
+   */
+  modelsCatalogUrl?: string | null;
 }
 
 export interface WebTerminalConfig {
@@ -339,6 +373,7 @@ export function loadConfig(
       maxSessions: WEB_TERMINAL_MAX_SESSIONS,
     },
     trustProxy: parseTrustProxy(env.COREHUB_TRUST_PROXY),
+    modelsCatalogUrl: parseModelsCatalogUrl(env.COREHUB_MODELS_CATALOG_URL),
   };
 }
 

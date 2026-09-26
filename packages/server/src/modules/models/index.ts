@@ -52,6 +52,7 @@ import { SecretStore } from './secrets.js';
 import { roleForAdapter } from './defaults.js';
 import { hermesSignInRuntime, type SignInRuntime } from './sign-in.js';
 import { codexVersionSource } from './live-models.js';
+import { modelsCatalogSource, type ModelsCatalog } from './models-catalog.js';
 import {
   ModelsService,
   type HermesTarget,
@@ -143,6 +144,8 @@ export interface ModelsOverrides {
    * 0 so a restart is one macrotask away instead of a second and a half.
    */
   restartDelayMs?: number;
+  /** A scripted shared models catalogue (decision §110); the real one is read from GitHub. */
+  catalog?: () => Promise<ModelsCatalog | null>;
   /**
    * The runtime that performs provider sign-ins (contract decision §55). Tests hand a scripted
    * one; absent, it is Hermes's own server where the hub supervises Hermes.
@@ -191,9 +194,17 @@ function contextOf(app: FastifyInstance): ModelsService {
   const db = requireSqlite(hub.database);
   const keys = dataKeyRingFor(app);
   const runtime = hermesRuntimeFor(app);
-  // The Codex CLI version the ChatGPT subscription's list is asked as (decision §110).
+  // The shared models catalogue (decision §110) and the Codex CLI version the ChatGPT
+  // subscription's list is asked as, both kept current without a new image.
+  const hostEnv = () => hub.config.hostEnv.inherited ?? {};
+  const catalog = modelsCatalogSource({
+    url: hub.config.modelsCatalogUrl ?? null,
+    ...(own.fetchImpl ? { fetch: own.fetchImpl } : {}),
+  });
   const codexVersion = codexVersionSource({
-    env: () => hub.config.hostEnv.inherited ?? {},
+    env: hostEnv,
+    floor: async () =>
+      (await (own.catalog ?? catalog)())?.providers['openai-codex']?.clientVersion ?? null,
     ...(own.fetchImpl ? { fetch: own.fetchImpl } : {}),
   });
   const hermes: HermesTarget = own.hermes ?? {
@@ -241,6 +252,8 @@ function contextOf(app: FastifyInstance): ModelsService {
       return row && !row.isDefault ? row.id : null;
     },
     ...(own.fetchImpl ? { fetchImpl: own.fetchImpl } : {}),
+    catalog: own.catalog ?? catalog,
+    hostEnv,
     ...(own.restartDelayMs === undefined ? {} : { restartDelayMs: own.restartDelayMs }),
     // Hermes signs in to a provider account through its own server (ADR 0015), which only a
     // hub that supervises Hermes runs (decision §55).
