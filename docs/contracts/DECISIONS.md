@@ -3084,3 +3084,24 @@ had them (§90 added their stream tickets). Proposed — owner to confirm:
 Rejected: the bearer in the media URL (§90); several ranges in one answer (`multipart/byteranges`,
 which no player asks for); a separate range route per module (one ticket route serves both kinds).
 
+## 99. A room message carries pictures and files; a seat's question names its room
+
+Proposed — owner to confirm (the phones' rooms, 2026-09-27: «reuse the chat composer … attachments
+with the quality choice», and «the room's pending items appear in the phone's pending list»).
+
+- **Files in a room.** `RoomMessageCreate.content` takes `image` and `file` blocks as well as text —
+  words, files, or both — naming attachments uploaded into the room's profile the way a chat's are
+  (`sessions.uploadAttachment`, `sessions.startUpload`). An id that names no attachment there is
+  `404`; `audio` and `location` blocks are `400 validation_failed` with
+  `details.reason: unsupported_block` (a phone sends a recording as a file). The stored message keeps
+  each block with its attachment's name, type, size and address, so every member sees it. The files
+  go with each seat's next turn as a chat's files go with its run (the seat's own run carries them
+  as blocks; the hub copies them into the run's input folder), and the room's transcript as the seat
+  reads it names them (`(attached: …)`). Rejected: a room's own upload — the profile's attachments
+  already serve chats, and any member of the room may enter its profile.
+- **A seat's question names its room.** An approval or question raised in a seat's own conversation
+  carries `Approval.room_id` (it was always `null`), everywhere an approval is read: the pending
+  list (`sessions.listApprovals`), the events, and `RoomDetail.pending_approvals`, which now lists
+  what waits in the room's seats (it was always empty). The pending list opens such an item in its
+  room. `sessions` learns a seat's room from `rooms` through the composition root
+  (`registerRoomOfSeat`), so neither module imports the other.

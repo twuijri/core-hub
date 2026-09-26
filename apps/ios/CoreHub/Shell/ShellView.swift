@@ -8,6 +8,8 @@ import SwiftUI
 enum MainContent: Equatable {
     case newChat
     case chat(sessionID: String, profile: String)
+    /// One room, opened from the Rooms segment, in its own profile.
+    case room(roomID: String, profile: String)
     case destination(DestinationID)
     case settings
 }
@@ -25,6 +27,8 @@ struct ShellView: View {
     @State private var searching = false
     /// A shared text waiting in the new chat's composer.
     @State private var seed: String?
+    @State private var pending: PendingModel?
+    @State private var showingPending = false
 
     var body: some View {
         GeometryReader { geometry in
@@ -40,6 +44,7 @@ struct ShellView: View {
                         segment: $segment,
                         sessionList: sessionList,
                         selectedSession: selectedSession,
+                        selectedRoom: selectedRoom,
                         navigate: navigate,
                         openSession: { session in
                             navigate(.chat(sessionID: session.id, profile: session.profile))
@@ -54,6 +59,8 @@ struct ShellView: View {
         }
         .onAppear {
             if sessionList == nil { sessionList = SessionListModel(app: app) }
+            if pending == nil { pending = PendingModel(app: app) }
+            pending?.start()
             takeLink()
             takeDraft()
         }
@@ -64,6 +71,11 @@ struct ShellView: View {
                 openChat: { session in navigate(.chat(sessionID: session.id, profile: session.profile)) },
                 openGlobalAgent: { navigate(.destination(.globalAgent)) }
             )
+        }
+        .sheet(isPresented: $showingPending) {
+            if let pending {
+                NavigationStack { PendingSheet(model: pending, go: navigate) }
+            }
         }
     }
 
@@ -84,6 +96,11 @@ struct ShellView: View {
 
     private var selectedSession: String? {
         if case .chat(let id, _) = main { return id }
+        return nil
+    }
+
+    private var selectedRoom: String? {
+        if case .room(let id, _) = main { return id }
         return nil
     }
 
@@ -108,6 +125,11 @@ struct ShellView: View {
                             .accessibilityLabel(l10n("shell.open_menu"))
                             .accessibilityIdentifier("shell.menu")
                         }
+                        ToolbarItem(placement: .topBarTrailing) {
+                            if let pending {
+                                PendingButton(model: pending) { showingPending = true }
+                            }
+                        }
                     }
             }
         }
@@ -131,6 +153,12 @@ struct ShellView: View {
                 firstMessage: firstMessages.take(sessionID)
             ))
             .id(sessionID)
+        case .room(let roomID, let profile):
+            RoomScreen(
+                model: RoomModel(app: app, roomID: roomID, profile: profile),
+                onGone: { navigate(.newChat) }
+            )
+            .id(roomID)
         case .destination(.tasks):
             TasksScreen(openChat: { sessionID, profile in navigate(.chat(sessionID: sessionID, profile: profile)) })
         case .destination(.schedules):
@@ -150,6 +178,7 @@ struct ShellView: View {
             searching = true
             return
         }
+        if case .room = target { segment = .rooms }
         if target == .settings, main != .settings { beforeSettings = main }
         main = target
         setDrawer(false)

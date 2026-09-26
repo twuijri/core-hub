@@ -1118,12 +1118,25 @@ export class SessionsService {
    */
   async startSeatTurn(
     scope: EngineScope,
-    input: { sessionId: string; seatId: string; prompt: string },
+    input: {
+      sessionId: string;
+      seatId: string;
+      prompt: string;
+      files?: ReadonlyArray<{ type: 'image' | 'file'; attachment_id: string }>;
+    },
   ): Promise<TurnHandle> {
     const accepted = await this.createRun(
       scope,
       input.sessionId,
-      { content: [{ type: 'text', text: input.prompt }] },
+      {
+        content: [
+          { type: 'text', text: input.prompt },
+          ...(input.files ?? []).map((file) => ({
+            type: file.type,
+            attachment_id: file.attachment_id,
+          })),
+        ],
+      },
       { kind: 'room', id: input.seatId },
     );
     const runId = String(accepted.payload.run_id);
@@ -1377,6 +1390,14 @@ export class SessionsService {
       items: page.items.map((row) => this.approvalOf(scope, row)),
       next_cursor: page.nextCursor,
     };
+  }
+
+  /** What waits for a person in these sessions — a room's seats (`RoomDetail.pending_approvals`). */
+  pendingApprovalsOf(scope: EngineScope, sessionIds: readonly string[]): Record<string, unknown>[] {
+    return sessionIds
+      .flatMap((id) => this.store.pendingApprovals(scope.workspace, id))
+      .sort((a, b) => a.requestedAt.getTime() - b.requestedAt.getTime())
+      .map((row) => this.approvalOf(scope, row));
   }
 
   getApproval(scope: EngineScope, approvalId: string): Record<string, unknown> {
@@ -1671,9 +1692,17 @@ export class SessionsService {
         sessionId: run?.sessionId ?? '',
         messageId: run?.finalMessageId ?? null,
         agent: { id: run?.agentId ?? '', name: 'agent' },
+        roomId: run ? this.roomOfSession(scope.workspace, run.sessionId) : null,
       },
       scope.profile,
     );
+  }
+
+  /** The room a seat's own session belongs to; `null` for any other session. */
+  private roomOfSession(workspace: string, sessionId: string): string | null {
+    const session = this.store.getSession(workspace, sessionId);
+    if (session?.originKind !== 'room' || !session.originId) return null;
+    return this.ports.roomOfSeat?.()?.(workspace, session.originId) ?? null;
   }
 }
 

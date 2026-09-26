@@ -93,6 +93,9 @@ class AppGraph(context: Context) {
     val http = HttpClients(store, { prefs.effectiveLanguage.tag }) { reason -> _signedOut.tryEmit(reason) }
     val realtime = Realtime(http.plain)
 
+    /** The agents of each profile, for their names, marks and pictures (`ui/components/AgentIdentity.kt`). */
+    val agents = hub.core.android.ui.components.AgentDirectory(this)
+
     /** This phone's own choices (This device), kept on the phone. */
     val device = DeviceSettings(context.getSharedPreferences("corehub.device", Context.MODE_PRIVATE))
     val speaker = Speaker(context)
@@ -177,6 +180,7 @@ class AppGraph(context: Context) {
         push.signOut(session)
         if (logout) hubCall { apis(session).auth.authLogout() }
         realtime.close()
+        agents.forget()
         store.save(null)
     }
 

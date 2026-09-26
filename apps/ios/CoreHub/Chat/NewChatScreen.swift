@@ -82,7 +82,10 @@ struct NewChatScreen: View {
                     Button {
                         agentID = agent.id
                     } label: {
-                        Text(agent.name)
+                        HStack(spacing: Space.s1) {
+                            AgentAvatar(identity: .of(agent), profile: agent.profile, size: 20)
+                            Text(agent.name)
+                        }
                             .font(.system(size: FontSize.sizeSm, weight: selected ? .semibold : .regular))
                             .padding(.horizontal, Space.s3)
                             .frame(height: Control.heightMd)

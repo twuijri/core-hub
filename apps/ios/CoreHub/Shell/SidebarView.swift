@@ -7,6 +7,7 @@ struct SidebarView: View {
     @Binding var segment: DestinationID
     let sessionList: SessionListModel
     let selectedSession: String?
+    let selectedRoom: String?
     let navigate: (MainContent) -> Void
     let openSession: (Session) -> Void
     let close: () -> Void
@@ -28,7 +29,9 @@ struct SidebarView: View {
                     if segment == .chat {
                         SessionListView(model: sessionList, selected: selectedSession, open: openSession)
                     } else {
-                        RoomsList()
+                        RoomsList(selected: selectedRoom) { room in
+                            navigate(.room(roomID: room.id, profile: room.profile))
+                        }
                     }
                 }
                 .padding(.horizontal, Space.s3)

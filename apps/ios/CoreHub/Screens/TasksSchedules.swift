@@ -182,30 +182,3 @@ struct ScheduleRow: View {
         }
     }
 }
-
-/// The Rooms segment's list. The hub's `rooms` module is not built yet; the list says what the
-/// hub answers instead of an empty space.
-struct RoomsList: View {
-    @Environment(AppModel.self) private var app
-    @Environment(\.l10n) private var l10n
-
-    var body: some View {
-        AsyncContent(key: app.currentProfile) {
-            let profile = app.currentProfile
-            return try await app.api.call { try await RoomsAPI.roomsList(xHubProfile: profile, apiConfiguration: $0) }.items
-        } content: { rooms, _ in
-            VStack(alignment: .leading, spacing: Space.s2) {
-                if rooms.isEmpty { Text(l10n("rooms.empty")).font(.system(size: FontSize.sizeSm)).foregroundStyle(Tone.textMuted) }
-                ForEach(rooms, id: \.id) { room in
-                    HStack {
-                        Text(room.name).font(.system(size: FontSize.sizeSm, weight: .medium))
-                        Spacer()
-                        Text(l10n("rooms.members", ["count": String(room.memberCount)]))
-                            .font(.system(size: FontSize.sizeXs)).foregroundStyle(Tone.textMuted)
-                    }
-                }
-            }
-        }
-        .accessibilityIdentifier("screen.rooms")
-    }
-}

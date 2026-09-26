@@ -44,6 +44,8 @@ data class ChatMessage(
     val attachments: List<ChatAttachment>,
     val runId: String?,
     val streaming: Boolean,
+    /** Who wrote it: a person's user id, or the agent's; in a room, which person is you. */
+    val authorId: String? = null,
 ) {
     /** The hub opens a run with an empty assistant shell; until something lands in it, it is not a turn. */
     val isEmpty: Boolean get() = text.isBlank() && toolCalls.isEmpty() && attachments.isEmpty() && reasoning.isBlank()
@@ -62,6 +64,7 @@ data class ChatMessage(
                 .map { ChatAttachment(it.type, it.name, it.url, it.attachmentId, it.mime) },
             runId = message.runId,
             streaming = message.status == hub.core.client.model.MessageStatus.STREAMING,
+            authorId = message.author.id,
         )
     }
 }

@@ -112,7 +112,15 @@
     "pinned": "Pinned",
     "recent": "Recent",
     "untitled": "New chat",
-    "load_more": "Load more"
+    "load_more": "Load more",
+    "batch_select": "Select",
+    "batch_done": "Done selecting",
+    "batch_selected": "{count} selected",
+    "batch_archive": "Archive",
+    "batch_unarchive": "Unarchive",
+    "batch_delete": "Delete",
+    "batch_delete_title": "Delete {count} conversations?",
+    "batch_delete_body": "They are deleted for good, with their messages."
   },
   "chat": {
     "send": "Send",
@@ -129,7 +137,9 @@
     "new_in_profile": "New chat in {profile}",
     "agent": "Agent",
     "deleted": "This conversation was deleted.",
-    "start_hint": "Ask anything. The conversation starts with your first message."
+    "start_hint": "Ask anything. The conversation starts with your first message.",
+    "more": "More",
+    "export": "Export"
   },
   "tool": {
     "running": "Running",
@@ -325,7 +335,50 @@
   },
   "rooms": {
     "empty": "No rooms yet.",
-    "members": "{count} members"
+    "members": "{count} members",
+    "untitled": "Room",
+    "members_title": "Members",
+    "archived": "This room is archived: it can be read, not written in.",
+    "typing": "{names} typing…",
+    "placeholder": "Message the room · @ names an agent",
+    "mention_all": "@all · everyone",
+    "seat_queued": "{name} is waiting its turn",
+    "seat_thinking": "{name} is thinking",
+    "seat_running": "{name} is replying",
+    "seat_waiting": "{name} is waiting for an answer",
+    "seat_stop": "Stop {name}",
+    "seats": "Agents in the room",
+    "lead": "Lead",
+    "status_idle": "Idle",
+    "status_queued": "Waiting its turn",
+    "status_thinking": "Thinking",
+    "status_running": "Replying",
+    "status_waiting_approval": "Waiting for an answer",
+    "status_offline": "Unavailable",
+    "people": "People",
+    "you_name": "{name} (you)",
+    "role_owner": "Made the room",
+    "role_manager": "Manager",
+    "role_member": "Member",
+    "remove": "Remove",
+    "invite": "Invite",
+    "invite_code": "Invite code: {code}",
+    "invite_hint": "Anyone who may enter this profile can join with the code or its link.",
+    "invite_share": "Share the link",
+    "invite_rotate": "New code",
+    "leave": "Leave the room",
+    "counts": "Agents {seats} · people {people}",
+    "name": "Room name",
+    "no_agents": "No agent is installed in this profile.",
+    "pick_agents": "Agents in the room",
+    "lead_hint": "The first agent is the lead: it answers a message that names nobody.",
+    "make": "Make",
+    "code": "Code or link",
+    "code_hint": "AB12CD34",
+    "already_member": "You are already in this room.",
+    "find": "Find",
+    "open": "Open",
+    "join": "Join"
   },
   "schedules": {
     "empty": "No schedules yet.",
@@ -460,5 +513,13 @@
     "compressed": "Compressed",
     "original": "Original quality",
     "open": "Open {name}"
+  },
+  "pending": {
+    "title": "Waiting for you",
+    "empty": "Nothing is waiting for you.",
+    "in_room": "In a room",
+    "in_chat": "In a chat",
+    "in_workflow": "In a workflow",
+    "open": "Open"
   }
 }

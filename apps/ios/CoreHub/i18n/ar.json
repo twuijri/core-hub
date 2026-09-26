@@ -112,7 +112,15 @@
     "pinned": "المثبّتة",
     "recent": "الأخيرة",
     "untitled": "محادثة جديدة",
-    "load_more": "حمّل المزيد"
+    "load_more": "حمّل المزيد",
+    "batch_select": "تحديد",
+    "batch_done": "إنهاء التحديد",
+    "batch_selected": "المحدَّد: {count}",
+    "batch_archive": "أرشفة",
+    "batch_unarchive": "إلغاء الأرشفة",
+    "batch_delete": "حذف",
+    "batch_delete_title": "حذف {count} من المحادثات؟",
+    "batch_delete_body": "تُحذف نهائيًا مع رسائلها."
   },
   "chat": {
     "send": "أرسل",
@@ -129,7 +137,9 @@
     "new_in_profile": "محادثة جديدة في {profile}",
     "agent": "الوكيل",
     "deleted": "حُذفت هذه المحادثة.",
-    "start_hint": "اسأل ما شئت. تبدأ المحادثة مع أول رسالة."
+    "start_hint": "اسأل ما شئت. تبدأ المحادثة مع أول رسالة.",
+    "more": "المزيد",
+    "export": "تصدير"
   },
   "tool": {
     "running": "يعمل",
@@ -325,7 +335,50 @@
   },
   "rooms": {
     "empty": "لا غرف بعد.",
-    "members": "{count} أعضاء"
+    "members": "{count} أعضاء",
+    "untitled": "غرفة",
+    "members_title": "الأعضاء",
+    "archived": "هذه الغرفة مؤرشفة: تُقرأ ولا يُكتب فيها.",
+    "typing": "{names} يكتب…",
+    "placeholder": "اكتب للغرفة · ‎@ لتسمية وكيل",
+    "mention_all": "‎@all · الجميع",
+    "seat_queued": "{name} ينتظر دوره",
+    "seat_thinking": "{name} يفكّر",
+    "seat_running": "{name} يردّ",
+    "seat_waiting": "{name} ينتظر إجابة",
+    "seat_stop": "أوقف {name}",
+    "seats": "الوكلاء في الغرفة",
+    "lead": "القائد",
+    "status_idle": "متاح",
+    "status_queued": "ينتظر دوره",
+    "status_thinking": "يفكّر",
+    "status_running": "يردّ",
+    "status_waiting_approval": "ينتظر إجابة",
+    "status_offline": "غير متاح",
+    "people": "الأشخاص",
+    "you_name": "{name} (أنت)",
+    "role_owner": "منشئ الغرفة",
+    "role_manager": "مدير",
+    "role_member": "عضو",
+    "remove": "إزالة",
+    "invite": "الدعوة",
+    "invite_code": "رمز الدعوة: {code}",
+    "invite_hint": "يستطيع الانضمام بالرمز أو رابطه كلُّ من يدخل هذا البروفايل.",
+    "invite_share": "مشاركة الرابط",
+    "invite_rotate": "رمز جديد",
+    "leave": "مغادرة الغرفة",
+    "counts": "الوكلاء {seats} · الأشخاص {people}",
+    "name": "اسم الغرفة",
+    "no_agents": "لا وكيل مثبّت في هذا البروفايل.",
+    "pick_agents": "الوكلاء في الغرفة",
+    "lead_hint": "الوكيل الأول هو القائد: يجيب عن الرسالة التي لا تسمّي أحدًا.",
+    "make": "إنشاء",
+    "code": "الرمز أو الرابط",
+    "code_hint": "AB12CD34",
+    "already_member": "أنت في هذه الغرفة من قبل.",
+    "find": "بحث",
+    "open": "فتح",
+    "join": "انضمام"
   },
   "schedules": {
     "empty": "لا جداول بعد.",
@@ -460,5 +513,13 @@
     "compressed": "مضغوطة",
     "original": "بالجودة الأصلية",
     "open": "افتح {name}"
+  },
+  "pending": {
+    "title": "بانتظارك",
+    "empty": "لا شيء بانتظارك.",
+    "in_room": "في غرفة",
+    "in_chat": "في محادثة",
+    "in_workflow": "في سير عمل",
+    "open": "فتح"
   }
 }

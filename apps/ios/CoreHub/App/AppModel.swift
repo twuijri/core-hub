@@ -49,10 +49,13 @@ final class AppModel {
     let realtime: RealtimeClient
     /// This phone's own voice and reading choices («This device»).
     let device = DeviceSettings()
+    /// The agents of each profile, for their names, marks and pictures (AgentIdentity.swift).
+    let agentDirectory = AgentDirectory()
     /// Text shared from another app, waiting to become a new chat.
     var pendingDraft: String?
     private let defaults: UserDefaults
     @ObservationIgnored private var sessionsNamespace: RealtimeNamespace?
+    @ObservationIgnored private var roomsNamespace: RealtimeNamespace?
     /// A link that opened the app before it knew whether anyone was signed in.
     @ObservationIgnored private var pendingLink: URL?
 
@@ -73,6 +76,7 @@ final class AppModel {
         self.realtime = RealtimeClient(keeper: keeper)
         api.language = language
         realtime.onStateChange = { [weak self] state in self?.connection = state }
+        agentDirectory.app = self
     }
 
     var isAdmin: Bool {
@@ -262,6 +266,10 @@ final class AppModel {
         sessionsNamespace = realtime.namespace("/rt/sessions") { [weak self] in
             await self?.handshake(all: true) ?? [:]
         }
+        // A room opens in its own profile, whatever the selector: the handshake admits them all.
+        roomsNamespace = realtime.namespace("/rt/rooms") { [weak self] in
+            await self?.handshake(all: true) ?? [:]
+        }
         LocalNotices.shared.start(app: self)
         takeShared()
     }
@@ -292,6 +300,9 @@ final class AppModel {
     /// `/rt/sessions`, heard across every profile the person may enter.
     var sessions: RealtimeNamespace? { sessionsNamespace }
 
+    /// `/rt/rooms`: an open room joins its channel here.
+    var rooms: RealtimeNamespace? { roomsNamespace }
+
     /// Re-reads who the person is, the profiles and the agents.
     func refreshAccount() async {
         do {
@@ -315,6 +326,7 @@ final class AppModel {
         do {
             let list = try await api.call { try await AgentsAPI.agentsList(xHubProfile: profile, apiConfiguration: $0) }
             if profile == currentProfile { agents = list.items }
+            agentDirectory.put(profile, list.items)
         } catch {
             if profile == currentProfile { agents = [] }
         }
@@ -327,6 +339,7 @@ final class AppModel {
         currentProfile = slug
         defaults.set(slug, forKey: Keys.profile)
         if let sessionsNamespace { sessionsNamespace.reconnect() }
+        if let roomsNamespace { roomsNamespace.reconnect() }
         Task { await reloadAgents() }
     }
 
@@ -351,10 +364,12 @@ final class AppModel {
         Speaker.shared.stop()
         realtime.stop()
         sessionsNamespace = nil
+        roomsNamespace = nil
         await keeper.set(nil)
         credentials = nil
         profiles = []
         agents = []
+        agentDirectory.forget()
         phase = .signedOut
     }
 
@@ -398,6 +413,10 @@ final class AppModel {
             guard let id = params["sessionId"] else { return .newChat }
             let profile = components.queryItems?.first { $0.name == "profile" }?.value ?? selector
             return .chat(sessionID: id, profile: profile)
+        case .rooms:
+            guard let id = params["roomId"] else { return .newChat }
+            let profile = components.queryItems?.first { $0.name == "profile" }?.value ?? selector
+            return .room(roomID: id, profile: profile)
         case .newChat:
             return .newChat
         case .settings:

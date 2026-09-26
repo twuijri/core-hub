@@ -60,6 +60,7 @@ import {
   attachmentReferences,
   createSessionsModule,
   registerChannelSource,
+  registerRoomOfSeat,
   registerWorkflowGate,
   runActivity,
   sessionActivityFor,
@@ -71,7 +72,7 @@ import {
   workflowApprovalsFor,
   type ChannelSource,
 } from './sessions/index.js';
-import { registerRoomPorts, roomsModule, roomsServiceFor } from './rooms/index.js';
+import { registerRoomPorts, roomOfSeatFor, roomsModule, roomsServiceFor } from './rooms/index.js';
 import { t as translate } from '../i18n/index.js';
 import {
   HermesApiUnavailable,
@@ -601,6 +602,9 @@ registerWorkflowPorts((app) => {
 /** The answer to a workflow step's gate (`sessions`) continues the paused run (`schedules`). */
 registerWorkflowGate((app) => workflowGateFor(app));
 
+/** An approval a seat's session raises names the seat's room (`rooms` → `sessions`). */
+registerRoomOfSeat((app) => roomOfSeatFor(app));
+
 /**
  * The hub fires its own schedules: a prompt schedule's run is a `sessions` turn in a
  * session of its own (source `schedule`, origin its history line), which the history opens.
@@ -808,6 +812,15 @@ registerRoomPorts((app) => ({
     const user = findUser(db, userId);
     if (!user) return [];
     return listWorkspacesFor(db, user).map((row) => ({ id: row.id, slug: row.slug }));
+  },
+  files(workspace, ids) {
+    const found = attachmentsPort(app).resolve(workspace, ids);
+    return new Map(
+      [...found].map(([id, file]) => [
+        id,
+        { name: file.name, mime: file.mime, sizeBytes: file.sizeBytes, url: file.url },
+      ]),
+    );
   },
 }));
 

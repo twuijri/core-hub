@@ -12,7 +12,10 @@ Code (`kimi.svg`) and Pi (`pi.svg`, lobe-icons' "Pi Agent", https://pi.dev) — 
 2026-09-22 and again 2026-09-25). Eight files out of nine hundred are copied in rather than
 depended on, so the client carries the marks it shows and not a 2.4 MB package. They are redrawn into our own
 `Mark` wrapper (one `viewBox`, `currentColor`, a `size` prop) and stripped of their
-`<title>` elements, because the control around them already names the agent.
+`<title>` elements, because the control around them already names the agent. Since 2026-09-27
+the iOS and Android apps carry the same marks, written from that file by
+`scripts/icons/agent-marks-mobile.mjs` (`apps/ios/CoreHub/Resources/Assets.xcassets/AgentMarks`,
+`apps/android/app/src/main/res/drawable/agent_mark_*.xml`).
 
 MIT License · Copyright (c) 2023 LobeHub
 

@@ -34,6 +34,10 @@ final class SessionListModel {
     private(set) var loading = false
     private(set) var error: HubFailure?
     private(set) var nextCursor: String?
+    /// Batch mode: the conversations selected (empty = not selecting).
+    private(set) var selected: Set<String> = []
+    private(set) var batchBusy = false
+    var batchError: String?
 
     @ObservationIgnored private weak var app: AppModel?
     @ObservationIgnored private var listener: UUID?
@@ -68,6 +72,54 @@ final class SessionListModel {
     func stop() {
         if let listener { app?.sessions?.remove(listener) }
         listener = nil
+    }
+
+    var selecting: Bool { !selected.isEmpty }
+
+    func toggle(_ id: String) { selected = SessionBatch.toggle(selected, id) }
+
+    func clearSelection() {
+        selected = []
+        batchError = nil
+    }
+
+    /// Archive (or bring back) every selected conversation, one call per profile.
+    func archiveSelected(_ archived: Bool) async {
+        await batch { profile, ids, config in
+            try await SessionsAPI.sessionsBulkUpdate(
+                xHubProfile: profile,
+                sessionBulkUpdate: SessionBulkUpdate(sessionIds: ids, patch: SessionBulkUpdatePatch(archived: archived)),
+                apiConfiguration: config
+            )
+        }
+    }
+
+    func deleteSelected() async {
+        await batch { profile, ids, config in
+            try await SessionsAPI.sessionsBulkDelete(xHubProfile: profile, ids: ids.joined(separator: ","), apiConfiguration: config)
+        }
+    }
+
+    private func batch(_ call: @escaping (String, [String], CoreHubClientAPIConfiguration) async throws -> BulkResult) async {
+        guard let app else { return }
+        let groups = SessionBatch.byProfile(sessions, selected)
+        guard !groups.isEmpty else { return }
+        batchBusy = true
+        batchError = nil
+        var results: [BulkResult] = []
+        var failure: String?
+        for (profile, ids) in groups {
+            do {
+                results.append(try await app.api.call { try await call(profile, ids, $0) })
+            } catch {
+                failure = HubFailure(error).describe(app.l10n)
+            }
+        }
+        let refused = SessionBatch.failures(results)
+        batchBusy = false
+        batchError = failure ?? refused.first
+        if failure == nil && refused.isEmpty { selected = [] }
+        reload()
     }
 
     /// Hub-side changes arrive in bursts (a title, then the status…); one refetch covers them.
@@ -122,10 +174,12 @@ struct SessionListView: View {
     let open: (Session) -> Void
     @Environment(AppModel.self) private var app
     @Environment(\.l10n) private var l10n
+    @State private var confirmingDelete = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: Space.s2) {
             controls
+            if model.selecting { batchBar }
             if let error = model.error {
                 NoticeView(text: error.describe(l10n), tone: .danger)
                 Button(l10n("common.retry")) { model.reload() }
@@ -177,6 +231,45 @@ struct SessionListView: View {
         }
     }
 
+    /// Batch mode: how many are selected, and archive, bring back or delete them all.
+    private var batchBar: some View {
+        VStack(alignment: .leading, spacing: Space.s1) {
+            HStack {
+                Button { model.clearSelection() } label: { Image(systemName: "xmark") }
+                    .accessibilityLabel(l10n("sessions.batch_done"))
+                Text(l10n("sessions.batch_selected", ["count": String(model.selected.count)]))
+                    .font(.system(size: FontSize.sizeSm, weight: .semibold))
+                Spacer()
+            }
+            HStack(spacing: Space.s3) {
+                Button(l10n("sessions.batch_archive")) { Task { await model.archiveSelected(true) } }
+                    .accessibilityIdentifier("sessions.batch.archive")
+                Button(l10n("sessions.batch_unarchive")) { Task { await model.archiveSelected(false) } }
+                    .accessibilityIdentifier("sessions.batch.unarchive")
+                Button(l10n("sessions.batch_delete"), role: .destructive) { confirmingDelete = true }
+                    .accessibilityIdentifier("sessions.batch.delete")
+            }
+            .font(.system(size: FontSize.sizeSm))
+            .disabled(model.batchBusy)
+            if let error = model.batchError {
+                Text(error).font(.system(size: FontSize.sizeXs)).foregroundStyle(Tone.dangerSoftText)
+            }
+        }
+        .padding(Space.s2)
+        .background(Tone.surface, in: RoundedRectangle(cornerRadius: Radius.md, style: .continuous))
+        .accessibilityIdentifier("sessions.batch")
+        .confirmationDialog(
+            l10n("sessions.batch_delete_title", ["count": String(model.selected.count)]),
+            isPresented: $confirmingDelete,
+            titleVisibility: .visible
+        ) {
+            Button(l10n("sessions.batch_delete"), role: .destructive) { Task { await model.deleteSelected() } }
+            Button(l10n("common.cancel"), role: .cancel) {}
+        } message: {
+            Text(l10n("sessions.batch_delete_body"))
+        }
+    }
+
     private var profileFilterMenu: some View {
         Menu {
             Button(l10n("sessions.all_profiles")) {
@@ -217,10 +310,18 @@ struct SessionListView: View {
 
     private func row(_ session: Session) -> some View {
         let title = session.title ?? l10n("sessions.untitled")
+        let chosen = model.selected.contains(session.id)
         return Button {
-            open(session)
+            if model.selecting { model.toggle(session.id) } else { open(session) }
         } label: {
             HStack(spacing: Space.s2) {
+                if model.selecting {
+                    Image(systemName: chosen ? "checkmark.circle.fill" : "circle")
+                        .foregroundStyle(chosen ? Tone.accent : Tone.textFaint)
+                } else if let agent = app.agentDirectory.agents(session.profile).first(where: { $0.id == session.agentId }) {
+                    // The chat's agent, by its face (its picture, its mark, or its initial).
+                    AgentAvatar(identity: .of(agent), profile: session.profile, size: 22)
+                }
                 VStack(alignment: .leading, spacing: 2) {
                     Text(title)
                         .font(.system(size: FontSize.sizeSm, weight: .medium))
@@ -245,13 +346,20 @@ struct SessionListView: View {
             .padding(.horizontal, Space.s2)
             .padding(.vertical, Space.s2)
             .background(
-                selected == session.id ? Tone.surface2 : Color.clear,
+                chosen || (!model.selecting && selected == session.id) ? Tone.surface2 : Color.clear,
                 in: RoundedRectangle(cornerRadius: Radius.md, style: .continuous)
             )
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
+        // A long press offers Select, which starts batch mode with this conversation in it.
+        .contextMenu {
+            Button { model.toggle(session.id) } label: {
+                Label(l10n("sessions.batch_select"), systemImage: "checkmark.circle")
+            }
+        }
         .accessibilityIdentifier("session.\(session.id)")
+        .accessibilityAction(named: Text(l10n("sessions.batch_select"))) { model.toggle(session.id) }
     }
 }
 
@@ -266,5 +374,37 @@ struct ProfileBadge: View {
             .padding(.horizontal, Space.s2)
             .padding(.vertical, 2)
             .background(Tone.accentSoft, in: Capsule())
+    }
+}
+
+/// The chats list's batch mode, as pure rules: the list may hold several profiles and each call
+/// names one, so a selection goes per profile, at most 100 ids a call (`sessions.bulkDelete`).
+enum SessionBatch {
+    static let maxPerCall = 100
+
+    static func toggle(_ selected: Set<String>, _ id: String) -> Set<String> {
+        var next = selected
+        if next.contains(id) { next.remove(id) } else { next.insert(id) }
+        return next
+    }
+
+    static func byProfile(_ sessions: [Session], _ selected: Set<String>) -> [(String, [String])] {
+        var order: [String] = []
+        var ids: [String: [String]] = [:]
+        for session in sessions where selected.contains(session.id) {
+            if ids[session.profile] == nil { order.append(session.profile) }
+            ids[session.profile, default: []].append(session.id)
+        }
+        return order.flatMap { profile -> [(String, [String])] in
+            let all = ids[profile] ?? []
+            return stride(from: 0, to: all.count, by: maxPerCall).map { start in
+                (profile, Array(all[start..<min(start + maxPerCall, all.count)]))
+            }
+        }
+    }
+
+    /// The hub's words for what did not go through (partial success is still a success).
+    static func failures(_ results: [BulkResult]) -> [String] {
+        results.flatMap(\.results).filter { !$0.ok }.map { $0.error?.error ?? $0.id }
     }
 }

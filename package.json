@@ -34,6 +34,7 @@
     "tokens:build": "pnpm --filter @corehub/ui-tokens build",
     "icons:build": "node scripts/icons/build-icons.mjs",
     "icons:lucide": "node scripts/icons/lucide-web.mjs && node scripts/icons/lucide-mobile.mjs",
+    "icons:agents": "node scripts/icons/agent-marks-mobile.mjs",
     "graph": "node scripts/graph.mjs",
     "graph:check": "node scripts/graph-check.mjs",
     "image:sealed-check": "node scripts/image-sealed-check.mjs"
