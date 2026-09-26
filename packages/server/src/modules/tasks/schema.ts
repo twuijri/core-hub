@@ -82,6 +82,12 @@ export type ProjectSettings = {
   checks?: string[];
 };
 
+/**
+ * One line of a task's definition of done or its constraints (contract `TaskCheckItem`,
+ * decision §104). `checked` is the reviewer's tick; a new run clears it.
+ */
+export type TaskCheckItem = { text: string; checked: boolean };
+
 export type WorktreeStats = {
   ahead?: number;
   behind?: number;
@@ -157,6 +163,10 @@ export const tasks = sqliteTable(
     /** The assignee's last progress summary. */
     latestSummary: text('latest_summary'),
     attachmentIds: json<string[]>('attachment_ids').notNull().default(EMPTY_ARRAY),
+    /** What must be true for the task to be done; sent with every run, ticked at review (§104). */
+    definitionOfDone: json<TaskCheckItem[]>('definition_of_done').notNull().default(EMPTY_ARRAY),
+    /** What the agent must keep to while doing it; sent and ticked like the above (§104). */
+    constraints: json<TaskCheckItem[]>('constraints').notNull().default(EMPTY_ARRAY),
     dueAt: timestampMs('due_at'),
     startedAt: timestampMs('started_at'),
     completedAt: timestampMs('completed_at'),

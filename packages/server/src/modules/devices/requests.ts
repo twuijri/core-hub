@@ -77,7 +77,7 @@ export function defaultTimeoutFor(capability: CapabilityKind): number {
 }
 /**
  * What an agent's run may ask the person's own devices for: a computer's files and programs
- * (§89), and a phone's location (§103), which the phone answers only after its person agrees.
+ * (§89), and a phone's location (§105), which the phone answers only after its person agrees.
  */
 export const AGENT_CAPABILITIES: ReadonlySet<CapabilityKind> = new Set([
   'files',

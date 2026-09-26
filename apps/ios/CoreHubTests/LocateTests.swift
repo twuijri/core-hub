@@ -2,7 +2,7 @@
 import CoreHubClient
 import XCTest
 
-/// An agent asks where the phone is (§103): what the phone does with the request, and what it sends.
+/// An agent asks where the phone is (§105): what the phone does with the request, and what it sends.
 final class LocateTests: XCTestCase {
     private let now = Date(timeIntervalSince1970: 1_790_000_000)
 

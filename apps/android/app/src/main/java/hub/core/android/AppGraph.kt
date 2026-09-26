@@ -130,7 +130,7 @@ class AppGraph(context: Context, sealer: hub.core.android.data.Sealer = Keystore
         scope.launch { push.registrar.report(thisPhoneReport(pushBlocker(), DeviceInfos.current(appContext), capabilities)) }
     }
 
-    /** Whether agents may ask where this phone is (§103): asked once, kept here. */
+    /** Whether agents may ask where this phone is (§105): asked once, kept here. */
     val locationChoices = hub.core.android.phone.LocationChoices(context.getSharedPreferences("corehub.device", Context.MODE_PRIVATE))
 
     /** Location requests to answer, from `/rt/devices` and the catch-up when the app comes back. */

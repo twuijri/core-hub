@@ -134,6 +134,8 @@ export function toTask(
     waiting_on: extras.waitingOn ?? [],
     // Only a running task can be stuck; a marker left on any other is not shown.
     stuck_since: row.status === 'running' ? (row.stuckAt?.toISOString() ?? null) : null,
+    definition_of_done: row.definitionOfDone ?? [],
+    constraints: row.constraints ?? [],
   };
 }
 

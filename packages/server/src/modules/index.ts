@@ -387,6 +387,20 @@ export function hermesChannelSourceOver(
     delete<T>(apiPath: string): Promise<T> {
       return call<T>('DELETE', apiPath);
     },
+    picture(profile, name) {
+      // Hermes's image cache of that profile: `cache/images/`, or `image_cache/` where an
+      // older install still keeps it (`get_hermes_dir`). A name, never a path (§103).
+      if (!/^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/.test(name)) return null;
+      for (const folder of ['cache/images', 'image_cache']) {
+        const file = path.join(homeOf(profile), folder, name);
+        try {
+          if (statSync(file).isFile()) return file;
+        } catch {
+          // not in this one
+        }
+      }
+      return null;
+    },
     stamp(profile) {
       const parts: string[] = [];
       for (const name of ['state.db', 'state.db-wal']) {
@@ -420,6 +434,7 @@ registerProfileMirror((app) => {
   });
   return {
     list: () => profiles.list(),
+    displayName: (name) => profiles.displayName(name),
     async create(name, origin) {
       try {
         await profiles.create(name, origin);

@@ -28,7 +28,7 @@ import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
 
-/** An agent asks where the phone is (§103): what the phone does with the request, and what it sends. */
+/** An agent asks where the phone is (§105): what the phone does with the request, and what it sends. */
 class LocateTest {
     private val json = Serializer.kotlinxSerializationJson
 

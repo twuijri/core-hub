@@ -11,8 +11,10 @@ import {
   categoryDescription,
   deleteSkill,
   getSkill,
+  hermesDisabledSkills,
   listSkills,
   parseFrontMatter,
+  platformsOf,
   putSkill,
   setSkillEnabled,
 } from './skills.js';
@@ -166,21 +168,81 @@ describe('writing one back', () => {
 });
 
 describe('turning one off', () => {
-  it('renames the file rather than deleting anything', () => {
+  it("switches through Hermes's own list and touches no file of the skill (§103)", () => {
     const dir = home();
     write(dir, 'markdown-viewer', PACK_SKILL);
     writeFileSync(path.join(dir, 'skills', 'markdown-viewer', 'script.js'), 'console.log(1)');
+    writeFileSync(path.join(dir, 'config.yaml'), '# mine\nmodel:\n  default: m1 # keep\n');
 
     const off = setSkillEnabled(dir, 'markdown-viewer', false);
     expect(off.enabled).toBe(false);
-    expect(existsSync(path.join(dir, 'skills', 'markdown-viewer', 'SKILL.md'))).toBe(false);
-    expect(existsSync(path.join(dir, 'skills', 'markdown-viewer', 'SKILL.md.off'))).toBe(true);
-    // Everything else is untouched, which is what makes turning it back on free.
+    expect(existsSync(path.join(dir, 'skills', 'markdown-viewer', 'SKILL.md'))).toBe(true);
+    expect(existsSync(path.join(dir, 'skills', 'markdown-viewer', 'SKILL.md.off'))).toBe(false);
     expect(existsSync(path.join(dir, 'skills', 'markdown-viewer', 'script.js'))).toBe(true);
+    const config = readFileSync(path.join(dir, 'config.yaml'), 'utf8');
+    expect(config).toContain('# mine');
+    expect(config).toContain('default: m1 # keep');
+    expect(hermesDisabledSkills(dir)).toEqual(new Set(['markdown-viewer']));
+    expect(listSkills(dir)[0]?.enabled).toBe(false);
 
     const on = setSkillEnabled(dir, 'markdown-viewer', true);
     expect(on.enabled).toBe(true);
     expect(on.description).toBe('Diagrams and charts in Markdown.');
+    expect(hermesDisabledSkills(dir)).toEqual(new Set());
+  });
+
+  it("reads Hermes's list as Hermes does: a lone name, the skill's own name, never its manual", () => {
+    const dir = home();
+    write(dir, 'markdown-viewer', PACK_SKILL);
+    write(dir, 'viewer-folder', '---\nname: viewer-by-name\n---\nbody\n');
+    write(dir, 'hermes-agent', '---\nname: hermes-agent\n---\nmanual\n');
+    writeFileSync(path.join(dir, 'config.yaml'), 'skills:\n  disabled: markdown-viewer\n');
+    expect(listSkills(dir).find((skill) => skill.key === 'markdown-viewer')?.enabled).toBe(false);
+    writeFileSync(
+      path.join(dir, 'config.yaml'),
+      'skills:\n  disabled: [viewer-by-name, hermes-agent]\n',
+    );
+    const listed = new Map(listSkills(dir).map((skill) => [skill.key, skill.enabled]));
+    expect(listed.get('markdown-viewer')).toBe(true);
+    expect(listed.get('viewer-folder')).toBe(false);
+    // Hermes never lets its manual be off, whatever the list says, and neither does the hub.
+    expect(listed.get('hermes-agent')).toBe(true);
+    expect(() => setSkillEnabled(dir, 'hermes-agent', false)).toThrow(/skill_essential/);
+  });
+
+  it('switching on brings back a skill an older hub renamed off', () => {
+    const dir = home();
+    write(dir, 'paused', PACK_SKILL, true);
+    const on = setSkillEnabled(dir, 'paused', true);
+    expect(on.enabled).toBe(true);
+    expect(existsSync(path.join(dir, 'skills', 'paused', 'SKILL.md'))).toBe(true);
+  });
+
+  it("leaves out a skill for another system, as Hermes's list does (§103)", () => {
+    const dir = home();
+    write(dir, 'mac-only', '---\nname: mac-only\nplatforms: [macos]\n---\nbody\n');
+    write(dir, 'linux-block', '---\nname: linux-block\nplatforms:\n  - linux # here\n---\nb\n');
+    write(dir, 'win-lone', '---\nname: win-lone\nplatforms: windows\n---\nbody\n');
+    write(dir, 'everywhere', PACK_SKILL);
+    expect(
+      listSkills(dir, 'linux')
+        .map((skill) => skill.key)
+        .sort(),
+    ).toEqual(['everywhere', 'linux-block']);
+    expect(
+      listSkills(dir, 'darwin')
+        .map((skill) => skill.key)
+        .sort(),
+    ).toEqual(['everywhere', 'mac-only']);
+    expect(
+      listSkills(dir, 'win32')
+        .map((skill) => skill.key)
+        .sort(),
+    ).toEqual(['everywhere', 'win-lone']);
+    expect(platformsOf('---\nname: x\nplatforms: ["macos", \'linux\']\n---\n')).toEqual([
+      'macos',
+      'linux',
+    ]);
   });
 
   it('still lists a disabled skill, and still reads it', () => {
@@ -318,9 +380,12 @@ describe('skills in category folders, as Hermes keeps them', () => {
     expect(() => putSkill(dir, 'findmy', { content: '---\nname: findmy\n---\nmine\n' })).toThrow(
       /skill_bundled/,
     );
-    expect(() => setSkillEnabled(dir, 'findmy', false)).toThrow(/skill_bundled/);
     expect(() => deleteSkill(dir, 'findmy')).toThrow(/skill_bundled/);
+    // Switched as Hermes switches it: its name in Hermes's list, its bytes untouched (§103).
+    expect(setSkillEnabled(dir, 'findmy', false).enabled).toBe(false);
+    expect(hermesDisabledSkills(dir)).toEqual(new Set(['findmy']));
     expect(readFileSync(file, 'utf8')).toBe(before);
+    expect(existsSync(`${file}.off`)).toBe(false);
   });
 
   it("writes, switches and deletes a category skill that is not Hermes's, where it is", () => {
@@ -335,7 +400,7 @@ describe('skills in category folders, as Hermes keeps them', () => {
     expect(existsSync(path.join(dir, 'skills', 'lit-review'))).toBe(false);
 
     setSkillEnabled(dir, 'lit-review', false);
-    expect(existsSync(path.join(folder, 'SKILL.md.off'))).toBe(true);
+    expect(hermesDisabledSkills(dir)).toEqual(new Set(['lit-review']));
     expect(listSkills(dir).find((skill) => skill.key === 'lit-review')?.enabled).toBe(false);
 
     deleteSkill(dir, 'lit-review');

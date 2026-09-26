@@ -62,7 +62,7 @@ import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonPrimitive
 
-/** What the person answered once for agents asking where this phone is (contract decision §103). */
+/** What the person answered once for agents asking where this phone is (contract decision §105). */
 enum class LocationChoice { ASK, ALWAYS, NEVER }
 
 /** The rules of answering a location request, apart from Android so they are tested. */

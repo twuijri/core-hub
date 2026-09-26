@@ -139,7 +139,7 @@ fun ThisDevicePage(shell: ShellViewModel) {
                 )
             }
         }
-        // Whether an agent may ask where this phone is (§103): asked the first time, changed here.
+        // Whether an agent may ask where this phone is (§105): asked the first time, changed here.
         item { SectionTitle(stringResource(R.string.locate_heading)) }
         item { LocationChoiceRow() }
         item { SectionTitle(stringResource(R.string.update_heading)) }

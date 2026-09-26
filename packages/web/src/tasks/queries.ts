@@ -98,6 +98,38 @@ export interface Task {
   waiting_on?: TaskDependencyState[];
   /** Set while it runs and its run has been silent too long: the stuck-task watchdog. */
   stuck_since?: string | null;
+  /** What must hold for it to be done; sent with the run, ticked at review (§104). */
+  definition_of_done?: CheckItem[];
+  /** What the agent must keep to while doing it; sent and ticked the same way (§104). */
+  constraints?: CheckItem[];
+}
+
+/** One line of a definition of done or of constraints (contract `TaskCheckItem`). */
+export interface CheckItem {
+  text: string;
+  /** The reviewer's tick: this holds for the work in review. */
+  checked: boolean;
+}
+
+/** One thing that happened on a Hermes card, in Hermes's words (contract `HermesCardEvent`). */
+export interface HermesCardEvent {
+  id: number;
+  kind: string;
+  run_id: number | null;
+  payload: Record<string, unknown> | null;
+  created_at: string;
+}
+
+/** One attempt of Hermes's dispatcher at a card (contract `HermesCardRun`). */
+export interface HermesCardRun {
+  id: number;
+  profile: string | null;
+  status: string;
+  outcome: string | null;
+  summary: string | null;
+  error: string | null;
+  started_at: string;
+  ended_at: string | null;
 }
 
 /** A dependency, as far as waiting for it goes (contract `TaskDependencyState`). */
@@ -127,6 +159,8 @@ export interface TaskComment {
 /** One task opened on its own (contract `TaskDetail`): the card, and what was said on it. */
 export interface TaskDetail extends Task {
   comments: TaskComment[];
+  /** A Hermes card's own history, read from Hermes as it opened (§103); `null` otherwise. */
+  hermes?: { events: HermesCardEvent[]; runs: HermesCardRun[] } | null;
 }
 
 /**
@@ -517,4 +551,46 @@ export function useTaskEvents(): void {
       for (const name of TASK_EVENTS) socket.off(name, handler);
     };
   }, [profile, queryClient, realtime.epoch]);
+}
+
+/** What a bulk edit may change on many tasks at once (contract `TaskBulkUpdate.patch`). */
+export interface BulkPatch {
+  priority?: 'low' | 'normal' | 'high' | 'urgent';
+  /** The same words said on every task — on a Hermes card, on Hermes first (§103). */
+  comment?: string;
+}
+
+/**
+ * The same change on many cards. The board holds every profile, and a bulk edit is made in one
+ * profile, so the cards go in one call per profile they are in. Answers how many were changed
+ * and how many were not (a Hermes card Hermes refused, say).
+ */
+export function useBulkUpdateTasks() {
+  const { client } = useAuth();
+  const refresh = useInvalidateBoard();
+  return useMutation({
+    mutationFn: async ({ tasks, patch }: { tasks: TaskRef[]; patch: BulkPatch }) => {
+      const byProfile = new Map<string, string[]>();
+      for (const task of tasks) {
+        const key = task.profile ?? '';
+        byProfile.set(key, [...(byProfile.get(key) ?? []), task.id]);
+      }
+      let changed = 0;
+      let refused = 0;
+      for (const [profile, ids] of byProfile) {
+        const answer = (
+          await client.request('patch', '/tasks', {
+            body: { task_ids: ids, patch },
+            ...inWorkspace(profile || undefined),
+          })
+        ).data as unknown as { results: Array<{ ok: boolean }> };
+        for (const result of answer.results) {
+          if (result.ok) changed += 1;
+          else refused += 1;
+        }
+      }
+      return { changed, refused };
+    },
+    onSuccess: refresh,
+  });
 }

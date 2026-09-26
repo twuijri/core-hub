@@ -937,7 +937,7 @@ export function createDevicesModule(lent: DevicesPorts): HubModule {
             timeout_ms?: number;
           };
           // An agent's run may ask the person's own computer for its helper's files and
-          // programs (§89) and a phone for its location (§103), and nothing else; anyone else
+          // programs (§89) and a phone for its location (§105), and nothing else; anyone else
           // needs the `device` scope.
           const run = isRunPrincipal(principal);
           const allowed = run

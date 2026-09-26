@@ -7,8 +7,12 @@
  * is shown as Hermes wrote it (`describeTaskError`).
  *
  * For the hub's own task it also holds "Start automatically" (`auto_start`, a switch that
- * takes effect when flipped) and, when the task has one, its git worktree: where it is, its
- * branch, how it stands — git's own message when git refused — and Remove (the branch stays).
+ * takes effect when flipped), its definition of done and constraints (§104: written here, sent
+ * with the run, ticked here by the reviewer while it is in review, saved with Save) and, when
+ * the task has one, its git worktree: where it is, its branch, how it stands — git's own
+ * message when git refused — and Remove (the branch stays).
+ *
+ * A Hermes card shows Hermes's own history instead: its runs and its events (§103).
  */
 import { useEffect, useState } from 'react';
 import { useI18n } from '../i18n/context.js';
@@ -32,10 +36,13 @@ import {
   useRemoveWorktree,
   useTaskDetail,
   useUpdateTask,
+  type CheckItem,
   type Task,
   type Worktree,
 } from './queries.js';
+import { CheckListEditor, cleanLines, sameLines } from './CheckList.js';
 import { describeTaskError } from './errors.js';
+import { HermesHistory } from './HermesHistory.js';
 
 const PRIORITIES = ['low', 'normal', 'high', 'urgent'] as const;
 
@@ -51,18 +58,28 @@ export function TaskDialog({ task, onClose }: { task: Task | null; onClose(): vo
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [priority, setPriority] = useState<string>('normal');
+  const [done, setDone] = useState<CheckItem[]>([]);
+  const [constraints, setConstraints] = useState<CheckItem[]>([]);
   const [said, setSaid] = useState('');
   const fromHermes = task?.external?.source === 'hermes';
 
   // The fields start from the card as the board had it, and take the card as the hub read
   // it (from Hermes, for Hermes's card) once that answer arrives.
   const shown = detail.data ?? task;
+  const shownDone = shown?.definition_of_done ?? [];
+  const shownConstraints = shown?.constraints ?? [];
   useEffect(() => {
     if (!shown) return;
     setTitle(shown.title);
     setDescription(shown.description ?? '');
     setPriority(shown.priority);
   }, [shown?.id, shown?.title, shown?.description, shown?.priority]);
+  // The lists start from the card too, and follow what the hub answered after a save.
+  useEffect(() => {
+    if (!shown) return;
+    setDone(shownDone);
+    setConstraints(shownConstraints);
+  }, [shown?.id, JSON.stringify(shownDone), JSON.stringify(shownConstraints)]);
   useEffect(() => {
     if (!task) return;
     setSaid('');
@@ -77,6 +94,11 @@ export function TaskDialog({ task, onClose }: { task: Task | null; onClose(): vo
     if (title.trim() !== shown.title) patch.title = title.trim();
     if (description !== (shown.description ?? '')) patch.description = description || null;
     if (priority !== shown.priority) patch.priority = priority;
+    // A Hermes card has none: Hermes briefs its own worker (§104).
+    if (!fromHermes && !sameLines(cleanLines(done), shownDone))
+      patch.definition_of_done = cleanLines(done);
+    if (!fromHermes && !sameLines(cleanLines(constraints), shownConstraints))
+      patch.constraints = cleanLines(constraints);
   }
   const changed = Object.keys(patch).length > 0;
 
@@ -185,6 +207,24 @@ export function TaskDialog({ task, onClose }: { task: Task | null; onClose(): vo
           </span>
         </div>
         {update.isError && <Notice tone="danger">{describeTaskError(update.error, t)}</Notice>}
+
+        {!fromHermes && (
+          <>
+            <CheckListEditor
+              kind="dod"
+              items={done}
+              onChange={setDone}
+              reviewing={shown?.status === 'review'}
+            />
+            <CheckListEditor
+              kind="constraints"
+              items={constraints}
+              onChange={setConstraints}
+              reviewing={shown?.status === 'review'}
+            />
+          </>
+        )}
+        {fromHermes && detail.data?.hermes && <HermesHistory history={detail.data.hermes} />}
 
         {!fromHermes && (
           <Switch

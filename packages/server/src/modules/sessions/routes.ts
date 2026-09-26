@@ -21,7 +21,7 @@
  *   the contract declares.
  */
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
-import { closeSync, createReadStream } from 'node:fs';
+import { closeSync, createReadStream, readFileSync, statSync } from 'node:fs';
 import { z } from 'zod';
 import { HubError, notFound } from '../../lib/errors.js';
 import { rangeReply } from '../../lib/byte-range.js';
@@ -597,6 +597,7 @@ export function registerSessionRoutes(app: FastifyInstance, deps: RouteDeps): vo
           .regex(/^[a-z][a-z0-9_]{0,31}$/)
           .optional(),
         hidden: z.enum(['include']).optional(),
+        limit: z.coerce.number().int().min(1).max(1000).optional(),
       }),
       request.query,
       'query',
@@ -609,7 +610,7 @@ export function registerSessionRoutes(app: FastifyInstance, deps: RouteDeps): vo
             profile: entry.profile,
           }))
         : [{ workspace: scope.workspace, profile: scope.profile }];
-    const read = await deps.channels(request).list(scopes, query.channel);
+    const read = await deps.channels(request).list(scopes, query.channel, query.limit);
     // What this person hid stays out of their list unless asked for (§88).
     const workspaceOf = new Map(scopes.map((each) => [each.profile, each.workspace]));
     const hidden = deps.service(request).channelHides.hiddenIn(
@@ -684,13 +685,48 @@ export function registerSessionRoutes(app: FastifyInstance, deps: RouteDeps): vo
   app.get('/channel-conversations/:conversation_id/messages', async (request) => {
     const scope = await scopeOf(request);
     const id = (request.params as { conversation_id?: unknown }).conversation_id;
+    const query = parse(
+      z.object({ offset: z.coerce.number().int().min(0).max(10_000_000).optional() }),
+      request.query,
+      'query',
+    );
     return deps
       .channels(request)
       .messages(
         { workspace: scope.workspace, profile: scope.profile },
         typeof id === 'string' ? id : '',
+        query.offset ?? 0,
       );
   });
+
+  // A picture the person sent on the channel (§103), from Hermes's image cache only.
+  app.get(
+    '/channel-conversations/:conversation_id/pictures/:picture_id',
+    async (request, reply) => {
+      const scope = await scopeOf(request);
+      const params = request.params as { conversation_id?: unknown; picture_id?: unknown };
+      const file = deps
+        .channels(request)
+        .picture(
+          { workspace: scope.workspace, profile: scope.profile },
+          typeof params.conversation_id === 'string' ? params.conversation_id : '',
+          typeof params.picture_id === 'string' ? params.picture_id : '',
+        );
+      let bytes: Buffer;
+      try {
+        if (statSync(file).size > PICTURE_MAX_BYTES) throw new Error('too large');
+        bytes = readFileSync(file);
+      } catch {
+        throw notFound({ resource: 'channel_picture' });
+      }
+      return reply
+        .header('Content-Type', pictureType(file))
+        .header('Cache-Control', 'private, no-store')
+        .header('X-Content-Type-Options', 'nosniff')
+        .header('Content-Security-Policy', "default-src 'none'; sandbox")
+        .send(bytes);
+    },
+  );
 
   // "Continue in Core Hub" (§62): read the conversation as above, then make the chat.
   app.post('/channel-conversations/:conversation_id/continue', async (request, reply) => {
@@ -713,4 +749,16 @@ export function registerSessionRoutes(app: FastifyInstance, deps: RouteDeps): vo
 function contentDisposition(download: boolean, name: string): string {
   const ascii = name.replace(/[^\x20-\x7e]/g, '_').replace(/["\\]/g, '_');
   return `${download ? 'attachment' : 'inline'}; filename="${ascii}"; filename*=UTF-8''${encodeURIComponent(name)}`;
+}
+
+/** Hermes refuses inbound media above its own caps; this is a ceiling well over them. */
+const PICTURE_MAX_BYTES = 50 * 1024 * 1024;
+
+/** The picture types a browser draws, by name; nothing else is served (§103). */
+function pictureType(file: string): string {
+  const ext = file.slice(file.lastIndexOf('.') + 1).toLowerCase();
+  if (ext === 'png') return 'image/png';
+  if (ext === 'gif') return 'image/gif';
+  if (ext === 'webp') return 'image/webp';
+  return 'image/jpeg';
 }

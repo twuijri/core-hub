@@ -85,6 +85,10 @@ export const SUMMARY_MAX = 600;
 const WORDS = {
   ar: {
     checklist: 'قائمة التحقق',
+    done: 'تعريف الإنجاز',
+    doneLead: 'لا تُعدّ المهمة منجزة إلا إذا تحقّق كل ما يلي:',
+    constraints: 'القيود',
+    constraintsLead: 'التزم بما يلي أثناء العمل:',
     instructions: 'تعليمات',
     finish:
       'نفّذ المهمة. وحين تنتهي اختم بملخص قصير لما فعلته وما بقي، فهذا ما يظهر على بطاقة المهمة.',
@@ -94,6 +98,10 @@ const WORDS = {
   },
   en: {
     checklist: 'Checklist',
+    done: 'Definition of done',
+    doneLead: 'The task is done only when every one of these holds:',
+    constraints: 'Constraints',
+    constraintsLead: 'Keep to these while you work:',
     instructions: 'Instructions',
     finish:
       'Do the task. When you finish, end with a short summary of what you did and what is left — it is what the task card shows.',
@@ -105,12 +113,13 @@ const WORDS = {
 
 /**
  * The prompt a task's run starts with: the task itself, as the agent needs it — title,
- * brief, the checklist with what is already ticked, and whatever the person added when
- * they assigned it.
+ * brief, the checklist with what is already ticked, its definition of done and its
+ * constraints (decision §104), and whatever the person added when they assigned it.
  */
 export function taskPrompt(input: {
   key: string;
-  task: Pick<TaskRow, 'number' | 'title' | 'description'>;
+  task: Pick<TaskRow, 'number' | 'title' | 'description'> &
+    Partial<Pick<TaskRow, 'definitionOfDone' | 'constraints'>>;
   subtasks: readonly Pick<SubtaskRow, 'title' | 'status'>[];
   instructions: string | null;
   language: 'ar' | 'en';
@@ -126,11 +135,40 @@ export function taskPrompt(input: {
           .join('\n'),
     );
   }
+  const lists = checkListsBrief(input.task, input.language);
+  if (lists) parts.push(lists);
   if (input.instructions?.trim()) {
     parts.push(`## ${words.instructions}\n${input.instructions.trim()}`);
   }
   parts.push(words.finish);
   return parts.join('\n\n');
+}
+
+/**
+ * A task's definition of done and constraints as the agent reads them (decision §104), or
+ * `null` when it has neither. Also the part of a Hermes card's brief they become when a hub
+ * task is handed to Hermes, whose worker reads only the card.
+ */
+export function checkListsBrief(
+  task: Partial<Pick<TaskRow, 'definitionOfDone' | 'constraints'>>,
+  language: 'ar' | 'en',
+): string | null {
+  const words = WORDS[language];
+  const parts: string[] = [];
+  const done = task.definitionOfDone ?? [];
+  if (done.length > 0) {
+    parts.push(
+      `## ${words.done}\n${words.doneLead}\n` + done.map((item) => `- ${item.text}`).join('\n'),
+    );
+  }
+  const constraints = task.constraints ?? [];
+  if (constraints.length > 0) {
+    parts.push(
+      `## ${words.constraints}\n${words.constraintsLead}\n` +
+        constraints.map((item) => `- ${item.text}`).join('\n'),
+    );
+  }
+  return parts.length > 0 ? parts.join('\n\n') : null;
 }
 
 /** The last words of a run, cut to a card's length on a word boundary. */

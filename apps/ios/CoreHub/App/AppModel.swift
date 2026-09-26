@@ -274,7 +274,7 @@ final class AppModel {
             await self?.handshake(all: true) ?? [:]
         }
         LocalNotices.shared.start(app: self)
-        // An agent may ask where this phone is (§103): requests reach `/rt/devices`.
+        // An agent may ask where this phone is (§105): requests reach `/rt/devices`.
         LocationRequests.shared.start(app: self)
         takeShared()
     }

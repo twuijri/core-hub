@@ -4,7 +4,7 @@
 
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.CAMERA" />
-    <!-- Where this phone is, when an agent asks and its person agrees (contract decision §103). -->
+    <!-- Where this phone is, when an agent asks and its person agrees (contract decision §105). -->
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
     <!-- Dictation the hub transcribes (Voice: Core Hub): the app records the take itself. -->

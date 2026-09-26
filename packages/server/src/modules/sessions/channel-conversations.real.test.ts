@@ -61,6 +61,28 @@ elif which == "designer":
     db.append_message("20260925_120000_99887766", "user", "hello from designer", timestamp=t0)
 elif which == "more":
     db.append_message("20260925_091500_aa11bb22", "user", "شكرًا!", timestamp=time.time())
+elif which == "pager":
+    # More than one page of Hermes's list (§103): 105 Telegram chats.
+    for i in range(105):
+        sid = "20260926_%06d_aa" % i
+        db.create_session(sid, "telegram", user_id=str(9000 + i), chat_id=str(9000 + i),
+            chat_type="dm", display_name="chat %d" % i)
+        db.append_message(sid, "user", "hello %d" % i, timestamp=t0 + i)
+    # A picture as Hermes's gateway stores it: saved in the profile's image cache, handed to a
+    # model that sees pictures, and written to the store as Hermes's own projection of it.
+    from agent.image_routing import build_native_content_parts
+    from agent.session_persistence import _durable_content
+    cache = Path(home) / "cache" / "images"
+    cache.mkdir(parents=True, exist_ok=True)
+    picture = cache / "img_abcdefabcdef.png"
+    picture.write_bytes(bytes.fromhex(
+        "89504e470d0a1a0a0000000d4948445200000001000000010806000000"
+        "1f15c4890000000d49444154789c6360000002000154a24f5d0000000049454e44ae426082"))
+    parts, skipped = build_native_content_parts("هذه الفاتورة", [str(picture)])
+    db.create_session("20260926_999999_pic", "telegram", user_id="8000", chat_id="8000",
+        chat_type="dm", display_name="صاحب الفاتورة")
+    db.append_message("20260926_999999_pic", "user", _durable_content(parts), timestamp=time.time())
+    print("stored:", json.dumps(_durable_content(parts), ensure_ascii=False))
 db.close()
 print("seeded", which)
 `;
@@ -98,7 +120,12 @@ describe.skipIf(!image)(
         );
       });
     const seed = (which: string) =>
-      inImage(PYTHON, ['-c', SEED, which === 'designer' ? '/hh/profiles/designer' : '/hh', which]);
+      inImage(PYTHON, [
+        '-c',
+        SEED,
+        which === 'designer' || which === 'pager' ? `/hh/profiles/${which}` : '/hh',
+        which,
+      ]);
 
     const spawnImpl: DashboardSpawner = (_command, args, options) => {
       const name = `corehub-channels-real-${process.pid}-${containers.length}`;
@@ -152,6 +179,7 @@ describe.skipIf(!image)(
     const source: ChannelSource = {
       hermesProfile: (workspace) => real.hermesProfile(workspace),
       stamp: (profile) => real.stamp(profile),
+      picture: (profile, name) => real.picture?.(profile, name) ?? null,
       get: <T>(apiPath: string) => {
         asked.push(apiPath);
         return real.get<T>(apiPath);
@@ -271,5 +299,36 @@ describe.skipIf(!image)(
         text: 'شكرًا!',
       });
     }, 120_000);
+
+    it('reads past Hermes’s page of 100, and serves a picture Hermes stored (§103)', async () => {
+      await inImage(HERMES, ['profile', 'create', 'pager', '--no-alias']);
+      console.log(await seed('pager'));
+      const pager = [{ workspace: 'pager', profile: 'pager' }];
+      const first = await reader.list(pager);
+      expect(first.items).toHaveLength(100);
+      expect(first.has_more).toBe(true);
+      const all = await reader.list(pager, undefined, 200);
+      expect(all.items).toHaveLength(106);
+      expect(all.has_more).toBe(false);
+      expect(asked.some((p) => p.startsWith('/api/sessions?') && p.includes('offset=100'))).toBe(
+        true,
+      );
+
+      const opened = await reader.messages(pager[0]!, '20260926_999999_pic');
+      expect(opened.items).toEqual([
+        expect.objectContaining({
+          role: 'user',
+          text: 'هذه الفاتورة',
+          attachments: [{ id: 'img_abcdefabcdef.png', kind: 'image', available: true }],
+        }),
+      ]);
+      const file = reader.picture(pager[0]!, '20260926_999999_pic', 'img_abcdefabcdef.png');
+      expect(file).toBe(
+        path.join(home, 'profiles', 'pager', 'cache', 'images', 'img_abcdefabcdef.png'),
+      );
+      expect(() =>
+        reader.picture(pager[0]!, '20260926_999999_pic', 'img_000000000000.png'),
+      ).toThrow();
+    }, 300_000);
   },
 );

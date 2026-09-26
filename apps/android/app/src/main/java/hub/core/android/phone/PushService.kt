@@ -46,7 +46,7 @@ fun thisPhone(
     appVersion = info.appVersion,
     osVersion = info.osVersion,
     pushBlocker = blocker,
-    // Where it is, when an agent asks and its person agrees (§103).
+    // Where it is, when an agent asks and its person agrees (§105).
     capabilities = listOf(hub.core.client.model.CapabilityKind.LOCATION),
 )
 

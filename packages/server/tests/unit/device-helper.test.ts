@@ -206,7 +206,7 @@ describe('devices: a computer’s helper and who may ask it', () => {
       run_id: '01J8QK3ZR2W7M5N4P6T8V9X0RN',
     });
 
-    // Its location too, since §103: the device asks its person before it answers.
+    // Its location too, since §105: the device asks its person before it answers.
     const location = await authed(h, run, {
       method: 'POST',
       url: '/api/v1/device-requests',

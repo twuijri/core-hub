@@ -215,7 +215,7 @@ const DEVICE_GRACE_MS = 5_000;
 /** The longest a program tool waits for its request (the device answers `running` before). */
 const PROGRAM_TIMEOUT_MS = 120_000;
 const FILES_TIMEOUT_MS = 60_000;
-/** A phone asks its person before it tells where it is: long enough to read and answer (§103). */
+/** A phone asks its person before it tells where it is: long enough to read and answer (§105). */
 const LOCATION_TIMEOUT_MS = 90_000;
 
 interface DeviceRequestView {
@@ -332,7 +332,7 @@ interface PhoneView {
 }
 
 /**
- * Which of the person's devices to ask where they are (§103): one they name, or else the one
+ * Which of the person's devices to ask where they are (§105): one they name, or else the one
  * that can tell (declares `location`, switched on, may be asked in this profile), connected
  * first, then the one seen most recently.
  */

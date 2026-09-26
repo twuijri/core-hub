@@ -268,7 +268,7 @@ describe('hub tools: the runner opens a lease for the life of a run', () => {
   });
 });
 
-describe('hub tools: where the phone is (§103)', () => {
+describe('hub tools: where the phone is (§105)', () => {
   const phone = (id: string, over: Record<string, unknown> = {}) => ({
     id,
     name: `Phone ${id}`,

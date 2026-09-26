@@ -1,4 +1,4 @@
-// An agent asks where this phone is (contract decision §103): the request arrives on `/rt/devices`
+// An agent asks where this phone is (contract decision §105): the request arrives on `/rt/devices`
 // (`request.created`, sent to this device only) or is caught up with `listRequests?status=pending`
 // when the app comes back; the person is asked once — «Allow every time», «Only this time»,
 // «Don't allow» — and iOS's own location permission follows. «Every time» and «never» are kept on

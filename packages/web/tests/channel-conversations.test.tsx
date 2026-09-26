@@ -146,7 +146,7 @@ interface Seen {
   profile: string | null;
 }
 
-function fakeHub(options: { unreachable?: boolean } = {}) {
+function fakeHub(options: { unreachable?: boolean; paged?: boolean } = {}) {
   const seen: Seen[] = [];
   // The hub's per-person marks and Hermes's store, as the routes change them (§88).
   const hidden = new Set<string>();
@@ -177,6 +177,58 @@ function fakeHub(options: { unreachable?: boolean } = {}) {
       gone.add(decodeURIComponent(one[1]!));
       return Promise.resolve(new Response(null, { status: 204 }));
     }
+    // Paging and pictures (§103): the list has older conversations until 200 are asked for,
+    // the transcript an older page, and the person sent a picture Hermes still keeps.
+    if (options.paged && path === '/channel-conversations') {
+      const limit = Number(url.searchParams.get('limit') ?? 100);
+      const older = { ...WA, id: '20260801_080000_00000001', peer_name: 'زبون قديم' };
+      return json({
+        items: limit >= 200 ? [TG, WA, older] : [TG, WA],
+        unavailable: [],
+        has_more: limit < 200,
+      });
+    }
+    if (options.paged && path === `/channel-conversations/${TG.id}/messages`) {
+      if (url.searchParams.get('offset') === '500')
+        return json({
+          conversation: TG,
+          items: [
+            {
+              id: '0',
+              role: 'user',
+              text: 'أول رسالة',
+              created_at: TG.started_at,
+              attachments: [],
+            },
+          ],
+          has_more: false,
+          next_offset: null,
+        });
+      return json({
+        conversation: TG,
+        items: [
+          {
+            id: '1',
+            role: 'user',
+            text: 'هذه الفاتورة',
+            created_at: TG.started_at,
+            attachments: [
+              { id: 'img_a1b2c3d4e5f6.png', kind: 'image', available: true },
+              { id: 'img_000000000000.png', kind: 'image', available: false },
+            ],
+          },
+        ],
+        has_more: true,
+        next_offset: 500,
+      });
+    }
+    if (options.paged && path.includes('/pictures/'))
+      return Promise.resolve(
+        new Response(new Uint8Array([0x89, 0x50, 0x4e, 0x47]), {
+          status: 200,
+          headers: { 'Content-Type': 'image/png' },
+        }),
+      );
     if (path === '/channel-conversations')
       return json({
         items: [TG, WA]
@@ -463,5 +515,62 @@ describe('a channel conversation opens read-only', () => {
     );
     expect(await screen.findByRole('alert')).toBeTruthy();
     expect(screen.queryByTestId('channel-readonly')).toBeNull();
+  });
+});
+
+describe('paging and pictures (§103)', () => {
+  it('reads older channel conversations when asked, a hundred more each time', async () => {
+    const user = userEvent.setup();
+    const hub = fakeHub({ paged: true });
+    render(
+      <Providers fetchImpl={hub.fetchImpl} path="/chat">
+        <SessionList />
+      </Providers>,
+    );
+    await screen.findAllByTestId('channel-row');
+    expect(screen.queryByText('زبون قديم')).toBeNull();
+    await user.click(await screen.findByTestId('channel-show-older'));
+    expect(await screen.findByText('زبون قديم')).toBeTruthy();
+    const asked = hub.seen.filter((c) => c.path === '/channel-conversations');
+    expect(asked.at(-1)?.query.get('limit')).toBe('200');
+    // The first read asked for Hermes's own hundred, without naming it.
+    expect(asked[0]?.query.get('limit')).toBeNull();
+    await waitFor(() => expect(screen.queryByTestId('channel-show-older')).toBeNull());
+  });
+
+  it('loads the page before from where the last one stopped, and draws the pictures', async () => {
+    const created = vi.fn(() => 'blob:http://hub.test/picture');
+    URL.createObjectURL = created;
+    URL.revokeObjectURL = vi.fn();
+    const user = userEvent.setup();
+    const hub = fakeHub({ paged: true });
+    render(
+      <Providers fetchImpl={hub.fetchImpl} path={`/chat/${TG.id}?source=channel`}>
+        <Routes>
+          <Route path="/chat/:sessionId?" element={<ChatScreen />} />
+        </Routes>
+      </Providers>,
+    );
+    const screenEl = await screen.findByTestId('channel-screen');
+    const picture = await within(screenEl).findByTestId('channel-picture');
+    expect(picture).toHaveAttribute('src', 'blob:http://hub.test/picture');
+    expect(picture).toHaveAttribute('alt', 'صورة أُرسلت في القناة');
+    // The one Hermes has already deleted says so, and is never asked for.
+    expect(within(screenEl).getByTestId('channel-picture-gone')).toHaveTextContent('يومًا واحدًا');
+    const pictures = hub.seen.filter((c) => c.path.includes('/pictures/'));
+    expect(pictures.map((c) => c.path)).toEqual([
+      `/channel-conversations/${TG.id}/pictures/img_a1b2c3d4e5f6.png`,
+    ]);
+
+    await user.click(within(screenEl).getByTestId('channel-older'));
+    await within(screenEl).findByText('أول رسالة');
+    const asked = hub.seen.filter((c) => c.path === `/channel-conversations/${TG.id}/messages`);
+    expect(asked.at(-1)?.query.get('offset')).toBe('500');
+    // Oldest first: the older page goes above.
+    const texts = within(screenEl)
+      .getAllByTestId('message-user')
+      .map((el) => el.textContent ?? '');
+    expect(texts[0]).toContain('أول رسالة');
+    expect(within(screenEl).queryByTestId('channel-older')).toBeNull();
   });
 });

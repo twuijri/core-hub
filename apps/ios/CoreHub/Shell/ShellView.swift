@@ -74,7 +74,7 @@ struct ShellView: View {
                 openGlobalAgent: { navigate(.destination(.globalAgent)) }
             )
         }
-        // An agent asked where this phone is: the person answers here, once or for good (§103).
+        // An agent asked where this phone is: the person answers here, once or for good (§105).
         .sheet(isPresented: Binding(
             get: { !LocationRequests.shared.waiting.isEmpty },
             set: { shown in

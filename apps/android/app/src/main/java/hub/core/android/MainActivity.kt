@@ -181,7 +181,7 @@ private fun AppRoot(pendingPairing: PairingRequest?, onPairingHandled: () -> Uni
     LaunchedEffect(shared) { if (shared != null) nav.go(Route.NewChat) }
     // While Android has not asked yet: once a launch, never again after a no (NotificationAsk).
     hub.core.android.phone.NotificationPermission()
-    // An agent asked where this phone is: the person answers here (§103).
+    // An agent asked where this phone is: the person answers here (§105).
     hub.core.android.phone.LocationConsent()
     // `corehub://open/<path>`: the same paths as the web (surfaceRoutes.android).
     LaunchedEffect(pendingPath) {
