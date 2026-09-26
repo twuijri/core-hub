@@ -486,6 +486,31 @@ function scriptFor(prompt: string, workspace = ''): Step[] {
       { type: 'completed' },
     ];
   }
+  if (/خطوات كثيرة|many steps/i.test(prompt)) {
+    // The tool activity of a turn (journey: zzzzzzzzzzzzz-tool-activity, owner 2026-09-26): a
+    // first call that fails, four quick ones, and a sixth that runs long enough for the live
+    // window to be looked at, then the answer — the tools fold into one row.
+    const steps: Step[] = [
+      { type: 'tool_started', ref: 'm0', name: 'vision_analyze', kind: 'custom', title: 'a.png' },
+      { type: 'delay', ms: 100 },
+      { type: 'tool_failed', ref: 'm0', output: 'the image could not be read', exitCode: 1 },
+    ];
+    ['skill_view', 'terminal', 'read_file', 'terminal'].forEach((name, i) => {
+      steps.push(
+        { type: 'tool_started', ref: `m${i + 1}`, name, kind: 'custom', title: `step ${i + 2}` },
+        { type: 'delay', ms: 100 },
+        { type: 'tool_completed', ref: `m${i + 1}`, output: 'ok', exitCode: 0 },
+      );
+    });
+    return [
+      ...steps,
+      { type: 'tool_started', ref: 'm5', name: 'web_search', kind: 'custom', title: 'step 6' },
+      { type: 'delay', ms: 6000 },
+      { type: 'tool_completed', ref: 'm5', output: 'found', exitCode: 0 },
+      { type: 'message_delta', text: 'انتهيت من الخطوات.' },
+      { type: 'completed' },
+    ];
+  }
   if (/ارسم المسار|trace this/i.test(prompt)) {
     // The Trajectory tab (journey 31): a turn that reads a file, a command that fails, and
     // an answer — with pauses, so every step has a duration on the timeline.

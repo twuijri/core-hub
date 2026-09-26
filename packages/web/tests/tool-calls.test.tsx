@@ -12,6 +12,12 @@ import { I18nProvider } from '../src/i18n/context.js';
 import { PaneProvider } from '../src/shell/pane.js';
 import { MessageView } from '../src/chat/MessageView.js';
 import { ToolCalls, LIVE_WINDOW } from '../src/chat/ToolCallCard.js';
+import {
+  durationParts,
+  summarizeTools,
+  toolActivity,
+  WEB_LIVE_WINDOW,
+} from '../src/chat/toolActivity.js';
 import { AnsweredQuestions, answeredQuestions } from '../src/chat/AnsweredQuestions.js';
 import { reasoningWorthShowing } from '../src/chat/turns.js';
 import type { Message, ToolCall } from '../src/types.js';
@@ -42,6 +48,76 @@ function mount(node: React.ReactNode) {
 
 afterEach(cleanup);
 
+describe('the tool activity rule (toolActivity)', () => {
+  const six = (status: (i: number) => ToolCall['status'] = () => 'succeeded') =>
+    ['a', 'b', 'c', 'd', 'e', 'f'].map((id, i) => call(id, `tool_${id}`, { status: status(i) }));
+
+  it('shows the last four while live and counts the rest as earlier', () => {
+    const activity = toolActivity(six(), true);
+    expect(WEB_LIVE_WINDOW).toBe(4);
+    expect(activity.folded).toBe(false);
+    expect(activity.visible.map((c) => c.id)).toEqual(['c', 'd', 'e', 'f']);
+    expect(activity.hidden).toBe(2);
+  });
+
+  it('takes the window it is given (two on a phone)', () => {
+    const activity = toolActivity(six(), true, 2);
+    expect(activity.visible.map((c) => c.id)).toEqual(['e', 'f']);
+    expect(activity.hidden).toBe(4);
+  });
+
+  it('keeps a failed or still-running call in view until the turn ends', () => {
+    const calls = six((i) => (i === 0 ? 'failed' : i === 1 ? 'running' : 'succeeded'));
+    const activity = toolActivity(calls, true, 2);
+    expect(activity.visible.map((c) => c.id)).toEqual(['a', 'b', 'e', 'f']);
+    expect(activity.hidden).toBe(2);
+  });
+
+  it('stays live while a call still runs or waits, even after the message ended', () => {
+    const waiting = toolActivity([call('a', 'x', { status: 'awaiting_approval' })], false);
+    expect(waiting.folded).toBe(false);
+  });
+
+  it('folds a finished turn into one summary', () => {
+    const calls = [
+      call('1', 'skill_view', {
+        started_at: '2026-09-26T10:00:00.000Z',
+        finished_at: '2026-09-26T10:00:05.000Z',
+      }),
+      call('2', 'vision_analyze', {
+        status: 'failed',
+        started_at: '2026-09-26T10:00:05.000Z',
+        finished_at: '2026-09-26T10:00:40.000Z',
+      }),
+      call('3', 'terminal', {
+        started_at: '2026-09-26T10:00:40.000Z',
+        finished_at: '2026-09-26T10:01:00.000Z',
+      }),
+      call('4', 'vision_analyze', {
+        started_at: '2026-09-26T10:01:00.000Z',
+        finished_at: '2026-09-26T10:01:05.000Z',
+      }),
+    ];
+    const activity = toolActivity(calls, false);
+    expect(activity.folded).toBe(true);
+    expect(activity.visible).toEqual([]);
+    expect(activity.hidden).toBe(4);
+    expect(activity.summary).toEqual({
+      count: 4,
+      failed: 1,
+      durationMs: 65_000,
+      names: ['vision_analyze', 'terminal', 'skill_view'],
+    });
+    expect(durationParts(65_000)).toEqual({ minutes: 1, seconds: 5 });
+  });
+
+  it('sums the durations when the calls carry no times, and says nothing when neither', () => {
+    expect(summarizeTools([call('1', 'a'), call('2', 'b')]).durationMs).toBe(240);
+    expect(summarizeTools([call('1', 'a', { duration_ms: null })]).durationMs).toBeNull();
+    expect(durationParts(240)).toEqual({ minutes: 0, seconds: 1 });
+  });
+});
+
 describe('a live run', () => {
   it(`shows the last ${LIVE_WINDOW} calls, the earlier ones on a click, and folds them back`, () => {
     const calls = ['a', 'b', 'c', 'd', 'e', 'f'].map((id, i) =>
@@ -52,29 +128,53 @@ describe('a live run', () => {
     expect(screen.queryByText('tool_a')).toBeNull();
     const toggle = screen.getByTestId('tool-group-earlier');
     expect(toggle).toHaveAttribute('aria-expanded', 'false');
+    expect(toggle).toHaveTextContent('+2 earlier steps');
     fireEvent.click(toggle);
     expect(screen.getAllByTestId('tool-call')).toHaveLength(6);
     expect(toggle).toHaveAttribute('aria-expanded', 'true');
-    expect(toggle).toHaveTextContent('Hide 2 earlier');
+    expect(toggle).toHaveTextContent('Hide the earlier steps');
     fireEvent.click(toggle);
     expect(screen.getAllByTestId('tool-call')).toHaveLength(LIVE_WINDOW);
-    expect(toggle).toHaveTextContent('2 earlier');
+    expect(toggle).toHaveTextContent('+2 earlier steps');
+  });
+
+  it('keeps an early failure in view', () => {
+    const calls = ['a', 'b', 'c', 'd', 'e', 'f'].map((id, i) =>
+      call(id, `tool_${id}`, { status: i === 0 ? 'failed' : 'succeeded' }),
+    );
+    mount(<ToolCalls calls={calls} live />);
+    expect(screen.getAllByTestId('tool-call')).toHaveLength(LIVE_WINDOW + 1);
+    expect(screen.getByText('tool_a')).toBeTruthy();
+    expect(screen.getByTestId('tool-group-earlier')).toHaveTextContent('+1 earlier step');
   });
 });
 
 describe('a finished run', () => {
-  it('folds into one line: how many, which, and whether any failed', () => {
+  it('folds into one line: how many steps, how long, how many failed, the latest tools', () => {
     const calls = [
-      call('1', 'terminal'),
-      call('2', 'terminal'),
-      call('3', 'vision_analyze', { status: 'failed' }),
+      call('1', 'terminal', { duration_ms: 30_000 }),
+      call('2', 'terminal', { duration_ms: 30_000 }),
+      call('3', 'vision_analyze', { status: 'failed', duration_ms: 5_000 }),
     ];
     mount(<ToolCalls calls={calls} live={false} />);
     const summary = screen.getByTestId('tool-group-summary');
-    expect(summary).toHaveTextContent('3 tools');
-    expect(summary).toHaveTextContent('terminal · vision_analyze');
-    expect(summary).toHaveTextContent('1 failed');
+    expect(summary).toHaveTextContent('3 steps');
+    expect(screen.getByTestId('tool-group-time')).toHaveTextContent('1m 05s');
+    expect(screen.getByTestId('tool-group-failed')).toHaveTextContent('1 failed');
+    expect(summary).toHaveTextContent('vision_analyze');
+    expect(summary).toHaveTextContent('terminal');
     expect(screen.getByTestId('tool-group')).not.toHaveAttribute('open');
+  });
+
+  it('counts in Arabic with the right plural', () => {
+    render(
+      <I18nProvider language="ar">
+        <PaneProvider>
+          <ToolCalls calls={[call('1', 'a'), call('2', 'b')]} live={false} />
+        </PaneProvider>
+      </I18nProvider>,
+    );
+    expect(screen.getByTestId('tool-group-summary')).toHaveTextContent('خطوتان');
   });
 
   it('opens a call only when there is something inside it', () => {

@@ -88,6 +88,7 @@ enum Lucide: String, CaseIterable {
     case volume2 = "volume-2"
     case webhook = "webhook"
     case workflow = "workflow"
+    case wrench = "wrench"
     case x = "x"
 }
 
