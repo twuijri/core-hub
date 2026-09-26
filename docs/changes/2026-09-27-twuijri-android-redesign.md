@@ -91,6 +91,13 @@ lint: 0 errors, 42 warnings
 
 $ node scripts/icons/lucide-mobile.mjs --check
 lucide: 6 shared + 84 Android icon(s) from lucide-static 1.48.0 up to date
+
+$ pnpm lint
+All matched files use Prettier code style!
+$ pnpm i18n:check
+i18n:check  OK
+$ pnpm change-record:check
+change-record  OK — 18 record(s) valid
 ```
 `ScreenShots` يتحقق أيضًا من ترتيب المحرّر («+»، النص، المايك، الإرسال من بداية القراءة إلى نهايتها، بالعربية والإنجليزية)
 ومن أن أول صف محادثة يبدأ في النصف الأعلى من الدرج.

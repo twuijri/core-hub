@@ -175,7 +175,14 @@ for (const name of list.icons) {
   );
 }
 /** Icons that point along the reading direction: Android flips them in a right-to-left layout. */
-const MIRRORED = new Set(['arrow-left', 'arrow-right', 'chevron-left', 'chevron-right', 'log-out', 'log-in']);
+const MIRRORED = new Set([
+  'arrow-left',
+  'arrow-right',
+  'chevron-left',
+  'chevron-right',
+  'log-out',
+  'log-in',
+]);
 for (const name of androidIcons) {
   const vectorParts = parts(name)
     .map(
