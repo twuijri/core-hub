@@ -20,7 +20,7 @@ export const pendingKeys = {
   list: (profile: string, agentId: string) => ['pending-writes', profile, agentId] as const,
 };
 
-export function usePendingWrites(agentId: string) {
+export function usePendingWrites(agentId: string, enabled = true) {
   const { client, profile, session } = useAuth();
   return useQuery({
     queryKey: pendingKeys.list(profile, agentId),
@@ -30,14 +30,14 @@ export function usePendingWrites(agentId: string) {
           params: { agent_id: agentId },
         })
       ).data,
-    enabled: !!session,
+    enabled: !!session && enabled && agentId !== '',
     retry: false,
     // The agent stages writes on its own time: look again now and then.
     refetchInterval: 15_000,
   });
 }
 
-function usePendingAnswer(agentId: string) {
+export function usePendingAnswer(agentId: string) {
   const { client, profile } = useAuth();
   const queryClient = useQueryClient();
   return useMutation({

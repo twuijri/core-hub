@@ -353,6 +353,12 @@ export interface MemoryItem {
   tags: string[];
   revision: number;
   updated_at: string | null;
+  /** A list document's entries (decision §102); `null` for the persona. Absent from older hubs. */
+  entries?: string[] | null;
+  /** The list's budget in characters; `null` when there is none. */
+  char_limit?: number | null;
+  /** What the list counts against `char_limit`. */
+  char_count?: number | null;
 }
 
 export const memoryKeys = {

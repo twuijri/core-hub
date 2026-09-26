@@ -134,6 +134,7 @@ export function StepPanel({
   problems,
   onRunFrom,
   runFromBusy,
+  settings,
 }: {
   draft: Draft;
   node: WfNode | null;
@@ -145,6 +146,8 @@ export function StepPanel({
   problems: readonly WorkflowIssue[];
   onRunFrom: (nodeId: string) => void;
   runFromBusy: boolean;
+  /** The workflow's own settings (its limits), shown while no step is selected (§102). */
+  settings?: ReactNode;
 }) {
   const { t } = useI18n();
   if (edge)
@@ -153,9 +156,12 @@ export function StepPanel({
     );
   if (!node) {
     return (
-      <p className="text-sm text-muted" data-testid="workflow-panel-empty">
-        {t('workflows.editor.no_selection')}
-      </p>
+      <div className="flex flex-col gap-3">
+        <p className="text-sm text-muted" data-testid="workflow-panel-empty">
+          {t('workflows.editor.no_selection')}
+        </p>
+        {settings}
+      </div>
     );
   }
   const update = (patch: Partial<Omit<WfNode, 'id' | 'kind'>>) =>

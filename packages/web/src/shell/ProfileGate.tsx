@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import { useAuth } from '../auth/context.js';
 import { useProfiles } from '../hub/queries.js';
 import { useI18n } from '../i18n/context.js';
@@ -12,13 +12,27 @@ import { Button, CoreHubMark } from '../ui/index.js';
  *
  * Owners and admins always have profiles (`default` cannot be archived); while the list is
  * loading, or if it cannot be read, the app renders as usual and each page reports its own.
+ *
+ * A member whose remembered profile is no longer among theirs — taken away, or archived — but
+ * who still has others is moved to the first of those, the same one "Check again" opens.
  */
 export function ProfileGate({ children }: { children: ReactNode }) {
-  const { user } = useAuth();
+  const { user, profile, setProfile } = useAuth();
   const profiles = useProfiles();
-  if (user?.role === 'member' && profiles.data && profiles.data.length === 0) {
+  const member = user?.role === 'member';
+  // The profile this device remembers was taken from the member (or archived) while others are
+  // still theirs: open the first one they were given instead of pages that each answer "not
+  // found" (owner follow-up to 2026-09-24's explicit grants).
+  const first = profiles.data?.[0]?.slug;
+  const lost = member && !!first && !profiles.data?.some((p) => p.slug === profile);
+  useEffect(() => {
+    if (lost && first) setProfile(first);
+  }, [lost, first, setProfile]);
+  if (member && profiles.data && profiles.data.length === 0) {
     return <NoProfile onRetry={() => profiles.refetch()} />;
   }
+  // One render while the switch lands, so nothing asks the hub about the lost profile.
+  if (lost) return null;
   return <>{children}</>;
 }
 

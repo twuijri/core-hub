@@ -1,7 +1,8 @@
 /**
  * The pending-actions bar: one quiet button at the top of every screen that says how many
  * things are waiting for the person — approvals, agents' questions, workflow steps, and for
- * an admin the senders waiting to pair with a channel — and opens them as a sheet. An
+ * an admin the senders waiting to pair with a channel and the memory and skill writes the
+ * agent staged for review (§102) — and opens them as a sheet. An
  * approval or a question is answered right there (the transcript's own card), and so is a
  * sender waiting to pair (Approve / Deny, the Channels page's own buttons); every item also
  * opens where it lives. The sheet is also the way into the global agent (NAVIGATION §4).
@@ -10,6 +11,8 @@ import { useState, type ReactNode } from 'react';
 import { Link } from 'react-router';
 import { ProfileScope } from '../auth/context.js';
 import { PairingDecision } from '../agents/PairingDecision.js';
+import { usePendingAnswer } from '../agents/PendingWritesCard.js';
+import { describeError } from '../auth/client.js';
 import { useApprovePairing, useDenyPairing } from '../agents/skills.js';
 import { describeToolError } from '../agents/toolErrors.js';
 import { ApprovalCard } from '../chat/ApprovalCard.js';
@@ -17,7 +20,16 @@ import { useI18n } from '../i18n/context.js';
 import { routeOf } from '../navigation/manifest.js';
 import { pendingHref, type PendingItem } from '../pending/pending.js';
 import { usePendingActions } from '../pending/queries.js';
-import { Badge, buttonClass, Card, EmptyState, Notice, Sheet, Tooltip } from '../ui/index.js';
+import {
+  Badge,
+  Button,
+  buttonClass,
+  Card,
+  EmptyState,
+  Notice,
+  Sheet,
+  Tooltip,
+} from '../ui/index.js';
 import { IconInbox, IconSpark } from '../ui/icons.js';
 import { ProfileBadge } from './ProfileBadge.js';
 import { useManyProfiles, useProfileInLink } from './profiles.js';
@@ -121,11 +133,15 @@ function PendingRow({
       {item.kind === 'approval' && item.approval.workflow_run_id && (
         <Badge tone="info">{t('pending.workflow_step')}</Badge>
       )}
+      {item.kind === 'approval' && item.approval.room_id && (
+        <Badge tone="info">{t('pending.room_item')}</Badge>
+      )}
       <span className="flex-1" />
       {link}
     </div>
   );
   if (item.kind === 'pairing') return <PairingRow item={item} meta={meta} />;
+  if (item.kind === 'write') return <WriteRow item={item} meta={meta} />;
   return (
     <div
       data-testid="pending-item"
@@ -138,6 +154,72 @@ function PendingRow({
         <ApprovalCard approval={item.approval} />
       </ProfileScope>
     </div>
+  );
+}
+
+/**
+ * A memory or skill write the agent staged for review (§58, counted here since §102): what it
+ * would change, approved or rejected right here with the settings page's own answers.
+ */
+function WriteRow({
+  item,
+  meta,
+}: {
+  item: Extract<PendingItem, { kind: 'write' }>;
+  meta: ReactNode;
+}) {
+  const { t } = useI18n();
+  const answer = usePendingAnswer(item.agentId);
+  const { write } = item;
+  const busy = answer.isPending && answer.variables?.write.id === write.id;
+  return (
+    <Card padding="sm" testId="pending-item" data-kind="write">
+      {meta}
+      <div className="mb-1 flex flex-wrap items-center gap-2">
+        <Badge tone={write.kind === 'memory' ? 'info' : 'accent'}>
+          {write.kind === 'memory'
+            ? write.target === 'user'
+              ? t('agents.pending.kind_user')
+              : t('agents.pending.kind_memory')
+            : t('agents.pending.kind_skill')}
+        </Badge>
+        <span className="text-xs text-muted">{t('pending.write_hint')}</span>
+      </div>
+      <p className="text-sm font-medium" dir="auto">
+        {write.name ? `${write.name} — ` : ''}
+        {write.summary || write.action}
+      </p>
+      {write.content && (
+        <pre
+          className="mt-2 max-h-32 overflow-auto whitespace-pre-wrap rounded bg-surface-2 p-2 text-xs"
+          dir="auto"
+        >
+          {write.content}
+        </pre>
+      )}
+      {answer.isError && <Notice tone="danger">{describeError(answer.error, t)}</Notice>}
+      <div className="mt-2 flex flex-wrap gap-2">
+        <Button
+          size="sm"
+          disabled={answer.isPending}
+          loading={busy && answer.variables?.answer === 'approve'}
+          onClick={() => answer.mutate({ write, answer: 'approve' })}
+          data-testid="pending-write-approve"
+        >
+          {t('agents.pending.approve')}
+        </Button>
+        <Button
+          size="sm"
+          variant="secondary"
+          disabled={answer.isPending}
+          loading={busy && answer.variables?.answer === 'reject'}
+          onClick={() => answer.mutate({ write, answer: 'reject' })}
+          data-testid="pending-write-reject"
+        >
+          {t('agents.pending.reject')}
+        </Button>
+      </div>
+    </Card>
   );
 }
 

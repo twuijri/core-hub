@@ -8,6 +8,7 @@
  */
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '../../auth/context.js';
+import type { Limits } from '../WorkflowLimits.js';
 import type { Agent, Model } from '../../types.js';
 import { toWrite, type Draft, type RunStep, type Validation } from './model.js';
 
@@ -201,16 +202,23 @@ export function useWorkflowWrites() {
         id,
         input,
         startNodeIds,
+        limits,
       }: {
         profile: string;
         id: string;
         input: string | null;
         startNodeIds?: string[] | null;
+        /** This run's own limits (`WorkflowLimitsOverride`); absent keeps the workflow's. */
+        limits?: Limits | null;
       }) =>
         (
           await client.request('post', '/workflows/{workflow_id}/run', {
             params: { workflow_id: id },
-            body: { input, start_node_ids: startNodeIds ?? null } as never,
+            body: {
+              input,
+              start_node_ids: startNodeIds ?? null,
+              ...(limits ? { limits } : {}),
+            } as never,
             ...inProfile(profile),
           })
         ).data as unknown as { workflow_run_id: string },

@@ -726,6 +726,87 @@ button.context-ring {
   }
 }
 
+/* The window by category (decision §102): one bar, a line per category. The colours are the
+   chart palette, which reads in both themes; a category the client does not know is faint. */
+.context-breakdown {
+  display: flex;
+  flex-direction: column;
+  gap: var(--ch-space-1);
+  margin-block-start: var(--ch-space-2);
+  padding-block-start: var(--ch-space-2);
+  border-block-start: 1px solid var(--ch-color-border);
+}
+.context-breakdown-bar {
+  display: flex;
+  block-size: 0.5rem;
+  border-radius: var(--ch-radius-full);
+  background: var(--ch-color-surface-2);
+  overflow: hidden;
+}
+.context-breakdown-bar > span {
+  block-size: 100%;
+  min-inline-size: 2px;
+}
+.context-breakdown-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: var(--ch-font-size-xs);
+}
+.context-breakdown-list > li {
+  display: flex;
+  align-items: center;
+  gap: var(--ch-space-2);
+}
+.context-breakdown-swatch {
+  flex-shrink: 0;
+  inline-size: 0.5rem;
+  block-size: 0.5rem;
+  border-radius: 2px;
+}
+.context-breakdown-name {
+  flex: 1;
+  min-inline-size: 0;
+}
+.context-breakdown-tokens {
+  color: var(--ch-color-text-muted);
+  font-variant-numeric: tabular-nums;
+}
+.context-breakdown [data-category] {
+  background: var(--ch-color-text-faint);
+}
+.context-breakdown [data-category='system_prompt'] {
+  background: var(--ch-color-chart-1);
+}
+.context-breakdown [data-category='tool_definitions'] {
+  background: var(--ch-color-chart-2);
+}
+.context-breakdown [data-category='rules'] {
+  background: var(--ch-color-status-review);
+}
+.context-breakdown [data-category='skills'] {
+  background: var(--ch-color-chart-3);
+}
+.context-breakdown [data-category='mcp'] {
+  background: var(--ch-color-chart-4);
+}
+.context-breakdown [data-category='subagent_definitions'] {
+  background: var(--ch-color-chart-5);
+}
+.context-breakdown [data-category='memory'] {
+  background: var(--ch-color-chart-6);
+}
+.context-breakdown [data-category='conversation'] {
+  background: var(--ch-color-accent);
+}
+/* The list rows carry the category too; only their swatch is coloured. */
+.context-breakdown-list > li[data-category] {
+  background: none;
+}
+
 /* «يُضغط السياق…» above the composer, where the live indicator sits. */
 .compression-status {
   display: flex;
@@ -1564,6 +1645,30 @@ button.context-ring {
   gap: var(--ch-space-2);
   padding-inline: var(--ch-space-1);
   font-weight: 500;
+}
+/* While the run is still going (decision §102): a small pulsing "so far" before the count. */
+.run-changes-live {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--ch-space-1);
+  padding: 0 var(--ch-space-2);
+  border-radius: var(--ch-radius-full);
+  background: var(--ch-color-accent-soft);
+  color: var(--ch-color-accent-soft-text);
+  font-size: var(--ch-font-size-xs);
+  font-weight: 500;
+}
+.run-changes-live-dot {
+  inline-size: 0.4rem;
+  block-size: 0.4rem;
+  border-radius: var(--ch-radius-full);
+  background: currentColor;
+  animation: ch-pulse 1.4s var(--ch-motion-ease) infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .run-changes-live-dot {
+    animation: none;
+  }
 }
 .run-changes-list {
   display: flex;
