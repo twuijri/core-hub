@@ -2,6 +2,7 @@ import { useEffect, useState, type ReactNode } from 'react';
 import { Link, useLocation } from 'react-router';
 import { ChromeScope } from '../auth/context.js';
 import { useI18n } from '../i18n/context.js';
+import { DesktopUpdateNotice } from '../desktop/UpdateNotice.js';
 import { agentPageFromPath, navigation, routeOf } from '../navigation/manifest.js';
 import { IconArrowStart } from '../ui/icons.js';
 import { Sheet } from '../ui/index.js';
@@ -79,6 +80,8 @@ export function AppShell({ title, children }: { title: string; children: ReactNo
             <SplitPane />
           </div>
         </div>
+        {/* The desktop app's new version, when there is one (nothing in a browser). */}
+        <DesktopUpdateNotice />
       </div>
     </PaneProvider>
   );

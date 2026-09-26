@@ -3077,8 +3077,8 @@
   },
   "desktop_updates": {
     "title": "Updates",
-    "auto": "Check for a new version once a day",
-    "auto_hint": "Asks GitHub for Core Hub's releases; nothing is downloaded or installed without you.",
+    "auto": "Look for new versions on its own",
+    "auto_hint": "About ten seconds after Core Hub starts, then every six hours. A new version downloads in the background; Core Hub restarts only when you say so.",
     "check": "Check now",
     "checking": "Checking…",
     "current": "This version: {version}",
@@ -3091,7 +3091,17 @@
     "all_releases": "All releases",
     "from_store": "Updates come from the Microsoft Store.",
     "store_page": "Open in the Microsoft Store",
-    "size": "{size} MB"
+    "size": "{size} MB",
+    "auto_hint_notify": "About ten seconds after Core Hub starts, then every six hours. Core Hub tells you when a new version is out; nothing is downloaded.",
+    "ready": "Core Hub {version} is ready to install.",
+    "ready_hint": "If you don't restart now, it is installed the next time you quit Core Hub.",
+    "restart": "Restart to update",
+    "later": "Later",
+    "downloading": "Downloading Core Hub {version}…",
+    "downloading_percent": "Downloading Core Hub {version}… {percent}%",
+    "download_page": "Open the download page",
+    "available_hint": "Get it from the download page and install it over this one.",
+    "notice_label": "New version of Core Hub"
   },
   "rooms": {
     "filter": "Which rooms",
