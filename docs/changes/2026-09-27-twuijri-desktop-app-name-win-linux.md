@@ -36,6 +36,9 @@ electron-builder الافتراضي من productName). وMSIX يتبعه (`app\C
   "corehub"` ويطابق `StartupWMClass=corehub`، فيجمع الـ dock النوافذ تحت المدخل المسمى «Core Hub». تغييره يكسر
   تثبيتات الـ dock الحالية وربط `corehub://` في `mimeapps.list`، ومعرّف سطح المكتب/‏app_id في Wayland لا يصلح بمسافة.
 
+مقترح — للمالك أن يؤكد: اسم الأمر `core-hub` في لينكس، وإبقاء `corehub.desktop` وصنف النافذة `corehub`، ونقل الترقية من
+مجلد `corehub` إلى `Core Hub`، وإعادة توجيه اختصارات الشخص إلى `Core Hub.exe` تلقائيًا.
+
 **لم يتغيّر:** أسماء ملفات الإصدار (`Core-Hub-Setup-X-x64.exe`، `Core-Hub-X-arm64.dmg`، `corehub_X_amd64.deb`…)،
 appId، بروتوكول `corehub://`، هوية MSIX، مجلد البيانات `<appData>/Core Hub`.
 
