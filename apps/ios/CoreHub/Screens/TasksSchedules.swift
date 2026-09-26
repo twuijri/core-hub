@@ -15,27 +15,8 @@ struct TasksScreen: View {
     @Environment(\.l10n) private var l10n
 
     var body: some View {
-        AsyncContent(key: "tasks") {
-            let header = app.currentProfile
-            return try await app.api.call {
-                try await TasksAPI.tasksListTasks(xHubProfile: header, profiles: .all, limit: 200, apiConfiguration: $0)
-            }.items
-        } content: { tasks, reload in
-            List {
-                if tasks.isEmpty { Text(l10n("tasks.empty")).foregroundStyle(Tone.textMuted) }
-                ForEach(TaskColumns.order, id: \.self) { status in
-                    let column = tasks.filter { $0.status == status }
-                    if !column.isEmpty {
-                        Section(l10n("tasks.status_\(status.rawValue)") + " · \(column.count)") {
-                            ForEach(column, id: \.id) { task in
-                                TaskRow(task: task, openChat: openChat, changed: reload)
-                            }
-                        }
-                    }
-                }
-            }
-            .refreshable { reload() }
-        }
+        // Columns side by side with drag between them (B15), as on the web.
+        TaskBoardView(openChat: openChat)
         .navigationTitle(l10n("nav.tasks"))
         .navigationBarTitleDisplayMode(.inline)
         .accessibilityIdentifier("screen.tasks")

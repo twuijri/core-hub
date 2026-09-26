@@ -574,5 +574,30 @@
     "stopped_step_timeout": "Stopped: a step ran out of time.",
     "cancel_run": "Stop the run",
     "finished": "This run has finished."
+  },
+  "board": {
+    "column_intake": "Inbox",
+    "column_queue": "Queue",
+    "column_waiting": "Waiting",
+    "column_review": "Review",
+    "column_done": "Done",
+    "action_queue": "Add to the queue",
+    "action_promote": "Mark ready",
+    "action_schedule": "Schedule it",
+    "action_block": "It is blocked",
+    "action_unblock": "Unblock",
+    "action_requestReview": "Send to review",
+    "action_reopenReview": "Reopen",
+    "action_complete": "Mark done",
+    "action_archive": "Archive",
+    "cannot_drop": "That move is not one a person makes here.",
+    "which": "What does this move mean?",
+    "block_reason": "Why is it blocked?",
+    "block_reason_hint": "What it needs to go on",
+    "empty_column": "Nothing here. Hold a card to move it.",
+    "open_column": "Open",
+    "archived": "{count} in the archive",
+    "stuck": "Seems stuck",
+    "waiting_on": "Waits for {count}"
   }
 }

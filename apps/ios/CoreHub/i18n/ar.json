@@ -574,5 +574,30 @@
     "stopped_step_timeout": "توقف: نفد وقت إحدى الخطوات.",
     "cancel_run": "أوقف التشغيل",
     "finished": "انتهى هذا التشغيل."
+  },
+  "board": {
+    "column_intake": "الوارد",
+    "column_queue": "قيد العمل",
+    "column_waiting": "بالانتظار",
+    "column_review": "المراجعة",
+    "column_done": "منجزة",
+    "action_queue": "أضفها إلى قيد العمل",
+    "action_promote": "اجعلها جاهزة",
+    "action_schedule": "جدولها",
+    "action_block": "متعطلة",
+    "action_unblock": "ارفع التعطّل",
+    "action_requestReview": "أرسلها للمراجعة",
+    "action_reopenReview": "أعد فتحها",
+    "action_complete": "اجعلها منجزة",
+    "action_archive": "أرشفها",
+    "cannot_drop": "هذه النقلة لا يقوم بها شخص هنا.",
+    "which": "ماذا تعني هذه النقلة؟",
+    "block_reason": "لماذا هي متعطلة؟",
+    "block_reason_hint": "ما تحتاجه لتكمل",
+    "empty_column": "لا شيء هنا. اضغط مطوّلًا على بطاقة لتنقلها.",
+    "open_column": "افتح",
+    "archived": "{count} في الأرشيف",
+    "stuck": "تبدو عالقة",
+    "waiting_on": "تنتظر {count}"
   }
 }

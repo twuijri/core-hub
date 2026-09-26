@@ -103,6 +103,8 @@ data class TasksUi(
     val loading: Boolean = true,
     val error: HubError? = null,
     val acting: Boolean = false,
+    /** A short word after a drop the board refused. */
+    val notice: Int? = null,
 )
 
 /**
@@ -146,10 +148,18 @@ class TasksViewModel(private val graph: AppGraph) : ViewModel() {
         }
     }
 
-    fun move(task: Task, to: TaskStatus) {
+    fun move(task: Task, to: TaskStatus, reason: String? = null) {
         val s = graph.store.current ?: return
-        act { graph.apis(s).tasks.tasksMoveTask(task.profile, task.id, TaskMove(status = to)) }
+        act { graph.apis(s).tasks.tasksMoveTask(task.profile, task.id, TaskMove(status = to, reason = reason?.ifBlank { null })) }
     }
+
+    /** A card put elsewhere in its own column (`after` null: first), in its own profile. */
+    fun reorder(task: Task, after: String?) {
+        val s = graph.store.current ?: return
+        act { graph.apis(s).tasks.tasksMoveTask(task.profile, task.id, TaskMove(status = task.status, afterTaskId = after)) }
+    }
+
+    fun say(message: Int?) = _ui.update { it.copy(notice = message) }
 
     fun assign(task: Task, agentId: String, start: Boolean) {
         val s = graph.store.current ?: return
@@ -228,37 +238,14 @@ fun TasksScreen(shell: ShellViewModel, onOpenChat: (sessionId: String, profile: 
             if (ui.loading) Loading()
             return@Column
         }
-        val columns = Board.columns(board).filter { it.second.isNotEmpty() }
-        val badges = Board.showsProfiles(board)
-        LazyColumn(
-            contentPadding = PaddingValues(start = 16.dp, end = 16.dp, bottom = 16.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp),
-            modifier = Modifier.fillMaxSize().testTag("tasks.board"),
-        ) {
-            if (columns.isEmpty()) item { EmptyState(stringResource(R.string.tasks_empty_column), icon = Lucide.ListChecks) }
-            columns.forEach { (status, tasks) ->
-                item(key = "h-" + status.value) {
-                    SectionTitle("${statusLabel(status)} · ${tasks.size}", leading = { StatusDot(statusColor(status), null) })
-                }
-                items(tasks, key = { it.id }) { task ->
-                    HubCard(Modifier.testTag("task.card.${task.id}"), onClick = { opened = task }, padding = 14.dp) {
-                        Row(verticalAlignment = Alignment.Top, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            InContentDirection(task.title) {
-                                Text(task.title, fontSize = FontTokens.sizeMd.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f), maxLines = 2, overflow = TextOverflow.Ellipsis)
-                            }
-                            if (badges) Badge(shell.profileName(task.profile), tone = BadgeTone.Accent)
-                        }
-                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            Badge(priorityLabel(task.priority), tone = priorityTone(task.priority))
-                            task.assignee?.let { Text(it.name, fontSize = FontTokens.sizeXs.sp, color = t.textMuted) }
-                        }
-                        task.latestSummary?.takeIf { it.isNotBlank() }?.let { line ->
-                            InContentDirection(line) { Text(line, fontSize = FontTokens.sizeXs.sp, color = t.textMuted, maxLines = 2, overflow = TextOverflow.Ellipsis) }
-                        }
-                    }
-                }
-            }
+        ui.notice?.let { NoticeBox(stringResource(it), BadgeTone.Warning, Modifier.padding(horizontal = 16.dp, vertical = 4.dp)) }
+        LaunchedEffect(ui.notice) { if (ui.notice != null) { delay(2_500); vm.say(null) } }
+        if (Board.columns(board).all { it.second.isEmpty() }) {
+            EmptyState(stringResource(R.string.tasks_empty_column), icon = Lucide.ListChecks)
+            return@Column
         }
+        // Columns side by side with drag between them (B14/B15), as on the web.
+        TaskBoard(board, Board.showsProfiles(board), shell::profileName, vm, onOpen = { opened = it })
     }
     opened?.let { task ->
         HubSheet(onDismiss = { opened = null }) {
@@ -286,6 +273,11 @@ private fun TaskSheet(task: Task, vm: TasksViewModel, acting: Boolean, onOpenCha
         }
         task.description?.takeIf { it.isNotBlank() }?.let { d -> InContentDirection(d) { Text(d, fontSize = FontTokens.sizeSm.sp) } }
         (task.blockedReason ?: task.statusReason)?.let { NoticeBox(it, BadgeTone.Danger) }
+        // What it waits for and whether it went quiet (contract decision §93).
+        BoardRules.waitingOn(task).takeIf { it.isNotEmpty() }?.let { titles ->
+            NoticeBox(stringResource(R.string.board_waiting_on_titles, titles.joinToString("، ".takeIf { LocalContext.current.graph.prefs.effectiveLanguage == hub.core.android.AppLanguage.AR } ?: ", ")), BadgeTone.Warning)
+        }
+        if (BoardRules.stuck(task)) NoticeBox(stringResource(R.string.board_stuck_body, localTime(task.stuckSince!!)), BadgeTone.Danger)
         task.latestSummary?.let { s -> InContentDirection(s) { Text(s, color = t.textMuted, fontSize = FontTokens.sizeSm.sp) } }
         FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(top = 6.dp)) {
             if (Board.canStart(task)) {
