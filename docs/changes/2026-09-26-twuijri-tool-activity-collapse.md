@@ -69,7 +69,17 @@ hub.core.android.shots.ToolActivityShots 4 failures 0 errors 0
 - الويب (عربي فاتح): `tool-activity-live-ar-light.png` (خمسة صفوف: الفاشل الأول + آخر أربعة، وسطر «+ خطوة سابقة»)، `tool-activity-folded-ar-light.png` («6 خطوات · 6 ث · فشلت خطوة» والشرائح)، `tool-activity-open-ar-light.png`. أول لقطة كشفت أن «6 خطوات» و«+ خطوة سابقة» تُقرأ مقلوبة داخل إطار الرسالة LTR؛ أُصلح بـ`dir="auto"`.
 - Android (Robolectric، `apps/android/app/build/shots/tool-activity/`): `android-tool-activity-live-en/ar`، `android-tool-activity-folded-en/ar`، `android-tool-activity-open-en`. أول لقطة كشفت قصّ الشريحة في منتصف الاسم؛ صارت كل شريحة تأخذ حصتها وتنتهي بـ«…».
 
-CI: يُحدَّث بعد الدفع.
+CI على PR #178 (أول دفع، commit قبل هذا التحديث): 17 فحصًا ناجحًا، منها:
+
+```
+Android build, unit tests, lint                        pass  4m55s
+Build and test on the iOS simulator                    pass  4m42s
+Web smoke journeys (Playwright against the real hub)   pass  9m4s
+Lint, typecheck, contracts, client tests, build        pass  5m15s
+Server unit tests (shard 1/3, 2/3, 3/3)                pass
+Desktop app smoke (Electron under Xvfb against the real hub)  pass
+Docker image builds and answers /health                pass
+```
 
 ## المخاطر والرجوع
 - الواجهة فقط؛ لا بيانات ولا عقد. الرجوع = عكس الدمج.
