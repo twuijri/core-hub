@@ -28,7 +28,7 @@ import { parse } from '../../lib/validate.js';
 import type { EngineScope } from './engine.js';
 import type { ScopeResolver } from './scope.js';
 import type { SessionsService } from './service.js';
-import type { ChannelConversations } from './channel-conversations.js';
+import { CONVERSATION_ID, type ChannelConversations } from './channel-conversations.js';
 import { DEFAULT_LIMIT, MAX_LIMIT } from './store.js';
 import { toSubagent } from './subagents.js';
 
@@ -565,6 +565,7 @@ export function registerSessionRoutes(app: FastifyInstance, deps: RouteDeps): vo
           .string()
           .regex(/^[a-z][a-z0-9_]{0,31}$/)
           .optional(),
+        hidden: z.enum(['include']).optional(),
       }),
       request.query,
       'query',
@@ -577,7 +578,76 @@ export function registerSessionRoutes(app: FastifyInstance, deps: RouteDeps): vo
             profile: entry.profile,
           }))
         : [{ workspace: scope.workspace, profile: scope.profile }];
-    return deps.channels(request).list(scopes, query.channel);
+    const read = await deps.channels(request).list(scopes, query.channel);
+    // What this person hid stays out of their list unless asked for (§87).
+    const workspaceOf = new Map(scopes.map((each) => [each.profile, each.workspace]));
+    const hidden = deps.service(request).channelHides.hiddenIn(
+      scopes.map((each) => each.workspace),
+      scope.userId,
+    );
+    const isHidden = (item: { id: string; profile: string }) =>
+      hidden.get(workspaceOf.get(item.profile) ?? '')?.has(item.id) ?? false;
+    return {
+      ...read,
+      items:
+        query.hidden === 'include'
+          ? read.items.map((item) => (isHidden(item) ? { ...item, hidden: true } : item))
+          : read.items.filter((item) => !isHidden(item)),
+    };
+  });
+
+  // Hide one from the caller's own list, or show it again (§87): the hub's mark only.
+  const conversationIdOf = (request: FastifyRequest): string => {
+    const id = (request.params as { conversation_id?: unknown }).conversation_id;
+    if (typeof id !== 'string' || !CONVERSATION_ID.test(id)) {
+      throw new HubError('validation_failed', {
+        details: { issues: [{ path: 'conversation_id', message: 'not a conversation id' }] },
+      });
+    }
+    return id;
+  };
+  app.put('/channel-conversations/:conversation_id/hidden', async (request, reply) => {
+    const scope = await scopeOf(request);
+    const id = conversationIdOf(request);
+    deps.service(request).channelHides.hide(scope.workspace, scope.userId, id);
+    return reply.status(204).send();
+  });
+  app.delete('/channel-conversations/:conversation_id/hidden', async (request, reply) => {
+    const scope = await scopeOf(request);
+    const id = conversationIdOf(request);
+    deps.service(request).channelHides.unhide(scope.workspace, scope.userId, id);
+    return reply.status(204).send();
+  });
+
+  // Delete it from Hermes, for good (§87; admins, by the contract's `x-roles`).
+  app.delete('/channel-conversations/:conversation_id', async (request, reply) => {
+    const role = request.principal?.user.role;
+    if (role !== 'owner' && role !== 'admin') {
+      throw new HubError('forbidden', {
+        messageKey: 'auth.admin_only',
+        details: { required_role: 'admin' },
+      });
+    }
+    const scope = await scopeOf(request);
+    const id = (request.params as { conversation_id?: unknown }).conversation_id;
+    const conversation = typeof id === 'string' ? id : '';
+    await deps
+      .channels(request)
+      .remove({ workspace: scope.workspace, profile: scope.profile }, conversation);
+    const service = deps.service(request);
+    service.channelHides.forget(scope.workspace, conversation);
+    service.audit.record({
+      actorKind: 'user',
+      actorId: scope.userId,
+      ownerId: scope.userId,
+      workspace: scope.workspace,
+      action: 'sessions.channel_conversation_deleted',
+      entityKind: 'channel_conversation',
+      entityId: conversation,
+      summary: 'Deleted a channel conversation from Hermes',
+      requestId: request.id,
+    });
+    return reply.status(204).send();
   });
 
   app.get('/channel-conversations/:conversation_id/messages', async (request) => {
