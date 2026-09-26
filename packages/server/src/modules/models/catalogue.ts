@@ -204,6 +204,12 @@ export function authKindOf(
 }
 
 /**
+ * The model a new OpenAI speech-to-text row starts on. `whisper-1` was the default until
+ * 2026-09-26; OpenAI shuts it down on 2027-02-26 and names `gpt-transcribe` as its successor.
+ */
+export const OPENAI_STT_DEFAULT_MODEL = 'gpt-transcribe';
+
+/**
  * The presets. Every entry is a provider the hub knows how to talk to today: it has an
  * adapter in `adapters/`, a real model list endpoint (or an honest `listModels: false`),
  * and a documented place to get a key when it needs one.
@@ -445,7 +451,10 @@ export const PROVIDER_CATALOGUE: readonly ProviderCatalogueEntry[] = [
     keyRequirement: 'required',
     baseUrl: 'https://api.openai.com/v1',
     capabilities: { stt: true, listModels: true },
-    settings: { model: 'whisper-1', language: null, voice: null },
+    // A new row starts on `gpt-transcribe`: OpenAI retires `whisper-1` on 2027-02-26 (DECISIONS
+    // §112). A preset's settings are copied into a row once, when it is created, so a row that
+    // already holds `whisper-1` — or any model somebody chose — keeps it.
+    settings: { model: OPENAI_STT_DEFAULT_MODEL, language: null, voice: null },
     hermesSpeech: {
       provider: 'openai',
       section: 'openai',

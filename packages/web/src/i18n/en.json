@@ -119,6 +119,9 @@
     },
     "theme_next": "Theme: {next}",
     "in_profile": "Profile: {name}",
+    "fold": "Collapse sidebar",
+    "unfold": "Expand sidebar",
+    "person_menu": "Your menu",
     "back_to_chats": "Back to chats",
     "no_profile_title": "No profile yet",
     "no_profile_body": "Your account has not been given a profile, so there is nothing to open yet. Ask an admin to give you one, then check again.",
@@ -987,10 +990,9 @@
         "ok": "The runtime restarted after the last change.",
         "missing": "Settings changed after Hermes last started — restart it to apply them."
       },
-      "all_ok": "Everything works",
-      "restart_now": "Restart now",
-      "show": "Show checks",
-      "hide": "Hide checks"
+      "ready": "Runtime ready · {passed}/{total} checks",
+      "passed": "{passed} of {total} checks pass",
+      "restart_now": "Restart now"
     },
     "speech": {
       "active_stt": "Speech to text for this profile",

@@ -23,6 +23,7 @@ import {
   Notice,
   SidebarGroup,
   SidebarRow,
+  useSidebarFolded,
   Skeleton,
   SkeletonGroup,
 } from '../ui/index.js';
@@ -69,6 +70,8 @@ export function AgentNav({
   // Beside the name, for whoever may restart it (owner, 2026-09-25): «خل جنب كلمة هرمز
   // والايقونه زر ريستارت … اذا ضغطته يدور واذا اكتمل يوقف ويطلع تنبيه انه دن».
   const restarter = useRestartAgent(agent?.id);
+  // In the folded rail the agent is its face alone; its name is the face's tooltip.
+  const folded = useSidebarFolded();
 
   if (agents.isPending)
     return (
@@ -88,12 +91,17 @@ export function AgentNav({
   const sections = agentSections(agent, user?.role ?? 'member');
   return (
     <div data-testid="agent-nav" data-agent-slug={agent.slug}>
-      <div className="flex items-center gap-2 px-2 py-2" data-testid="agent-nav-head">
+      <div
+        className={`flex items-center gap-2 py-2 ${folded ? 'justify-center' : 'px-2'}`}
+        data-testid="agent-nav-head"
+      >
         <Avatar name={agent.name} size="sm" mark={agentMark(agent.slug, 14)} />
-        <span className="min-w-0 truncate font-semibold" dir="auto">
-          {agent.name}
-        </span>
-        {canRestart(agent, user?.role) && (
+        {!folded && (
+          <span className="min-w-0 truncate font-semibold" dir="auto">
+            {agent.name}
+          </span>
+        )}
+        {!folded && canRestart(agent, user?.role) && (
           <Button
             variant="ghost"
             size="sm"

@@ -1031,6 +1031,8 @@
 
 /* --------------------------------------------------------------- the sidebar */
 .ch-sidebar {
+  /* The folded rail: one square row (a large control) and the groups' own inset either side. */
+  --ch-sidebar-rail: calc(var(--ch-control-height-lg) + 2 * var(--ch-space-2));
   display: flex;
   flex-direction: column;
   block-size: 100%;
@@ -1038,6 +1040,11 @@
   flex-shrink: 0;
   border-block: 0;
   border-inline-start: 0;
+  overflow: hidden;
+  /* Folding eases the width; the motion tokens are 0 ms under prefers-reduced-motion. */
+  transition-property: inline-size;
+  transition-duration: var(--ch-motion-normal);
+  transition-timing-function: var(--ch-motion-ease);
 }
 .ch-sidebar-brand {
   display: flex;
@@ -1129,6 +1136,108 @@
   background: var(--ch-color-accent-strong);
   border-color: var(--ch-color-accent-strong);
   color: var(--ch-color-accent-text);
+}
+
+/* A keyboard shortcut named in a tooltip: the keys, set apart from the words. */
+.ch-kbd {
+  margin-inline-start: var(--ch-space-1);
+  padding-inline: var(--ch-space-1);
+  border: 1px solid currentColor;
+  border-radius: var(--ch-radius-sm);
+  font: inherit;
+  font-size: var(--ch-font-size-xs);
+  opacity: 0.75;
+}
+/* The brand row's own control (the fold toggle) sits at its end. */
+.ch-sidebar-brand-action {
+  display: inline-flex;
+  margin-inline-start: auto;
+}
+.ch-sidebar-row {
+  position: relative;
+}
+.ch-sidebar-row-trailing {
+  display: inline-flex;
+  margin-inline-start: auto;
+}
+
+/* ---- folded: a rail of icons (shell/sidebarFold.ts). Labels stay the rows' accessible
+   names, visually hidden; each row is a square, and a count rides on its corner. */
+.ch-sidebar[data-folded='true'] {
+  inline-size: var(--ch-sidebar-rail);
+}
+.ch-sidebar[data-folded='true'] .ch-sidebar-brand {
+  justify-content: center;
+  padding-inline: var(--ch-space-2);
+}
+.ch-sidebar[data-folded='true'] .ch-sidebar-brand-action {
+  margin-inline-start: 0;
+}
+.ch-sidebar[data-folded='true'] .ch-sidebar-row {
+  inline-size: var(--ch-control-height-lg);
+  block-size: var(--ch-control-height-lg);
+  padding-inline: 0;
+  justify-content: center;
+}
+.ch-sidebar[data-folded='true'] .ch-sidebar-row-label {
+  position: absolute;
+  inline-size: 1px;
+  block-size: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+.ch-sidebar[data-folded='true'] .ch-sidebar-row-trailing {
+  position: absolute;
+  inset-block-start: -2px;
+  inset-inline-end: -2px;
+  margin: 0;
+  font-size: var(--ch-font-size-xs);
+  transform: scale(0.8);
+}
+.ch-sidebar[data-folded='true'] .ch-sidebar-group-label {
+  display: none;
+}
+.ch-sidebar[data-folded='true'] .ch-sidebar-body {
+  padding-inline: 0;
+}
+.ch-sidebar[data-folded='true'] .ch-sidebar-foot {
+  align-items: center;
+  padding-inline: var(--ch-space-2);
+}
+/* The person's menu in the folded footer: their initial, with the connection's dot on it. */
+.ch-sidebar-person {
+  position: relative;
+  display: inline-grid;
+  place-items: center;
+  inline-size: var(--ch-control-height-lg);
+  block-size: var(--ch-control-height-lg);
+  border-radius: var(--ch-radius-full);
+}
+.ch-sidebar-person:hover,
+.ch-sidebar-person[data-state='open'] {
+  background: var(--ch-color-surface-2);
+}
+.ch-sidebar-person-dot {
+  position: absolute;
+  inset-block-end: 2px;
+  inset-inline-end: 2px;
+  inline-size: 0.625rem;
+  block-size: 0.625rem;
+  border-radius: var(--ch-radius-full);
+  border: 2px solid var(--ch-color-surface);
+  background: var(--ch-color-danger-soft-text);
+}
+.ch-sidebar-person-dot[data-tone='success'] {
+  background: var(--ch-color-success-soft-text);
+}
+.ch-sidebar-person-dot[data-tone='warning'] {
+  background: var(--ch-color-warning-soft-text);
+}
+@media (prefers-reduced-motion: reduce) {
+  .ch-sidebar {
+    transition: none;
+  }
 }
 
 /* The sidebar's rows, standing inside a page instead of beside it. No glass and no
