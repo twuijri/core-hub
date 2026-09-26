@@ -44,6 +44,8 @@ export const CREDENTIAL_FAMILIES = [
   'deepseek',
   'xai',
   'elevenlabs',
+  'deepgram',
+  'azure-speech',
   'ollama',
   'lmstudio',
   'litellm',
@@ -57,7 +59,34 @@ export const CREDENTIAL_FAMILIES = [
 export type CredentialFamily = (typeof CREDENTIAL_FAMILIES)[number];
 
 /** How a provider's HTTP surface is driven (`adapters/`). */
-export type ProviderProtocol = 'anthropic' | 'openai' | 'google' | 'ollama' | 'elevenlabs';
+export type ProviderProtocol =
+  'anthropic' | 'openai' | 'google' | 'ollama' | 'elevenlabs' | 'groq' | 'deepgram' | 'azure';
+
+/**
+ * What a speech provider's requests allow, from its public documentation (DECISIONS §87).
+ */
+export interface SpeechLimits {
+  /**
+   * The most characters one synthesis request takes. Longer text is split at sentence, then
+   * word, boundaries under it (`speech/split.ts`) and the parts' audio joined in order.
+   */
+  maxInputChars?: number;
+}
+
+/**
+ * How Hermes's own voice tools say this speech provider (read from Hermes's MIT source,
+ * `tools/transcription_tools.py` and `tools/tts_tool*.py`, v2026.9.14): the value of
+ * `stt.provider` / `tts.provider`, and the keys of its block (`stt.<section>.model`, …) the
+ * hub writes the row's choice into. A provider Hermes has no voice backend for has none, and
+ * Hermes's voice in channels is then left as it is.
+ */
+export interface HermesSpeechRoute {
+  provider: string;
+  section: string;
+  modelKey: string;
+  voiceKey: string | null;
+  languageKey: string | null;
+}
 
 /**
  * Whether the endpoint needs a key. There is deliberately no third value meaning "a key
@@ -144,6 +173,15 @@ export interface ProviderCatalogueEntry {
   repeatable?: boolean;
   /** Defaults for a speech provider's `settings` (model, language, voice). */
   settings?: SpeechProviderSettings;
+  /** A speech provider's documented request limits (DECISIONS §87). */
+  speech?: SpeechLimits;
+  /** How Hermes's own voice tools say this speech provider, when they can. */
+  hermesSpeech?: HermesSpeechRoute;
+  /**
+   * What the address field should show when `baseUrl` is null and the person must type it —
+   * an example of the shape, never a value the hub would use.
+   */
+  baseUrlExample?: string;
   /** Documentation link shown next to the key field, so nobody has to search for it. */
   keysUrl: string | null;
   /**
@@ -408,6 +446,13 @@ export const PROVIDER_CATALOGUE: readonly ProviderCatalogueEntry[] = [
     baseUrl: 'https://api.openai.com/v1',
     capabilities: { stt: true, listModels: true },
     settings: { model: 'whisper-1', language: null, voice: null },
+    hermesSpeech: {
+      provider: 'openai',
+      section: 'openai',
+      modelKey: 'model',
+      voiceKey: null,
+      languageKey: 'language',
+    },
     keysUrl: 'https://platform.openai.com/api-keys',
   },
   {
@@ -424,9 +469,67 @@ export const PROVIDER_CATALOGUE: readonly ProviderCatalogueEntry[] = [
     apiMode: 'native',
     keyRequirement: 'required',
     baseUrl: 'https://api.openai.com/v1',
-    capabilities: { tts: true, listModels: true, listVoices: false },
+    // Voices: the documented list (no endpoint), `speech/documented.ts`.
+    capabilities: { tts: true, listModels: true, listVoices: true },
     settings: { model: 'gpt-4o-mini-tts', language: null, voice: 'alloy' },
+    speech: { maxInputChars: 4096 },
+    hermesSpeech: {
+      provider: 'openai',
+      section: 'openai',
+      modelKey: 'model',
+      voiceKey: 'voice',
+      languageKey: null,
+    },
     keysUrl: 'https://platform.openai.com/api-keys',
+  },
+  // Groq (groq.com, the inference company — not xAI's Grok): the chat key speaks and
+  // transcribes too. Whisper over OpenAI's shape; Orpheus TTS (English, and Arabic in the
+  // Saudi dialect) in WAV only, 200 characters a request, voices named in its docs (§87).
+  {
+    slug: 'groq-stt',
+    label: 'Groq — speech to text',
+    kind: 'stt',
+    family: 'groq',
+    envVar: 'GROQ_API_KEY',
+    hermesEnvVars: ['GROQ_API_KEY'],
+    hermesProvider: null,
+    hermesRoute: 'none',
+    hermesApiMode: null,
+    protocol: 'groq',
+    apiMode: 'native',
+    keyRequirement: 'required',
+    baseUrl: 'https://api.groq.com/openai/v1',
+    capabilities: { stt: true, listModels: true },
+    settings: { model: 'whisper-large-v3-turbo', language: null, voice: null },
+    hermesSpeech: {
+      provider: 'groq',
+      section: 'groq',
+      modelKey: 'model',
+      voiceKey: null,
+      languageKey: 'language',
+    },
+    keysUrl: 'https://console.groq.com/keys',
+  },
+  {
+    slug: 'groq-tts',
+    label: 'Groq — text to speech',
+    kind: 'tts',
+    family: 'groq',
+    envVar: 'GROQ_API_KEY',
+    hermesEnvVars: ['GROQ_API_KEY'],
+    hermesProvider: null,
+    // Hermes's OpenAI-shaped TTS asks for MP3 or Opus, which Groq refuses: not expressible.
+    hermesRoute: 'none',
+    hermesApiMode: null,
+    protocol: 'groq',
+    apiMode: 'native',
+    keyRequirement: 'required',
+    baseUrl: 'https://api.groq.com/openai/v1',
+    capabilities: { tts: true, listModels: true, listVoices: true },
+    // No default model or voice: the person picks the voice (the owner, 2026-09-26).
+    settings: { model: null, language: null, voice: null },
+    speech: { maxInputChars: 200 },
+    keysUrl: 'https://console.groq.com/keys',
   },
   {
     slug: 'elevenlabs',
@@ -442,9 +545,123 @@ export const PROVIDER_CATALOGUE: readonly ProviderCatalogueEntry[] = [
     apiMode: 'native',
     keyRequirement: 'required',
     baseUrl: 'https://api.elevenlabs.io/v1',
-    capabilities: { tts: true, listModels: false, listVoices: true },
+    capabilities: { tts: true, listModels: true, listVoices: true },
     settings: { model: 'eleven_multilingual_v2', language: null, voice: null },
+    speech: { maxInputChars: 5000 },
+    hermesSpeech: {
+      provider: 'elevenlabs',
+      section: 'elevenlabs',
+      modelKey: 'model_id',
+      voiceKey: 'voice_id',
+      languageKey: null,
+    },
     keysUrl: 'https://elevenlabs.io/app/settings/api-keys',
+  },
+  {
+    slug: 'elevenlabs-stt',
+    label: 'ElevenLabs — speech to text',
+    kind: 'stt',
+    family: 'elevenlabs',
+    envVar: 'ELEVENLABS_API_KEY',
+    hermesEnvVars: ['ELEVENLABS_API_KEY'],
+    hermesProvider: null,
+    hermesRoute: 'none',
+    hermesApiMode: null,
+    protocol: 'elevenlabs',
+    apiMode: 'native',
+    keyRequirement: 'required',
+    baseUrl: 'https://api.elevenlabs.io/v1',
+    // Scribe has no model endpoint: the documented list, labelled (§87).
+    capabilities: { stt: true, listModels: true },
+    settings: { model: 'scribe_v2', language: null, voice: null },
+    hermesSpeech: {
+      provider: 'elevenlabs',
+      section: 'elevenlabs',
+      modelKey: 'model_id',
+      voiceKey: null,
+      languageKey: 'language_code',
+    },
+    keysUrl: 'https://elevenlabs.io/app/settings/api-keys',
+  },
+  // Deepgram: Nova transcription and Aura voices, one key. The model list and the voice list
+  // are both its own `GET /v1/models` (§87). Hermes has no Deepgram voice backend.
+  {
+    slug: 'deepgram-stt',
+    label: 'Deepgram — speech to text',
+    kind: 'stt',
+    family: 'deepgram',
+    envVar: 'DEEPGRAM_API_KEY',
+    hermesEnvVars: ['DEEPGRAM_API_KEY'],
+    hermesProvider: null,
+    hermesRoute: 'none',
+    hermesApiMode: null,
+    protocol: 'deepgram',
+    apiMode: 'native',
+    keyRequirement: 'required',
+    baseUrl: 'https://api.deepgram.com/v1',
+    capabilities: { stt: true, listModels: true },
+    settings: { model: 'nova-3', language: null, voice: null },
+    keysUrl: 'https://console.deepgram.com',
+  },
+  {
+    slug: 'deepgram-tts',
+    label: 'Deepgram — text to speech',
+    kind: 'tts',
+    family: 'deepgram',
+    envVar: 'DEEPGRAM_API_KEY',
+    hermesEnvVars: ['DEEPGRAM_API_KEY'],
+    hermesProvider: null,
+    hermesRoute: 'none',
+    hermesApiMode: null,
+    protocol: 'deepgram',
+    apiMode: 'native',
+    keyRequirement: 'required',
+    baseUrl: 'https://api.deepgram.com/v1',
+    capabilities: { tts: true, listModels: true, listVoices: true },
+    settings: { model: 'aura-2', language: null, voice: null },
+    speech: { maxInputChars: 2000 },
+    keysUrl: 'https://console.deepgram.com',
+  },
+  // Azure AI Speech with a resource key: every neural voice of every locale (Saudi
+  // `ar-SA-HamedNeural` / `ar-SA-ZariyahNeural` among them) and fast transcription. The key
+  // belongs to a region, so the address is asked for, never guessed (§87).
+  {
+    slug: 'azure-tts',
+    label: 'Azure Speech — text to speech',
+    kind: 'tts',
+    family: 'azure-speech',
+    envVar: 'AZURE_SPEECH_KEY',
+    hermesEnvVars: ['AZURE_SPEECH_KEY'],
+    hermesProvider: null,
+    hermesRoute: 'none',
+    hermesApiMode: null,
+    protocol: 'azure',
+    apiMode: 'native',
+    keyRequirement: 'required',
+    baseUrl: null,
+    baseUrlExample: 'https://<region>.api.cognitive.microsoft.com',
+    capabilities: { tts: true, listModels: false, listVoices: true },
+    settings: { model: null, language: null, voice: null },
+    keysUrl: 'https://portal.azure.com/#create/Microsoft.CognitiveServicesSpeechServices',
+  },
+  {
+    slug: 'azure-stt',
+    label: 'Azure Speech — speech to text',
+    kind: 'stt',
+    family: 'azure-speech',
+    envVar: 'AZURE_SPEECH_KEY',
+    hermesEnvVars: ['AZURE_SPEECH_KEY'],
+    hermesProvider: null,
+    hermesRoute: 'none',
+    hermesApiMode: null,
+    protocol: 'azure',
+    apiMode: 'native',
+    keyRequirement: 'required',
+    baseUrl: null,
+    baseUrlExample: 'https://<region>.api.cognitive.microsoft.com',
+    capabilities: { stt: true, listModels: false },
+    settings: { model: null, language: null, voice: null },
+    keysUrl: 'https://portal.azure.com/#create/Microsoft.CognitiveServicesSpeechServices',
   },
   // Signed in to through Hermes (contract decision §55): Hermes's own device-code sign-in
   // for its provider `nous` (MIT source `hermes_cli/web_routers/oauth.py`). No key, and

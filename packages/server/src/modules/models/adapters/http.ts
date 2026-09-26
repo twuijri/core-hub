@@ -209,3 +209,121 @@ export function detailOf(answer: HttpAnswer): string | null {
 export function joinUrl(base: string, suffix: string): string {
   return `${base.replace(/\/+$/, '')}/${suffix.replace(/^\/+/, '')}`;
 }
+
+/**
+ * A POST whose body is raw bytes (a recording) and whose answer is JSON — Deepgram's
+ * `/listen` takes the audio as the body itself, typed by `content-type`.
+ */
+export async function requestUpload(request: {
+  url: string;
+  headers?: Record<string, string>;
+  body: Uint8Array;
+  contentType: string;
+  fetchImpl: typeof fetch;
+  timeoutMs?: number;
+}): Promise<HttpAnswer> {
+  const started = Date.now();
+  try {
+    const response = await request.fetchImpl(request.url, {
+      method: 'POST',
+      signal: AbortSignal.timeout(request.timeoutMs ?? 60_000),
+      headers: {
+        accept: 'application/json',
+        'content-type': request.contentType,
+        ...(request.headers ?? {}),
+      },
+      body: new Uint8Array(request.body),
+    });
+    const text = (await response.text()).slice(0, MAX_BODY_BYTES);
+    let body: unknown = null;
+    try {
+      body = JSON.parse(text) as unknown;
+    } catch {
+      body = null;
+    }
+    return {
+      ok: response.ok,
+      status: response.status,
+      body,
+      text,
+      error: null,
+      durationMs: Date.now() - started,
+    };
+  } catch (error) {
+    return {
+      ok: false,
+      status: null,
+      body: null,
+      text: null,
+      error: error instanceof Error ? error.message : String(error),
+      durationMs: Date.now() - started,
+    };
+  }
+}
+
+/**
+ * A POST with a text body (SSML) whose answer is audio — Azure's speech synthesis. Same
+ * shape as `requestBytes`, which only sends JSON.
+ */
+export async function requestTextForBytes(request: {
+  url: string;
+  headers?: Record<string, string>;
+  body: string;
+  contentType: string;
+  fetchImpl: typeof fetch;
+  timeoutMs?: number;
+}): Promise<BytesAnswer> {
+  try {
+    const response = await request.fetchImpl(request.url, {
+      method: 'POST',
+      signal: AbortSignal.timeout(request.timeoutMs ?? 30_000),
+      headers: { 'content-type': request.contentType, ...(request.headers ?? {}) },
+      body: request.body,
+    });
+    if (!response.ok) {
+      const text = (await response.text()).slice(0, 2_000);
+      return {
+        ok: false,
+        status: response.status,
+        bytes: null,
+        contentType: null,
+        detail: text.trim() || null,
+        error: null,
+      };
+    }
+    return {
+      ok: true,
+      status: response.status,
+      bytes: new Uint8Array(await response.arrayBuffer()),
+      contentType: response.headers.get('content-type'),
+      detail: null,
+      error: null,
+    };
+  } catch (error) {
+    return {
+      ok: false,
+      status: null,
+      bytes: null,
+      contentType: null,
+      detail: null,
+      error: error instanceof Error ? error.message : String(error),
+    };
+  }
+}
+
+/** The failure of a synthesis request, in the vocabulary the service reports. */
+export function synthesisFailure(answer: BytesAnswer): {
+  supported: false;
+  reason: string;
+  detail: string | null;
+} {
+  const reason =
+    answer.error !== null
+      ? 'unreachable'
+      : answer.status === 401 || answer.status === 403
+        ? 'unauthorized'
+        : answer.status === 429
+          ? 'rate_limited'
+          : 'http_error';
+  return { supported: false, reason, detail: answer.detail ?? answer.error };
+}
