@@ -2543,6 +2543,19 @@ Not changed here: the speech providers (ElevenLabs lists voices, not models; its
 is a setting, not a list) and the presets' default model settings. The hub's adapters for key
 providers already ask the provider; none keeps a list.
 
+**Amended 2026-09-26 (the list was still short on the owner's Pro account).** The Codex backend
+reads `client_version` as the asking Codex CLI's version and leaves out every model whose
+`minimal_client_version` is newer; `0.0.0` now answers a frozen older list (`gpt-6-astra`, the
+5.6 trio, `gpt-5.5`) without `gpt-6-sol` / `gpt-6-luna`. The hub asks as the latest Codex CLI
+release, as the Codex CLI itself does with its own version (`CODEX_CLIENT_VERSION` in
+`live-models.ts`, 0.157.0 = openai/codex `rust-v0.157.0`; bump it to the newest `rust-v*` tag, or
+set `COREHUB_CODEX_CLIENT_VERSION` in the hub's environment), and asks `0.0.0` once more only when
+that version is refused or lists nothing. CLI Proxy API's longer list is not the backend's: its
+Codex list is a static catalogue per plan kept in its code, `gpt-oss-120b-medium` is another
+provider's (Antigravity) in the same "GPT" group, and `gpt-image-1.5` / `gpt-image-2` are image
+names its own Images endpoint maps onto the Codex image tool. None of those is added here;
+`gpt-image-1.5` stays out until it is seen drawing through a real subscription (§84).
+
 ## 84. The ChatGPT subscription draws through the Codex backend's image tool
 
 The owner (2026-09-25): his CLI Proxy API instance on the same ChatGPT account offers `gpt-image-2`
