@@ -151,7 +151,38 @@
     "arguments": "المعطيات",
     "output": "المخرجات",
     "truncated": "قُطعت المخرجات.",
-    "duration": "{seconds} ث"
+    "duration": "{seconds} ث",
+    "activity": {
+      "steps": {
+        "zero": "لا خطوات",
+        "one": "خطوة واحدة",
+        "two": "خطوتان",
+        "few": "{count} خطوات",
+        "many": "{count} خطوة",
+        "other": "{count} خطوة"
+      },
+      "failed": {
+        "zero": "لم تفشل أي خطوة",
+        "one": "فشلت خطوة",
+        "two": "فشلت خطوتان",
+        "few": "فشلت {count} خطوات",
+        "many": "فشلت {count} خطوة",
+        "other": "فشلت {count} خطوة"
+      },
+      "earlier": {
+        "zero": "لا خطوات سابقة",
+        "one": "+ خطوة سابقة",
+        "two": "+ خطوتان سابقتان",
+        "few": "+ {count} خطوات سابقة",
+        "many": "+ {count} خطوة سابقة",
+        "other": "+ {count} خطوة سابقة"
+      },
+      "hide_earlier": "إخفاء الخطوات السابقة",
+      "show": "يُظهر الخطوات",
+      "hide": "يُخفي الخطوات",
+      "seconds": "{seconds} ث",
+      "minutes": "{minutes} د {seconds} ث"
+    }
   },
   "approval": {
     "title": "بانتظار قرارك",

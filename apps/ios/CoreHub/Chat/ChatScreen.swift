@@ -282,8 +282,8 @@ struct MessageRow: View {
             if let reasoning = message.reasoning, !reasoning.text.isEmpty {
                 ReasoningView(reasoning: reasoning, streaming: message.status == .streaming)
             }
-            ForEach(message.toolCalls, id: \.id) { call in
-                ToolCallCard(call: call)
+            if !message.toolCalls.isEmpty {
+                ToolActivityView(calls: message.toolCalls, live: message.status == .streaming)
             }
             if !message.text.isEmpty {
                 MarkdownView(text: message.text)
