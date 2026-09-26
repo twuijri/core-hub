@@ -68,7 +68,8 @@ protocol PushBackend {
     func register(_ device: DeviceRegistration) async throws -> String
     /// The id of the device a pairing made (`this_device` in `devices.list`).
     func thisDevice() async throws -> String?
-    func registerPush(deviceID: String, token: String, locale: HubLocale) async throws
+    /// `devices.registerPush`, with the relay's device proof when this install could make one.
+    func registerPush(deviceID: String, token: String, locale: HubLocale, proof: PushRelayProof?) async throws
     func unregisterPush(deviceID: String) async throws
     /// `devices.update`: what the phone says about itself at each launch.
     func update(deviceID: String, patch: DevicePatch) async throws
@@ -89,7 +90,7 @@ struct PushRegistrar {
     /// with the same row every time). A password session whose row was removed on the web
     /// registers again, once.
     func register(token: String, locale: HubLocale, kind: Credentials.Kind, knownDeviceID: String?,
-                  device: DeviceRegistration) async -> Outcome {
+                  device: DeviceRegistration, proof: PushRelayProof? = nil) async -> Outcome {
         do {
             guard try await backend.providers().contains(.apns) else { return .noSender }
         } catch {
@@ -115,7 +116,7 @@ struct PushRegistrar {
                 }
             }
             do {
-                try await backend.registerPush(deviceID: id, token: token, locale: locale)
+                try await backend.registerPush(deviceID: id, token: token, locale: locale, proof: proof)
                 return .registered(deviceID: id)
             } catch {
                 let failure = HubFailure(error)
@@ -207,8 +208,8 @@ struct HubPushBackend: PushBackend {
         return nil
     }
 
-    func registerPush(deviceID: String, token: String, locale: HubLocale) async throws {
-        let registration = PushRegistration(provider: .apns, token: token, locale: locale)
+    func registerPush(deviceID: String, token: String, locale: HubLocale, proof: PushRelayProof?) async throws {
+        let registration = PushRegistration(provider: .apns, token: token, locale: locale, relayProof: proof)
         _ = try await api.call {
             try await DevicesAPI.devicesRegisterPush(deviceId: deviceID, pushRegistration: registration, apiConfiguration: $0)
         }
@@ -236,6 +237,15 @@ final class PushCenter {
     @ObservationIgnored private var token: String?
     @ObservationIgnored private var prompt = PermissionPrompt()
     @ObservationIgnored private var starting = false
+    /// This install's proof for the push relay (DeviceProof.swift).
+    @ObservationIgnored var proofs = DeviceProof(store: KeychainProofKeyStore())
+    /// Drops this app's APNs registration (a seam: the tests count the calls).
+    @ObservationIgnored var unregisterRemote: @MainActor () -> Void = {
+        UIApplication.shared.unregisterForRemoteNotifications()
+    }
+
+    /// The APNs token this launch holds, if any.
+    var heldToken: String? { token }
 
     var isActive: Bool { state == .active }
 
@@ -301,7 +311,8 @@ final class PushCenter {
         let registrar = PushRegistrar(backend: HubPushBackend(api: app.api))
         let outcome = await registrar.register(
             token: token, locale: locale, kind: credentials.kind, knownDeviceID: credentials.deviceID,
-            device: app.thisDevice(pushBlocker: ._none)
+            device: app.thisDevice(pushBlocker: ._none),
+            proof: proofs.proof(platform: "apns", token: token)
         )
         guard app.phase == .signedIn else { return }
         switch outcome {
@@ -327,9 +338,21 @@ final class PushCenter {
         state = .idle
     }
 
-    /// Signed out by the hub: nothing to tell it.
+    /// Signed out: this phone's push is idle until the next sign-in.
     func reset() {
         state = .idle
+    }
+
+    /// Signed out by the hub (a 401 at launch or on a call): the ended sign-in cannot tell the
+    /// hub anything, and the hub forgot this phone's token when that sign-in ended. What is left
+    /// here goes too — the token this launch held, and the APNs registration itself, so APNs
+    /// refuses the old token to any hub or relay still holding it (one older than that clean-up
+    /// answers `Unregistered` and forgets it). The next sign-in registers again (`start`). The
+    /// proof key stays: it is this install's, whichever hub it signs in to.
+    func endedByHub() {
+        token = nil
+        state = .idle
+        unregisterRemote()
     }
 }
 

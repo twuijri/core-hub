@@ -368,6 +368,7 @@ final class AppModel {
 
     private func signedOutByHub() {
         notice = l10n("errors.signed_out")
+        PushCenter.shared.endedByHub()
         Task { await clearSession() }
     }
 

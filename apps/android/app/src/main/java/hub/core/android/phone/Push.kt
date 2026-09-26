@@ -11,6 +11,7 @@ import hub.core.client.model.DeviceRegistration
 import hub.core.client.model.Locale
 import hub.core.client.model.PushProvider
 import hub.core.client.model.PushRegistration
+import hub.core.client.model.PushRelayProof
 
 /**
  * Push on this phone (docs/changes/2026-09-25-twuijri-devices-push.md, "what the apps call"):
@@ -58,11 +59,13 @@ object PushPayload {
  *   (older installs look it up as `this_device`);
  * - signed in with a password: this install registers itself (`devices.register`, its stable
  *   `device_key`), and the hub answers with the same row every time.
- * The id is kept with the session and goes when the session goes.
+ * The id is kept with the session and goes when the session goes. Each registration carries the
+ * push relay's device proof for the token when this install can make one (DeviceProof.kt).
  */
 class PushRegistrar(
     private val store: SessionStore,
     private val apis: (StoredSession) -> HubApis,
+    private val proof: (token: String) -> PushRelayProof? = { null },
     private val describe: () -> DeviceRegistration,
 ) {
     sealed interface Outcome {
@@ -81,6 +84,7 @@ class PushRegistrar(
             provider = PushRegistration.Provider.FCM,
             token = token,
             locale = if (locale == "ar") Locale.AR else Locale.EN,
+            relayProof = proof(token),
         )
         var retried = false
         while (true) {

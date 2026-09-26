@@ -11,7 +11,9 @@ import hub.core.android.data.SessionStore
 import hub.core.android.data.StoredSession
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.ProcessLifecycleOwner
+import hub.core.android.phone.DeviceProof
 import hub.core.android.phone.DeviceSettings
+import hub.core.android.phone.KeystoreProofKeys
 import hub.core.android.phone.NoticeTracker
 import hub.core.android.phone.NoticeWorker
 import hub.core.android.phone.Notifier
@@ -105,10 +107,15 @@ class AppGraph(context: Context, sealer: hub.core.android.data.Sealer = Keystore
     private val notifier = Notifier(context)
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
 
+    /** This install's key for the push relay's device proof (DeviceProof.kt). */
+    private val proofKeys = KeystoreProofKeys()
+
     /** FCM: registered with the hub while someone is signed in, when this build has Firebase. */
     val push = PushManager(
         context,
-        PushRegistrar(store, { apis(it) }) { thisPhone(store.deviceKey, DeviceInfos.current(context).name, pushBlocker()) },
+        PushRegistrar(store, { apis(it) }, { token -> DeviceProof.proof(proofKeys, "fcm", token) }) {
+            thisPhone(store.deviceKey, DeviceInfos.current(context).name, pushBlocker())
+        },
         { prefs.effectiveLanguage.tag },
         scope,
     )
