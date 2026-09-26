@@ -102,6 +102,13 @@ describe.skipIf(!image)('Hermes profiles (real Hermes; set COREHUB_HERMES_IMAGE 
     expect(design.stdout).toContain('Profile: فريق التصميم (design)');
     const description = await run(['profile', 'describe', 'design']);
     expect(description.stdout).toContain('Designs screens');
+    // Read back as Hermes reads it (§102): `default`'s by Hermes's own rename, and a name
+    // Hermes wrote itself, with Hermes's own command, for a profile the hub never named.
+    expect(profiles.displayName('default')).toBe('الرئيسي');
+    expect(profiles.displayName('design')).toBe('فريق التصميم');
+    expect((await run(['profile', 'rename', '--', 'default', 'البيت'])).code).toBe(0);
+    expect(profiles.displayName('default')).toBe('البيت');
+    expect(profiles.displayName('worker')).toBe('');
     // Nothing moved: the same ids, the same folders.
     expect(await profiles.list()).toEqual(['design', 'worker']);
     expect(existsSync(path.join(home, 'profiles', 'design', 'SOUL.md'))).toBe(true);

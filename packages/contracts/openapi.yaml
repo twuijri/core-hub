@@ -23215,10 +23215,10 @@ components:
           type: string
           maxLength: 64
           description: >-
-            Hermes's name for what happened: `created`, `assigned`, `claimed`, `completed`,
-            `blocked`, `unblocked`, `commented`, `edited`, `priority`, `status`, `archived`,
-            `reclaimed`, `crashed`, `timed_out`, `review_requested`, `scheduled`… — Hermes may add
-            more.
+            Hermes's name for what happened: `created`, `assigned`, `claimed`, `spawned`,
+            `completed`, `blocked`, `unblocked`, `commented`, `edited`, `reprioritized`, `status`,
+            `archived`, `reclaimed`, `timed_out`, `review_requested`, `changes_requested`,
+            `scheduled`… — Hermes has more, and may add others.
         run_id:
           type: [integer, 'null']
           description: The attempt it belongs to, or `null` for the card itself.

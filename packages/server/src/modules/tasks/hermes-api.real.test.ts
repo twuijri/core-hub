@@ -241,6 +241,33 @@ describe.skipIf(!image)(
           'تعليق من المركز',
         );
 
+        // Hermes's own history of the card, read as it opens (§102): its event log, newest
+        // first, and no attempt yet — nobody has run it.
+        const history = (opened.json() as { hermes: { events: Json[]; runs: Json[] } | null })
+          .hermes;
+        console.log(`hermes events: ${history?.events.map((e) => e.kind).join(', ')}`);
+        expect(history?.runs).toEqual([]);
+        const kinds = history?.events.map((event) => event.kind) ?? [];
+        expect(kinds).toContain('created');
+        expect(kinds).toContain('commented');
+        expect(kinds.at(-1)).toBe('created');
+
+        // Several cards at once (§102): a priority and a comment, on Hermes first.
+        const bulk = await authed(hub, hub.token, {
+          method: 'PATCH',
+          url: '/api/v1/tasks',
+          payload: { task_ids: [id], patch: { priority: 'high', comment: 'تعليق جماعي' } },
+        });
+        expect(bulk.statusCode).toBe(200);
+        expect((bulk.json() as { results: Json[] }).results).toEqual([
+          { id, ok: true, error: null },
+        ]);
+        shown = await show(created.id);
+        expect(shown?.task.priority).toBe(1);
+        expect(shown?.comments).toContainEqual(
+          expect.objectContaining({ author: 'Admin', body: 'تعليق جماعي' }),
+        );
+
         // A refusal, in Hermes's words, changes nothing.
         const empty = await authed(hub, hub.token, {
           method: 'PATCH',
