@@ -89,6 +89,10 @@ $ node scripts/icons/build-icons.mjs --check
 icons: 58 files up to date
 ```
 
+CI على PR #195 (الدفعة الأولى): كل الفحوص الخمسة عشر نجحت، منها «Android build, unit tests, lint»
+(3m14s، يشمل `PlayStoreShots`) و«Lint, typecheck, contracts, client tests, build» (6m54s، يشمل
+`pnpm scripts:test`).
+
 لم يُشغَّل: `play-upload.yml` نفسه (لا حساب Play ولا `PLAY_SERVICE_ACCOUNT_JSON`)، ولا بناء بمفتاح الإصدار
 الحقيقي وFirebase (يحدث في CI عند التشغيل)، ولا actionlint (غير مثبّت). بقية اختبارات أندرويد
 وlint يشغّلها `android.yml` على GitHub. TypeScript لم يُمسّ، فلم يُشغَّل `pnpm typecheck`.
