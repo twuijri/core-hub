@@ -17,6 +17,7 @@
  * there is something that actually asks. A screen that showed a green dot here would be
  * inventing a measurement.
  */
+import { createHash } from 'node:crypto';
 import { existsSync, readFileSync, writeFileSync, mkdirSync } from 'node:fs';
 import path from 'node:path';
 import { parseDocument, type Document } from 'yaml';
@@ -40,6 +41,57 @@ export interface McpServer {
   config: Record<string, unknown>;
   /** The block says `auth: oauth`: Hermes signs in to it by OAuth (DECISIONS §122). */
   oauth: boolean;
+  /** Hermes's `tools.include` / `tools.exclude` of the block (DECISIONS §134). */
+  toolFilter: McpToolFilter;
+  /**
+   * A hash of what decides the server's connection — the raw block without `enabled`, `tools`
+   * and `oauth` — so a kept test can say it was made on other settings (DECISIONS §134).
+   * Credentials count (a new key may change the tools), but only their hash leaves here.
+   */
+  fingerprint: string;
+}
+
+/** `null` — the key is absent. `include: []` is Hermes's "allow none", not "no filter". */
+export interface McpToolFilter {
+  include: string[] | null;
+  exclude: string[] | null;
+}
+
+/** The keys a test does not depend on: the switch, the tool filter, the sign-in settings. */
+const NOT_CONNECTION = new Set(['enabled', 'tools', 'oauth']);
+
+function stable(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(stable);
+  if (isBlock(value)) {
+    return Object.fromEntries(
+      Object.keys(value)
+        .sort()
+        .map((key) => [key, stable(value[key])]),
+    );
+  }
+  return value;
+}
+
+export function connectionFingerprint(config: Record<string, unknown>): string {
+  const kept = Object.fromEntries(
+    Object.entries(config).filter(([key]) => !NOT_CONNECTION.has(key)),
+  );
+  return createHash('sha256')
+    .update(JSON.stringify(stable(kept)))
+    .digest('hex')
+    .slice(0, 32);
+}
+
+/** Hermes reads a list (or one string) of names; anything else is no filter. */
+function names(value: unknown): string[] | null {
+  if (typeof value === 'string') return [value];
+  if (!Array.isArray(value)) return null;
+  return value.filter((entry): entry is string => typeof entry === 'string');
+}
+
+export function toolFilterOf(config: Record<string, unknown>): McpToolFilter {
+  const tools = isBlock(config.tools) ? config.tools : {};
+  return { include: names(tools.include), exclude: names(tools.exclude) };
 }
 
 /**
@@ -159,6 +211,8 @@ export function listMcpServers(home: string): McpServer[] {
       enabled: config.enabled !== false,
       config: mask(config),
       oauth: config.auth === 'oauth',
+      toolFilter: toolFilterOf(config),
+      fingerprint: connectionFingerprint(config),
     }))
     .sort((a, b) => a.name.localeCompare(b.name));
 }
@@ -263,4 +317,44 @@ export function prepareOAuthLogin(
   doc.setIn([BLOCK, name, 'oauth', 'redirect_port'], port);
   save(home, doc);
   return redirect;
+}
+
+/**
+ * Write which tools Hermes gives the agent from this server (DECISIONS §134): Hermes's own
+ * `mcp_servers.<name>.tools.include` (an allow-list, which wins) or `.tools.exclude` (a
+ * block-list), the keys `hermes mcp configure` writes and `tools/mcp_tool_registration.py`
+ * reads at v2026.9.14 and v2026.9.24. `include` as a list writes the allow-list and drops
+ * `exclude`; otherwise `exclude` as a list writes the block-list and drops `include`; both
+ * `null` removes the filter. The block's other keys, `tools.resources` and `tools.prompts`
+ * among them, and every other byte of the file are left alone; a `tools` left empty goes.
+ */
+export function setMcpToolFilter(home: string, name: string, filter: McpToolFilter): McpServer {
+  if (!NAME.test(name)) throw new McpError('mcp_name_invalid');
+  const doc = load(home);
+  const block = doc.toJS()?.[BLOCK]?.[name] as Record<string, unknown> | undefined;
+  if (!block || typeof block !== 'object') throw new McpError('mcp_not_found');
+  if (block.tools !== undefined && block.tools !== null && !isBlock(block.tools)) {
+    throw new McpError('mcp_tools_block_invalid');
+  }
+  const clean = (list: string[]) => [...new Set(list.map((entry) => entry.trim()))].filter(Boolean);
+  const path = [BLOCK, name, 'tools'];
+  if (filter.include) {
+    doc.setIn([...path, 'include'], clean(filter.include));
+    if (doc.hasIn([...path, 'exclude'])) doc.deleteIn([...path, 'exclude']);
+  } else if (filter.exclude) {
+    doc.setIn([...path, 'exclude'], clean(filter.exclude));
+    if (doc.hasIn([...path, 'include'])) doc.deleteIn([...path, 'include']);
+  } else {
+    for (const key of ['include', 'exclude']) {
+      if (doc.hasIn([...path, key])) doc.deleteIn([...path, key]);
+    }
+  }
+  const tools = doc.toJS()?.[BLOCK]?.[name]?.tools as unknown;
+  if (tools !== undefined && (tools === null || (isBlock(tools) && Object.keys(tools).length === 0))) {
+    doc.deleteIn(path);
+  }
+  save(home, doc);
+  const written = getMcpServer(home, name);
+  if (!written) throw new McpError('mcp_write_failed');
+  return written;
 }
