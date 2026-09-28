@@ -378,3 +378,79 @@ describe('hub tools: where the phone is (§105)', () => {
     await expect(tool.run(none, {})).rejects.toMatchObject({ code: 'device_capability_off' });
   });
 });
+
+describe('hub tools: a schedule says why its last run failed', () => {
+  const failed = {
+    id: '01J8QK3ZR2W7M5N4P6T8V9X0SA',
+    name: 'Daily follow-up',
+    enabled: true,
+    trigger: { kind: 'cron', expression: '0 10 * * *', timezone: 'Asia/Riyadh' },
+    next_run_at: '2026-09-29T07:00:00Z',
+    last_run_at: '2026-09-28T07:00:20Z',
+    last_status: 'failed',
+    last_error: 'RuntimeError: No LLM provider configured.',
+    last_delivery_error: null,
+    // What the REST row carries besides: never handed to the agent.
+    prompt: 'Read my tasks',
+    external_id: 'e4011134ed8f',
+    created_at: '2026-09-26T17:34:38Z',
+  };
+  const ctxWith = (answer: (method: string, route: string) => unknown): ToolContext => ({
+    profile: 'work',
+    agentId: null,
+    filesRoot: '/tmp',
+    timezone: 'UTC',
+    notify: () => {},
+    sleep: async () => {},
+    async call(method, route) {
+      return answer(method, route);
+    },
+  });
+  const tool = (name: string) => HUB_TOOLS.find((t) => t.name === name)!;
+
+  it('lists the error and the delivery error with the status, and nothing else of the row', async () => {
+    // A row from a hub that has no error keys keeps them absent: nothing is made up.
+    const older = {
+      id: '01J8QK3ZR2W7M5N4P6T8V9X0SB',
+      name: 'Older',
+      enabled: true,
+      last_status: 'succeeded',
+    };
+    const answer = await tool('schedules.list').run(
+      ctxWith(() => ({ items: [failed, older] })),
+      {},
+    );
+    expect(answer).toEqual({
+      schedules: [
+        {
+          id: failed.id,
+          name: 'Daily follow-up',
+          enabled: true,
+          trigger: failed.trigger,
+          next_run_at: failed.next_run_at,
+          last_run_at: failed.last_run_at,
+          last_status: 'failed',
+          last_error: 'RuntimeError: No LLM provider configured.',
+          last_delivery_error: null,
+        },
+        older,
+      ],
+    });
+  });
+
+  it('answers creating and pausing with the same fields', async () => {
+    const ctx = ctxWith(() => failed);
+    const made = await tool('schedules.create').run(ctx, {
+      name: 'x',
+      prompt: 'y',
+      cron: '0 10 * * *',
+    });
+    const paused = await tool('schedules.pause').run(ctx, { schedule_id: failed.id });
+    for (const answer of [made, paused]) {
+      const { schedule } = answer as { schedule: Record<string, unknown> };
+      expect(schedule).toMatchObject({ last_error: failed.last_error, last_delivery_error: null });
+      expect(schedule).not.toHaveProperty('prompt');
+      expect(schedule).not.toHaveProperty('external_id');
+    }
+  });
+});

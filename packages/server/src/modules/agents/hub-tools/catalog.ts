@@ -139,6 +139,11 @@ const TASK_KEYS = [
   'blocked_reason',
   'updated_at',
 ] as const;
+/**
+ * With the reason a last run failed, as the schedule's REST row (and the web) already carries it:
+ * without them an agent asked why its reminder did not come can only answer "failed". Both are
+ * about the last run, so they are read with `last_status` and `last_run_at`.
+ */
 const SCHEDULE_KEYS = [
   'id',
   'name',
@@ -147,6 +152,8 @@ const SCHEDULE_KEYS = [
   'next_run_at',
   'last_run_at',
   'last_status',
+  'last_error',
+  'last_delivery_error',
 ] as const;
 const SESSION_KEYS = [
   'id',
@@ -761,7 +768,8 @@ export const HUB_TOOLS: readonly HubToolDefinition[] = [
     name: 'schedules.list',
     group: 'schedules',
     access: 'read',
-    description: "List this profile's schedules with their next and last run.",
+    description:
+      "List this profile's schedules with their next and last run. When the last run failed, last_error says why the run itself failed and last_delivery_error why its answer was not delivered.",
     inputSchema: { type: 'object', properties: { limit: LIMIT } },
     async run(ctx, args) {
       const body = await ctx.call('GET', '/schedules', {
