@@ -100,7 +100,20 @@ i18n:limits  OK
 
 أندرويد: لا يوجد JDK على هذا الجهاز، فلم يُبنَ محليًا؛ التحقق من `assembleDebug test lint`
 واختبار اللقطة `AgentsTwoShots` (طيّ/فتح الرأس، زر التحرير لا يُستدعى بضغط الرأس) على GitHub CI.
-نتيجة CI تُضاف هنا بعد اكتمالها.
+نتيجة GitHub CI على PR #220 (الكومِت الأول) — كلها ناجحة:
+
+```text
+pass | Android build, unit tests, lint | 8m18s
+pass | Lint, typecheck, contracts, client tests, build | 7m50s
+pass | Web smoke journeys (Playwright against the real hub) | 13m26s
+pass | Translations fit their labels (measured widths) | 33s
+pass | Server unit tests (shard 1/3, 2/3, 3/3) | 5m2s, 5m59s, 3m10s
+pass | Real Hermes suites (floor / pinned) | 6m25s / 7m22s
+pass | Desktop app smoke (Electron under Xvfb against the real hub) | 1m24s
+pass | Docker image builds and answers /health | 2m46s
+pass | db:generate + db:migrate (SQLite and PostgreSQL) | 1m11s
+pass | PR adds or updates a change record | 12s
+```
 
 ## المخاطر والرجوع
 
