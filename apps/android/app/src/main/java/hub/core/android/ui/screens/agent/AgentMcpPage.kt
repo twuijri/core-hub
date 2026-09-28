@@ -1,5 +1,6 @@
 package hub.core.android.ui.screens
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
@@ -12,21 +13,29 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.collapse
+import androidx.compose.ui.semantics.expand
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import hub.core.android.R
@@ -35,8 +44,6 @@ import hub.core.android.generated.FontTokens
 import hub.core.android.ui.components.ConfirmDeleteDialog
 import hub.core.android.ui.components.ErrorNotice
 import hub.core.android.ui.components.LoadView
-import hub.core.android.ui.components.RowAction
-import hub.core.android.ui.components.RowActionsButton
 import hub.core.android.ui.components.rememberConfirmDelete
 import hub.core.android.ui.components.rememberLoad
 import hub.core.android.ui.kit.Badge
@@ -51,6 +58,7 @@ import hub.core.android.ui.kit.HubSheet
 import hub.core.android.ui.kit.HubSwitch
 import hub.core.android.ui.kit.HubTextField
 import hub.core.android.ui.kit.Lucide
+import hub.core.android.ui.kit.LucideIcon
 import hub.core.android.ui.kit.NoticeBox
 import hub.core.android.ui.kit.Segment
 import hub.core.android.ui.kit.Segmented
@@ -112,7 +120,7 @@ private fun McpPage(agent: Agent, profile: String) {
                                 }
                             },
                             onDelete = { deleting.ask(server) },
-                            oauth = { McpOAuthRow(ops, server, onChanged = { load.reload() }) },
+                            oauth = { open -> McpOAuthRow(ops, server, onChanged = { load.reload() }, expanded = open) },
                         )
                     }
                 }
@@ -129,6 +137,11 @@ private fun McpPage(agent: Agent, profile: String) {
     )
 }
 
+/**
+ * One server (owner, 2026-09-28, as on the web): the header — chevron, name, transport, state and the
+ * switch — opens and folds what is under it; it no longer opens the editor, which has its own Edit
+ * button beside Test. Folded by default, open when the server needs the person or was just tested.
+ */
 @Composable
 internal fun McpServerRow(
     server: McpServer,
@@ -138,12 +151,27 @@ internal fun McpServerRow(
     onEdit: () -> Unit,
     onTest: () -> Unit,
     onDelete: () -> Unit,
-    /** The server's OAuth sign-in in this profile (DECISIONS §122), [McpOAuthRow]. */
-    oauth: (@Composable () -> Unit)? = null,
+    /** The server's OAuth sign-in in this profile (DECISIONS §122), [McpOAuthRow]; told whether the row is open. */
+    oauth: (@Composable (Boolean) -> Unit)? = null,
 ) {
     val t = LocalTokens.current
-    HubCard(Modifier.testTag("mcp.${server.name}"), padding = 14.dp, onClick = onEdit) {
-        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+    var open by rememberSaveable(server.name) { mutableStateOf(McpOAuthRules.needsAttention(server) || test != null) }
+    LaunchedEffect(testing) { if (testing) open = true }
+    val toggle = { open = !open }
+    val state = stringResource(if (open) R.string.agents2_mcp_row_open else R.string.agents2_mcp_row_folded)
+    HubCard(Modifier.testTag("mcp.${server.name}"), padding = 14.dp) {
+        Row(
+            Modifier.fillMaxWidth()
+                .clickable(role = Role.Button, onClick = toggle)
+                .semantics {
+                    stateDescription = state
+                    if (open) collapse { toggle(); true } else expand { toggle(); true }
+                }
+                .testTag("mcp.${server.name}.header"),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            LucideIcon(if (open) Lucide.ChevronDown else Lucide.ChevronRight, null, size = 16.dp, tint = t.textMuted)
             Text(server.name, fontSize = FontTokens.sizeMd.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f, fill = false))
             Badge(server.transport.value)
             Row(Modifier.weight(1f), horizontalArrangement = Arrangement.End) {
@@ -155,23 +183,28 @@ internal fun McpServerRow(
             HubSwitch(server.enabled, onSwitch, Modifier.testTag("mcp.${server.name}.switch"))
         }
         val summary = McpRules.summary(server)
-        if (summary.isNotEmpty()) Text(summary, fontSize = FontTokens.sizeXs.sp, color = t.textMuted, fontFamily = FontFamily.Monospace, maxLines = 2)
-        Text(stringResource(R.string.agent_tools, server.tools.size), fontSize = FontTokens.sizeXs.sp, color = t.textMuted)
-        server.error?.let { NoticeBox(it, BadgeTone.Danger) }
-        McpTestView(server.name, test)
-        oauth?.invoke()
+        if (summary.isNotEmpty()) {
+            Text(summary, fontSize = FontTokens.sizeXs.sp, color = t.textMuted, fontFamily = FontFamily.Monospace, maxLines = if (open) 6 else 1, overflow = TextOverflow.Ellipsis)
+        }
+        if (open) {
+            Text(stringResource(R.string.agent_tools, server.tools.size), fontSize = FontTokens.sizeXs.sp, color = t.textMuted)
+            server.error?.let { NoticeBox(it, BadgeTone.Danger) }
+            McpTestView(server.name, test)
+        }
+        oauth?.invoke(open)
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             HubButton(
                 stringResource(if (testing) R.string.agents2_mcp_testing else R.string.mcp_test), onTest,
                 kind = ButtonKind.Secondary, size = ControlSize.Sm, icon = Lucide.Activity, loading = testing, modifier = Modifier.testTag("mcp.${server.name}.test"),
             )
+            HubButton(
+                stringResource(R.string.agents2_mcp_edit), onEdit,
+                kind = ButtonKind.Secondary, size = ControlSize.Sm, icon = Lucide.Pencil, modifier = Modifier.testTag("mcp.${server.name}.edit"),
+            )
             Row(Modifier.weight(1f), horizontalArrangement = Arrangement.End) {
-                RowActionsButton(
-                    listOf(
-                        RowAction(stringResource(R.string.agents2_mcp_edit), Lucide.Pencil, onClick = onEdit),
-                        RowAction(stringResource(R.string.kit_delete), Lucide.Trash, danger = true, onClick = onDelete),
-                    ),
-                    Modifier.testTag("mcp.${server.name}.more"),
+                HubIconButton(
+                    Lucide.Trash, stringResource(R.string.kit_delete), onDelete,
+                    size = 32.dp, iconSize = 16.dp, tint = t.danger, modifier = Modifier.testTag("mcp.${server.name}.delete"),
                 )
             }
         }

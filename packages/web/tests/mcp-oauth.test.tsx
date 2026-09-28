@@ -394,3 +394,79 @@ describe('connecting an MCP server by OAuth', () => {
     );
   });
 });
+
+describe('a server row folds', () => {
+  const expand = (name: string) => screen.getByTestId(`mcp-expand-${name}`);
+  const details = (name: string) => screen.getByTestId(`mcp-details-${name}`);
+
+  it('starts closed, but open where the person is needed (a sign-in never made)', async () => {
+    localStorage.clear();
+    mount(hub().fetchImpl);
+    await screen.findByTestId('mcp-expand-files');
+    // clickup requires a sign-in and has none: open, with its Connect in reach.
+    expect(expand('clickup').getAttribute('aria-expanded')).toBe('true');
+    expect(details('clickup').hidden).toBe(false);
+    // A process, a header-signed server, an older hub's row: closed.
+    for (const name of ['files', 'github', 'legacy']) {
+      expect(expand(name).getAttribute('aria-expanded')).toBe('false');
+      expect(details(name).hidden).toBe(true);
+    }
+    // The header is a button that names what it opens.
+    expect(expand('files').tagName).toBe('BUTTON');
+    expect(expand('files').getAttribute('aria-controls')).toBe(details('files').id);
+  });
+
+  it('opens and folds on a press of its header, never opens the editor, and remembers it', async () => {
+    localStorage.clear();
+    mount(hub().fetchImpl);
+    await screen.findByTestId('mcp-expand-files');
+    fireEvent.click(expand('files'));
+    expect(expand('files').getAttribute('aria-expanded')).toBe('true');
+    expect(details('files').hidden).toBe(false);
+    expect(within(details('files')).getByText('Command')).toBeTruthy();
+    expect(within(details('files')).getByText('npx')).toBeTruthy();
+    expect(screen.queryByTestId('mcp-editor')).toBeNull();
+
+    // The switch and Delete are beside the header, not in it: they change nothing here.
+    fireEvent.click(screen.getByTestId('mcp-toggle-files'));
+    expect(expand('files').getAttribute('aria-expanded')).toBe('true');
+
+    // Kept on this device: the next visit finds it open.
+    cleanup();
+    mount(hub().fetchImpl);
+    await screen.findByTestId('mcp-expand-files');
+    expect(expand('files').getAttribute('aria-expanded')).toBe('true');
+    fireEvent.click(expand('files'));
+    expect(expand('files').getAttribute('aria-expanded')).toBe('false');
+    expect(details('files').hidden).toBe(true);
+    localStorage.clear();
+  });
+
+  it('edits from its own Edit button', async () => {
+    localStorage.clear();
+    mount(hub().fetchImpl);
+    fireEvent.click(await screen.findByTestId('mcp-edit-files'));
+    const editor = await screen.findByTestId('mcp-editor');
+    expect(within(editor).getByText('files')).toBeTruthy();
+    expect(expand('files').getAttribute('aria-expanded')).toBe('false');
+  });
+
+  it('keeps Reconnect and Disconnect inside the folded part, and Test opens it', async () => {
+    localStorage.clear();
+    mount(hub({ status: 'connected' }).fetchImpl);
+    await screen.findByTestId('mcp-expand-clickup');
+    // Signed in: nothing needs the person, so the row starts closed…
+    expect(expand('clickup').getAttribute('aria-expanded')).toBe('false');
+    // …with the sign-in's buttons under it, out of reach of a stray press.
+    expect(details('clickup').hidden).toBe(true);
+    expect(details('clickup').contains(screen.getByTestId('mcp-oauth-connect-clickup'))).toBe(true);
+    expect(details('clickup').contains(screen.getByTestId('mcp-oauth-disconnect-clickup'))).toBe(
+      true,
+    );
+    fireEvent.click(screen.getByTestId('mcp-test-clickup'));
+    expect(expand('clickup').getAttribute('aria-expanded')).toBe('true');
+    const result = await screen.findByTestId('mcp-test-result-clickup');
+    expect(details('clickup').contains(result)).toBe(true);
+    localStorage.clear();
+  });
+});

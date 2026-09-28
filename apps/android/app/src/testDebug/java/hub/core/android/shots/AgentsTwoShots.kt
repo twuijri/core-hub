@@ -111,6 +111,7 @@ class AgentsTwoShots {
 
     @Test fun mcpServersHubToolsEditorAndPendingWrite() {
         var deleted = false
+        var edited = 0
         compose.setContent {
             CoreHubTheme(ThemeChoice.LIGHT) {
                 Column(
@@ -118,7 +119,7 @@ class AgentsTwoShots {
                     verticalArrangement = Arrangement.spacedBy(12.dp),
                 ) {
                     HubToolsView(hubTools, busy = false, error = null, test = null, testing = false, onSwitch = {}, onGroup = { _, _, _ -> }, onTest = {})
-                    McpServerRow(github, McpTest(result = tested), testing = false, onSwitch = {}, onEdit = {}, onTest = {}, onDelete = { deleted = true })
+                    McpServerRow(github, McpTest(result = tested), testing = false, onSwitch = {}, onEdit = { edited += 1 }, onTest = {}, onDelete = { deleted = true })
                     PendingWriteRow(write, busy = false) {}
                     McpEditorBody(github, onDismiss = {}, onSave = { _, _, _ -> Result.success(Unit) })
                 }
@@ -133,6 +134,17 @@ class AgentsTwoShots {
         compose.onNodeWithTag("mcp.editor.env.1.key").performTextInput("MODE")
         compose.waitForIdle()
         assertEquals(false, deleted)
+        // The header folds the row and opens nothing else; Edit is its own button (owner, 2026-09-28).
+        compose.onNodeWithTag("mcp.github.header").performClick()
+        compose.waitForIdle()
+        compose.onNodeWithTag("mcp.github.result", useUnmergedTree = true).assertDoesNotExist()
+        compose.onNodeWithTag("mcp.github.header").performClick()
+        compose.waitForIdle()
+        compose.onNodeWithTag("mcp.github.result", useUnmergedTree = true).assertExists()
+        assertEquals(0, edited)
+        compose.onNodeWithTag("mcp.github.edit").performClick()
+        compose.waitForIdle()
+        assertEquals(1, edited)
     }
 
     @Test fun channelCardsSettingsAndWebhook() {

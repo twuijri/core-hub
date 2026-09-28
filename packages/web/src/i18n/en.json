@@ -2313,6 +2313,8 @@
     "editor_note": "Every MCP server has its own fields. It is edited as it is, and nothing we do not recognise is dropped. A credential reads as [stored]; leaving it keeps the one on file.",
     "delete_title": "Delete {name}?",
     "delete_body": "It goes from the config file. Nothing is removed from the server itself.",
+    "address": "Address",
+    "command": "Command",
     "test": {
       "button": "Test",
       "running": "Testing…",

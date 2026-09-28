@@ -12,10 +12,17 @@
  *
  * **Test asks Hermes**, exactly as on a server row: Hermes connects to the block the hub wrote
  * and lists the tools it was offered.
+ *
+ * **It folds** (owner, 2026-09-28): the header — title and the switch — is what shows; a press
+ * on the title opens the groups, the test and the recent calls. Closed by default, open when the
+ * hub cannot offer its tools; the choice is kept on this device (`mcpExpanded.ts`).
  */
 import { describeError } from '../auth/client.js';
 import { useI18n } from '../i18n/context.js';
-import { Badge, Button, Card, CardHeader, Notice, Switch } from '../ui/index.js';
+import { useId } from 'react';
+import { Badge, Button, Card, Notice, Switch } from '../ui/index.js';
+import { IconChevron } from '../ui/icons.js';
+import { expandedKey, useMcpExpanded } from './mcpExpanded.js';
 import { TestResult } from './McpTestResultView.js';
 import { describeToolError } from './toolErrors.js';
 import {
@@ -36,13 +43,44 @@ export function HubToolsCard({ agentId }: { agentId: string | undefined }) {
   // A hub older than the card answers something else here; the card then shows nothing.
   const data = Array.isArray(settings.data?.groups) ? settings.data : undefined;
 
+  const [open, setOpen] = useMcpExpanded(
+    expandedKey(agentId, '#hub'),
+    // Starts open when the hub cannot offer its tools, or they could not be read.
+    settings.isError || (!!data && !data.available),
+    settings.isError || !!data,
+  );
+  const bodyId = `hub-tools-body-${useId()}`;
+  const runTest = (name: string) => {
+    setOpen(true);
+    probe.mutate(name);
+  };
+
   return (
-    <Card testId="hub-tools" data-enabled={data?.enabled || undefined}>
-      <CardHeader
-        title={t('hub_tools.title', { product })}
-        subtitle={t('hub_tools.subtitle', { product })}
-        actions={
-          data && (
+    <Card testId="hub-tools" data-enabled={data?.enabled || undefined} data-open={open}>
+      {/* The header folds the card: its groups and their tools are long, and read rarely. */}
+      <header className="ch-card-head">
+        <h3 className="hub-tools-heading">
+          <button
+            type="button"
+            className="hub-tools-toggle"
+            aria-expanded={open}
+            aria-controls={bodyId}
+            data-testid="hub-tools-expand"
+            onClick={() => setOpen(!open)}
+          >
+            <IconChevron size={16} className="mcp-chevron" />
+            <span className="ch-card-headings">
+              <span className="ch-card-title" dir="auto">
+                {t('hub_tools.title', { product })}
+              </span>
+              <span className="ch-card-subtitle" dir="auto">
+                {t('hub_tools.subtitle', { product })}
+              </span>
+            </span>
+          </button>
+        </h3>
+        {data && (
+          <div className="ch-card-actions">
             <Switch
               checked={data.enabled}
               disabled={update.isPending || (!data.available && !data.enabled)}
@@ -51,63 +89,70 @@ export function HubToolsCard({ agentId }: { agentId: string | undefined }) {
               testId="hub-tools-toggle"
               onChange={(next) => update.mutate({ enabled: next })}
             />
-          )
-        }
-      />
+          </div>
+        )}
+      </header>
       <div className="flex flex-col gap-3">
         {settings.isError && <Notice tone="danger">{describeToolError(settings.error, t)}</Notice>}
-        {data && !data.available && (
-          <Notice tone="warning">
-            {t(`hub_tools.unavailable.${data.unavailable_reason ?? 'runtime_absent'}`)}
-          </Notice>
-        )}
-        {data && (
-          <p className="text-sm text-muted" data-testid="hub-tools-acts-as">
-            {t('hub_tools.acts_as')}
-          </p>
-        )}
         {update.isError && <Notice tone="danger">{describeError(update.error, t)}</Notice>}
+        <div
+          id={bodyId}
+          className="flex flex-col gap-3"
+          hidden={!open}
+          data-testid="hub-tools-body"
+        >
+          {data && !data.available && (
+            <Notice tone="warning">
+              {t(`hub_tools.unavailable.${data.unavailable_reason ?? 'runtime_absent'}`)}
+            </Notice>
+          )}
+          {data && (
+            <p className="text-sm text-muted" data-testid="hub-tools-acts-as">
+              {t('hub_tools.acts_as')}
+            </p>
+          )}
 
-        {data && (
-          <ul className="flex flex-col gap-2" data-testid="hub-tools-groups">
-            {data.groups.map((group) => (
-              <li key={group.id}>
-                <GroupRow
-                  group={group}
-                  disabled={!data.enabled || update.isPending}
-                  onChange={(change) => update.mutate({ groups: [{ id: group.id, ...change }] })}
-                />
-              </li>
-            ))}
-          </ul>
-        )}
+          {data && (
+            <ul className="flex flex-col gap-2" data-testid="hub-tools-groups">
+              {data.groups.map((group) => (
+                <li key={group.id}>
+                  <GroupRow
+                    group={group}
+                    disabled={!data.enabled || update.isPending}
+                    onChange={(change) => update.mutate({ groups: [{ id: group.id, ...change }] })}
+                  />
+                </li>
+              ))}
+            </ul>
+          )}
 
-        {data && (
-          <div className="flex flex-wrap items-center gap-2">
-            <Button
-              size="sm"
-              variant="secondary"
-              disabled={!data.enabled || probe.isPending}
-              data-testid="hub-tools-test"
-              onClick={() => probe.mutate(data.server_name)}
-            >
-              {probe.isPending ? t('mcp.test.running') : t('mcp.test.button')}
-            </Button>
-            {data.url && (
-              <span className="text-xs text-muted" dir="ltr">
-                {data.url}
-              </span>
-            )}
-          </div>
-        )}
-        {probe.isError && (
-          <div data-testid={`mcp-test-result-${data?.server_name ?? 'corehub'}`} data-ok="false">
-            <Notice tone="danger">{describeToolError(probe.error, t)}</Notice>
-          </div>
-        )}
-        {probe.data && data && <TestResult name={data.server_name} result={probe.data} />}
+          {data && (
+            <div className="flex flex-wrap items-center gap-2">
+              <Button
+                size="sm"
+                variant="secondary"
+                disabled={!data.enabled || probe.isPending}
+                data-testid="hub-tools-test"
+                onClick={() => runTest(data.server_name)}
+              >
+                {probe.isPending ? t('mcp.test.running') : t('mcp.test.button')}
+              </Button>
+              {data.url && (
+                <span className="text-xs text-muted" dir="ltr">
+                  {data.url}
+                </span>
+              )}
+            </div>
+          )}
+          {probe.isError && (
+            <div data-testid={`mcp-test-result-${data?.server_name ?? 'corehub'}`} data-ok="false">
+              <Notice tone="danger">{describeToolError(probe.error, t)}</Notice>
+            </div>
+          )}
+          {probe.data && data && <TestResult name={data.server_name} result={probe.data} />}
 
-        {data && <RecentCalls calls={data.recent_calls} />}
+          {data && <RecentCalls calls={data.recent_calls} />}
+        </div>
       </div>
     </Card>
   );

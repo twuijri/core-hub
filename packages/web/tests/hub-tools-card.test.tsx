@@ -145,9 +145,11 @@ function settings(enabled: boolean, writes: string[] = []) {
   };
 }
 
-function hub() {
+function hub(options: { available?: boolean } = {}) {
   const sent: Sent[] = [];
   let current = settings(false);
+  if (options.available === false)
+    current = { ...current, available: false, unavailable_reason: 'runtime_absent' as never };
   const fetchImpl = ((input: string, init: RequestInit = {}) => {
     const url = new URL(String(input));
     const path = url.pathname;
@@ -281,5 +283,49 @@ describe('the Core Hub tools card', () => {
     expect(
       sent.some((s) => s.method === 'POST' && s.url.endsWith('/mcp-servers/corehub/test')),
     ).toBe(true);
+  });
+
+  it('folds from its title: closed by default, opened by a press and kept on this device', async () => {
+    localStorage.clear();
+    const { fetchImpl } = hub();
+    mount(`/agents/${HERMES}/mcp`, fetchImpl);
+    const toggle = await screen.findByTestId('hub-tools-expand');
+    await screen.findByTestId('hub-group-tasks');
+    // The long part — groups, test, calls — is under the title, closed; the switch is not.
+    expect(toggle.getAttribute('aria-expanded')).toBe('false');
+    expect(toggle.tagName).toBe('BUTTON');
+    expect(screen.getByTestId('hub-tools-body').hidden).toBe(true);
+    expect(
+      screen.getByTestId('hub-tools-body').contains(screen.getByTestId('hub-group-tasks')),
+    ).toBe(true);
+    expect(
+      screen.getByTestId('hub-tools-body').contains(screen.getByTestId('hub-tools-toggle')),
+    ).toBe(false);
+    fireEvent.click(toggle);
+    expect(toggle.getAttribute('aria-expanded')).toBe('true');
+    expect(screen.getByTestId('hub-tools-body').hidden).toBe(false);
+    // Switching it on does not fold or open it.
+    fireEvent.click(screen.getByTestId('hub-tools-toggle'));
+    expect(toggle.getAttribute('aria-expanded')).toBe('true');
+
+    // The next visit on this device finds it open.
+    cleanup();
+    mount(`/agents/${HERMES}/mcp`, hub().fetchImpl);
+    await screen.findByTestId('hub-group-tasks');
+    expect(screen.getByTestId('hub-tools-expand').getAttribute('aria-expanded')).toBe('true');
+    fireEvent.click(screen.getByTestId('hub-tools-expand'));
+    expect(screen.getByTestId('hub-tools-body').hidden).toBe(true);
+    localStorage.clear();
+  });
+
+  it('starts open when the hub cannot offer its tools, so the reason is read', async () => {
+    localStorage.clear();
+    const { fetchImpl } = hub({ available: false });
+    mount(`/agents/${HERMES}/mcp`, fetchImpl);
+    await screen.findByTestId('hub-group-tasks');
+    await waitFor(() =>
+      expect(screen.getByTestId('hub-tools-expand').getAttribute('aria-expanded')).toBe('true'),
+    );
+    expect(screen.getByTestId('hub-tools-body').hidden).toBe(false);
   });
 });

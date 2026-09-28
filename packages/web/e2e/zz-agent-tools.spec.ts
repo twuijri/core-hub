@@ -3,7 +3,8 @@
  * scripted Hermes API (`e2e/hub.ts`):
  *
  * - MCP: "Test" has Hermes connect to a server and shows the tools it listed; a server Hermes
- *   cannot start shows Hermes's own sentence.
+ *   cannot start shows Hermes's own sentence. A row folds from its header, Edit is its own
+ *   button, and which rows are open is kept on this device.
  * - Skills: "Import" takes a zip of two skills and lists both; the same pack again is refused
  *   with the skill named; a broken pack is refused with the file named.
  * - Channels: "Link WhatsApp" draws Hermes's QR code, redraws it when Hermes replaces it, and
@@ -73,10 +74,46 @@ test('23. the agent tools ask Hermes: an MCP test, a skill pack imported, WhatsA
   await expect(failed).toContainText("No such file or directory: 'not-a-command'");
   await shot(page, 'agent-mcp-test-ar-light');
 
+  // ---- A row folds (owner, 2026-09-28): its header opens and closes what is under it and
+  // never opens the editor; Edit is its own button. Test opened the row to show its result.
+  const docs = page.getByTestId('mcp-expand-docs');
+  await expect(docs).toHaveAttribute('aria-expanded', 'true');
+  await docs.click();
+  await expect(docs).toHaveAttribute('aria-expanded', 'false');
+  await expect(page.getByTestId('mcp-details-docs')).toBeHidden();
+  await expect(page.getByTestId('mcp-editor')).toHaveCount(0);
+  // From the keyboard too: the header is a button.
+  await docs.focus();
+  await page.keyboard.press('Enter');
+  await expect(docs).toHaveAttribute('aria-expanded', 'true');
+  await expect(page.getByTestId('mcp-details-docs')).toBeVisible();
+  await expect(page.getByTestId('mcp-details-docs')).toContainText('mcp-server-filesystem');
+  await expect(page.getByTestId('mcp-editor')).toHaveCount(0);
+  await page.getByTestId('mcp-edit-docs').click();
+  const editor = page.getByTestId('mcp-editor');
+  await expect(editor).toBeVisible();
+  await expect(editor.getByTestId('mcp-config')).toHaveValue(/mcp-server-filesystem/);
+  await page.keyboard.press('Escape');
+  await expect(editor).toHaveCount(0);
+  // Kept on this device: after a reload, docs is still open and broken closed once folded.
+  await page.getByTestId('mcp-expand-broken').click();
+  await expect(page.getByTestId('mcp-expand-broken')).toHaveAttribute('aria-expanded', 'false');
+  await page.reload();
+  await expect(page.getByTestId('mcp-expand-docs')).toHaveAttribute('aria-expanded', 'true');
+  await expect(page.getByTestId('mcp-expand-broken')).toHaveAttribute('aria-expanded', 'false');
+  await expect(page.getByTestId('mcp-details-broken')).toBeHidden();
+  await shot(page, 'agent-mcp-rows-folded-ar-light');
+
   // ---- Core Hub tools (§67): switched on, the hub writes its own server into this profile's
   // config; Test has Hermes connect to it like any other; the block is not a row of the list.
   const card = page.getByTestId('hub-tools');
   await expect(card).toContainText('أدوات كور هب');
+  // The card folds too, closed by default: its groups are under its title.
+  const hubExpand = page.getByTestId('hub-tools-expand');
+  await expect(hubExpand).toHaveAttribute('aria-expanded', 'false');
+  await expect(page.getByTestId('hub-group-tasks')).toBeHidden();
+  await hubExpand.click();
+  await expect(page.getByTestId('hub-group-tasks')).toBeVisible();
   await page.getByTestId('hub-tools-toggle').click();
   await expect(page.getByTestId('hub-group-toggle-tasks')).toBeEnabled();
   await page.getByTestId('hub-group-writes-tasks').click();
