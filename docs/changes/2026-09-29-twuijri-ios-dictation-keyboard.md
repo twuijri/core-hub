@@ -72,7 +72,15 @@ $ pnpm exec prettier --check apps/ios/CoreHub/i18n/en.json apps/ios/CoreHub/i18n
 All matched files use Prettier code style!
 ```
 
-CI (PR #220، مهمة iOS «Build and test on the iOS simulator»): تُسجَّل النتيجة هنا بعد انتهائها.
+CI (PR #220، تشغيل iOS رقم 36491692233 على `470c4dc0`): البناء والاختبار على محاكي آيفون نجحا.
+
+```
+Generate the Swift client (CoreHubClient): success
+Build and test on the iOS simulator: success
+Executed 395 tests, with 0 failures (0 unexpected)
+```
+التشغيل السابق على نفس الفرع (`404774ca`، رقم 36489416854) نفّذ 382 اختبارًا؛ الفرق 13 = اختبارات
+`TypedLanguageTests` الجديدة كلها، ناجحة، مع `DictationLanguageTests` القديمة.
 
 ## المخاطر والرجوع
 - **لا يمكن التحقق إلا على آيفون حقيقي مع Gboard**: أيّ الإشارات يعطيها Gboard فعلًا — هل تتغير
