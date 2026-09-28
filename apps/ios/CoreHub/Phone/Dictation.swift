@@ -35,6 +35,8 @@ final class Dictation {
     private(set) var levels = [Float](repeating: 0, count: Dictation.levelCount)
     /// The language the phone listens in during this take; nil while the hub listens.
     private(set) var listeningIn: String?
+    /// The locales the phone's recognizer knows, as it names them; empty while the hub listens.
+    private(set) var supported: [String] = []
 
     @ObservationIgnored private let engine = AVAudioEngine()
     @ObservationIgnored private let feed = Feed()
@@ -75,6 +77,7 @@ final class Dictation {
             return
         }
         let supported = SFSpeechRecognizer.supportedLocales().map(\.identifier)
+        self.supported = supported
         guard let identifier = DictationLanguage.match(languages, supported: supported),
               let recognizer = SFSpeechRecognizer(locale: Locale(identifier: identifier)),
               recognizer.isAvailable
@@ -105,6 +108,30 @@ final class Dictation {
             state = .failed(l10n("voice.unavailable"))
             teardown()
         }
+    }
+
+    /// Listens in another language from now on (the language mark on the recording bar), on the
+    /// same microphone: what was heard so far stays, and the rest of the take keeps this language.
+    /// False when the phone cannot recognize it now (nothing changes then).
+    @discardableResult
+    func switchLanguage(to language: String) -> Bool {
+        guard state == .listening, recorder == nil,
+              let identifier = DictationLanguage.match([language], supported: supported),
+              DictationLanguage.tag(identifier)?.lowercased() != listeningIn?.lowercased(),
+              let next = SFSpeechRecognizer(locale: Locale(identifier: identifier)),
+              next.isAvailable
+        else { return false }
+        // A late result of the stretch in the old language is dropped (`received` checks it).
+        stretch += 1
+        commit()
+        feed.request?.endAudio()
+        task?.cancel()
+        task = nil
+        recognizer = next
+        listeningIn = DictationLanguage.tag(identifier)
+        quickFailures = 0
+        listen()
+        return true
     }
 
     /// One recognition task over the running microphone.
@@ -192,6 +219,7 @@ final class Dictation {
             transcribe = hub
             startedAt = Date()
             listeningIn = nil
+            supported = []
             state = .listening
             meter = Task { [weak self] in
                 while !Task.isCancelled {

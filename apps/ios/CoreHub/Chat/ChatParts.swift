@@ -328,6 +328,9 @@ struct Composer: View {
                 DictationStrip(
                     dictation: dictation,
                     badge: DictationLanguage.badge(dictation.listeningIn ?? DictationLanguage.auto),
+                    languages: switchLanguages,
+                    reader: app.language.rawValue,
+                    onLanguage: switchLanguage,
                     onCancel: {
                         sendWhenHeard = false
                         dictation.cancel()
@@ -342,6 +345,11 @@ struct Composer: View {
         }
         .animation(.easeOut(duration: Motion.fast), value: dictating)
         .onAppear { _ = KeyboardLanguage.shared }
+        .onChange(of: text) { old, new in
+            // Typing tells the language of a keyboard that does not say it; dictated words do not.
+            guard !dictating, dictation.heard.isEmpty || new != Dictation.join(dictationBase, dictation.heard) else { return }
+            KeyboardLanguage.shared.noteEdit(from: old, to: new)
+        }
         .onChange(of: dictation.heard) { _, heard in
             guard dictating || dictation.state == .idle else { return }
             text = Dictation.join(dictationBase, heard)
@@ -477,6 +485,25 @@ struct Composer: View {
         return [choice] + offered
     }
 
+    /// What the recording bar's language mark switches between (only while the phone listens).
+    private var switchLanguages: [String] {
+        guard dictation.listeningIn != nil else { return [] }
+        return DictationLanguage.switchOptions(
+            listening: dictation.listeningIn,
+            keyboards: KeyboardLanguage.enabled,
+            preferred: Locale.preferredLanguages,
+            remembered: KeyboardLanguage.shared.current,
+            supported: dictation.supported
+        )
+    }
+
+    /// The person switched the language on the recording bar: the rest of this take listens in
+    /// it, and it is the last language used for the next one.
+    private func switchLanguage(_ language: String) {
+        guard dictation.switchLanguage(to: language) else { return }
+        KeyboardLanguage.shared.remember(dictation.listeningIn ?? language)
+    }
+
     /// Send: while dictating, once the last words are in.
     private func send() {
         guard dictating else { return onSend() }
@@ -527,6 +554,12 @@ struct DictationStrip: View {
     let dictation: Dictation
     /// The language the phone listens in, as its short mark; nil while the hub listens.
     let badge: String?
+    /// What a tap on the mark steps through (DictationLanguage.switchOptions); a touch and hold
+    /// lists them. Empty, or no `onLanguage`: the mark only shows the language.
+    var languages: [String] = []
+    /// The reader's language, for the languages' names.
+    var reader: String = "en"
+    var onLanguage: ((String) -> Void)? = nil
     let onCancel: () -> Void
     let onStop: () -> Void
     let onSend: () -> Void
@@ -545,10 +578,14 @@ struct DictationStrip: View {
                 .accessibilityIdentifier("dictation.cancel")
                 Waveform(levels: dictation.levels)
                 if let badge {
-                    Text(badge)
-                        .font(.system(size: FontSize.sizeXs, weight: .semibold))
-                        .foregroundStyle(Tone.textMuted)
-                        .accessibilityHidden(true)
+                    if let onLanguage, !languages.isEmpty {
+                        languageMark(badge, onLanguage: onLanguage)
+                    } else {
+                        Text(badge)
+                            .font(.system(size: FontSize.sizeXs, weight: .semibold))
+                            .foregroundStyle(Tone.textMuted)
+                            .accessibilityHidden(true)
+                    }
                 }
                 Button(action: onStop) {
                     RoundedRectangle(cornerRadius: 2.5, style: .continuous)
@@ -582,6 +619,44 @@ struct DictationStrip: View {
         .frame(maxWidth: Layout.composerMax)
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("dictation.strip")
+    }
+
+    /// The language mark as a control (owner, 2026-09-29): a tap switches to the next language
+    /// at once, a touch and hold lists them. Drawn as a chip with the up-down chevrons so it
+    /// reads as something to press.
+    private func languageMark(_ badge: String, onLanguage: @escaping (String) -> Void) -> some View {
+        let listening = dictation.listeningIn
+        let selected = languages.first { tag in listening.map { DictationLanguage.base($0) == DictationLanguage.base(tag) } ?? false }
+        return Menu {
+            Picker(l10n("voice.language"), selection: Binding(
+                get: { selected ?? "" },
+                set: { onLanguage($0) }
+            )) {
+                ForEach(languages, id: \.self) { tag in
+                    Text(DictationLanguage.name(tag, in: reader)).tag(tag)
+                }
+            }
+            .pickerStyle(.inline)
+        } label: {
+            HStack(spacing: 2) {
+                Text(badge)
+                    .font(.system(size: FontSize.sizeXs, weight: .semibold))
+                LucideIcon(.chevronsUpDown, size: 10)
+            }
+            .padding(.horizontal, Space.s2)
+            .frame(minHeight: Control.heightSm - 8)
+            .background(Tone.accentSoft, in: Capsule())
+            .foregroundStyle(Tone.accentSoftText)
+            .hitSlop(8)
+        } primaryAction: {
+            if let next = DictationLanguage.next(after: listening, in: languages) { onLanguage(next) }
+        }
+        .menuStyle(.button)
+        .buttonStyle(.plain)
+        .accessibilityLabel(l10n("voice.language"))
+        .accessibilityValue(listening.map { DictationLanguage.name($0, in: reader) } ?? badge)
+        .accessibilityHint(l10n("voice.language_switch_hint"))
+        .accessibilityIdentifier("dictation.language")
     }
 }
 

@@ -51,23 +51,11 @@ enum DictationLanguage {
 
     /// The script most letters of `texts` are written in; nil with fewer than three letters.
     static func script(of texts: [String]) -> Script? {
-        var counts: [Script: Int] = [:]
-        for text in texts {
-            for scalar in text.unicodeScalars {
-                guard let found = script(of: scalar) else { continue }
-                counts[found, default: 0] += 1
-            }
-        }
-        // Japanese mixes kana with Han: any kana makes it Japanese.
-        if let kana = counts[.kana], kana > 0 {
-            counts[.kana] = kana + (counts[.han] ?? 0)
-            counts[.han] = nil
-        }
-        guard let best = counts.max(by: { $0.value < $1.value }), best.value >= 3 else { return nil }
-        return best.key
+        script(of: texts, minimum: 3)
     }
 
-    private static func script(of scalar: Unicode.Scalar) -> Script? {
+    /// The writing system of one letter; nil for anything else (digits, marks, emoji).
+    static func letterScript(_ scalar: Unicode.Scalar) -> Script? {
         switch scalar.value {
         case 0x0041...0x005A, 0x0061...0x007A, 0x00C0...0x024F, 0x1E00...0x1EFF: return .latin
         case 0x0600...0x06FF, 0x0750...0x077F, 0x08A0...0x08FF, 0xFB50...0xFDFF, 0xFE70...0xFEFF: return .arabic
