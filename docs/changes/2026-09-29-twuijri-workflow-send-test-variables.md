@@ -111,6 +111,23 @@ i18n:check  OK
 
 Android وiOS لم يُبنيا محليًا (لا JDK ولا Xcode على هذا الجهاز)؛ البناء واختباراتهما على GitHub CI.
 
+نتيجة GitHub CI على PR #220 (الكومِت `e63bd4b6`) — كلها ناجحة:
+
+```text
+pass | Android build, unit tests, lint | 9m54s
+pass | Build and test on the iOS simulator | 8m53s
+pass | Generate the Swift client (CoreHubClient) | 43s
+pass | Lint, typecheck, contracts, client tests, build | 7m54s
+pass | Web smoke journeys (Playwright against the real hub) | 14m20s
+pass | Server unit tests (shard 1/3, 2/3, 3/3) | 5m34s, 6m16s, 3m56s
+pass | Real Hermes suites (floor / pinned) | 8m44s / 7m18s
+pass | Translations fit their labels (measured widths) | 43s
+pass | Desktop app smoke (Electron under Xvfb against the real hub) | 1m32s
+pass | Docker image builds and answers /health | 3m34s
+pass | db:generate + db:migrate (SQLite and PostgreSQL) | 1m12s
+pass | Store listing and demo hub checks | 16s
+```
+
 ## المخاطر والرجوع
 
 - عميل قديم (هاتف بنسخة سابقة) يضغط الإرسال التجريبي لنص فيه متغيرات سيرى رسالة الرفض بدل وصول
