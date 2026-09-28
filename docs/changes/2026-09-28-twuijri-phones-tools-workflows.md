@@ -77,7 +77,10 @@ BUILD SUCCESSFUL in 20s   (لقطة الدرج بالعربية: الأيقون�
 ```
 iOS لا يُبنى على هذا الجهاز (لا Swift): البناء واختبارات XCTest على CI فقط — النتيجة أدناه.
 
-CI على هذا الفرع: (يُحدَّث بعد اكتمال التشغيل).
+CI على PR #211 (الرأس `82fc2be9`، بعد دمج `origin/main`): كل الفحوص ناجحة — Android build, unit tests, lint؛
+Build and test on the iOS simulator (أول بناء لكود iOS: `Executed 376 tests, with 0 failures`، `** TEST SUCCEEDED **`)؛
+Generate the Swift client؛ Lint, typecheck, contracts, client tests, build؛ Server unit tests (3/3)؛ Web smoke journeys
+(Playwright)؛ Desktop app smoke؛ Docker image؛ db:generate + db:migrate؛ change record؛ graphify-out.
 
 ## المخاطر والرجوع
 - كود iOS كُتب دون مترجم محلي؛ CI هو أول بناء له.
