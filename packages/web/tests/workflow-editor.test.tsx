@@ -165,6 +165,17 @@ function fakeHub(
           )
         : json(saved);
     }
+    if (path === '/workflows/test-step' && (body as { workflow_run_id?: string }).workflow_run_id) {
+      // The last run's values: `check` finished, nobody typed an `input`.
+      return json({
+        rendered: 'x',
+        answer: null,
+        output: null,
+        error: null,
+        executed: false,
+        values: { 'steps.check.output': 'All checks passed.' },
+      });
+    }
     if (path === '/workflows/test-step') {
       const node = (body as { node: { kind: string } }).node;
       return json(
@@ -599,6 +610,61 @@ describe('Workflows: its own page', () => {
     ).nodes[0]!;
     expect(node).toMatchObject({ kind: 'notify', input: 'Done' });
     expect((node.send as { targets: unknown[] }).targets).toHaveLength(2);
+  });
+
+  it('a Send message test with variables: values from the last run or typed, a preview, and no send until each has one (§124)', async () => {
+    const user = userEvent.setup();
+    const { seen, fetchImpl } = fakeHub();
+    mount(fetchImpl, `/schedules?section=workflows&workflow=${FLOW}&profile=designer`);
+    await screen.findByTestId('workflow-canvas');
+    await user.click(await screen.findByTestId('workflow-add-send'));
+    const words = await screen.findByTestId('workflow-step-text');
+    fireEvent.change(words, {
+      target: { value: 'Result: {{steps.check.output}} for {{input}} ({{ steps.check.output }})' },
+    });
+    await user.click(screen.getByTestId('workflow-send-telegram'));
+    await user.type(screen.getByTestId('workflow-send-chat'), '-1001');
+
+    // Each variable once, the preview with the holes still showing, and Send off.
+    const sample = screen.getByTestId('workflow-send-sample');
+    expect(within(sample).getByTestId('workflow-send-value-steps.check.output')).toBeTruthy();
+    expect(within(sample).getByTestId('workflow-send-value-input')).toBeTruthy();
+    expect(screen.getByTestId('workflow-send-preview')).toHaveTextContent(
+      'Result: {{steps.check.output}} for {{input}}',
+    );
+    expect(screen.getByTestId('workflow-send-missing')).toHaveTextContent('{{input}}');
+    expect(screen.getByTestId('workflow-send-test')).toBeDisabled();
+
+    // The last run fills what it had; `input` it did not have stays for the person.
+    await user.click(screen.getByTestId('workflow-send-last-run'));
+    await screen.findByTestId('workflow-send-last-run-filled');
+    const asked = seen.find(
+      (c) =>
+        c.path === '/workflows/test-step' &&
+        (c.body as { workflow_run_id?: string }).workflow_run_id,
+    )!;
+    expect(asked.body).toMatchObject({ workflow_run_id: RUN, node: { kind: 'notify' } });
+    expect(asked.profile).toBe('designer');
+    expect(screen.getByTestId('workflow-send-value-steps.check.output')).toHaveValue(
+      'All checks passed.',
+    );
+    expect(screen.getByTestId('workflow-send-missing')).toHaveTextContent('{{input}}');
+    expect(screen.getByTestId('workflow-send-missing')).not.toHaveTextContent('steps.check');
+    expect(screen.getByTestId('workflow-send-test')).toBeDisabled();
+
+    await user.type(screen.getByTestId('workflow-send-value-input'), 'release 2');
+    expect(screen.getByTestId('workflow-send-preview')).toHaveTextContent(
+      'Result: All checks passed. for release 2 (All checks passed.)',
+    );
+    expect(screen.queryByTestId('workflow-send-missing')).toBeNull();
+    await user.click(screen.getByTestId('workflow-send-test'));
+    await screen.findByTestId('workflow-send-test-result');
+    // The words go as written, with the values: the hub renders them with the run's own code.
+    expect(seen.find((c) => c.path === '/workflows/send-test')!.body).toEqual({
+      text: 'Result: {{steps.check.output}} for {{input}} ({{ steps.check.output }})',
+      values: { 'steps.check.output': 'All checks passed.', input: 'release 2' },
+      send: { targets: [{ platform: 'telegram', chat_id: '-1001' }] },
+    });
   });
 
   it('a failure alert is saved with the workflow, and a step is tried with a sample (§127)', async () => {

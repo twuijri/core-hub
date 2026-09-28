@@ -141,6 +141,7 @@ export function StepPanel({
   runFromBusy,
   settings,
   profile,
+  lastRunId = null,
 }: {
   draft: Draft;
   node: WfNode | null;
@@ -156,6 +157,8 @@ export function StepPanel({
   settings?: ReactNode;
   /** The workflow's profile, where a "Send message" step's test goes (§124). */
   profile?: string;
+  /** The workflow's newest run, whose values a "Send message" test can use (§124). */
+  lastRunId?: string | null;
 }) {
   const { t } = useI18n();
   if (edge)
@@ -215,7 +218,12 @@ export function StepPanel({
             testId="workflow-step-text"
           />
           {node.send ? (
-            <SendForm node={node} profile={profile ?? 'default'} update={update} />
+            <SendForm
+              node={node}
+              profile={profile ?? 'default'}
+              update={update}
+              lastRunId={lastRunId}
+            />
           ) : (
             <p className="text-xs text-muted">{t('workflows.form.notify_to')}</p>
           )}

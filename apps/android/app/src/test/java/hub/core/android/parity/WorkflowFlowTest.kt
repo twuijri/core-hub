@@ -136,6 +136,19 @@ class WorkflowFlowTest {
         assertFalse(WorkflowFlowRules.canTestSend(WorkflowSend(emptyList()), "hello"))
         assertFalse(WorkflowFlowRules.canTestSend(send, "  "))
         assertTrue(WorkflowFlowRules.canTestSend(send, "hello"))
+
+        // Words with variables: named once each as the hub names them, no test until each has a
+        // value, and the test carries the words filled in — never `{{steps.analysis.output}}`.
+        val words = "Result: {{steps.analysis.output}} for {{ input }} ({{steps.analysis.output}})"
+        assertEquals(listOf("steps.analysis.output", "input"), WorkflowFlowRules.variablesIn(words))
+        assertFalse(WorkflowFlowRules.canTestSend(send, words))
+        val some = mapOf("steps.analysis.output" to "done", "input" to "")
+        assertEquals(listOf("input"), WorkflowFlowRules.missingIn(words, some))
+        assertEquals("Result: done for {{ input }} (done)", WorkflowFlowRules.fill(words, some))
+        assertFalse(WorkflowFlowRules.canTestSend(send, words, some))
+        val all = some + ("input" to "release 2")
+        assertTrue(WorkflowFlowRules.canTestSend(send, words, all))
+        assertEquals("Result: done for release 2 (done)", WorkflowFlowRules.sendTest(send, words, all).text)
     }
 
     @Test fun `the failure alert is written only once changed, null when emptied, and left out otherwise`() {

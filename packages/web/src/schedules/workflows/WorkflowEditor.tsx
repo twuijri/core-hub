@@ -497,6 +497,7 @@ export default function WorkflowEditor({
                     onRunFrom={(id) => void runFrom([id]).catch(() => undefined)}
                     runFromBusy={writes.run.isPending}
                     profile={profile}
+                    lastRunId={runs.data?.[0]?.id ?? null}
                     settings={
                       <section
                         className="flex flex-col gap-2 border-t border-line pt-3"

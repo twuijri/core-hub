@@ -182,6 +182,17 @@ final class WorkflowEditorTests: XCTestCase {
         XCTAssertFalse(WorkflowEditRules.canTestSend(send, text: "  "))
         XCTAssertFalse(WorkflowEditRules.canTestSend(WorkflowSend(targets: []), text: "Hello"))
         XCTAssertEqual(WorkflowEditRules.sendTest(send, text: " Hi ").text, "Hi")
+        // Words with variables: named once each as the hub names them, no test until each has a
+        // value, and the test carries the words filled in — never `{{steps.analysis.output}}`.
+        let words = "Result: {{steps.analysis.output}} for {{ input }} ({{steps.analysis.output}})"
+        XCTAssertEqual(WorkflowEditRules.variables(in: words), ["steps.analysis.output", "input"])
+        XCTAssertFalse(WorkflowEditRules.canTestSend(send, text: words))
+        var values = ["steps.analysis.output": "done", "input": ""]
+        XCTAssertEqual(WorkflowEditRules.missing(in: words, values: values), ["input"])
+        XCTAssertEqual(WorkflowEditRules.fill(words, values: values), "Result: done for {{ input }} (done)")
+        values["input"] = "release 2"
+        XCTAssertTrue(WorkflowEditRules.canTestSend(send, text: words, values: values))
+        XCTAssertEqual(WorkflowEditRules.sendTest(send, text: words, values: values).text, "Result: done for release 2 (done)")
         let result = WorkflowSendResult(status: .partial, messageIds: [], deliveredTo: ["telegram:-1002"],
                                         failures: [WorkflowSendResultFailuresInner(target: "whatsapp:+9665", reason: "unknown platform")])
         XCTAssertEqual(WorkflowEditRules.failureLines(result), ["whatsapp:+9665: unknown platform"])

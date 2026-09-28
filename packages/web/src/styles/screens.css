@@ -792,6 +792,75 @@
   gap: var(--ch-space-2);
   padding: 0 var(--ch-space-3) var(--ch-space-3);
 }
+/* An MCP server on the agent's MCP page: its header row, and under it, when opened, what
+   belongs to it (the address, the sign-in, the last test) inside the same box. */
+.mcp-card {
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--ch-color-border);
+  border-radius: var(--ch-radius-md);
+  background: var(--ch-color-surface);
+}
+.mcp-card > .mcp-card-head {
+  border: 0;
+  background: transparent;
+  flex-wrap: wrap;
+}
+.mcp-card[data-enabled] > .mcp-card-head {
+  opacity: 1;
+}
+.mcp-card-body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--ch-space-2);
+  padding: 0 var(--ch-space-3) var(--ch-space-3);
+}
+.mcp-card-address {
+  display: flex;
+  flex-direction: column;
+  gap: 0.125rem;
+  margin: 0;
+}
+.mcp-card-address dd {
+  margin: 0;
+  font-size: var(--ch-font-size-xs);
+  overflow-wrap: anywhere;
+  text-align: start;
+}
+.mcp-chevron {
+  flex: 0 0 auto;
+  color: var(--ch-color-text-muted);
+  transition: transform var(--ch-motion-fast) var(--ch-motion-ease);
+}
+/* Closed, the chevron points along the reading direction; open, it points down. */
+[aria-expanded='false'] > * > .mcp-chevron,
+[aria-expanded='false'] > .mcp-chevron {
+  transform: rotate(-90deg);
+}
+:root[dir='rtl'] [aria-expanded='false'] > * > .mcp-chevron,
+:root[dir='rtl'] [aria-expanded='false'] > .mcp-chevron {
+  transform: rotate(90deg);
+}
+/* The hub's own tools card folds from its title (agents/HubToolsCard.tsx). */
+.hub-tools-heading {
+  flex: 1;
+  min-inline-size: 0;
+  margin: 0;
+  font: inherit;
+}
+.hub-tools-toggle {
+  display: flex;
+  align-items: center;
+  gap: var(--ch-space-2);
+  inline-size: 100%;
+  min-inline-size: 0;
+  padding: 0;
+  text-align: start;
+  background: transparent;
+  border: 0;
+  cursor: pointer;
+  color: inherit;
+}
 .skill-open {
   display: flex;
   flex-direction: column;

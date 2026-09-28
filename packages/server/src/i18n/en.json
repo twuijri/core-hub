@@ -1,5 +1,6 @@
 {
   "errors": {
+    "template_unresolved": "The message still has variables with no value. Fill each one, or use the last run's values, and send again.",
     "bad_request": "The request could not be understood.",
     "validation_failed": "The request did not match the expected shape.",
     "profile_required": "A profile scope (X-Hub-Profile) is required.",

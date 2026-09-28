@@ -397,5 +397,7 @@
   "agents2_wh_deliver_to": "%1$s (محادثته الرئيسية)",
   "agents2_wh_create": "إنشاء",
   "agents2_wh_copy_url": "نسخ العنوان",
-  "agents2_wh_copy_secret": "نسخ السرّ"
+  "agents2_wh_copy_secret": "نسخ السرّ",
+  "agents2_mcp_row_open": "مفتوح",
+  "agents2_mcp_row_folded": "مطويّ"
 }

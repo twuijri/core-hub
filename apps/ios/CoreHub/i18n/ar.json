@@ -504,7 +504,8 @@
     "language_more": "لغات أخرى…",
     "language_suggested": "لوحات مفاتيحك واللغات الشائعة",
     "language_all": "كل اللغات",
-    "language_hint": "المس مطولًا لاختيار اللغة."
+    "language_hint": "المس مطولًا لاختيار اللغة.",
+    "language_switch_hint": "المس للتبديل إلى اللغة التالية، والمس مطولًا لعرض اللغات."
   },
   "tools": {
     "refresh": "تحديث"

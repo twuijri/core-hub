@@ -21,8 +21,14 @@
  * **A remote server can be signed in by OAuth from here** (DECISIONS §122): the chip says
  * whether this profile is signed in, and Connect runs Hermes's own browser sign-in
  * (`McpOAuthControls.tsx`).
+ *
+ * **A row folds** (owner, 2026-09-28). Its header — the switch, the name with its chips and
+ * address, Test, Edit and Delete — is what shows; a press on the name opens what is under it:
+ * the full address or command, the sign-in and its Reconnect / Disconnect, the last test. Edit
+ * is its own button now, so opening a row never opens the editor. Which rows are open is kept
+ * on this device (`mcpExpanded.ts`); a row that needs the person starts open.
  */
-import { useState } from 'react';
+import { useEffect, useId, useState } from 'react';
 import { useParams } from 'react-router';
 import { describeError } from '../auth/client.js';
 import { useAgents } from '../hub/queries.js';
@@ -43,7 +49,7 @@ import {
   Textarea,
   useConfirm,
 } from '../ui/index.js';
-import { IconTool, IconTrash } from '../ui/icons.js';
+import { IconChevron, IconEdit, IconTool, IconTrash } from '../ui/icons.js';
 import {
   useCreateMcpServer,
   useDeleteMcpServer,
@@ -65,6 +71,7 @@ import {
   offersOAuth,
   useMcpOAuthConnect,
 } from './McpOAuthControls.js';
+import { expandedKey, useMcpExpanded, writeExpanded } from './mcpExpanded.js';
 
 const TEMPLATE = `{
   "command": "npx",
@@ -166,6 +173,17 @@ function ServerRow({
   const probe = useTestMcpServer(agentId);
   const oauth = useMcpOAuthConnect(agentId, server.name, adopted);
   const { ask, dialog } = useConfirm();
+  const key = expandedKey(agentId, server.name);
+  const [open, setOpen] = useMcpExpanded(key, needsAttention(server));
+  const bodyId = `mcp-details-${useId()}`;
+  // A sign-in started from "Add server" is followed here, so the row opens to show it.
+  useEffect(() => {
+    if (adopted) setOpen(true);
+  }, [adopted, setOpen]);
+  const runTest = () => {
+    setOpen(true);
+    probe.mutate(server.name);
+  };
   // Hermes said the server wants a sign-in: offer it where the failure is read (§122).
   const signInHere =
     probe.data && !probe.data.ok && offersOAuth(server) && needsOAuth(probe.data.error) ? (
@@ -184,10 +202,18 @@ function ServerRow({
         </Button>
       </>
     ) : null;
+  const address = summarise(server);
 
+  // The header is the folded row: switch, the name (the button that opens it), Test, Edit and
+  // Delete. Everything that changes a sign-in lives under it, where a stray press cannot reach.
   return (
-    <div className="flex flex-col gap-2">
-      <div className="skill-row" data-enabled={server.enabled || undefined}>
+    <div
+      className="mcp-card"
+      data-enabled={server.enabled || undefined}
+      data-open={open}
+      data-testid={`mcp-row-${server.name}`}
+    >
+      <div className="skill-row mcp-card-head">
         <Switch
           checked={server.enabled}
           label={t('mcp.enabled')}
@@ -195,8 +221,16 @@ function ServerRow({
           testId={`mcp-toggle-${server.name}`}
           onChange={(next) => update.mutate({ name: server.name, enabled: next })}
         />
-        <button type="button" className="skill-open" onClick={onEdit}>
+        <button
+          type="button"
+          className="skill-open mcp-card-toggle"
+          aria-expanded={open}
+          aria-controls={bodyId}
+          data-testid={`mcp-expand-${server.name}`}
+          onClick={() => setOpen(!open)}
+        >
           <span className="flex items-center gap-2">
+            <IconChevron size={14} className="mcp-chevron" />
             <span className="font-medium" dir="ltr">
               {server.name}
             </span>
@@ -204,7 +238,7 @@ function ServerRow({
             <McpOAuthChip server={server} />
           </span>
           <span className="skill-description" dir="ltr">
-            {summarise(server)}
+            {address}
           </span>
         </button>
         <Button
@@ -212,9 +246,18 @@ function ServerRow({
           variant="secondary"
           disabled={probe.isPending}
           data-testid={`mcp-test-${server.name}`}
-          onClick={() => probe.mutate(server.name)}
+          onClick={runTest}
         >
           {probe.isPending ? t('mcp.test.running') : t('mcp.test.button')}
+        </Button>
+        <Button
+          size="sm"
+          variant="secondary"
+          icon={<IconEdit size={14} />}
+          data-testid={`mcp-edit-${server.name}`}
+          onClick={onEdit}
+        >
+          {t('common.edit')}
         </Button>
         <Button
           size="sm"
@@ -227,7 +270,7 @@ function ServerRow({
               body: t('mcp.delete_body'),
               confirmLabel: t('common.delete'),
             }).then((yes) => {
-              if (yes) remove.mutate(server.name);
+              if (yes) remove.mutate(server.name, { onSuccess: () => writeExpanded(key, null) });
             });
           }}
         >
@@ -235,20 +278,57 @@ function ServerRow({
         </Button>
         {dialog}
       </div>
-      {probe.isError && (
-        <div data-testid={`mcp-test-result-${server.name}`} data-ok="false">
-          <Notice tone="danger">{describeToolError(probe.error, t)}</Notice>
-        </div>
-      )}
-      {probe.data && <TestResult name={server.name} result={probe.data} action={signInHere} />}
-      <McpOAuthControls
-        agentId={agentId}
-        server={server}
-        oauth={oauth}
-        onTest={() => probe.mutate(server.name)}
-      />
+      {/* Folded, the part stays mounted (hidden): a sign-in in flight keeps its progress and
+          still runs its test by itself when it lands. */}
+      <div
+        id={bodyId}
+        className="mcp-card-body"
+        hidden={!open}
+        data-testid={`mcp-details-${server.name}`}
+      >
+        {address && (
+          <dl className="mcp-card-address">
+            <dt className="text-xs text-muted">
+              {typeof server.config.url === 'string' ? t('mcp.address') : t('mcp.command')}
+            </dt>
+            <dd dir="ltr">
+              <code>{address}</code>
+            </dd>
+          </dl>
+        )}
+        {server.error && (
+          <Notice tone="danger">
+            <span dir="auto">{server.error}</span>
+          </Notice>
+        )}
+        {probe.isError && (
+          <div data-testid={`mcp-test-result-${server.name}`} data-ok="false">
+            <Notice tone="danger">{describeToolError(probe.error, t)}</Notice>
+          </div>
+        )}
+        {probe.data && <TestResult name={server.name} result={probe.data} action={signInHere} />}
+        <McpOAuthControls
+          agentId={agentId}
+          server={server}
+          oauth={oauth}
+          onTest={() => probe.mutate(server.name)}
+        />
+      </div>
     </div>
   );
+}
+
+/**
+ * A row that starts open: Hermes reported an error for it, or its sign-in ran out, went
+ * unreadable, or was never made for a server that requires one.
+ */
+function needsAttention(server: McpServer): boolean {
+  if (server.error) return true;
+  const oauth = server.oauth;
+  if (!oauth || !offersOAuth(server)) return false;
+  if (oauth.status === 'connected') return false;
+  if (oauth.status === 'not_connected') return oauth.required;
+  return true;
 }
 
 /** One line a person can recognise the server by: what it runs, or where it points. */

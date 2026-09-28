@@ -383,13 +383,52 @@ enum WorkflowEditRules {
         return WorkflowSendTarget(platform: coreHub, sessionId: session.id, title: session.title, agentId: session.agentId)
     }
 
-    /// "Send test message" needs a target and words.
-    static func canTestSend(_ send: WorkflowSend, text: String?) -> Bool {
-        !send.targets.isEmpty && !(text ?? "").trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    /// A variable of the step's words, read with the hub's own pattern (`expr.ts` `pathsIn`).
+    private static let variable = try! NSRegularExpression(pattern: #"\{\{\s*([A-Za-z0-9_.]+)\s*\}\}"#)
+
+    /// Every variable of the words, once each, in order (`steps.analysis.output`, `input`).
+    static func variables(in text: String?) -> [String] {
+        let text = text ?? ""
+        var out: [String] = []
+        for match in variable.matches(in: text, range: NSRange(text.startIndex..., in: text)) {
+            guard let range = Range(match.range(at: 1), in: text) else { continue }
+            let path = String(text[range])
+            if !out.contains(path) { out.append(path) }
+        }
+        return out
     }
 
-    static func sendTest(_ send: WorkflowSend, text: String?) -> WorkflowSendTest {
-        WorkflowSendTest(send: send, text: (text ?? "").trimmingCharacters(in: .whitespacesAndNewlines))
+    /// The variables that have no value yet (an empty one counts as none).
+    static func missing(in text: String?, values: [String: String]) -> [String] {
+        variables(in: text).filter { (values[$0] ?? "").isEmpty }
+    }
+
+    /// The words with each value put in; a variable without one stays as written (the preview).
+    static func fill(_ text: String?, values: [String: String]) -> String {
+        let text = text ?? ""
+        var out = ""
+        var last = text.startIndex
+        for match in variable.matches(in: text, range: NSRange(text.startIndex..., in: text)) {
+            guard let whole = Range(match.range, in: text), let name = Range(match.range(at: 1), in: text) else { continue }
+            out += text[last..<whole.lowerBound]
+            let value = values[String(text[name])] ?? ""
+            out += value.isEmpty ? String(text[whole]) : value
+            last = whole.upperBound
+        }
+        out += text[last...]
+        return out
+    }
+
+    /// "Send test message" needs a target, words, and a value for each variable (2026-09-29): a test
+    /// never sends `{{steps.analysis.output}}` as it is.
+    static func canTestSend(_ send: WorkflowSend, text: String?, values: [String: String] = [:]) -> Bool {
+        !send.targets.isEmpty && !(text ?? "").trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            && missing(in: text, values: values).isEmpty
+    }
+
+    /// The test carries the words with the values put in, so it says what the run will say.
+    static func sendTest(_ send: WorkflowSend, text: String?, values: [String: String] = [:]) -> WorkflowSendTest {
+        WorkflowSendTest(send: send, text: fill(text, values: values).trimmingCharacters(in: .whitespacesAndNewlines))
     }
 
     /// Each target that did not take it: "target: reason".

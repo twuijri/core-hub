@@ -82,6 +82,19 @@ export function render(template: string, ctx: Context): string {
   return out.length > MAX_RENDERED ? out.slice(0, MAX_RENDERED) : out;
 }
 
+/**
+ * The paths of a template that read as nothing (`undefined`) in `ctx`, once each, in the
+ * order they first appear. A run renders such a hole as empty; "Send test message" refuses
+ * to send it (§124), so a test never delivers a literal `{{…}}` or a silent gap.
+ */
+export function unresolvedIn(template: string, ctx: Context): string[] {
+  const out: string[] = [];
+  for (const path of pathsIn(template)) {
+    if (!out.includes(path) && read(path, ctx) === undefined) out.push(path);
+  }
+  return out;
+}
+
 /** Every path a template mentions, so a workflow can be checked before it is saved. */
 export function pathsIn(template: string): string[] {
   return [...template.matchAll(/\{\{\s*([A-Za-z0-9_.]+)\s*\}\}/g)].map((match) => match[1] ?? '');

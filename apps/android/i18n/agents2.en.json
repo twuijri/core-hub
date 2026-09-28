@@ -397,5 +397,7 @@
   "agents2_wh_deliver_to": "%1$s (its home chat)",
   "agents2_wh_create": "Create",
   "agents2_wh_copy_url": "Copy address",
-  "agents2_wh_copy_secret": "Copy secret"
+  "agents2_wh_copy_secret": "Copy secret",
+  "agents2_mcp_row_open": "Open",
+  "agents2_mcp_row_folded": "Folded"
 }

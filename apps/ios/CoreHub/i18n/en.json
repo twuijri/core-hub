@@ -504,7 +504,8 @@
     "language_more": "More languages…",
     "language_suggested": "Your keyboards and popular languages",
     "language_all": "All languages",
-    "language_hint": "Touch and hold to choose the language."
+    "language_hint": "Touch and hold to choose the language.",
+    "language_switch_hint": "Tap to switch to the next language; touch and hold to list them."
   },
   "tools": {
     "refresh": "Refresh"

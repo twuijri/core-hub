@@ -4395,3 +4395,29 @@ Rejected: raising the floor (0.21.3 still passes every real suite); `gateway.sta
 profile to keep webhooks per profile (a shim Hermes will remove, §129); writing the default
 profile's settings to restore pairing in named profiles (it would change the default profile's
 own channel behaviour).
+
+## 133. "Send test message" fills the step's variables first, and never sends a `{{…}}`
+
+Proposed (2026-09-29) — a tester's report: the test of a "Send message" step (§124) sent its words
+as written, so Telegram received `{{steps.analysis.output}}`; the run itself filled them. Owner to
+confirm. Additive contract change only.
+
+**A test says what the run will say.** `WorkflowSendTest` gains two optional fields: `values` (a
+value per variable, keyed by its path as the template writes it — `steps.analysis.output`,
+`trigger.body.task.name`, `input`) and `workflow_run_id` (a run of the workflow whose event, input
+and finished steps fill them; `values` win over it). When the words name a variable, the hub puts
+both into one context and renders them with the run's own code (`expr.ts` `render`), so a test and a
+run cannot differ. A variable with nothing is refused, `400 bad_request`, `details.reason:
+template_unresolved` and `details.unresolved` naming each one — never sent as `{{…}}` and never as
+a silent gap. Words without a variable are sent as they are, exactly as before; an older app that
+sends words with a variable gets the refusal, which is the point.
+
+**Where the values come from.** "Test this step" (`WorkflowStepTest`) takes the same two fields, and
+its result gains `values`: what each variable of the step's words read as in the sample. The web
+asks it with the workflow's newest run ("Use the last run's values") and fills a field per
+variable; the person can change any, or type them all when there is no run. The preview under the
+fields shows the words that will go, and Send stays off while a variable has no value. The phones
+(iOS, Android) ask for a value per variable, show the preview, block until each has one, and send
+the words filled in; taking values from the last run on a phone is a follow-up.
+
+**What a run does is unchanged**: it still reads a variable with nothing as empty (§123).

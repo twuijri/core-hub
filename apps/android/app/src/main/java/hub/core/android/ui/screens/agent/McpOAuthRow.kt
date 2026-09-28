@@ -60,6 +60,21 @@ internal object McpOAuthRules {
         return oauth.required || oauth.status != McpOAuthState.Status.NOT_CONNECTED || !hasHeaders
     }
 
+    /**
+     * A row that starts open (owner, 2026-09-28): Hermes reported an error for it, or its sign-in ran
+     * out, went unreadable, or was never made for a server that requires one. The web's rule.
+     */
+    fun needsAttention(server: McpServer): Boolean {
+        if (server.error != null) return true
+        val oauth = server.oauth ?: return false
+        if (!offers(server)) return false
+        return when (oauth.status) {
+            McpOAuthState.Status.CONNECTED -> false
+            McpOAuthState.Status.NOT_CONNECTED -> oauth.required
+            else -> true
+        }
+    }
+
     fun statusText(status: McpOAuthState.Status): Int = when (status) {
         McpOAuthState.Status.CONNECTED -> R.string.mcp_oauth_connected
         McpOAuthState.Status.EXPIRED -> R.string.mcp_oauth_expired_status
@@ -69,7 +84,7 @@ internal object McpOAuthRules {
 }
 
 @Composable
-internal fun McpOAuthRow(ops: AgentsTwoOps, server: McpServer, onChanged: () -> Unit) {
+internal fun McpOAuthRow(ops: AgentsTwoOps, server: McpServer, onChanged: () -> Unit, expanded: Boolean = true) {
     val state = server.oauth ?: return
     if (!McpOAuthRules.offers(server)) return
     val context = LocalContext.current
@@ -108,7 +123,7 @@ internal fun McpOAuthRow(ops: AgentsTwoOps, server: McpServer, onChanged: () -> 
                     dot = true,
                 )
             }
-            if (flow?.status != McpOAuthFlow.Status.PENDING) {
+            if (expanded && flow?.status != McpOAuthFlow.Status.PENDING) {
                 HubButton(
                     stringResource(if (state.status == McpOAuthState.Status.NOT_CONNECTED) R.string.mcp_oauth_connect else R.string.mcp_oauth_reconnect),
                     {
@@ -130,33 +145,37 @@ internal fun McpOAuthRow(ops: AgentsTwoOps, server: McpServer, onChanged: () -> 
                 )
             }
         }
-        Text(stringResource(R.string.mcp_oauth_per_profile), fontSize = FontTokens.sizeXs.sp, color = t.textMuted)
-        ErrorNotice(error)
-        flow?.let { current ->
-            when (current.status) {
-                McpOAuthFlow.Status.PENDING -> {
-                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Spinner(14.dp)
-                        Text(stringResource(R.string.mcp_oauth_waiting), fontSize = FontTokens.sizeXs.sp, color = t.textMuted)
+        // Folded, the row shows only the badge: Connect / Reconnect and the sign-in's progress are under
+        // it, out of reach of a stray tap. The polling above keeps running either way.
+        if (expanded) {
+            Text(stringResource(R.string.mcp_oauth_per_profile), fontSize = FontTokens.sizeXs.sp, color = t.textMuted)
+            ErrorNotice(error)
+            flow?.let { current ->
+                when (current.status) {
+                    McpOAuthFlow.Status.PENDING -> {
+                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Spinner(14.dp)
+                            Text(stringResource(R.string.mcp_oauth_waiting), fontSize = FontTokens.sizeXs.sp, color = t.textMuted)
+                        }
+                        current.authorizationUrl?.let { link ->
+                            HubButton(stringResource(R.string.mcp_oauth_open_page), { open(link) }, kind = ButtonKind.Secondary, size = ControlSize.Sm, icon = Lucide.ExternalLink)
+                        }
                     }
-                    current.authorizationUrl?.let { link ->
-                        HubButton(stringResource(R.string.mcp_oauth_open_page), { open(link) }, kind = ButtonKind.Secondary, size = ControlSize.Sm, icon = Lucide.ExternalLink)
-                    }
+                    McpOAuthFlow.Status.APPROVED -> NoticeBox(
+                        stringResource(R.string.mcp_oauth_approved, current.tools.size.toString()), BadgeTone.Success,
+                        Modifier.testTag("mcp.${server.name}.oauth.approved"),
+                    )
+                    else -> NoticeBox(
+                        stringResource(
+                            when (current.status) {
+                                McpOAuthFlow.Status.CANCELLED -> R.string.mcp_oauth_cancelled
+                                McpOAuthFlow.Status.EXPIRED -> R.string.mcp_oauth_expired
+                                else -> R.string.mcp_oauth_failed
+                            },
+                        ) + (current.error?.let { " $it" } ?: ""),
+                        BadgeTone.Danger,
+                    )
                 }
-                McpOAuthFlow.Status.APPROVED -> NoticeBox(
-                    stringResource(R.string.mcp_oauth_approved, current.tools.size.toString()), BadgeTone.Success,
-                    Modifier.testTag("mcp.${server.name}.oauth.approved"),
-                )
-                else -> NoticeBox(
-                    stringResource(
-                        when (current.status) {
-                            McpOAuthFlow.Status.CANCELLED -> R.string.mcp_oauth_cancelled
-                            McpOAuthFlow.Status.EXPIRED -> R.string.mcp_oauth_expired
-                            else -> R.string.mcp_oauth_failed
-                        },
-                    ) + (current.error?.let { " $it" } ?: ""),
-                    BadgeTone.Danger,
-                )
             }
         }
     }
