@@ -440,10 +440,21 @@ export function useProfileConversations(profile: string, enabled: boolean) {
 export function useSendTest(profile: string) {
   const { client } = useAuth();
   return useMutation({
-    mutationFn: async ({ send, text }: { send: Send; text: string }) =>
+    mutationFn: async ({
+      send,
+      text,
+      values,
+    }: {
+      send: Send;
+      text: string;
+      /** A value for each variable of `text`, by its path; the hub renders and sends (§124). */
+      values?: Record<string, string>;
+    }) =>
       (
         await client.request('post', '/workflows/send-test', {
-          body: { send, text } as never,
+          body: (values && Object.keys(values).length > 0
+            ? { send, text, values }
+            : { send, text }) as never,
           ...inProfile(profile),
         })
       ).data as unknown as SendResult,
@@ -457,6 +468,8 @@ export interface StepTestResult {
   output: string | null;
   error: string | null;
   executed: boolean;
+  /** What each variable read as in the sample, by its path; absent from an older hub. */
+  values?: Record<string, string>;
 }
 
 /** Try one step with a sample; nothing is saved and no run is made. */
@@ -465,9 +478,11 @@ export function useStepTest(profile: string) {
   return useMutation({
     mutationFn: async (body: {
       node: ReturnType<typeof toWrite>['nodes'][number];
-      input: string | null;
-      trigger: unknown;
-      execute: boolean;
+      input?: string | null;
+      trigger?: unknown;
+      execute?: boolean;
+      /** A run to take the sample from (§124). */
+      workflow_run_id?: string;
     }) =>
       (
         await client.request('post', '/workflows/test-step', {

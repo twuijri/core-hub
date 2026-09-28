@@ -289,6 +289,8 @@ struct WorkflowStepPage: View {
     @State private var sending = false
     @State private var sendResult: WorkflowSendResult?
     @State private var sendError: String?
+    /// A value for each variable of a "Send message" step's words, typed for the test.
+    @State private var sendValues: [String: String] = [:]
 
     private var index: Int? { draft.nodes.firstIndex { $0.id == nodeID } }
 
@@ -432,12 +434,36 @@ struct WorkflowStepPage: View {
     private func sendSection(_ index: Int, _ send: WorkflowSend) -> some View {
         Section {
             SendTargetsForm(send: send, profile: profile) { next in draft.nodes[index].send = next }
+            let words = draft.nodes[index].input
+            let variables = WorkflowEditRules.variables(in: words)
+            if !variables.isEmpty {
+                Text(l10n("workflow_editor.send.sample_title")).font(.system(size: FontSize.sizeSm, weight: .medium))
+                Text(l10n("workflow_editor.send.sample_hint")).font(.system(size: FontSize.sizeXs)).foregroundStyle(Tone.textMuted)
+                ForEach(variables, id: \.self) { path in
+                    TextField("{{\(path)}}" as String, text: Binding(
+                        get: { sendValues[path] ?? "" },
+                        set: { sendValues[path] = $0 }
+                    ), axis: .vertical)
+                    .accessibilityIdentifier("workflow.send.value.\(path)")
+                }
+            }
+            if !(words ?? "").trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                let preview = WorkflowEditRules.fill(words, values: sendValues).trimmingCharacters(in: .whitespacesAndNewlines)
+                Text(l10n("workflow_editor.send.preview")).font(.system(size: FontSize.sizeSm, weight: .medium))
+                Text(preview).font(.system(size: FontSize.sizeSm)).contentDirection(of: preview)
+                    .accessibilityIdentifier("workflow.send.preview")
+            }
+            let missing = WorkflowEditRules.missing(in: words, values: sendValues)
+            if !missing.isEmpty {
+                NoticeView(text: l10n("workflow_editor.send.missing", ["names": missing.map { "{{\($0)}}" }.joined(separator: " ")]), tone: .warning)
+                    .accessibilityIdentifier("workflow.send.missing")
+            }
             Button {
-                Task { await testSend(send, text: draft.nodes[index].input) }
+                Task { await testSend(send, text: words) }
             } label: {
                 LucideLabel(l10n("workflow_editor.send.test"), icon: .play, size: 16)
             }
-            .disabled(sending || !WorkflowEditRules.canTestSend(send, text: draft.nodes[index].input))
+            .disabled(sending || !WorkflowEditRules.canTestSend(send, text: words, values: sendValues))
             .accessibilityIdentifier("workflow.send.test")
             if let sendError { NoticeView(text: sendError, tone: .danger) }
             if let sendResult {
@@ -458,7 +484,7 @@ struct WorkflowStepPage: View {
     private func testSend(_ send: WorkflowSend, text: String?) async {
         sending = true
         defer { sending = false }
-        let profile = profile, body = WorkflowEditRules.sendTest(send, text: text)
+        let profile = profile, body = WorkflowEditRules.sendTest(send, text: text, values: sendValues)
         do {
             sendResult = try await app.api.call {
                 try await SchedulesAPI.schedulesTestWorkflowSend(xHubProfile: profile, workflowSendTest: body, apiConfiguration: $0)

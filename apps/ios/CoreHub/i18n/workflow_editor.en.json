@@ -183,6 +183,10 @@
       "pick": "Choose a conversation",
       "untitled": "Untitled conversation",
       "test": "Send test message",
+      "sample_title": "Values for the test",
+      "sample_hint": "The message uses variables. Type a value for each before a test is sent; the web page of this workflow can also take them from its last run.",
+      "preview": "Preview of what will be sent",
+      "missing": "Fill these before sending: {names}",
       "status": {
         "sent": "Sent",
         "partial": "Sent to some targets only",

@@ -142,10 +142,29 @@ object WorkflowFlowRules {
         if (session == null) WorkflowSendTarget(platform = "core_hub")
         else WorkflowSendTarget(platform = "core_hub", sessionId = session.id, title = session.title, agentId = session.agentId)
 
-    /** "Send test message" needs a target and words. */
-    fun canTestSend(send: WorkflowSend, text: String?): Boolean = send.targets.isNotEmpty() && !text.isNullOrBlank()
+    /** A variable of the step's words, read with the hub's own pattern (`expr.ts` `pathsIn`). */
+    private val VARIABLE = Regex("""\{\{\s*([A-Za-z0-9_.]+)\s*\}\}""")
 
-    fun sendTest(send: WorkflowSend, text: String?) = WorkflowSendTest(send, text.orEmpty().trim())
+    /** Every variable of the words, once each, in order (`steps.analysis.output`, `input`). */
+    fun variablesIn(text: String?): List<String> = VARIABLE.findAll(text.orEmpty()).map { it.groupValues[1] }.distinct().toList()
+
+    /** The variables that have no value yet (an empty one counts as none). */
+    fun missingIn(text: String?, values: Map<String, String>): List<String> = variablesIn(text).filter { values[it].isNullOrEmpty() }
+
+    /** The words with each value put in; a variable without one stays as written (the preview). */
+    fun fill(text: String?, values: Map<String, String>): String =
+        VARIABLE.replace(text.orEmpty()) { match -> values[match.groupValues[1]]?.takeIf { it.isNotEmpty() } ?: match.value }
+
+    /**
+     * "Send test message" needs a target, words, and a value for each variable (2026-09-29): a test
+     * never sends `{{steps.analysis.output}}` as it is.
+     */
+    fun canTestSend(send: WorkflowSend, text: String?, values: Map<String, String> = emptyMap()): Boolean =
+        send.targets.isNotEmpty() && !text.isNullOrBlank() && missingIn(text, values).isEmpty()
+
+    /** The test carries the words with the values put in, so it says what the run will say. */
+    fun sendTest(send: WorkflowSend, text: String?, values: Map<String, String> = emptyMap()) =
+        WorkflowSendTest(send, fill(text, values).trim())
 
     // ------------------------------------------------------------------ the failure alert (§127)
 

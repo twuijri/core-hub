@@ -80,5 +80,9 @@
   "wft_triggers_test_event": "حدث تجريبي",
   "wft_triggers_title": "المشغّلات",
   "wft_triggers_url": "العنوان",
-  "wft_triggers_url_hint": "أعطِ هذا العنوان للمرسِل. لا يتغيّر."
+  "wft_triggers_url_hint": "أعطِ هذا العنوان للمرسِل. لا يتغيّر.",
+  "wft_send_sample_title": "قيم التجربة",
+  "wft_send_sample_hint": "الرسالة فيها متغيرات. اكتب قيمة لكل متغير قبل إرسال التجربة؛ وصفحة سير العمل على الويب تستطيع أخذها من آخر تشغيل.",
+  "wft_send_preview": "معاينة ما سيُرسل",
+  "wft_send_missing": "املأ هذه قبل الإرسال: %1$s"
 }

@@ -25950,10 +25950,27 @@ components:
         execute:
           type: boolean
           description: An agent step runs a real turn with the rendered prompt.
+        values:
+          $ref: '#/components/schemas/WorkflowSampleValues'
+        workflow_run_id:
+          description: >-
+            A run of the workflow to take the sample from (its event, input and finished
+            steps); `input`, `trigger`, `steps` and `values` win over it.
+          oneOf:
+            - $ref: '#/components/schemas/Ulid'
+            - type: 'null'
     WorkflowStepTestResult:
       type: object
       required: [rendered, answer, output, error, executed]
       properties:
+        values:
+          type: object
+          additionalProperties:
+            type: string
+          description: >-
+            What each variable of the step's words read as in the sample, by its path; a
+            variable with nothing is left out. Lets a client fill its sample from a run.
+            Absent from an older hub.
         rendered:
           type: [string, 'null']
           description: The step's words with the sample filled in (a condition's rules in words).
@@ -26016,6 +26033,14 @@ components:
           description: "`core_hub`: the conversation's agent, to make it again if it was deleted."
     WorkflowSendTest:
       type: object
+      description: >-
+        `text` is the step's words as written, a template. When it names variables
+        (`{{input}}`, `{{trigger.*}}`, `{{steps.<id>.output}}`) the hub fills them with the
+        run's own renderer from `workflow_run_id` (that run's event, input and finished steps)
+        and `values` over it, and refuses with `400 bad_request`, `details.reason:
+        template_unresolved` and `details.unresolved` (the variables with nothing) while any
+        is left — it never sends a literal `{{…}}`. Words with no variable are sent as they
+        are, as before (DECISIONS §124).
       required: [send, text]
       properties:
         send:
@@ -26024,6 +26049,25 @@ components:
           type: string
           minLength: 1
           maxLength: 20000
+        values:
+          $ref: '#/components/schemas/WorkflowSampleValues'
+        workflow_run_id:
+          description: >-
+            A run of the workflow whose values fill the variables (its event, its input and
+            each finished step's output); `values` win over it.
+          oneOf:
+            - $ref: '#/components/schemas/Ulid'
+            - type: 'null'
+    WorkflowSampleValues:
+      type: [object, 'null']
+      description: >-
+        A value for each variable, keyed by its path as the template writes it
+        (`steps.analysis.output`, `trigger.body.task.name`, `input`). Only paths under
+        `input`, `trigger` and `steps` are used.
+      maxProperties: 100
+      additionalProperties:
+        type: string
+        maxLength: 20000
     WorkflowSendResult:
       type: object
       description: >-

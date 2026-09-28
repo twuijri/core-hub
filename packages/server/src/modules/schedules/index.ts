@@ -45,6 +45,8 @@ import {
 import type { WorkflowDefinition, WorkflowNode, WorkflowSend } from './schema.js';
 import { HermesCron, refusedByHermesCron, type HermesCronPort } from './hermes-cron.js';
 import { sendProblems } from './send.js';
+import { pathsIn, render, unresolvedIn, type Context } from './expr.js';
+import { runContext, valuesIn, withValues } from './sample.js';
 import {
   WorkflowEngine,
   costOf,
@@ -1341,17 +1343,41 @@ export const schedulesModule = defineModule({
       operationId: 'schedules.testWorkflowSend',
       handler: async (request, { body }) => {
         const scope = runScopeOf(request);
-        const ask = body as { send: WorkflowSend; text: string };
+        const ask = body as {
+          send: WorkflowSend;
+          text: string;
+          values?: Record<string, string> | null;
+          workflow_run_id?: string | null;
+        };
         const problems = sendProblems(ask.send);
         if (problems.length > 0) {
           throw new HubError('bad_request', { details: { reason: 'send_invalid', problems } });
+        }
+        // The step's words are a template (§124): filled from a run and/or typed values with
+        // the run's own `render`, and refused while any variable has nothing — a test never
+        // sends a literal `{{steps.analysis.output}}`. Words without one go out as they are,
+        // as they always did.
+        let text = ask.text;
+        if (pathsIn(text).length > 0) {
+          const base: Context = ask.workflow_run_id
+            ? runContext(serviceOf(request), scope, ask.workflow_run_id)
+            : { trigger: undefined, steps: {}, input: undefined };
+          const ctx = withValues(base, ask.values);
+          const unresolved = unresolvedIn(text, ctx);
+          if (unresolved.length > 0) {
+            throw new HubError('bad_request', {
+              messageKey: 'errors.template_unresolved',
+              details: { reason: 'template_unresolved', unresolved },
+            });
+          }
+          text = render(text, ctx);
         }
         // Sent now, and not remembered: pressing it twice sends twice.
         const { result } = await deliverSend(
           portsFor(request.server).messages,
           scope,
           ask.send,
-          ask.text,
+          text,
           null,
           () => undefined,
         );
@@ -1369,15 +1395,35 @@ export const schedulesModule = defineModule({
           trigger?: unknown;
           steps?: Record<string, string | null>;
           execute?: boolean;
+          values?: Record<string, string> | null;
+          workflow_run_id?: string | null;
         };
-        const ctx = {
-          trigger: ask.trigger ?? null,
-          steps: Object.fromEntries(
-            Object.entries(ask.steps ?? {}).map(([id, output]) => [id, { output }]),
-          ),
-          input: ask.input ?? '',
+        // A run a person picked is the base (§124); the sample fields given here over it.
+        const run = ask.workflow_run_id
+          ? runContext(serviceOf(request), scope, ask.workflow_run_id)
+          : null;
+        const base: Context = {
+          trigger: ask.trigger !== undefined ? ask.trigger : (run?.trigger ?? null),
+          steps: {
+            ...run?.steps,
+            ...Object.fromEntries(
+              Object.entries(ask.steps ?? {}).map(([id, output]) => [id, { output }]),
+            ),
+          },
+          input: ask.input ?? run?.input ?? '',
         };
-        return testStep(portsFor(request.server), scope, ask.node, ctx, ask.execute === true);
+        const ctx = withValues(base, ask.values);
+        const result = await testStep(
+          portsFor(request.server),
+          scope,
+          ask.node,
+          ctx,
+          ask.execute === true,
+        );
+        // What each of the step's variables reads as, so a client can fill its sample from a run.
+        // Words without a variable answer as before.
+        const paths = pathsIn(ask.node.input ?? '');
+        return paths.length > 0 ? { ...result, values: valuesIn(paths, ctx) } : result;
       },
     });
 

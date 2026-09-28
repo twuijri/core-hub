@@ -8,6 +8,7 @@ import {
   isEmpty,
   parseCondition,
   pathsIn,
+  unresolvedIn,
   read,
   render,
   type Context,
@@ -72,6 +73,18 @@ describe('rendering a template', () => {
 
   it('lists the paths it would need, so a workflow can be checked before it is saved', () => {
     expect(pathsIn('{{a.b}} and {{ c.d }}')).toEqual(['a.b', 'c.d']);
+  });
+
+  it('names the variables that read as nothing, once each; null and empty are values', () => {
+    const run = { trigger: null, steps: { a: { output: null }, b: { output: '' } }, input: 'x' };
+    expect(
+      unresolvedIn('{{steps.a.output}} {{steps.b.output}} {{input}} {{steps.c.output}}', run),
+    ).toEqual(['steps.c.output']);
+    expect(unresolvedIn('{{trigger.body.id}} {{ trigger.body.id }} {{x}}', run)).toEqual([
+      'trigger.body.id',
+      'x',
+    ]);
+    expect(unresolvedIn('no variables at all', run)).toEqual([]);
   });
 
   it('caps what one substitution can produce', () => {

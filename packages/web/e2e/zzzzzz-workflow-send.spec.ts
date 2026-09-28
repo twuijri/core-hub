@@ -6,7 +6,8 @@
  * Bot API itself) and posted in that conversation. "Send test message" goes to both; a chat
  * Telegram does not know comes back with Telegram's own words and "sent to some targets
  * only"; the workflow saved and run by hand puts the message in Telegram once and in the
- * conversation, where it is read in the chat.
+ * conversation, where it is read in the chat. The test never sends `{{input}}` as it is: it
+ * waits for a value — typed, then taken from the run — and previews the words (2026-09-29).
  */
 import { mkdirSync } from 'node:fs';
 import path from 'node:path';
@@ -78,6 +79,18 @@ test('34. a Send message step sends to Telegram and posts in a conversation', as
   await page.getByRole('listbox').getByRole('option').nth(1).click();
   await expect(picker).not.toContainText('اختر محادثة');
 
+  // The words read `{{input}}`: nothing is sent until it has a value (2026-09-29). No run yet,
+  // so the value is typed; the preview shows what will go.
+  const send = page.getByTestId('workflow-send-test');
+  await expect(page.getByTestId('workflow-send-no-run')).toBeVisible();
+  await expect(page.getByTestId('workflow-send-preview')).toHaveText('التقرير: {{input}}');
+  await expect(page.getByTestId('workflow-send-missing')).toContainText('{{input}}');
+  await expect(send).toBeDisabled();
+  await page.getByTestId('workflow-send-value-input').fill('تجربة يدوية');
+  await expect(page.getByTestId('workflow-send-preview')).toHaveText('التقرير: تجربة يدوية');
+  await expect(page.getByTestId('workflow-send-missing')).toHaveCount(0);
+  await expect(send).toBeEnabled();
+
   // A chat Telegram does not know: its words, and the conversation still took it.
   await page.getByTestId('workflow-send-test').click();
   const result = page.getByTestId('workflow-send-test-result');
@@ -90,7 +103,7 @@ test('34. a Send message step sends to Telegram and posts in a conversation', as
   await expect(result).toContainText('أُرسلت');
   await expect(result).not.toContainText('Bad Request');
   expect((await sentToTelegram(page)).slice(before).map((m) => [m.chat_id, m.text])).toEqual([
-    [GROUP, 'التقرير: {{input}}'],
+    [GROUP, 'التقرير: تجربة يدوية'],
   ]);
   await expect(page.getByTestId('workflow-check')).toHaveAttribute('data-valid', 'true');
   await shot(page, 'workflow-send-ar-light');
@@ -102,7 +115,24 @@ test('34. a Send message step sends to Telegram and posts in a conversation', as
   const run = page.getByTestId('workflow-run-view');
   await expect(run.getByTestId('workflow-run-state')).toContainText('تم', { timeout: 20_000 });
   expect((await sentToTelegram(page)).slice(before).map((m) => m.text)).toEqual([
-    'التقرير: {{input}}',
+    'التقرير: تجربة يدوية',
+    'التقرير: كل المهام تمت',
+  ]);
+
+  // Back to the drawing: the test takes its value from that run.
+  await page.getByTestId('workflow-modes').getByRole('tab', { name: 'تحرير' }).click();
+  await page.getByTestId('workflow-node').first().click();
+  await expect(page.getByTestId('workflow-send-value-input')).toHaveValue('');
+  await expect(send).toBeDisabled();
+  await page.getByTestId('workflow-send-last-run').click();
+  await expect(page.getByTestId('workflow-send-value-input')).toHaveValue('كل المهام تمت');
+  await expect(page.getByTestId('workflow-send-preview')).toHaveText('التقرير: كل المهام تمت');
+  await shot(page, 'workflow-send-sample-ar-light');
+  await send.click();
+  await expect(page.getByTestId('workflow-send-test-result')).toContainText('أُرسلت');
+  expect((await sentToTelegram(page)).slice(before).map((m) => m.text)).toEqual([
+    'التقرير: تجربة يدوية',
+    'التقرير: كل المهام تمت',
     'التقرير: كل المهام تمت',
   ]);
 

@@ -80,5 +80,9 @@
   "wft_triggers_test_event": "Test event",
   "wft_triggers_title": "Triggers",
   "wft_triggers_url": "Address",
-  "wft_triggers_url_hint": "Give this address to the sender. It stays the same."
+  "wft_triggers_url_hint": "Give this address to the sender. It stays the same.",
+  "wft_send_sample_title": "Values for the test",
+  "wft_send_sample_hint": "The message uses variables. Type a value for each before a test is sent; the web page of this workflow can also take them from its last run.",
+  "wft_send_preview": "Preview of what will be sent",
+  "wft_send_missing": "Fill these before sending: %1$s"
 }

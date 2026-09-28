@@ -278,22 +278,50 @@ internal fun SendStepForm(node: WorkflowNode, profile: String, ops: WorkflowFlow
     var busy by remember(node.id) { mutableStateOf(false) }
     var result by remember(node.id) { mutableStateOf<WorkflowSendResult?>(null) }
     var error by remember(node.id) { mutableStateOf<HubError?>(null) }
+    // A value for each variable of the words, typed for the test (2026-09-29).
+    var values by remember(node.id) { mutableStateOf(mapOf<String, String>()) }
+    val variables = WorkflowFlowRules.variablesIn(node.input)
+    val missing = WorkflowFlowRules.missingIn(node.input, values)
     Column(Modifier.testTag("workflow.editor.step.${node.id}.send"), verticalArrangement = Arrangement.spacedBy(4.dp)) {
         Text(stringResource(R.string.wft_send_targets), fontSize = FontTokens.sizeSm.sp, fontWeight = FontWeight.Medium)
         SendTargetsForm(send, profile, ops, "workflow.editor.step.${node.id}.send") { next -> onNode(node.copy(send = next)) }
+        if (variables.isNotEmpty()) {
+            Text(stringResource(R.string.wft_send_sample_title), fontSize = FontTokens.sizeSm.sp, fontWeight = FontWeight.Medium)
+            Text(stringResource(R.string.wft_send_sample_hint), fontSize = FontTokens.sizeXs.sp, color = t.textMuted)
+            variables.forEach { path ->
+                HubTextField(
+                    values[path].orEmpty(), { values = values + (path to it) },
+                    label = "{{$path}}", singleLine = false, maxLines = 4, size = ControlSize.Md,
+                    fieldTag = "workflow.editor.step.${node.id}.send.value.$path",
+                )
+            }
+        }
+        if (!node.input.isNullOrBlank()) {
+            Text(stringResource(R.string.wft_send_preview), fontSize = FontTokens.sizeSm.sp, fontWeight = FontWeight.Medium)
+            val preview = WorkflowFlowRules.fill(node.input, values).trim()
+            InContentDirection(preview) {
+                Text(preview, Modifier.testTag("workflow.editor.step.${node.id}.send.preview"), fontSize = FontTokens.sizeSm.sp, color = t.text)
+            }
+        }
+        if (missing.isNotEmpty()) {
+            Text(
+                stringResource(R.string.wft_send_missing, missing.joinToString(" ") { "{{$it}}" }),
+                Modifier.testTag("workflow.editor.step.${node.id}.send.missing"), fontSize = FontTokens.sizeXs.sp, color = t.danger,
+            )
+        }
         HubButton(
             stringResource(R.string.wft_send_test),
             {
                 busy = true
                 error = null
                 scope.launch {
-                    ops.testSend(profile, WorkflowFlowRules.sendTest(send, node.input))
+                    ops.testSend(profile, WorkflowFlowRules.sendTest(send, node.input, values))
                         .onSuccess { result = it }.onFailure { error = it as? HubError; result = null }
                     busy = false
                 }
             },
             kind = ButtonKind.Secondary, size = ControlSize.Sm, icon = Lucide.Send, loading = busy,
-            enabled = WorkflowFlowRules.canTestSend(send, node.input), modifier = Modifier.testTag("workflow.editor.step.${node.id}.send.test"),
+            enabled = WorkflowFlowRules.canTestSend(send, node.input, values), modifier = Modifier.testTag("workflow.editor.step.${node.id}.send.test"),
         )
         ErrorNotice(error)
         result?.let { r ->

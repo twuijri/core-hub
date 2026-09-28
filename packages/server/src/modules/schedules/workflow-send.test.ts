@@ -307,4 +307,83 @@ describe('the "Send message" step', () => {
       await hub.close();
     }
   });
+
+  it("send-test fills the step's variables like the run does, and refuses while any has no value", async () => {
+    fakePorts();
+    const hub = await signedInHub();
+    try {
+      const targets = [{ platform: 'telegram', chat_id: '-1001' }];
+      const analysis = { ...send([], 'تحليل: {{input}}'), id: 'analysis', title: 'Analysis' };
+      delete (analysis as { send?: unknown }).send;
+      const template = 'النتيجة: {{steps.analysis.output}} — {{input}}';
+      const id = await authed(hub, hub.token, {
+        method: 'POST',
+        url: '/api/v1/workflows',
+        payload: {
+          name: 'Send',
+          nodes: [analysis, send(targets, template)],
+          edges: [{ id: 'e1', from: 'analysis', to: 'tell', route: 'success' }],
+        },
+      });
+      expect(id.statusCode, id.body).toBe(201);
+      // The run itself: the variables filled, exactly as before this change.
+      const run = await runOnce(hub, (id.json() as Json).id as string, 'تم');
+      expect(run.status).toBe('succeeded');
+      expect(calls.map((call) => call.text)).toEqual(['النتيجة: تحليل: تم — تم']);
+      calls.length = 0;
+
+      const test = (payload: Json) =>
+        authed(hub, hub.token, {
+          method: 'POST',
+          url: '/api/v1/workflows/send-test',
+          payload: { text: template, send: { targets }, ...payload },
+        });
+
+      // An older client sends the raw words: refused, naming what is missing — never
+      // `{{steps.analysis.output}}` on the phone.
+      const raw = await test({});
+      expect(raw.statusCode, raw.body).toBe(400);
+      expect(raw.json()).toMatchObject({
+        code: 'bad_request',
+        details: { reason: 'template_unresolved', unresolved: ['steps.analysis.output', 'input'] },
+      });
+      const partly = await test({ values: { input: 'x' } });
+      expect(partly.json()).toMatchObject({ details: { unresolved: ['steps.analysis.output'] } });
+      expect(calls).toEqual([]);
+
+      // Typed values.
+      const typed = await test({ values: { 'steps.analysis.output': 'عينة', input: 'يدوي' } });
+      expect(typed.statusCode, typed.body).toBe(200);
+      expect(calls.map((call) => call.text)).toEqual(['النتيجة: عينة — يدوي']);
+
+      // The last run's values, with a typed one over it.
+      calls.length = 0;
+      const fromRun = await test({ workflow_run_id: run.id });
+      expect(fromRun.statusCode, fromRun.body).toBe(200);
+      const over = await test({ workflow_run_id: run.id, values: { input: 'بديل' } });
+      expect(over.statusCode, over.body).toBe(200);
+      expect(calls.map((call) => call.text)).toEqual([
+        'النتيجة: تحليل: تم — تم',
+        'النتيجة: تحليل: تم — بديل',
+      ]);
+
+      // "Test this step" hands back what each variable reads as in that run.
+      const step = await authed(hub, hub.token, {
+        method: 'POST',
+        url: '/api/v1/workflows/test-step',
+        payload: { node: send(targets, template), workflow_run_id: run.id },
+      });
+      expect(step.statusCode, step.body).toBe(200);
+      expect(step.json()).toMatchObject({
+        rendered: 'النتيجة: تحليل: تم — تم',
+        values: { 'steps.analysis.output': 'تحليل: تم', input: 'تم' },
+      });
+
+      // A run that is not there is a 404, not a guess.
+      const ghost = await test({ workflow_run_id: '01J8QK3ZR2W7M5N4P6T8V9X0ZZ' });
+      expect(ghost.statusCode).toBe(404);
+    } finally {
+      await hub.close();
+    }
+  });
 });
