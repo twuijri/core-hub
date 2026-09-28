@@ -184,6 +184,8 @@ describe('connecting an MCP server by OAuth', () => {
     expect((await servers(h, agent))[0]).toMatchObject({
       name: 'clickup',
       oauth: { status: 'connected', required: true },
+      // The sign-in that landed is the server's last test now (DECISIONS §134).
+      last_test: { ok: true, tool_count: 3, stale: false },
     });
 
     // Used once: the same callback again is an ended sign-in, said as such.
