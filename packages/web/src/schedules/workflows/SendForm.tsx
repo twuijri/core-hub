@@ -132,7 +132,7 @@ export function SendForm({
   const preview = fillTemplate(text, values);
   const refused = unresolvedOf(test.error);
 
-  const useLastRun = () => {
+  const fillFromLastRun = () => {
     if (!lastRunId) return;
     const single: Draft = {
       name: 'test',
@@ -160,7 +160,7 @@ export function SendForm({
               size="sm"
               variant="secondary"
               loading={fromRun.isPending}
-              onClick={useLastRun}
+              onClick={fillFromLastRun}
               data-testid="workflow-send-last-run"
             >
               {t('workflows.send.use_last_run')}
