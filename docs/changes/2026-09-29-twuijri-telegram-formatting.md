@@ -114,7 +114,27 @@ $ pnpm nav:check            → nav:check  OK — 41 destinations, …
 ```
 
 لم تُشغَّل محليًا: اختبارات iOS وAndroid (لا Xcode ولا Java على الجهاز) ولا المجموعات الكاملة — تعمل على
-GitHub CI. نتيجة CI تُضاف أدناه.
+GitHub CI.
+
+CI على PR ‎#227: أول تشغيل فشل في فحص واحد للويب (`tests/theme-colors.test.ts`: الصنف `border-s-2` ليس
+لونًا من الثيم في حدّ الاقتباس بالمعاينة)، أُصلح إلى `border-s border-line-strong`. بعدها كل الفحوص خضراء على
+الرأس `88663291`:
+
+```text
+pass | Android build, unit tests, lint | 10m2s
+pass | Build and test on the iOS simulator | 5m57s
+pass | Lint, typecheck, contracts, client tests, build | 8m2s
+pass | Server unit tests (shard 1/3) | 4m58s
+pass | Server unit tests (shard 2/3) | 5m22s
+pass | Server unit tests (shard 3/3) | 4m22s
+pass | Web smoke journeys (Playwright against the real hub) | 11m10s
+pass | Real Hermes suites (floor) | 8m29s
+pass | Real Hermes suites (pinned) | 6m58s
+pass | Docker image builds and answers /health | 4m17s
+pass | Desktop app smoke (Electron under Xvfb against the real hub) | 1m32s
+pass | db:generate + db:migrate (SQLite and PostgreSQL) | 1m16s
+pass | Translations fit their labels (measured widths) | 41s
+```
 
 ## المخاطر والرجوع
 
