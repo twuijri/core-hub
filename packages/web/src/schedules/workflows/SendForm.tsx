@@ -508,7 +508,7 @@ function renderTelegram(nodes: TgNode[]): ReactNode[] {
         );
       case 'quote':
         return (
-          <blockquote key={index} className="my-1 border-s-2 border-line ps-2">
+          <blockquote key={index} className="my-1 border-s border-line-strong ps-2">
             {children}
           </blockquote>
         );
