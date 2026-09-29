@@ -151,3 +151,35 @@ deliberately absent, because in both cases we took an idea and wrote our own cod
 Dependencies installed from npm are not listed here: their licences travel with
 them in `node_modules` and in `pnpm-lock.yaml`. This file is only for source we
 carry ourselves.
+
+## CLIProxyAPI — the model gateway's translator
+
+The container image (`/opt/corehub/bin/cli-proxy-api`) and the desktop installers
+(`resources/cliproxy/`) carry the unmodified release binary of
+[CLIProxyAPI](https://github.com/router-for-me/CLIProxyAPI) `8.0.4`, one per platform, each checked
+against the SHA-256 pinned in `scripts/cliproxy/pin.json` before it is used (ADR 0029). Core Hub runs
+it as a separate program on a loopback port; none of its code is copied into Core Hub. Its licence
+file ships beside it as `LICENSE.CLIProxyAPI`.
+
+> MIT License
+>
+> Copyright (c) 2025-2005.9 Luis Pater
+> Copyright (c) 2025.9-present Router-For.ME
+>
+> Permission is hereby granted, free of charge, to any person obtaining a copy
+> of this software and associated documentation files (the "Software"), to deal
+> in the Software without restriction, including without limitation the rights
+> to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+> copies of the Software, and to permit persons to whom the Software is
+> furnished to do so, subject to the following conditions:
+>
+> The above copyright notice and this permission notice shall be included in all
+> copies or substantial portions of the Software.
+>
+> THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+> IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+> FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+> AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+> LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+> OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+> SOFTWARE.

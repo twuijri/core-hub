@@ -4763,3 +4763,76 @@ settings `env`); removing the old bridge in place before installing the new one 
 would leave no agent); a shared `~/.agents/skills` page now (the survey's next step, not tonight's);
 calling ACP `authenticate` for Codex (it writes the key into Codex's own `auth.json`; the gateway
 work decides how the hub signs agents in).
+
+## 140. The model gateway, phase 1: every coding agent runs on any model the hub has
+
+ADR 0029 (the hybrid the owner approved on 2026-09-29: the hub's own gateway in front, CLIProxyAPI
+behind it as the translator). Phase 1. The owner's rules are the ADR's; what follows is how phase 1
+does them, proposed here — owner to confirm:
+
+- **Contract, additive only.** `Agent.model_source` (a string: `hub` or `agent`; absent for Hermes, the
+  hub's own agent, agents not wired yet, a hub whose gateway is off, and older hubs): where a coding
+  agent's model calls go in this profile. `Model.agent_gateway` (boolean; absent when the hub has no
+  gateway): a coding agent can run this model through the gateway — its provider has a key the hub
+  holds and is not a subscription signed in to through Hermes. The choice itself is a field of the
+  agent's settings form (`models` section, `model_source`: `auto` / `hub` / `agent`, default `auto`),
+  which the settings operations already carry; no new operation. The gateway's own routes
+  (`/gateway/anthropic/…`, `/gateway/openai/…`) are not `/api/v1`: they are served on a loopback port
+  of their own to the programs the hub starts, and documented in ADR 0029 §2.
+- **Which agents, and how.** Claude Code (`ANTHROPIC_BASE_URL`, `ANTHROPIC_AUTH_TOKEN` = the token,
+  `ANTHROPIC_MODEL` and the Opus/Sonnet aliases = `corehub-main`, `ANTHROPIC_DEFAULT_HAIKU_MODEL` =
+  `corehub-small`, `CLAUDE_CODE_DISABLE_EXPERIMENTAL_BETAS=1`,
+  `CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1`, the model's context window when known; its API key,
+  OAuth token and Bedrock/Vertex switches taken out). Codex (`CODEX_CONFIG`: a `corehub` provider,
+  Responses wire, `env_key` = the token's variable, model `corehub-main`; and codex-acp's own `gateway`
+  sign-in method as `DEFAULT_AUTH_REQUEST`, which changes only the running session — the `api-key`
+  method was not used because it writes the token into Codex's `auth.json`, over a ChatGPT sign-in).
+  Goose (its OpenAI provider at the gateway's Chat Completions path), OpenCode (an OpenAI-compatible
+  provider in `OPENCODE_CONFIG_CONTENT`, models.dev not asked), Qwen Code (`OPENAI_BASE_URL`,
+  `OPENAI_API_KEY`, `OPENAI_MODEL`) and Kimi Code (its env-only temporary model), all from the
+  research's verified names; Claude Code and Codex are proven with the real bridges, the other four are
+  wired but not yet run for real. Each entry's wiring is data in its catalog file (`gateway`). Gemini
+  CLI, Grok Build and Pi keep their own account (phases 2–3).
+- **What an agent on the gateway is given.** Its own settings `env` and `secret_refs` as before; none
+  of the profile's provider keys; the wiring's variables; `NO_PROXY` with the loopback addresses added.
+  The wiring's `clears` and the entry's key variables are taken out after everything is merged
+  (`AgentTarget.envRemove`), so a key in the host's environment does not reach it either. An agent not
+  on the gateway gets exactly what it got before.
+- **Automatic.** `hub` in the image (`COREHUB_AGENT_MODEL_SOURCE=hub`); elsewhere `hub` unless the agent
+  has its own sign-in or provider on this computer (its sign-in file, a provider its settings name, a
+  key in the environment the hub runs in — `agent-credentials.ts` §`ownSignIn`). In every mode `agent`
+  when there is no model to give it (none picked, no default), and, on Automatic, when the chosen
+  model's provider is one the gateway does not serve. A choice of `hub` with such a model is refused by
+  the gateway with the reason, never silently served by the agent's own account. A change applies from
+  the next message: the runner starts the agent again with the other environment. When the gateway
+  cannot start (no CLIProxyAPI, it fails), the agent runs on its own account and the log says why.
+- **Per turn.** The runner sets the token's turn (run, provider row, model) before each prompt and
+  clears it after; the gateway resolves `corehub-main`, `corehub-small` and any id it does not know to
+  it, and a catalogue key to its own model. A call between turns runs on the last turn's model.
+- **Usage.** Read from each answer (Anthropic `message_start`/`message_delta`, Responses
+  `response.completed`, Chat's usage chunk, or a whole JSON body) without changing a byte; the turn's
+  running totals per model reach the run as the adapters' usage events do, priced from the model row
+  (`estimated`); a call that ends after its turn is added to that run's row (`recordUsage` gains
+  `accumulate`, which adds instead of replacing).
+- **CLIProxyAPI** 8.0.4, pinned per platform by SHA-256 (`scripts/cliproxy/pin.json`, the Linux builds
+  are the static `no-plugin` ones); in the image at `/opt/corehub/bin/cli-proxy-api` (+22.6 MB
+  compressed), in each desktop installer at `resources/cliproxy/` (+14–23 MB), for a developer from
+  `pnpm cliproxy:fetch`; `COREHUB_CLIPROXY_BIN` names another, `COREHUB_MODEL_GATEWAY=off` switches the
+  whole gateway off. Started the first time an agent needs it, run with `-local-model` (no remote model
+  catalogue), restarted with a backoff (1, 2, 5, 10, 30 s), its lines in the hub's log under `cliproxy`
+  (its per-request lines at debug), a change of providers served by a new process while the old one
+  finishes its streams. Known: it still asks GitHub for the Antigravity client version every three
+  hours, which the hub cannot switch off.
+- **Proven for real** (`agents/model-gateway.real.test.ts`, a CI job required through `gate`):
+  CLIProxyAPI 8.0.4 + the hub's gateway + the real `claude-agent-acp` 0.84.0 and `codex-acp` 2.0.0,
+  against a provider that speaks only Chat Completions: Claude Code writes a file with its `Write` tool
+  on the provider's tool call and the next request carries the result; Codex answers through Responses;
+  a call without a token, with a forged one or a revoked one is refused; the provider's key reaches the
+  provider only — not the agent's environment, not the hub's log — and the token never reaches the
+  provider.
+
+Rejected: an agent pointed at CLIProxyAPI directly (static shared keys, no profile, turn or ledger); a
+download of CLIProxyAPI on first use in the desktop app (a runtime download-and-run path for 14–23 MB
+the owner's size budget allows); lending Hermes-held subscriptions (the owner); restarting CLIProxyAPI
+in place on a provider change (it would cut other agents' streams); counting a call's usage into the
+ledger directly while its turn is live (the run's own totals would double it).

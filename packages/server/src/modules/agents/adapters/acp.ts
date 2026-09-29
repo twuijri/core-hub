@@ -649,8 +649,8 @@ export function createAcpAdapter(options: AcpAdapterOptions): AgentAdapter {
               restart_required: false,
               applies: 'next_message',
               note: {
-                ar: 'يسري من الرسالة التالية؛ تبدأ المحادثة المفتوحة من جديد على المصدر المختار وتكمل من حيث توقفت.',
-                en: 'Takes effect from the next message: an open conversation restarts the agent on the chosen source and carries on where it was.',
+                ar: 'يسري من الرسالة التالية: المحادثة المفتوحة يُعاد تشغيل الوكيل فيها على المصدر المختار.',
+                en: 'Takes effect from the next message: an open conversation starts the agent again on the chosen source.',
               },
               fields: [
                 {
