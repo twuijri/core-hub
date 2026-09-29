@@ -129,7 +129,20 @@ $ tsc --noEmit (server, web) → بلا أخطاء
 $ pnpm build              → exit 0
 ```
 
-iOS وAndroid لا يُبنيان على هذا الجهاز (لا macOS ولا JDK): يتحقق منهما CI. نتيجة CI تُضاف أدناه.
+iOS وAndroid لا يُبنيان على هذا الجهاز (لا macOS ولا JDK): تحقق منهما CI.
+
+CI على طلب الدمج #223 (الرأس `b267553f`، يضم هذا العمل وعمل «أرسل رسالة تجريبية»): كل الفحوص خضراء —
+Lint/typecheck/contracts/build، الخادم (3 أجزاء)، Playwright، الترجمات، db:migrate، صورة Docker،
+Electron، Android، iOS simulator، وتوليد عميل Swift. واختبار Hermes الحقيقي الجديد شُغّل على الصورتين:
+
+```text
+Real Hermes suites (floor)   ref=v2026.9.14
+ ✓  unit  src/modules/agents/mcp-tool-filter.real.test.ts (2 tests) 7416ms
+ Test Files  32 passed (32)
+Real Hermes suites (pinned)  ref=v2026.9.24
+ ✓  unit  src/modules/agents/mcp-tool-filter.real.test.ts (2 tests) 10136ms
+ Test Files  32 passed (32)
+```
 
 ## المخاطر والرجوع
 
