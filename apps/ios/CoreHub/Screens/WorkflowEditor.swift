@@ -453,7 +453,7 @@ struct WorkflowStepPage: View {
     @ViewBuilder
     private func sendSection(_ index: Int, _ send: WorkflowSend) -> some View {
         Section {
-            SendTargetsForm(send: send, profile: profile) { next in draft.nodes[index].send = next }
+            SendTargetsForm(send: send, profile: profile, formatting: true) { next in draft.nodes[index].send = next }
             let words = draft.nodes[index].input
             let variables = WorkflowEditRules.variables(in: words)
             if !variables.isEmpty {

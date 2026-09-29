@@ -136,7 +136,25 @@ object WorkflowFlowRules {
         return WorkflowSend(if (next != null) others + next else others)
     }
 
-    fun telegram(chatId: String) = WorkflowSendTarget(platform = "telegram", chatId = chatId.trim())
+    /**
+     * A Telegram target. `formatting` (§137) is carried over when the chat id is edited, so a
+     * step sent as HTML stays HTML; `null` leaves it out (the hub keeps the saved one).
+     */
+    fun telegram(chatId: String, formatting: String? = null) =
+        WorkflowSendTarget(platform = "telegram", chatId = chatId.trim(), formatting = formatting)
+
+    /** How Telegram reads a step's words (§137): plain text, HTML or MarkdownV2 — no other value. */
+    val FORMATTINGS = listOf("plain", "html", "markdown_v2")
+
+    /** A target's formatting as this app shows it: absent (a step saved before §137) is plain. */
+    fun formattingOf(target: WorkflowSendTarget?): String =
+        target?.formatting?.takeIf { it in FORMATTINGS } ?: "plain"
+
+    /** The Telegram target with another formatting; its chat id and anything else stay. */
+    fun withFormatting(send: WorkflowSend, formatting: String): WorkflowSend {
+        val telegram = target(send, "telegram") ?: return send
+        return setTarget(send, "telegram", telegram.copy(formatting = formatting.takeIf { it in FORMATTINGS } ?: "plain"))
+    }
 
     fun conversation(session: Session?) =
         if (session == null) WorkflowSendTarget(platform = "core_hub")

@@ -151,6 +151,39 @@ class WorkflowFlowTest {
         assertEquals("Result: done for release 2 (done)", WorkflowFlowRules.sendTest(send, words, all).text)
     }
 
+    @Test fun `Telegram formatting is read, chosen, kept when the chat id changes, and survives a load and save`() {
+        // A step saved before §137: no field, read as plain, and saved without one.
+        val old = WorkflowSend(listOf(WorkflowFlowRules.telegram("-1001")))
+        assertEquals("plain", WorkflowFlowRules.formattingOf(WorkflowFlowRules.target(old, "telegram")))
+        assertEquals(null, WorkflowFlowRules.target(old, "telegram")!!.formatting)
+
+        var send = WorkflowFlowRules.withFormatting(old, "html")
+        assertEquals("html", WorkflowFlowRules.target(send, "telegram")!!.formatting)
+        // Editing the chat id keeps the formatting.
+        val html = WorkflowFlowRules.target(send, "telegram")!!
+        send = WorkflowFlowRules.setTarget(send, "telegram", WorkflowFlowRules.telegram(" -1002 ", html.formatting))
+        assertEquals(listOf("-1002", "html"), WorkflowFlowRules.target(send, "telegram")!!.let { listOf(it.chatId, it.formatting) })
+        // Only the three values; anything else is plain here and refused by the hub.
+        assertEquals("plain", WorkflowFlowRules.formattingOf(WorkflowSendTarget(platform = "telegram", formatting = "Markdown")))
+        assertEquals("markdown_v2", WorkflowFlowRules.target(WorkflowFlowRules.withFormatting(send, "markdown_v2"), "telegram")!!.formatting)
+        assertEquals("plain", WorkflowFlowRules.target(WorkflowFlowRules.withFormatting(send, "bogus"), "telegram")!!.formatting)
+        // No Telegram target: nothing to change.
+        val none = WorkflowSend(listOf(WorkflowFlowRules.conversation(null)))
+        assertEquals(none, WorkflowFlowRules.withFormatting(none, "html"))
+
+        // A workflow from the hub keeps the field through this app's load and save.
+        val loaded = Serializer.kotlinxSerializationJson.decodeFromString(
+            WorkflowSendTarget.serializer(),
+            """{"platform":"telegram","chat_id":"-1001","formatting":"html"}""",
+        )
+        assertEquals("html", loaded.formatting)
+        val written = Serializer.kotlinxSerializationJson.encodeToString(WorkflowSendTarget.serializer(), loaded)
+        assertTrue(written.contains("\"formatting\":\"html\""))
+        // Absent stays absent (the hub keeps what was saved).
+        val bare = Serializer.kotlinxSerializationJson.encodeToString(WorkflowSendTarget.serializer(), WorkflowFlowRules.telegram("-1"))
+        assertFalse(bare.contains("formatting"))
+    }
+
     @Test fun `the failure alert is written only once changed, null when emptied, and left out otherwise`() {
         val saved = workflow(onFailure = """{"inbox":true,"send":null}""")
         val loaded = WorkflowDraftRules.from(saved)
