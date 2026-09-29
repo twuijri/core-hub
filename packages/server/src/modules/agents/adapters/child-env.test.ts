@@ -222,12 +222,14 @@ describe.skipIf(process.platform === 'win32')('every ACP agent of the catalog, s
     });
     const session = await adapter.start({
       slug: entry.id,
+      name: entry.name,
       command: [entry.binary, ...entry.protocolArgs],
       executablePath,
+      endpoint: null,
       cwd: dir,
       // What the hub hands it: the profile's shared key under the agent's own name.
       env: handed ? { [handed]: 'from-the-hub' } : {},
-    } as Parameters<typeof adapter.start>[0]);
+    });
     await session.close();
     const got = JSON.parse(readFileSync(path.join(dir, 'env.json'), 'utf8')) as Record<
       string,

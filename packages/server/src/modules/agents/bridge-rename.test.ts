@@ -166,9 +166,11 @@ describe.skipIf(process.platform === 'win32')('an ACP bridge renamed on npm', ()
     expect(found?.executablePath).toBe(path.join(agentBinDir(dataDir, id), binary));
     const probe = await adapter.probe({
       slug: id,
+      name: entry.name,
       command: [entry.binary],
       executablePath: null,
-    } as unknown as Parameters<typeof adapter.probe>[0]);
+      endpoint: null,
+    });
     expect(probe.installed).toBe(true);
   });
 
