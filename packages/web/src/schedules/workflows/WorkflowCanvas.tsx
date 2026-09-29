@@ -196,8 +196,6 @@ export function WorkflowCanvas({
     () => new Map(triggers.map((trigger, index) => [trigger.id, places[index]!])),
     [triggers, places],
   );
-  // Which side a step's outputs are on, on screen: the reading direction's end.
-  const outSide = rtl ? 'left' : 'right';
 
   const size = () => {
     const box = frame.current?.getBoundingClientRect();
@@ -637,8 +635,7 @@ export function WorkflowCanvas({
             return (
               <div
                 key={trigger.id}
-                dir={rtl ? 'rtl' : 'ltr'}
-                className="group pointer-events-auto absolute top-0 left-0"
+                className="group pointer-events-auto absolute top-0 start-0"
                 style={{
                   width: TRIGGER_WIDTH,
                   transform: `translate(${at.x}px, ${at.y}px) scaleX(${sign})`,
@@ -646,77 +643,80 @@ export function WorkflowCanvas({
                 }}
                 data-trigger-node={trigger.id}
               >
-                <button
-                  type="button"
-                  className={`relative flex w-full items-center gap-2 overflow-hidden rounded-e-md rounded-s-[2rem] border-2 bg-raised py-2 pe-3 ps-2 text-start shadow-sm ${
-                    trigger.pending || !trigger.enabled
-                      ? 'border-dashed border-warning-soft-text/70'
-                      : 'border-warning-soft-text'
-                  } ${trigger.enabled ? '' : 'opacity-70'}`}
-                  style={{ height: TRIGGER_HEIGHT }}
-                  aria-label={[
-                    t('workflows.nodes.trigger'),
-                    trigger.title,
-                    trigger.detail,
-                    trigger.pending ? t('workflows.nodes.pending') : null,
-                    trigger.enabled ? null : t('workflows.nodes.off'),
-                  ]
-                    .filter(Boolean)
-                    .join(' · ')}
-                  onPointerDown={(event) => event.stopPropagation()}
-                  // A trigger is not a step: Delete and the arrows leave the steps alone.
-                  onFocus={() => dispatch({ type: 'select', selection: null })}
-                  onClick={() => onOpenTrigger?.(trigger.id)}
-                  data-testid="workflow-trigger-node"
-                  data-trigger-id={trigger.id}
-                  data-trigger-kind={trigger.kind}
-                  data-pending={trigger.pending ? 'true' : undefined}
-                >
-                  <span
-                    className="grid size-10 shrink-0 place-items-center rounded-full bg-warning-soft text-warning-soft-text"
-                    aria-hidden
+                {/* The world is laid out left to right; the node's own content follows the language,
+                    so its outputs (`inset-inline-end`) sit on the side the flow goes. */}
+                <div dir={rtl ? 'rtl' : 'ltr'} className="relative">
+                  <button
+                    type="button"
+                    className={`relative flex w-full items-center gap-2 overflow-hidden rounded-e-md rounded-s-[2rem] border-2 bg-raised py-2 pe-3 ps-2 text-start shadow-sm ${
+                      trigger.pending || !trigger.enabled
+                        ? 'border-dashed border-warning-soft-text/70'
+                        : 'border-warning-soft-text'
+                    } ${trigger.enabled ? '' : 'opacity-70'}`}
+                    style={{ height: TRIGGER_HEIGHT }}
+                    aria-label={[
+                      t('workflows.nodes.trigger'),
+                      trigger.title,
+                      trigger.detail,
+                      trigger.pending ? t('workflows.nodes.pending') : null,
+                      trigger.enabled ? null : t('workflows.nodes.off'),
+                    ]
+                      .filter(Boolean)
+                      .join(' · ')}
+                    onPointerDown={(event) => event.stopPropagation()}
+                    // A trigger is not a step: Delete and the arrows leave the steps alone.
+                    onFocus={() => dispatch({ type: 'select', selection: null })}
+                    onClick={() => onOpenTrigger?.(trigger.id)}
+                    data-testid="workflow-trigger-node"
+                    data-trigger-id={trigger.id}
+                    data-trigger-kind={trigger.kind}
+                    data-pending={trigger.pending ? 'true' : undefined}
                   >
-                    {TRIGGER_ICON[trigger.kind]}
-                  </span>
-                  <span className="flex min-w-0 flex-col">
-                    <span className="flex items-center gap-1 text-[11px] font-medium uppercase tracking-wide text-muted">
-                      <IconTrigger size={11} aria-hidden />
-                      {t('workflows.nodes.trigger')}
-                    </span>
-                    <span className="truncate text-sm font-medium" dir="auto">
-                      {trigger.title}
-                    </span>
                     <span
-                      className="max-w-full self-start truncate text-xs text-muted"
-                      dir={trigger.detailLtr && !trigger.pending ? 'ltr' : 'auto'}
-                    >
-                      {trigger.pending ? t('workflows.nodes.pending') : trigger.detail}
-                    </span>
-                  </span>
-                </button>
-                {!readOnly && (
-                  <>
-                    <span
+                      className="grid size-10 shrink-0 place-items-center rounded-full bg-warning-soft text-warning-soft-text"
                       aria-hidden
-                      className="absolute size-4 cursor-crosshair rounded-full border-2 border-raised shadow"
-                      style={{
-                        top: TRIGGER_HEIGHT / 2 - 8,
-                        [outSide]: -8,
-                        background: 'var(--color-warning-soft-text)',
-                      }}
-                      onPointerDown={(event) => onPortDown(event, trigger.id, 'success', true)}
-                      data-testid="workflow-trigger-port"
-                    />
-                    <AddHandle
-                      top={TRIGGER_HEIGHT / 2}
-                      side={outSide}
-                      shown={starts.length === 0}
-                      label={t('workflows.nodes.add_first', { name: trigger.title })}
-                      onAdd={() => onAddStep?.({ type: 'trigger', id: trigger.id })}
-                      testId="workflow-trigger-add-step"
-                    />
-                  </>
-                )}
+                    >
+                      {TRIGGER_ICON[trigger.kind]}
+                    </span>
+                    <span className="flex min-w-0 flex-col">
+                      <span className="flex items-center gap-1 text-[11px] font-medium uppercase tracking-wide text-muted">
+                        <IconTrigger size={11} aria-hidden />
+                        {t('workflows.nodes.trigger')}
+                      </span>
+                      <span className="truncate text-sm font-medium" dir="auto">
+                        {trigger.title}
+                      </span>
+                      <span
+                        className="max-w-full self-start truncate text-xs text-muted"
+                        dir={trigger.detailLtr && !trigger.pending ? 'ltr' : 'auto'}
+                      >
+                        {trigger.pending ? t('workflows.nodes.pending') : trigger.detail}
+                      </span>
+                    </span>
+                  </button>
+                  {!readOnly && (
+                    <>
+                      <span
+                        aria-hidden
+                        className="absolute size-4 cursor-crosshair rounded-full border-2 border-raised shadow"
+                        style={{
+                          top: TRIGGER_HEIGHT / 2 - 8,
+                          insetInlineEnd: -8,
+                          background: 'var(--color-warning-soft-text)',
+                        }}
+                        onPointerDown={(event) => onPortDown(event, trigger.id, 'success', true)}
+                        data-testid="workflow-trigger-port"
+                      />
+                      <AddHandle
+                        top={TRIGGER_HEIGHT / 2}
+                        shown={starts.length === 0}
+                        label={t('workflows.nodes.add_first', { name: trigger.title })}
+                        onAdd={() => onAddStep?.({ type: 'trigger', id: trigger.id })}
+                        testId="workflow-trigger-add-step"
+                      />
+                    </>
+                  )}
+                </div>
               </div>
             );
           })}
@@ -733,8 +733,7 @@ export function WorkflowCanvas({
             return (
               <div
                 key={node.id}
-                dir={rtl ? 'rtl' : 'ltr'}
-                className="group pointer-events-auto absolute top-0 left-0"
+                className="group pointer-events-auto absolute top-0 start-0"
                 style={{
                   width: NODE_WIDTH,
                   transform: `translate(${node.position.x}px, ${node.position.y}px) scaleX(${sign})`,
@@ -742,136 +741,136 @@ export function WorkflowCanvas({
                 }}
                 data-node-id={node.id}
               >
-                <button
-                  type="button"
-                  className={`relative flex w-full items-center gap-2.5 overflow-hidden rounded-md border-2 bg-raised px-2.5 py-2 text-start shadow-sm ${
-                    state
-                      ? STATE_CLASS[state]
-                      : bad
-                        ? 'border-danger'
-                        : found.length
-                          ? 'border-warning-soft-text'
-                          : 'border-line'
-                  } ${chosen ? 'outline outline-2 outline-offset-2 outline-accent' : ''}`}
-                  style={{ height: NODE_HEIGHT, cursor: readOnly ? 'pointer' : 'grab' }}
-                  aria-pressed={chosen}
-                  aria-label={[
-                    kindName,
-                    node.title || node.id,
-                    state ? t(`workflows.states.${state}`) : null,
-                    found.length
-                      ? t('workflows.editor.issue_count', { count: found.length })
-                      : null,
-                  ]
-                    .filter(Boolean)
-                    .join(' · ')}
-                  onPointerDown={(event) => onNodeDown(event, node)}
-                  onFocus={() =>
-                    dispatch({ type: 'select', selection: { type: 'node', id: node.id } })
-                  }
-                  onClick={(event) => {
-                    // Enter or Space (a click with no pointer) opens the step; a pointer
-                    // opens it when it lets go without dragging (`onUp`).
-                    if (event.detail === 0) onOpenNode?.(node.id);
-                  }}
-                  data-testid="workflow-node"
-                  data-node-id={node.id}
-                  data-kind={node.kind}
-                  data-state={state ?? undefined}
-                  data-issues={found.length || undefined}
-                >
-                  <span
-                    className={`grid size-9 shrink-0 place-items-center rounded-md ${KIND_TONE[node.kind]}`}
-                    aria-hidden
+                {/* The world is laid out left to right; the node's own content follows the language,
+                    so its outputs (`inset-inline-end`) sit on the side the flow goes. */}
+                <div dir={rtl ? 'rtl' : 'ltr'} className="relative">
+                  <button
+                    type="button"
+                    className={`relative flex w-full items-center gap-2.5 overflow-hidden rounded-md border-2 bg-raised px-2.5 py-2 text-start shadow-sm ${
+                      state
+                        ? STATE_CLASS[state]
+                        : bad
+                          ? 'border-danger'
+                          : found.length
+                            ? 'border-warning-soft-text'
+                            : 'border-line'
+                    } ${chosen ? 'outline outline-2 outline-offset-2 outline-accent' : ''}`}
+                    style={{ height: NODE_HEIGHT, cursor: readOnly ? 'pointer' : 'grab' }}
+                    aria-pressed={chosen}
+                    aria-label={[
+                      kindName,
+                      node.title || node.id,
+                      state ? t(`workflows.states.${state}`) : null,
+                      found.length
+                        ? t('workflows.editor.issue_count', { count: found.length })
+                        : null,
+                    ]
+                      .filter(Boolean)
+                      .join(' · ')}
+                    onPointerDown={(event) => onNodeDown(event, node)}
+                    onFocus={() =>
+                      dispatch({ type: 'select', selection: { type: 'node', id: node.id } })
+                    }
+                    onClick={(event) => {
+                      // Enter or Space (a click with no pointer) opens the step; a pointer
+                      // opens it when it lets go without dragging (`onUp`).
+                      if (event.detail === 0) onOpenNode?.(node.id);
+                    }}
+                    data-testid="workflow-node"
+                    data-node-id={node.id}
+                    data-kind={node.kind}
+                    data-state={state ?? undefined}
+                    data-issues={found.length || undefined}
                   >
-                    {node.send ? <IconSendMessage size={18} /> : KIND_ICON[node.kind]}
-                  </span>
-                  <span className="flex min-w-0 flex-1 flex-col gap-0.5">
-                    <span className="flex items-center gap-1.5 text-[11px] font-medium uppercase tracking-wide text-muted">
-                      <span className="truncate">{kindName}</span>
-                      {node.approval_required && node.kind !== 'approval' && (
-                        <IconApproval size={11} aria-hidden />
-                      )}
-                      {state && (
-                        <span
-                          className="ms-auto normal-case tracking-normal"
-                          data-testid="workflow-node-state"
-                        >
-                          {t(`workflows.states.${state}`)}
-                        </span>
-                      )}
-                      {!state && found.length > 0 && (
-                        <span
-                          className={`ms-auto rounded-full px-1.5 normal-case tracking-normal ${
-                            bad
-                              ? 'bg-danger-soft text-danger-soft-text'
-                              : 'bg-warning-soft text-warning-soft-text'
-                          }`}
-                          data-testid="workflow-node-issues"
-                        >
-                          {found.length}
-                        </span>
-                      )}
+                    <span
+                      className={`grid size-9 shrink-0 place-items-center rounded-md ${KIND_TONE[node.kind]}`}
+                      aria-hidden
+                    >
+                      {node.send ? <IconSendMessage size={18} /> : KIND_ICON[node.kind]}
                     </span>
-                    <span className="truncate text-sm font-medium" dir="auto">
-                      {node.title || node.id}
+                    <span className="flex min-w-0 flex-1 flex-col gap-0.5">
+                      <span className="flex items-center gap-1.5 text-[11px] font-medium uppercase tracking-wide text-muted">
+                        <span className="truncate">{kindName}</span>
+                        {node.approval_required && node.kind !== 'approval' && (
+                          <IconApproval size={11} aria-hidden />
+                        )}
+                        {state && (
+                          <span
+                            className="ms-auto normal-case tracking-normal"
+                            data-testid="workflow-node-state"
+                          >
+                            {t(`workflows.states.${state}`)}
+                          </span>
+                        )}
+                        {!state && found.length > 0 && (
+                          <span
+                            className={`ms-auto rounded-full px-1.5 normal-case tracking-normal ${
+                              bad
+                                ? 'bg-danger-soft text-danger-soft-text'
+                                : 'bg-warning-soft text-warning-soft-text'
+                            }`}
+                            data-testid="workflow-node-issues"
+                          >
+                            {found.length}
+                          </span>
+                        )}
+                      </span>
+                      <span className="truncate text-sm font-medium" dir="auto">
+                        {node.title || node.id}
+                      </span>
+                      <span className="truncate text-xs text-muted" dir="auto">
+                        {summaryOf(node)}
+                      </span>
                     </span>
-                    <span className="truncate text-xs text-muted" dir="auto">
-                      {summaryOf(node)}
-                    </span>
-                  </span>
-                </button>
-                {!readOnly && (
-                  <>
-                    <Port
-                      share={0.34}
-                      side={outSide}
-                      route="success"
-                      label={`${node.title || node.id}: ${routeLabel('success', node)}`}
-                      onPointerDown={(event) => onPortDown(event, node.id, 'success')}
-                    />
-                    <Port
-                      share={0.74}
-                      side={outSide}
-                      route="failure"
-                      label={`${node.title || node.id}: ${routeLabel('failure', node)}`}
-                      onPointerDown={(event) => onPortDown(event, node.id, 'failure')}
-                    />
-                    {onAddStep && (
-                      <AddHandle
-                        top={NODE_HEIGHT * 0.34}
-                        side={outSide}
-                        shown={!hasOut(node, 'success')}
-                        label={t('workflows.nodes.add_after', {
-                          name: node.title || node.id,
-                          route: routeLabel('success', node),
-                        })}
-                        onAdd={() => onAddStep({ type: 'node', id: node.id, route: 'success' })}
-                        testId="workflow-node-add"
+                  </button>
+                  {!readOnly && (
+                    <>
+                      <Port
+                        share={0.34}
                         route="success"
+                        label={`${node.title || node.id}: ${routeLabel('success', node)}`}
+                        onPointerDown={(event) => onPortDown(event, node.id, 'success')}
                       />
-                    )}
-                    {onAddStep && node.kind === 'condition' && (
-                      <AddHandle
-                        top={NODE_HEIGHT * 0.74}
-                        side={outSide}
-                        shown={!hasOut(node, 'failure')}
-                        label={t('workflows.nodes.add_after', {
-                          name: node.title || node.id,
-                          route: routeLabel('failure', node),
-                        })}
-                        onAdd={() => onAddStep({ type: 'node', id: node.id, route: 'failure' })}
-                        testId="workflow-node-add"
+                      <Port
+                        share={0.74}
                         route="failure"
+                        label={`${node.title || node.id}: ${routeLabel('failure', node)}`}
+                        onPointerDown={(event) => onPortDown(event, node.id, 'failure')}
                       />
-                    )}
-                  </>
-                )}
-                {extra && (
-                  <div dir={rtl ? 'rtl' : 'ltr'} className="mt-1.5">
-                    {extra}
-                  </div>
-                )}
+                      {onAddStep && (
+                        <AddHandle
+                          top={NODE_HEIGHT * 0.34}
+                          shown={!hasOut(node, 'success')}
+                          label={t('workflows.nodes.add_after', {
+                            name: node.title || node.id,
+                            route: routeLabel('success', node),
+                          })}
+                          onAdd={() => onAddStep({ type: 'node', id: node.id, route: 'success' })}
+                          testId="workflow-node-add"
+                          route="success"
+                        />
+                      )}
+                      {onAddStep && node.kind === 'condition' && (
+                        <AddHandle
+                          top={NODE_HEIGHT * 0.74}
+                          shown={!hasOut(node, 'failure')}
+                          label={t('workflows.nodes.add_after', {
+                            name: node.title || node.id,
+                            route: routeLabel('failure', node),
+                          })}
+                          onAdd={() => onAddStep({ type: 'node', id: node.id, route: 'failure' })}
+                          testId="workflow-node-add"
+                          route="failure"
+                        />
+                      )}
+                    </>
+                  )}
+                  {extra && (
+                    <div dir={rtl ? 'rtl' : 'ltr'} className="mt-1.5">
+                      {extra}
+                    </div>
+                  )}
+                </div>
               </div>
             );
           })}
@@ -998,14 +997,11 @@ function summaryOf(node: WfNode): string {
 /** A node's outgoing dot: drag from it onto another node to connect them. */
 function Port({
   share,
-  side,
   route,
   label,
   onPointerDown,
 }: {
   share: number;
-  /** The screen side a step's outputs are on (the reading direction's end). */
-  side: 'left' | 'right';
   route: Route;
   label: string;
   onPointerDown: (event: ReactPointerEvent<HTMLElement>) => void;
@@ -1015,7 +1011,7 @@ function Port({
       aria-hidden
       data-label={label}
       className="absolute size-4 cursor-crosshair rounded-full border-2 border-raised shadow"
-      style={{ top: NODE_HEIGHT * share - 8, [side]: -8, background: ROUTE_STROKE[route] }}
+      style={{ top: NODE_HEIGHT * share - 8, insetInlineEnd: -8, background: ROUTE_STROKE[route] }}
       onPointerDown={onPointerDown}
       data-testid={`workflow-port-${route}`}
     />
@@ -1028,7 +1024,6 @@ function Port({
  */
 function AddHandle({
   top,
-  side,
   shown,
   label,
   onAdd,
@@ -1036,7 +1031,6 @@ function AddHandle({
   route,
 }: {
   top: number;
-  side: 'left' | 'right';
   shown: boolean;
   label: string;
   onAdd: () => void;
@@ -1048,7 +1042,7 @@ function AddHandle({
       className={`absolute flex items-center ${
         shown ? '' : 'opacity-0 transition-ui group-hover:opacity-100 focus-within:opacity-100'
       }`}
-      style={{ top: top - 12, [side]: -46 }}
+      style={{ top: top - 12, insetInlineEnd: -46 }}
     >
       <span aria-hidden className="h-0.5 w-4 bg-line-strong" />
       <Tooltip label={label}>
