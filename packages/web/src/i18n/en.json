@@ -2364,6 +2364,35 @@
       "url_bad": "An https:// address (http:// only for this computer).",
       "submit": "Add and sign in",
       "name_taken": "A server named {name} already exists; choose another name."
+    },
+    "tools": {
+      "count": "{count} tools",
+      "count_filtered": "{allowed} of {total} tools",
+      "failed_badge": "Test failed",
+      "tested_at": "Tested {when}",
+      "stale": "This server's settings changed after the last test, so the list may be out of date. Test it again.",
+      "auto_testing": "Testing the server to list its tools…",
+      "heading": "Tools the agent may use",
+      "allowed": "{allowed} of {total} allowed",
+      "all": "All",
+      "none": "None",
+      "read_only": "Read-only",
+      "read_only_hint": "Read-only ticks the tools that only read, list, search or get, and unticks those that create, change, delete, send or run. Each tool says how it was read; check before saving.",
+      "access": {
+        "read": "Reads",
+        "write": "Changes",
+        "unknown": "Unclear"
+      },
+      "access_annotation": "The server marks this tool read-only.",
+      "access_name": "Read from the tool's name.",
+      "search": "Search tools",
+      "no_match": "No tool matches.",
+      "locked": "Set by the pattern {pattern} in the config file.",
+      "note_all": "No filter: the agent gets every tool, including any the server adds later.",
+      "note_include": "Only the ticked tools. A tool the server adds later stays off until you tick it.",
+      "note_exclude": "Every tool except the unticked ones, including any the server adds later.",
+      "undo": "Undo",
+      "saved": "Saved. Hermes applies it the next time it connects to this server, after a restart."
     }
   },
   "hub_tools": {

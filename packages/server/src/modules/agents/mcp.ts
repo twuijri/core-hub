@@ -350,7 +350,10 @@ export function setMcpToolFilter(home: string, name: string, filter: McpToolFilt
     }
   }
   const tools = doc.toJS()?.[BLOCK]?.[name]?.tools as unknown;
-  if (tools !== undefined && (tools === null || (isBlock(tools) && Object.keys(tools).length === 0))) {
+  if (
+    tools !== undefined &&
+    (tools === null || (isBlock(tools) && Object.keys(tools).length === 0))
+  ) {
     doc.deleteIn(path);
   }
   save(home, doc);

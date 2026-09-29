@@ -841,6 +841,27 @@
 :root[dir='rtl'] [aria-expanded='false'] > .mcp-chevron {
   transform: rotate(90deg);
 }
+/* An MCP server's tools from its last test, and which the agent may use (McpToolsPanel.tsx). */
+.mcp-tools,
+.mcp-tools-picker {
+  display: flex;
+  flex-direction: column;
+  gap: var(--ch-space-2);
+}
+.mcp-tools-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--ch-space-1);
+  max-block-size: 24rem;
+  overflow-y: auto;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.mcp-tools-list code {
+  font-size: var(--ch-font-size-xs);
+  overflow-wrap: anywhere;
+}
 /* The hub's own tools card folds from its title (agents/HubToolsCard.tsx). */
 .hub-tools-heading {
   flex: 1;
