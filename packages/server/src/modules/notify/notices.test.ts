@@ -44,6 +44,22 @@ describe('notices: the wording', () => {
     expect(sentenceFor(event, 'en').body).toBe('خطة الإطلاق');
   });
 
+  it('shows the start of the reply when there is one, with the chat named in the title', () => {
+    const event = {
+      kind: 'run_completed',
+      agent: 'Hermes',
+      session: 'تحليل طلب ClickUp',
+      reply: '📌 الطلب: تصوير فعالية يوم الأربعاء',
+    } as const;
+    expect(sentenceFor(event, 'en').title).toBe('Hermes · تحليل طلب ClickUp');
+    expect(sentenceFor(event, 'en').body).toBe('📌 الطلب: تصوير فعالية يوم الأربعاء');
+    expect(sentenceFor({ ...event, session: '' }, 'ar').title).toBe('Hermes · رد جديد');
+    // Markdown marks are not shown on a lock screen.
+    expect(sentenceFor({ ...event, reply: '## **المهمة:** `تصوير`' }, 'en').body).toBe(
+      'المهمة: تصوير',
+    );
+  });
+
   it('says why a run failed when there is a reason, and what it was about when there is not', () => {
     const withReason = {
       kind: 'run_failed',

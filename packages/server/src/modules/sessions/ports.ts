@@ -403,6 +403,8 @@ export interface SessionsNotifier {
     agentName: string;
     outcome: 'succeeded' | 'failed';
     reason: string | null;
+    /** The start of the reply, flattened (the session list's preview), for the notice body. */
+    replyPreview?: string | null;
   }): void;
   approvalRequested(input: {
     workspace: string;

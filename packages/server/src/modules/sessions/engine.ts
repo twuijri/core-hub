@@ -987,6 +987,7 @@ export class RunEngine {
           agentName: run.agent.name,
           outcome: terminal === 'succeeded' ? 'succeeded' : 'failed',
           reason: state.error?.message ?? null,
+          replyPreview: terminal === 'succeeded' ? preview(state.text) : null,
         }),
       );
     }

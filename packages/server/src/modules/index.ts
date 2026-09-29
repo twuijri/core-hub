@@ -211,7 +211,12 @@ export const notifierPort = (app: FastifyInstance): SessionsNotifier => {
       notifier.announce(
         { userId: input.userId, workspace: input.workspace, profile: input.profile },
         input.outcome === 'succeeded'
-          ? { kind: 'run_completed', agent: input.agentName, session: input.sessionTitle }
+          ? {
+              kind: 'run_completed',
+              agent: input.agentName,
+              session: input.sessionTitle,
+              reply: input.replyPreview ?? null,
+            }
           : {
               kind: 'run_failed',
               agent: input.agentName,
