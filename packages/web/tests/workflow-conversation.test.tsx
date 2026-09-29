@@ -218,7 +218,7 @@ describe('an agent step’s conversation (§136)', () => {
     await user.click(screen.getByTestId('workflow-conversation-manual'));
     const field = screen.getByTestId('workflow-conversation-id');
 
-    fireEvent.change(field, { target: { value: `‏${CHAT} ` } });
+    fireEvent.change(field, { target: { value: `\u200f${CHAT} ` } });
     await waitFor(() =>
       expect(screen.getByTestId('workflow-conversation-result')).toHaveTextContent(
         '“ClickUp reports” is ready.',
@@ -300,7 +300,7 @@ describe('an agent step’s conversation (§136)', () => {
       mode: 'thread',
       extra: 1,
     });
-    expect(lookupId(` ${CHAT}‎`)).toBe(CHAT);
+    expect(lookupId(` ${CHAT}\u200e`)).toBe(CHAT);
     expect(lookupId('{{trigger.id}}')).toBeNull();
   });
 });

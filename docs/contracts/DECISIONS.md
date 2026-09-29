@@ -4503,3 +4503,85 @@ another step reopens it); the page, the drawing and its unsaved changes stay. Th
 test are kept per step while the page is open — reopening the step shows them — and are never
 saved into the step; "Use the last run's values" takes any answer as text and names the variables
 the run had nothing for.
+
+## 136. An agent step can talk in the same conversation every run
+
+Owner's request (2026-09-29): a workflow's Agent step opened a new conversation on every run, so
+the chat list filled with one conversation per run. Generic for every hub. The details below are
+proposed — owner to confirm.
+
+**Shape.** `WorkflowNode.conversation` (optional, nullable) is `WorkflowAgentConversation`:
+`mode` (`new` — a new conversation per run, the default and what a step without the field does —
+or `reuse`), `session_id` (the conversation's id, or a template such as
+`{{trigger.body.conversation}}` rendered with the run's `render` like the prompt), and, for
+`reuse`, `create_if_missing` (off by default) and `title` (a template; the step's title when
+empty). `mode` is a plain string, as §124's `platform`, so the generated Kotlin and Swift clients
+never meet an enum value they cannot decode; an unknown mode is refused when the workflow is
+saved (`conversation_mode_unknown`), as is `reuse` without an id (`conversation_id_missing`) or
+with one that is neither a ULID (after cutting spaces and invisible direction marks) nor a
+template (`conversation_id_invalid`); template paths are checked like the prompt's. An app that
+does not know the field sends an agent node without it and `updateWorkflow` keeps the saved
+node's (`null` removes it), as for §123's `rules` and §124's `send`: older phones drop unknown
+node fields when they decode, so the hub is what keeps them. Phones built from this contract
+decode and re-send the field (it is in their generated `WorkflowNode`), show the mode, the id and
+"created if missing" read-only on the agent step, and keep it on save; editing it on the phones is
+a follow-up.
+
+**Who may use which conversation** (enforced by the hub at run time, and by the same function
+behind "Test conversation"): the conversation must be in the run's profile (workspace) as the
+person the run acts as reaches it — a trigger's run acts as the trigger's creator (§123), a
+schedule's as its owner, a run by hand as whoever pressed Run. Another profile's conversation is
+answered exactly like a missing one (`not_found`), so nothing about it is told. A room seat's
+conversation (it belongs to its room) and another person's own assistant (`global_agent`) are
+refused (`not_allowed`). **The agent**: a conversation has one agent; the step's agent must be
+the same (`agent_mismatch` otherwise, never a silent switch), or the step may leave its agent
+empty and the conversation's own agent answers (the save warning `agent_missing` is not raised
+for a `reuse` step). The web's picker sets the step's agent to the picked conversation's. The
+turn uses the step's own model/provider when it names one, else the conversation's.
+
+**Missing conversation.** Off (default): a missing, deleted or foreign conversation fails the step
+with "the conversation <id> was not found in this profile (it was deleted, or it is another
+profile's)" — never a new conversation in silence. On: the run makes one (source `workflow`,
+origin the workflow, the step's agent, the rendered title) and the turn goes there; when the
+step's `session_id` is a plain id the step is **pointed at the new conversation** (the drawing's
+version is not bumped, as §124 does for a deleted Send-message conversation) so every later run
+talks there, and the run owner's inbox says which conversation was missing and which was made
+(plus a `workflow conversation made` log line). A templated id is not repointed — the next run's
+values decide again. Runs that were waiting for the same missing id use the conversation the first
+one made (remembered in memory by the requested id, so two concurrent runs do not make two).
+
+**Turns one at a time, whole.** Runs that reach the same conversation are serialized in the hub:
+a run waits until the workflow turns queued before it for that conversation have ended *and* the
+conversation has no turn going on (a person's included), and only then writes its prompt and
+starts its run. The history therefore reads prompt, reply, prompt, reply (never two prompts before
+their replies), Hermes never receives a second turn while one runs (it would answer
+`already_running`), and each run's output is read by its own run id — its own reply only. The
+wait is bounded (10 minutes; `WorkflowPorts.conversationWaitMs`); past it, or when the step's
+timeout or the run's budget ends the step, nothing is written into the conversation and the step
+fails with "the conversation was busy with another turn for N s; this run did not send its
+message".
+
+**Outputs.** `WorkflowStep.session_id` — declared since §52 but always `null` — is now filled for
+every agent step (new or reused conversation), and `WorkflowStep.message_id` (new, optional) is the
+agent's reply message; `output` stays the reply's text. Later steps may read
+`{{steps.<id>.conversation_id}}` (also `session_id`), `message_id`, `run_id` and `status`
+(`succeeded`/`failed`) besides `output`. The web's run view opens the conversation at the reply.
+
+**Test conversation** (`schedules.checkWorkflowConversation`, `POST /workflows/conversation-check`,
+additive): `{ session_id, agent_id? }` → `WorkflowConversationCheckResult` with `status` (a plain
+string: `ready`, `busy`, `not_found`, `not_allowed`, `agent_mismatch`), the title, the agent, the
+turn going on and a reason; nothing is sent or saved. A template is `400` (`conversation_id_template`):
+it has no value until the step runs.
+
+**Web.** The agent step's form has "Conversation": "A new conversation for each run" or "The same
+conversation every run". The owner's shape: the **picker is the main control** (the profile's
+conversations, searched by title, each with its last activity and agent; room seats are not
+offered), "Paste a conversation id instead" is the secondary way (templates only there); a plain
+id, picked or pasted, is looked up at once and shown by its title or the reason it cannot be used;
+"Test conversation" asks again; "Create if missing" (off) with the new conversation's title.
+
+Rejected: a new node kind or an enum `mode` (older phones would fail to load workflows); queueing
+the prompt in the session's own run queue at once (two runs would write two prompts before either
+reply, and a run that gave up would leave an unanswered prompt behind); letting a step switch a
+conversation's agent (a conversation has one agent in every client); telling another profile's
+conversation apart from a missing one (it would confirm that it exists).

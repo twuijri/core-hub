@@ -84,5 +84,8 @@
   "wft_send_sample_title": "قيم التجربة",
   "wft_send_sample_hint": "الرسالة فيها متغيرات. اكتب قيمة لكل متغير قبل إرسال التجربة؛ وصفحة سير العمل على الويب تستطيع أخذها من آخر تشغيل.",
   "wft_send_preview": "معاينة ما سيُرسل",
-  "wft_send_missing": "املأ هذه قبل الإرسال: %1$s"
+  "wft_send_missing": "املأ هذه قبل الإرسال: %1$s",
+  "wft_conversation_reuse": "المحادثة نفسها في كل تشغيل",
+  "wft_conversation_hint": "تُختار من الويب. يعرضها الهاتف ويحتفظ بها عند الحفظ.",
+  "wft_conversation_create": "تُنشأ إن لم توجد"
 }

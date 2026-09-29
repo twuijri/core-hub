@@ -28,7 +28,7 @@ import { variablesIn } from './template.js';
 
 /** Invisible marks and spaces a pasted id may carry; an id is letters and digits only. */
 export function cleanConversationId(value: string): string {
-  return value.replace(/[\s‎‏‪-‮⁦-⁩﻿]/g, '');
+  return value.replace(/[\s\u200e\u200f\u202a-\u202e\u2066-\u2069\ufeff]/g, '');
 }
 
 const ULID = /^[0-9A-HJKMNP-TV-Z]{26}$/;

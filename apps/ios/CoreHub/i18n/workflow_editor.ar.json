@@ -70,7 +70,10 @@
       "rules_any": "تتحقق أي قاعدة",
       "rules_remove": "احذف هذه القاعدة",
       "rules_add": "أضف قاعدة",
-      "rules_hint": "كل قاعدة تقارن مسارًا — trigger.event أو trigger.task_id أو trigger.body.… أو steps.<id>.output — بقيمة. «نعم» تتبع الوصلات الخضراء و«لا» الحمراء؛ و«لا» بلا شيء بعدها تُنهي التشغيل «مُصفّى»."
+      "rules_hint": "كل قاعدة تقارن مسارًا — trigger.event أو trigger.task_id أو trigger.body.… أو steps.<id>.output — بقيمة. «نعم» تتبع الوصلات الخضراء و«لا» الحمراء؛ و«لا» بلا شيء بعدها تُنهي التشغيل «مُصفّى».",
+      "conversation_reuse": "المحادثة نفسها في كل تشغيل",
+      "conversation_hint": "تُختار من الويب. يعرضها الهاتف ويحتفظ بها عند الحفظ.",
+      "conversation_create": "تُنشأ إن لم توجد"
     },
     "routes": {
       "success": "عند النجاح",

@@ -70,7 +70,10 @@
       "rules_any": "any one rule holds",
       "rules_remove": "Remove this rule",
       "rules_add": "Add a rule",
-      "rules_hint": "Each rule compares a path — trigger.event, trigger.task_id, trigger.body.…, steps.<id>.output — with a value. Yes follows the green connections, no the red ones; a no with nothing after it ends the run as “filtered”."
+      "rules_hint": "Each rule compares a path — trigger.event, trigger.task_id, trigger.body.…, steps.<id>.output — with a value. Yes follows the green connections, no the red ones; a no with nothing after it ends the run as “filtered”.",
+      "conversation_reuse": "The same conversation every run",
+      "conversation_hint": "Chosen on the web. The phone shows it and keeps it when you save.",
+      "conversation_create": "Created if missing"
     },
     "routes": {
       "success": "On success",

@@ -45,7 +45,7 @@ export function isTemplate(value: string): boolean {
  * around it, cut out — an id is letters and digits only.
  */
 export function cleanConversationId(value: string): string {
-  return value.replace(/[\s‎‏‪-‮⁦-⁩﻿]/g, '');
+  return value.replace(/[\s\u200e\u200f\u202a-\u202e\u2066-\u2069\ufeff]/g, '');
 }
 
 /** Whether a rendered id can name a conversation at all (a ULID). */

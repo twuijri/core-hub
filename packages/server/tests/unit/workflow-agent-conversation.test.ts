@@ -433,7 +433,7 @@ describe('workflows: an agent step that reuses a conversation (§136)', () => {
         agent_id: AGENT,
         active_run_id: null,
       });
-      expect((await check(`‏ ${chat} `)).body).toMatchObject({ status: 'ready' });
+      expect((await check(`\u200f ${chat} `)).body).toMatchObject({ status: 'ready' });
       expect((await check(NOWHERE)).body).toMatchObject({ status: 'not_found', title: null });
       expect((await check(theirs)).body).toMatchObject({ status: 'agent_mismatch' });
       expect((await check(theirs, null)).body).toMatchObject({ status: 'ready' });

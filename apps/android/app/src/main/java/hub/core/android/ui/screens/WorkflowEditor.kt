@@ -479,6 +479,17 @@ private fun StepEditor(
                         onDismiss = { picking = false },
                     )
                 }
+                // The same conversation every run (§136): chosen on the web, shown and kept here.
+                node.conversation?.takeIf { it.mode == "reuse" }?.let { conversation ->
+                    Column(Modifier.testTag("workflow.editor.step.${node.id}.conversation")) {
+                        Text(stringResource(R.string.wft_conversation_reuse), fontSize = FontTokens.sizeSm.sp, color = t.textMuted)
+                        Text(conversation.sessionId ?: "—", fontSize = FontTokens.sizeXs.sp, fontFamily = FontFamily.Monospace, maxLines = 1)
+                        if (conversation.createIfMissing == true) {
+                            Text(stringResource(R.string.wft_conversation_create), fontSize = FontTokens.sizeXs.sp, color = t.textMuted)
+                        }
+                        Text(stringResource(R.string.wft_conversation_hint), fontSize = FontTokens.sizeXs.sp, color = t.textMuted)
+                    }
+                }
                 HubTextField(
                     input, { v -> change { it.copy(input = v) } }, Modifier.fillMaxWidth(), label = stringResource(R.string.wfe_prompt),
                     singleLine = false, minLines = 3, maxLines = 8, size = ControlSize.Md, fieldTag = "workflow.editor.step.${node.id}.input",

@@ -84,5 +84,8 @@
   "wft_send_sample_title": "Values for the test",
   "wft_send_sample_hint": "The message uses variables. Type a value for each before a test is sent; the web page of this workflow can also take them from its last run.",
   "wft_send_preview": "Preview of what will be sent",
-  "wft_send_missing": "Fill these before sending: %1$s"
+  "wft_send_missing": "Fill these before sending: %1$s",
+  "wft_conversation_reuse": "The same conversation every run",
+  "wft_conversation_hint": "Chosen on the web. The phone shows it and keeps it when you save.",
+  "wft_conversation_create": "Created if missing"
 }
