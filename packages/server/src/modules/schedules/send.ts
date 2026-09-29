@@ -42,9 +42,21 @@ export function splitMessage(text: string, max: number = TELEGRAM_MAX_CHARS): st
   return parts;
 }
 
+/**
+ * Invisible marks a chat id picks up when it is copied out of right-to-left text (LRM, RLM,
+ * the isolates, zero-width spaces, a no-break space): Telegram would answer "chat not found"
+ * for an id that looks right on screen.
+ */
+const INVISIBLE = /[\s\u00a0\u200b-\u200f\u202a-\u202e\u2060-\u2069\ufeff]/g;
+
+/** A Telegram chat id as typed, without spaces or invisible direction marks. */
+export function chatIdOf(value: string | null | undefined): string {
+  return typeof value === 'string' ? value.replace(INVISIBLE, '') : '';
+}
+
 /** A target's stable name: `telegram:<chat_id>`, `core_hub:<session_id>`. */
 export function targetKey(target: WorkflowSendTarget): string {
-  if (target.platform === 'telegram') return `telegram:${(target.chat_id ?? '').trim()}`;
+  if (target.platform === 'telegram') return `telegram:${chatIdOf(target.chat_id)}`;
   if (target.platform === 'core_hub') return `core_hub:${target.session_id ?? ''}`;
   return `${target.platform}:`;
 }
@@ -57,7 +69,7 @@ export function sendProblems(send: WorkflowSend): Array<{ code: string; index: n
   targets.forEach((target, index) => {
     if (!(SEND_PLATFORMS as readonly string[]).includes(target.platform)) {
       out.push({ code: 'send_platform_unknown', index });
-    } else if (target.platform === 'telegram' && !(target.chat_id ?? '').trim()) {
+    } else if (target.platform === 'telegram' && !chatIdOf(target.chat_id)) {
       out.push({ code: 'send_chat_missing', index });
     } else if (target.platform === 'core_hub' && !target.session_id && !target.agent_id) {
       out.push({ code: 'send_conversation_missing', index });
@@ -70,7 +82,37 @@ export function hasSend(send: WorkflowSend | null | undefined): send is Workflow
   return !!send && typeof send === 'object' && Array.isArray(send.targets);
 }
 
-export type TelegramAnswer = { ok: true; messageId: string } | { ok: false; reason: string };
+/**
+ * What Telegram did with one message. A refusal carries a short `code` for the hub's log:
+ * Telegram's own `error_code` (`400`, `403`…), `timeout`, or `unreachable`.
+ */
+export type TelegramAnswer =
+  { ok: true; messageId: string } | { ok: false; reason: string; code: string };
+
+/** How long one `sendMessage` may take before it counts as failed. */
+export const TELEGRAM_TIMEOUT_MS = 20_000;
+
+/** `text` with every copy of the bot token cut out, so no reason or log line carries it. */
+export function withoutToken(text: string, token: string): string {
+  return token ? text.split(token).join('…') : text;
+}
+
+/** Why a fetch failed, with its cause (Node's `fetch failed` alone names nothing). */
+function reachFailure(error: unknown): { said: string; timeout: boolean } {
+  const err = error instanceof Error ? error : new Error(String(error));
+  const timeout = err.name === 'TimeoutError' || err.name === 'AbortError';
+  const cause = (err as { cause?: unknown }).cause;
+  const detail =
+    cause instanceof Error
+      ? [(cause as { code?: unknown }).code, cause.message].filter(Boolean).join(' ')
+      : typeof cause === 'string'
+        ? cause
+        : '';
+  return {
+    said: detail && !err.message.includes(detail) ? `${err.message}: ${detail}` : err.message,
+    timeout,
+  };
+}
 
 /**
  * One `sendMessage` through the Bot API. The token goes in the path, as Telegram asks; it is
@@ -82,6 +124,7 @@ export async function telegramSend(
   token: string,
   chatId: string,
   text: string,
+  timeoutMs: number = TELEGRAM_TIMEOUT_MS,
 ): Promise<TelegramAnswer> {
   let response: Response;
   try {
@@ -89,13 +132,24 @@ export async function telegramSend(
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ chat_id: chatId, text, disable_web_page_preview: true }),
-      signal: AbortSignal.timeout(30_000),
+      signal: AbortSignal.timeout(timeoutMs),
     });
   } catch (error) {
-    const said = error instanceof Error ? error.message : String(error);
-    return { ok: false, reason: `Telegram could not be reached (${said.replace(token, '…')})` };
+    const { said, timeout } = reachFailure(error);
+    return {
+      ok: false,
+      code: timeout ? 'timeout' : 'unreachable',
+      reason: timeout
+        ? `Telegram did not answer within ${Math.round(timeoutMs / 1000)} s`
+        : `Telegram could not be reached (${withoutToken(said, token)})`,
+    };
   }
-  let body: { ok?: boolean; result?: { message_id?: number }; description?: string } = {};
+  let body: {
+    ok?: boolean;
+    result?: { message_id?: number };
+    description?: string;
+    error_code?: number;
+  } = {};
   try {
     body = (await response.json()) as typeof body;
   } catch {
@@ -104,9 +158,11 @@ export async function telegramSend(
   if (body.ok === true && body.result?.message_id !== undefined) {
     return { ok: true, messageId: String(body.result.message_id) };
   }
+  const description = typeof body.description === 'string' ? body.description.trim() : '';
   return {
     ok: false,
-    reason: body.description?.trim() || `Telegram answered ${response.status}`,
+    code: String(body.error_code ?? response.status),
+    reason: withoutToken(description || `Telegram answered ${response.status}`, token),
   };
 }
 

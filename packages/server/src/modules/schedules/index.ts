@@ -51,6 +51,7 @@ import {
   WorkflowEngine,
   costOf,
   deliverSend,
+  sendLogFields,
   testStep,
   stepOf,
   stoppedByOf,
@@ -1348,9 +1349,26 @@ export const schedulesModule = defineModule({
           text: string;
           values?: Record<string, string> | null;
           workflow_run_id?: string | null;
+          workflow_id?: string | null;
+          node_id?: string | null;
         };
+        // One log line per test (and per target it reached), so a test that "did nothing" can
+        // be found: which workflow and step, where, and what came of it — never the bot token
+        // or the words (2026-09-29).
+        const who = {
+          workflow_id: ask.workflow_id ?? null,
+          node_id: ask.node_id ?? null,
+          profile: scope.profile,
+          test: true,
+        };
+        const refused = (code: string, detail: Record<string, unknown>) =>
+          request.log.warn(
+            { ...who, status: 'refused', error_code: code, ...detail },
+            'workflow send test refused',
+          );
         const problems = sendProblems(ask.send);
         if (problems.length > 0) {
+          refused('send_invalid', { problems: problems.map((problem) => problem.code) });
           throw new HubError('bad_request', { details: { reason: 'send_invalid', problems } });
         }
         // The step's words are a template (§124): filled from a run and/or typed values with
@@ -1359,12 +1377,21 @@ export const schedulesModule = defineModule({
         // as they always did.
         let text = ask.text;
         if (pathsIn(text).length > 0) {
-          const base: Context = ask.workflow_run_id
-            ? runContext(serviceOf(request), scope, ask.workflow_run_id)
-            : { trigger: undefined, steps: {}, input: undefined };
+          let base: Context = { trigger: undefined, steps: {}, input: undefined };
+          if (ask.workflow_run_id) {
+            try {
+              base = runContext(serviceOf(request), scope, ask.workflow_run_id);
+            } catch (error) {
+              refused(error instanceof HubError ? error.code : 'run_unreadable', {
+                workflow_run_id: ask.workflow_run_id,
+              });
+              throw error;
+            }
+          }
           const ctx = withValues(base, ask.values);
           const unresolved = unresolvedIn(text, ctx);
           if (unresolved.length > 0) {
+            refused('template_unresolved', { unresolved });
             throw new HubError('bad_request', {
               messageKey: 'errors.template_unresolved',
               details: { reason: 'template_unresolved', unresolved },
@@ -1380,6 +1407,11 @@ export const schedulesModule = defineModule({
           text,
           null,
           () => undefined,
+          (report) => {
+            const fields = { ...who, ...sendLogFields(report) };
+            if (report.status === 'sent') request.log.info(fields, 'workflow send test');
+            else request.log.warn(fields, 'workflow send test failed');
+          },
         );
         return result;
       },

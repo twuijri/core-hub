@@ -1671,7 +1671,9 @@
       "run_find_hint": "Task or event id",
       "run_filtered": "Filtered: not one to act on",
       "run_task": "Task {id}",
-      "run_event": "Event {id}"
+      "run_event": "Event {id}",
+      "panel_failed": "This part of the editor hit an error and was closed so the rest keeps working: {message}",
+      "panel_retry": "Show it again"
     },
     "form": {
       "title": "Title",
@@ -1825,6 +1827,18 @@
         "sent": "Sent",
         "partial": "Sent to some targets only",
         "failed": "Not sent"
+      },
+      "sending": "Sending the test message…",
+      "sent_to": "Sent to",
+      "message_ids": "Message id",
+      "no_answer": "The hub did not answer within {seconds} s. Nothing is known to have been sent; check the hub log for “workflow send test”.",
+      "bad_answer": "The hub’s answer could not be read, so nothing is known to have been sent. Check the hub log for “workflow send test”.",
+      "last_run_empty": "The last run had no value for: {names}. Type one before sending.",
+      "blocked": {
+        "no_target": "Choose where to send it first: Telegram and/or a conversation.",
+        "no_chat": "Type the Telegram chat id first.",
+        "no_conversation": "Choose the conversation first.",
+        "no_text": "Write the message first."
       }
     },
     "alert": {

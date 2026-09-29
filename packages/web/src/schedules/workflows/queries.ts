@@ -437,6 +437,51 @@ export function useProfileConversations(profile: string, enabled: boolean) {
 }
 
 /** "Send test message": the step's words to its targets now (not remembered as sent). */
+/** How long a test send may take before the page says the hub did not answer. */
+export const SEND_TEST_TIMEOUT_MS = 90_000;
+
+/** The hub gave no answer to a test send in time (`SEND_TEST_TIMEOUT_MS`). */
+export class SendTestNoAnswer extends Error {
+  constructor(readonly seconds: number) {
+    super(`no answer within ${seconds} s`);
+    this.name = 'SendTestNoAnswer';
+  }
+}
+
+/** The hub's answer to a test send was not a `WorkflowSendResult` (a proxy's page, say). */
+export class SendTestBadAnswer extends Error {
+  constructor() {
+    super('the answer was not a send result');
+    this.name = 'SendTestBadAnswer';
+  }
+}
+
+const strings = (value: unknown): string[] =>
+  Array.isArray(value) ? value.filter((each): each is string => typeof each === 'string') : [];
+
+/**
+ * A `WorkflowSendResult` read defensively: anything else is `null`, so the page says it could
+ * not read the answer instead of drawing nothing.
+ */
+export function readSendResult(data: unknown): SendResult | null {
+  if (!data || typeof data !== 'object') return null;
+  const raw = data as Record<string, unknown>;
+  if (raw.status !== 'sent' && raw.status !== 'partial' && raw.status !== 'failed') return null;
+  const ids = strings(raw.message_ids);
+  return {
+    status: raw.status,
+    message_id: typeof raw.message_id === 'string' ? raw.message_id : (ids[0] ?? null),
+    message_ids: ids.length > 0 ? ids : typeof raw.message_id === 'string' ? [raw.message_id] : [],
+    delivered_to: strings(raw.delivered_to),
+    failures: (Array.isArray(raw.failures) ? raw.failures : []).flatMap((failure: unknown) => {
+      const each = (failure ?? {}) as { target?: unknown; reason?: unknown };
+      return typeof each.target === 'string'
+        ? [{ target: each.target, reason: typeof each.reason === 'string' ? each.reason : '' }]
+        : [];
+    }),
+  };
+}
+
 export function useSendTest(profile: string) {
   const { client } = useAuth();
   return useMutation({
@@ -444,20 +489,39 @@ export function useSendTest(profile: string) {
       send,
       text,
       values,
+      workflowId,
+      nodeId,
     }: {
       send: Send;
       text: string;
       /** A value for each variable of `text`, by its path; the hub renders and sends (§124). */
       values?: Record<string, string>;
-    }) =>
-      (
-        await client.request('post', '/workflows/send-test', {
-          body: (values && Object.keys(values).length > 0
-            ? { send, text, values }
-            : { send, text }) as never,
+      /** Named in the hub's log line for the test only (2026-09-29). */
+      workflowId?: string | null;
+      nodeId?: string | null;
+    }) => {
+      const signal = AbortSignal.timeout(SEND_TEST_TIMEOUT_MS);
+      let data: unknown;
+      try {
+        ({ data } = await client.request('post', '/workflows/send-test', {
+          body: {
+            send,
+            text,
+            ...(values && Object.keys(values).length > 0 ? { values } : {}),
+            ...(workflowId ? { workflow_id: workflowId } : {}),
+            ...(nodeId ? { node_id: nodeId } : {}),
+          } as never,
+          signal,
           ...inProfile(profile),
-        })
-      ).data as unknown as SendResult,
+        }));
+      } catch (error) {
+        if (signal.aborted) throw new SendTestNoAnswer(SEND_TEST_TIMEOUT_MS / 1000);
+        throw error;
+      }
+      const result = readSendResult(data);
+      if (!result) throw new SendTestBadAnswer();
+      return result;
+    },
   });
 }
 

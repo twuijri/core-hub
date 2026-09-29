@@ -4421,3 +4421,41 @@ fields shows the words that will go, and Send stays off while a variable has no 
 the words filled in; taking values from the last run on a phone is a follow-up.
 
 **What a run does is unchanged**: it still reads a variable with nothing as empty (§123).
+
+## 134. "Send test message" always ends in words, and the hub logs every send
+
+Proposed (2026-09-29) — the owner's tester on v1.1.5-preview.27: pressing "Send test message"
+seemed to do nothing (no success, no error, nothing in Telegram), with a variable and with plain
+words, and "Use the last run's values" once left the workflow page white. Owner to confirm.
+Additive contract change only.
+
+**Never silent.** The web's button ends in one of: a spinner with "Sending…" while it works; the
+state with where it went and the platform's message id(s); Telegram's own words, or the hub's
+error with its request id; "the hub did not answer within 90 s" (the page stops waiting); or "the
+answer could not be read" when something other than a `WorkflowSendResult` came back (a proxy's
+page). While it cannot be pressed it says why in words, not only in a tooltip: no target, a
+Telegram target without a chat id, a conversation not chosen, no words, or the variables still
+without a value.
+
+**The hub's log line.** Each test send writes one line per target — `workflow send test`
+(`info`) or `workflow send test failed` (`warn`) — with `workflow_id`, `node_id`, `profile`,
+`platform`, `chat_id` or `session_id`, `status`, `message_id(s)` on success and `error_code` +
+`error` on failure; a test refused before sending (`send_invalid`, `template_unresolved`, a run
+that is not there) writes `workflow send test refused`. A run's own sends and its failure alert
+write `workflow send` / `workflow send failed` with `workflow_run_id` as well. The bot token and the
+words are never in a line or a reason: every copy of the token is cut out of a reason, and a
+network failure names its cause (`ECONNREFUSED`, `ENOTFOUND`) instead of Node's bare "fetch
+failed"; Telegram gets 20 s per message (`timeout`). `WorkflowSendTest` gains two optional fields,
+`workflow_id` and `node_id`, used only for that line.
+
+**Chat ids copied out of right-to-left text.** The hub and the web cut spaces and invisible
+direction marks (LRM, RLM, the isolates, zero-width spaces, no-break space) out of a Telegram
+chat id before it is checked or sent; the web saves the cleaned id, and a step saved earlier with
+a mark in it still reaches the chat because the hub cleans it too.
+
+**A panel error closes that panel only.** The editor's canvas, its side panel and a run's view
+each sit in an error fence: an error while drawing one says what it was and offers it again (and
+another step reopens it); the page, the drawing and its unsaved changes stay. The values of a
+test are kept per step while the page is open — reopening the step shows them — and are never
+saved into the step; "Use the last run's values" takes any answer as text and names the variables
+the run had nothing for.

@@ -13,7 +13,16 @@ import { HubApiError } from '@corehub/contracts';
 import { useState } from 'react';
 import { describeError } from '../../auth/client.js';
 import { useI18n } from '../../i18n/context.js';
-import { Button, Checkbox, Input, Notice, Select, Switch, Textarea } from '../../ui/index.js';
+import {
+  Button,
+  Checkbox,
+  Input,
+  Notice,
+  Select,
+  Spinner,
+  Switch,
+  Textarea,
+} from '../../ui/index.js';
 import {
   toWrite,
   type Draft,
@@ -22,7 +31,14 @@ import {
   type SendTarget,
   type WfNode,
 } from './model.js';
-import { useProfileConversations, useSendTest, useStepTest } from './queries.js';
+import {
+  SendTestBadAnswer,
+  SendTestNoAnswer,
+  useProfileConversations,
+  useSendTest,
+  useStepTest,
+  type SendResult,
+} from './queries.js';
 import { fillTemplate, filledValues, missingIn, variablesIn } from './template.js';
 
 /** Telegram and/or a conversation, as a `Send`'s targets. */
@@ -54,7 +70,7 @@ export function SendTargets({
       <Checkbox
         checked={!!telegram}
         onChange={(next) =>
-          setTarget('telegram', next ? { platform: 'telegram', chat_id: chat.trim() } : null)
+          setTarget('telegram', next ? { platform: 'telegram', chat_id: cleanChatId(chat) } : null)
         }
         label={t('workflows.send.telegram')}
         testId={`${testPrefix}-telegram`}
@@ -65,7 +81,10 @@ export function SendTargets({
             value={chat}
             onChange={(event) => {
               setChat(event.target.value);
-              setTarget('telegram', { platform: 'telegram', chat_id: event.target.value.trim() });
+              setTarget('telegram', {
+                platform: 'telegram',
+                chat_id: cleanChatId(event.target.value),
+              });
             }}
             placeholder="-1001234567890"
             aria-label={t('workflows.send.chat_id')}
@@ -109,28 +128,81 @@ export function SendTargets({
   );
 }
 
+/**
+ * The test values typed or taken from a run, per step, for as long as the page is open: a step
+ * opened again (or the editor reopened after an error) shows them again. Never saved into the
+ * step — a test changes nothing in the workflow (2026-09-29).
+ */
+const sampleValues = new Map<string, Record<string, string>>();
+
+/** Every value as a string: an answer that is not one is never put into a field as it is. */
+function asValues(value: unknown): Record<string, string> {
+  if (!value || typeof value !== 'object') return {};
+  const out: Record<string, string> = {};
+  for (const [path, each] of Object.entries(value as Record<string, unknown>)) {
+    if (typeof each === 'string') out[path] = each;
+    else if (typeof each === 'number' || typeof each === 'boolean') out[path] = String(each);
+    else if (each !== null && each !== undefined) out[path] = JSON.stringify(each);
+  }
+  return out;
+}
+
+/** Why the test cannot be sent yet, as a message key; `null` when it can. */
+export function sendBlockedBy(send: Send, text: string): string | null {
+  if (send.targets.length === 0) return 'workflows.send.blocked.no_target';
+  for (const target of send.targets) {
+    if (target.platform === 'telegram' && !cleanChatId(target.chat_id ?? '')) {
+      return 'workflows.send.blocked.no_chat';
+    }
+    if (target.platform === 'core_hub' && !target.session_id && !target.agent_id) {
+      return 'workflows.send.blocked.no_conversation';
+    }
+  }
+  if (!text) return 'workflows.send.blocked.no_text';
+  return null;
+}
+
 export function SendForm({
   node,
   profile,
   update,
   lastRunId = null,
+  workflowId = null,
 }: {
   node: WfNode;
   profile: string;
   update: (patch: Partial<WfNode>) => void;
   /** The workflow's newest run, whose values can fill the message's variables (§124). */
   lastRunId?: string | null;
+  /** The saved workflow's id, named in the hub's log line for the test. */
+  workflowId?: string | null;
 }) {
   const { t } = useI18n();
   const send: Send = node.send ?? { targets: [] };
   const test = useSendTest(profile);
   const fromRun = useStepTest(profile);
-  const text = (node.input ?? '').trim();
+  const text = (typeof node.input === 'string' ? node.input : '').trim();
   const variables = variablesIn(text);
-  const [values, setValues] = useState<Record<string, string>>({});
+  const cacheKey = `${profile}\u0000${workflowId ?? 'new'}\u0000${node.id}`;
+  const [values, setStoredValues] = useState<Record<string, string>>(
+    () => sampleValues.get(cacheKey) ?? {},
+  );
+  const setValues = (next: (current: Record<string, string>) => Record<string, string>) =>
+    setStoredValues((current) => {
+      const value = next(current);
+      sampleValues.set(cacheKey, value);
+      return value;
+    });
+  const [notFound, setNotFound] = useState<string[]>([]);
   const missing = missingIn(text, values);
   const preview = fillTemplate(text, values);
   const refused = unresolvedOf(test.error);
+  const blockedKey = sendBlockedBy(send, text);
+  const blocked = blockedKey
+    ? t(blockedKey)
+    : missing.length > 0
+      ? t('workflows.send.missing', { names: namesOf(missing) })
+      : null;
 
   const fillFromLastRun = () => {
     if (!lastRunId) return;
@@ -143,8 +215,25 @@ export function SendForm({
     };
     fromRun.mutate(
       { node: toWrite(single).nodes[0]!, workflow_run_id: lastRunId },
-      { onSuccess: (result) => setValues((current) => ({ ...current, ...(result.values ?? {}) })) },
+      {
+        onSuccess: (result) => {
+          const found = asValues((result as { values?: unknown } | null)?.values);
+          setValues((current) => ({ ...current, ...found }));
+          setNotFound(variables.filter((path) => !found[path]));
+        },
+      },
     );
+  };
+
+  const sendTest = () => {
+    if (blocked) return;
+    test.mutate({
+      send: { targets: send.targets.map(cleanTarget) },
+      text,
+      values: filledValues(text, values),
+      workflowId,
+      nodeId: node.id,
+    });
   };
 
   return (
@@ -171,9 +260,14 @@ export function SendForm({
             </p>
           )}
           {fromRun.error && <Notice tone="danger">{describeError(fromRun.error, t)}</Notice>}
-          {fromRun.data && (
+          {fromRun.isSuccess && (
             <p className="text-xs text-muted" data-testid="workflow-send-last-run-filled">
               {t('workflows.send.last_run_filled')}
+            </p>
+          )}
+          {fromRun.isSuccess && notFound.length > 0 && (
+            <p className="text-xs text-muted" data-testid="workflow-send-last-run-empty">
+              {t('workflows.send.last_run_empty', { names: namesOf(notFound) })}
             </p>
           )}
           {variables.map((path) => (
@@ -181,9 +275,10 @@ export function SendForm({
               <code dir="ltr" className="text-start">{`{{${path}}}`}</code>
               <Textarea
                 value={values[path] ?? ''}
-                onChange={(event) =>
-                  setValues((current) => ({ ...current, [path]: event.target.value }))
-                }
+                onChange={(event) => {
+                  const value = event.target.value;
+                  setValues((current) => ({ ...current, [path]: value }));
+                }}
                 rows={1}
                 dir="auto"
                 aria-label={t('workflows.send.value_of', { path })}
@@ -213,34 +308,94 @@ export function SendForm({
       <Button
         size="sm"
         variant="secondary"
-        disabled={send.targets.length === 0 || !text || missing.length > 0}
+        disabledReason={blocked}
         loading={test.isPending}
-        onClick={() => test.mutate({ send, text, values: filledValues(text, values) })}
+        onClick={sendTest}
         data-testid="workflow-send-test"
       >
         {t('workflows.send.test')}
       </Button>
-      {test.error && (
-        <Notice tone="danger">
-          {refused
-            ? t('workflows.send.missing', { names: namesOf(refused) })
-            : describeError(test.error, t)}
-        </Notice>
+      {/* Why it cannot be pressed, in words — not only in a tooltip (2026-09-29). */}
+      {blocked && !missing.length && (
+        <p className="text-xs text-muted" data-testid="workflow-send-blocked">
+          {blocked}
+        </p>
       )}
-      {test.data && (
-        <div className="flex flex-col gap-1 text-xs" data-testid="workflow-send-test-result">
-          <span data-status={test.data.status}>
-            {t(`workflows.send.status.${test.data.status}`)}
+      {test.isPending && (
+        <div aria-live="polite" data-testid="workflow-send-sending">
+          <Spinner label={t('workflows.send.sending')} />
+        </div>
+      )}
+      {!test.isPending && test.error && (
+        <div data-testid="workflow-send-test-error">
+          <Notice tone="danger">
+            {refused
+              ? t('workflows.send.missing', { names: namesOf(refused) })
+              : test.error instanceof SendTestNoAnswer
+                ? t('workflows.send.no_answer', { seconds: test.error.seconds })
+                : test.error instanceof SendTestBadAnswer
+                  ? t('workflows.send.bad_answer')
+                  : describeError(test.error, t)}
+          </Notice>
+        </div>
+      )}
+      {!test.isPending && test.data && <SendTestResult result={test.data} />}
+    </div>
+  );
+}
+
+/** What a test send did: the state, where it went with the platform's ids, and each failure. */
+function SendTestResult({ result }: { result: SendResult }) {
+  const { t } = useI18n();
+  const tone =
+    result.status === 'sent' ? 'success' : result.status === 'partial' ? 'warning' : 'danger';
+  return (
+    <div data-testid="workflow-send-test-result" data-status={result.status}>
+      <Notice tone={tone}>
+        <div className="flex flex-col gap-1 text-xs">
+          <span className="font-medium" data-status={result.status}>
+            {t(`workflows.send.status.${result.status}`)}
           </span>
-          {test.data.failures.map((failure) => (
+          {/* The values in their own left-to-right element, so they copy clean (no marks). */}
+          {result.delivered_to.map((target) => (
+            <span key={target} data-testid="workflow-send-test-delivered">
+              {t('workflows.send.sent_to')}:{' '}
+              <code dir="ltr" className="break-all">
+                {target}
+              </code>
+            </span>
+          ))}
+          {result.message_ids.length > 0 && (
+            <span data-testid="workflow-send-test-ids">
+              {t('workflows.send.message_ids')}:{' '}
+              <code dir="ltr" className="break-all">
+                {result.message_ids.join(', ')}
+              </code>
+            </span>
+          )}
+          {result.failures.map((failure) => (
             <span key={failure.target} dir="auto" className="text-danger">
               {failure.target}: {failure.reason}
             </span>
           ))}
         </div>
-      )}
+      </Notice>
     </div>
   );
+}
+
+/**
+ * A chat id without the invisible direction marks and spaces it picks up when copied out of
+ * right-to-left text: the id Telegram knows (the hub cleans it the same way).
+ */
+export function cleanChatId(value: string): string {
+  return value.replace(/[\s\u00a0\u200b-\u200f\u202a-\u202e\u2060-\u2069\ufeff]/g, '');
+}
+
+function cleanTarget(target: SendTarget): SendTarget {
+  return target.platform === 'telegram' && typeof target.chat_id === 'string'
+    ? { ...target, chat_id: cleanChatId(target.chat_id) }
+    : target;
 }
 
 /** Variables as the template writes them, in a line (left to right: they are paths). */

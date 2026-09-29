@@ -142,6 +142,7 @@ export function StepPanel({
   settings,
   profile,
   lastRunId = null,
+  workflowId = null,
 }: {
   draft: Draft;
   node: WfNode | null;
@@ -159,6 +160,8 @@ export function StepPanel({
   profile?: string;
   /** The workflow's newest run, whose values a "Send message" test can use (§124). */
   lastRunId?: string | null;
+  /** The saved workflow's id (`null` while new), named in the hub's log of a test send. */
+  workflowId?: string | null;
 }) {
   const { t } = useI18n();
   if (edge)
@@ -219,10 +222,13 @@ export function StepPanel({
           />
           {node.send ? (
             <SendForm
+              // Its own test values and result per step, never another step's.
+              key={node.id}
               node={node}
               profile={profile ?? 'default'}
               update={update}
               lastRunId={lastRunId}
+              workflowId={workflowId}
             />
           ) : (
             <p className="text-xs text-muted">{t('workflows.form.notify_to')}</p>

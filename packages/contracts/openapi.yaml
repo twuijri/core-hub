@@ -26058,6 +26058,19 @@ components:
           oneOf:
             - $ref: '#/components/schemas/Ulid'
             - type: 'null'
+        workflow_id:
+          description: >-
+            The workflow the step belongs to, when it is saved. Only named in the hub's log
+            line for the test, so a failed test can be found; it changes nothing that is sent.
+          oneOf:
+            - $ref: '#/components/schemas/Ulid'
+            - type: 'null'
+        node_id:
+          type: [string, 'null']
+          maxLength: 64
+          description: >-
+            The step's id in the drawing (`notify_1`), saved or not. Only named in the hub's log
+            line for the test.
     WorkflowSampleValues:
       type: [object, 'null']
       description: >-

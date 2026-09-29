@@ -5,9 +5,9 @@
  * deleted conversation made again, pointed to and said.
  */
 import { afterEach, describe, expect, it } from 'vitest';
-import { authed, signedInHub } from '../../../tests/unit/helpers.js';
+import { authed, capturingLogger, signedInHub } from '../../../tests/unit/helpers.js';
 import { registerWorkflowPorts, workflowEngineFor } from './index.js';
-import { splitMessage } from './send.js';
+import { chatIdOf, splitMessage, telegramSend } from './send.js';
 import type { MessagePorts, WorkflowPorts } from './workflow-engine.js';
 
 type Json = Record<string, unknown>;
@@ -385,5 +385,174 @@ describe('the "Send message" step', () => {
     } finally {
       await hub.close();
     }
+  });
+});
+
+describe('a test send is never silent, and the hub logs it (2026-09-29)', () => {
+  const FLOW = '01J8QK3ZR2W7M5N4P6T8V9X0WF';
+  /** Telegram, as the tester's hub met it: a chat that takes it, one it does not know, and no network. */
+  const telegram = (async (url: string | URL | Request, init?: RequestInit) => {
+    const body = JSON.parse(String(init?.body)) as { chat_id: string; text: string };
+    calls.push({ url: String(url), chat: body.chat_id, text: body.text });
+    if (body.chat_id === '-100404') {
+      return Response.json(
+        { ok: false, error_code: 400, description: 'Bad Request: chat not found' },
+        { status: 400 },
+      );
+    }
+    if (body.chat_id === '-100500') {
+      // Node's fetch says only "fetch failed"; the cause names the address, token and all.
+      throw new TypeError('fetch failed', {
+        cause: Object.assign(new Error(`connect ECONNREFUSED ${String(url)}`), {
+          code: 'ECONNREFUSED',
+        }),
+      });
+    }
+    return Response.json({ ok: true, result: { message_id: 812 } });
+  }) as typeof fetch;
+
+  it('says what went and where, logs each test with its step and profile, and never logs the token', async () => {
+    fakePorts({ messages: fakeMessages({ fetch: telegram }) });
+    const captured = capturingLogger();
+    const hub = await signedInHub({}, { logger: captured.logger });
+    try {
+      const test = (targets: Json[], extra: Json = {}) =>
+        authed(hub, hub.token, {
+          method: 'POST',
+          url: '/api/v1/workflows/send-test',
+          payload: {
+            text: 'CORE_HUB_TELEGRAM_TEST_OK',
+            send: { targets },
+            workflow_id: FLOW,
+            node_id: 'notify_1',
+            ...extra,
+          },
+        });
+
+      // The chat id as copied out of right-to-left text: an LRM in front still reaches the chat.
+      const ok = await test([{ platform: 'telegram', chat_id: '\u200e-1003938641118 ' }]);
+      expect(ok.statusCode, ok.body).toBe(200);
+      expect(ok.json()).toEqual({
+        status: 'sent',
+        message_id: '812',
+        message_ids: ['812'],
+        delivered_to: ['telegram:-1003938641118'],
+        failures: [],
+      });
+      expect(calls.map((call) => [call.chat, call.text])).toEqual([
+        ['-1003938641118', 'CORE_HUB_TELEGRAM_TEST_OK'],
+      ]);
+      expect(captured.lines).toContainEqual(
+        expect.objectContaining({
+          msg: 'workflow send test',
+          workflow_id: FLOW,
+          node_id: 'notify_1',
+          profile: 'default',
+          test: true,
+          platform: 'telegram',
+          chat_id: '-1003938641118',
+          status: 'sent',
+          message_id: '812',
+        }),
+      );
+
+      // Telegram's refusal, in its words, in the answer and in the log.
+      const refused = await test([{ platform: 'telegram', chat_id: '-100404' }]);
+      expect(refused.json()).toMatchObject({
+        status: 'failed',
+        failures: [{ target: 'telegram:-100404', reason: 'Bad Request: chat not found' }],
+      });
+      expect(captured.lines).toContainEqual(
+        expect.objectContaining({
+          msg: 'workflow send test failed',
+          node_id: 'notify_1',
+          chat_id: '-100404',
+          status: 'failed',
+          error_code: '400',
+          error: 'Bad Request: chat not found',
+        }),
+      );
+
+      // No network: the cause is named, the token cut out.
+      const down = await test([{ platform: 'telegram', chat_id: '-100500' }]);
+      const reason = (down.json() as { failures: Array<{ reason: string }> }).failures[0]!.reason;
+      expect(reason).toContain('ECONNREFUSED');
+      expect(reason).not.toContain(TOKEN);
+      expect(captured.lines).toContainEqual(
+        expect.objectContaining({
+          chat_id: '-100500',
+          status: 'failed',
+          error_code: 'unreachable',
+        }),
+      );
+
+      // Refused before sending (a variable without a value): logged too.
+      const unfilled = await test([{ platform: 'telegram', chat_id: '-1001' }], {
+        text: '{{steps.agent_1.output}}',
+      });
+      expect(unfilled.statusCode).toBe(400);
+      expect(captured.lines).toContainEqual(
+        expect.objectContaining({
+          msg: 'workflow send test refused',
+          node_id: 'notify_1',
+          status: 'refused',
+          error_code: 'template_unresolved',
+          unresolved: ['steps.agent_1.output'],
+        }),
+      );
+
+      // Never the bot token, in any line.
+      expect(JSON.stringify(captured.lines)).not.toContain(TOKEN);
+      expect(JSON.stringify(captured.lines)).not.toContain(TOKEN.split(':')[1]!);
+    } finally {
+      await hub.close();
+    }
+  });
+
+  it('a profile with no bot answers why at once, and the run logs its sends', async () => {
+    fakePorts({ messages: fakeMessages({ telegramToken: () => null }) });
+    const captured = capturingLogger();
+    const hub = await signedInHub({}, { logger: captured.logger });
+    try {
+      const res = await authed(hub, hub.token, {
+        method: 'POST',
+        url: '/api/v1/workflows/send-test',
+        payload: { text: 'hi', send: { targets: [{ platform: 'telegram', chat_id: '-1001' }] } },
+      });
+      expect(res.json()).toMatchObject({
+        status: 'failed',
+        failures: [{ reason: expect.stringContaining('TELEGRAM_BOT_TOKEN') }],
+      });
+      expect(captured.lines).toContainEqual(
+        expect.objectContaining({ msg: 'workflow send test failed', error_code: 'no_bot' }),
+      );
+
+      const id = await workflow(hub, [send([{ platform: 'telegram', chat_id: '-1001' }])]);
+      const run = await runOnce(hub, id);
+      expect(captured.lines).toContainEqual(
+        expect.objectContaining({
+          msg: 'workflow send failed',
+          workflow_id: id,
+          workflow_run_id: run.id,
+          node_id: 'tell',
+          test: false,
+          error_code: 'no_bot',
+        }),
+      );
+    } finally {
+      await hub.close();
+    }
+  });
+
+  it('cuts invisible marks out of a chat id, and a slow Telegram is a timeout, not a hang', async () => {
+    expect(chatIdOf('\u2066-100123\u2069')).toBe('-100123');
+    expect(chatIdOf(' @channel\u200f')).toBe('@channel');
+    expect(chatIdOf(null)).toBe('');
+    const never = ((_url: string, init?: RequestInit) =>
+      new Promise((_resolve, reject) => {
+        init?.signal?.addEventListener('abort', () => reject(init.signal!.reason));
+      })) as unknown as typeof fetch;
+    const answer = await telegramSend(never, 'http://t', TOKEN, '-1', 'x', 50);
+    expect(answer).toMatchObject({ ok: false, code: 'timeout' });
   });
 });
