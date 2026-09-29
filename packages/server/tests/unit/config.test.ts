@@ -9,6 +9,7 @@ import {
   loadConfig,
   parseModelsCatalogUrl,
   pickEnv,
+  readHostEnv,
 } from '../../src/app/config.js';
 
 const srcDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..', 'src');
@@ -164,5 +165,47 @@ describe('config', () => {
     expect(() => parseModelsCatalogUrl('http://example.test/models.json')).toThrow(
       /COREHUB_MODELS_CATALOG_URL/,
     );
+  });
+});
+
+// DECISIONS §139: no program the hub starts is given the hub's own settings.
+describe('readHostEnv', () => {
+  it('hands no child the hub’s own settings, and keeps everything else (Hermes needs it)', () => {
+    const host = readHostEnv({
+      DATABASE_URL: 'postgres://hub:secret@db/hub',
+      HUB_ADMIN_PASSWORD: 'first-owner-password',
+      COREHUB_APNS_KEY: '-----BEGIN PRIVATE KEY-----',
+      COREHUB_FCM_SERVICE_ACCOUNT: '{"private_key":"x"}',
+      COREHUB_PUSH_RELAY_URL: 'https://relay.example',
+      MAJLIS_VERSION: '0.9.0',
+      DATA_DIR: '/data',
+      PORT: '8080',
+      PATH: '/usr/bin',
+      HOME: '/data/home',
+      HERMES_HOME: '/data/hermes',
+      TELEGRAM_BOT_TOKEN: '123:abc',
+      OPENROUTER_API_KEY: 'sk-or',
+      COREHUB_IMAGE_TIMEOUT: '90',
+    });
+    expect(host.path).toBe('/usr/bin');
+    for (const name of [
+      'DATABASE_URL',
+      'HUB_ADMIN_PASSWORD',
+      'COREHUB_APNS_KEY',
+      'COREHUB_FCM_SERVICE_ACCOUNT',
+      'COREHUB_PUSH_RELAY_URL',
+      'MAJLIS_VERSION',
+      'DATA_DIR',
+      'PORT',
+    ]) {
+      expect(host.inherited[name], name).toBeUndefined();
+    }
+    // Hermes's own variables, a channel token Hermes reads and a skill script's setting stay.
+    expect(host.inherited).toMatchObject({
+      HERMES_HOME: '/data/hermes',
+      TELEGRAM_BOT_TOKEN: '123:abc',
+      OPENROUTER_API_KEY: 'sk-or',
+      COREHUB_IMAGE_TIMEOUT: '90',
+    });
   });
 });
