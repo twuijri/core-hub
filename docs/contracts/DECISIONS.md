@@ -4702,3 +4702,64 @@ agent already reads, and invisible to the agent run by hand); an ACP `initialize
 health check (a process per agent at every boot, and a sign-in some agents want first); a new
 `ErrorCode` for "sign-in needed" (older generated clients cannot decode it); the phones in this
 change (they still say "Default model" and show no badge — a follow-up).
+
+## 139. A coding agent gets an allow-list of the hub's environment; the renamed ACP bridges; Claude Code's skills
+
+Phase 0 of the model gateway (research in PR #228, `docs/research/model-gateway-2026-09.md`,
+approved by the owner on 2026-09-29). Proposed here — owner to confirm:
+
+- **A coding agent the hub starts gets an allow-list of the hub's environment, never all of it.**
+  Until now an ACP agent inherited the hub's whole `process.env` — the database URL, the first-owner
+  password, push keys, anything an operator put in the container reached every third-party CLI and
+  the package scripts it ran. Now it gets: a base every program needs (`PATH`, `HOME`, `USER`,
+  `LOGNAME`, `SHELL`, `TMPDIR`, `XDG_*`, `LANG`, `LANGUAGE`, `LC_*`, `TZ`, `TERM`, `COLORTERM`, the
+  proxy variables in both cases, `SSL_CERT_FILE`, `SSL_CERT_DIR`, `NODE_EXTRA_CA_CERTS`,
+  `REQUESTS_CA_BUNDLE`, `CURL_CA_BUNDLE`, npm's cache and registry, the desktop session's
+  `DISPLAY`, `WAYLAND_DISPLAY`, `XAUTHORITY`, `DBUS_SESSION_BUS_ADDRESS`, `SSH_AUTH_SOCK`, and what
+  a Windows program cannot start without); the variables its catalog entry maps its keys to
+  (`credentials`); and the ones the entry documents the agent reading (`hostEnv`: Claude Code
+  `ANTHROPIC_*`, `CLAUDE_*`, its Bedrock/Vertex routes; Codex `OPENAI_*`, `CODEX_*` and codex-acp's
+  own switches; Gemini `GEMINI_*`, `GOOGLE_*`; Qwen `QWEN_*` and its providers; Kimi `KIMI_*`,
+  `MOONSHOT_*`; Grok `XAI_*`, `GROK_*`; Goose `GOOSE_*`, OpenCode `OPENCODE_*` and Pi `PI_*` with
+  every provider's variables). `COREHUB_*`, `MAJLIS_*`, `HUB_*`, `DATABASE_*`, `TELEGRAM_*`,
+  `DATA_DIR` and `PORT` are never passed, whatever an entry names, and the catalog refuses an entry
+  that asks for them. `NODE_OPTIONS` is not passed. What the hub itself hands the agent (the
+  profile's shared keys, its settings `env`) is added on top, as before. The same list serves the
+  agent's sign-in and its `--version` checks. A person who set a key or setting for an agent in the
+  host's environment keeps it: every variable the agent reads is on its list (a test starts each
+  catalog agent as a fake program and checks both sides).
+- **No program the hub starts is given the hub's own settings.** `HostEnv.inherited` is the host's
+  environment less the hub's configuration keys (`ENV_KEYS` and their old names). Hermes, npm and
+  the other helpers get this — Hermes keeps everything else it reads (its channels' tokens,
+  provider keys, `HERMES_*`, a skill script's `COREHUB_IMAGE_*`), so nothing of it breaks.
+- **Claude Code and Codex move to the renamed ACP bridges.** `@zed-industries/claude-code-acp`
+  0.16.2 and `@zed-industries/codex-acp` 0.16.0 are deprecated on npm; the pins are now
+  `@agentclientprotocol/claude-agent-acp` 0.84.0 (program `claude-agent-acp`) and
+  `@agentclientprotocol/codex-acp` 2.0.0 (program `codex-acp`; it installs `@openai/codex` beside
+  it). An npm entry may name `legacy` packages with their program. An install of the old package
+  keeps working with no action: the hub finds its program under the old name, runs it, and reads
+  its version from its own `package.json`, so the card offers the update (0.16.2 → 0.84.0). Taking
+  the update (or auto-update) installs the new package into `<DATA_DIR>/agents/.<id>.next`, runs
+  its `--version` (a Node too old for it fails here), swaps the folders and runs the health check;
+  anything that fails leaves the old install exactly as it was. npm cannot install the new package
+  over the old one in place (both own `bin/codex-acp`: EEXIST), which is why the swap. A dot folder
+  under `agents/` is never put on `PATH`. Checked with the real packages (`acp-bridges.real.test.ts`):
+  the old bridge installed, updated by the hub's installer, and the new one driven by the hub's ACP
+  adapter through `initialize`, `session/new` and a turn against a local fake Anthropic / OpenAI
+  Responses endpoint named only in the environment — the key the hub handed reached it. codex-acp
+  (0.16 and 2.0 alike) still asks for a sign-in at `session/new` when it is only handed a key
+  unless `DEFAULT_AUTH_REQUEST` says to use it; that is unchanged here and left to the gateway work.
+- **Claude Code's Skills page manages `~/.claude/skills`** (`$CLAUDE_CONFIG_DIR/skills`) instead of
+  answering `409 skills_are_hermes_only`: the skill operations (list, read, write, switch, pin,
+  delete, import) act on that folder, one set for every profile, as its Config files and MCP pages
+  do. Nothing of Hermes's applies there: no `library` in the list, no bundled skills, no `platforms`
+  filter, and off is `SKILL.md` renamed `SKILL.md.off` — never a `config.yaml` written into
+  Claude Code's folder. Every other agent that is not Hermes still answers `skills_are_hermes_only`;
+  the library operations stay Hermes's.
+
+Rejected: a deny-list for coding agents (whatever an operator adds tomorrow would leak again);
+passing `GITHUB_TOKEN`/`GH_TOKEN` through (a secret; a person who wants it gives it in the agent's
+settings `env`); removing the old bridge in place before installing the new one (a failed install
+would leave no agent); a shared `~/.agents/skills` page now (the survey's next step, not tonight's);
+calling ACP `authenticate` for Codex (it writes the key into Codex's own `auth.json`; the gateway
+work decides how the hub signs agents in).
