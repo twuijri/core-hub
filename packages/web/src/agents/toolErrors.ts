@@ -124,6 +124,10 @@ export function describeToolError(
         return t('skills.library.off_refused');
       case 'plugin_bundled':
         return t('agent_plugins.bundled_refused');
+      case 'config_has_comments':
+        return t('mcp.config_has_comments');
+      case 'config_busy':
+        return t('mcp.config_busy');
       case 'memory_too_long':
         return t('memory.too_long', { limit: details?.limit ?? 0, length: details?.length ?? 0 });
     }

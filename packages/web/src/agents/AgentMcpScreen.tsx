@@ -33,10 +33,17 @@
  * 61 tools" when only some are allowed), and opening it shows them with a box each — which the
  * agent may use (`McpToolsPanel.tsx`). A server never tested is tested once, by itself, the
  * first time its row is open. A hub that keeps no tests (older) gets the page as it was.
+ *
+ * **A coding agent's page edits the agent's own file** (2026-09-29): Claude Code's
+ * `~/.claude.json`, Gemini CLI's and Qwen Code's `settings.json` — one set for every profile,
+ * read when the agent's conversation starts, and the note says that instead of Hermes's
+ * restart. Test and sign-in ask Hermes, so they are Hermes's rows only. An agent whose file the
+ * hub does not edit yet (`mcp_not_managed`) is told so, pointing to its Config files; the
+ * Core Hub tools card works on every page, being the profile's.
  */
 import { useEffect, useId, useRef, useState } from 'react';
 import { useParams } from 'react-router';
-import { describeError } from '../auth/client.js';
+import { HubApiError } from '@corehub/contracts';
 import { useAgents } from '../hub/queries.js';
 import { useI18n } from '../i18n/context.js';
 import { AppShell } from '../shell/AppShell.js';
@@ -80,6 +87,25 @@ import {
 import { expandedKey, useMcpExpanded, writeExpanded } from './mcpExpanded.js';
 import { McpToolsPanel, toolCountLabel } from './McpToolsPanel.js';
 
+/**
+ * Where each coding agent keeps the servers this page edits, as the hub finds it by default
+ * (`coding-agent-mcp.ts`); an agent's own variable may move it, so it is said, not relied on.
+ */
+const AGENT_MCP_FILE: Readonly<Record<string, string>> = {
+  'claude-code': '~/.claude.json',
+  'gemini-cli': '~/.gemini/settings.json',
+  'qwen-code': '~/.qwen/settings.json',
+};
+
+/** The hub does not edit this coding agent's servers yet (its reason, not a failure). */
+function notManaged(error: unknown): boolean {
+  return (
+    error instanceof HubApiError &&
+    (error.body as { details?: { reason?: string } } | undefined)?.details?.reason ===
+      'mcp_not_managed'
+  );
+}
+
 const TEMPLATE = `{
   "command": "npx",
   "args": ["-y", "some-mcp-server"]
@@ -100,6 +126,15 @@ export function AgentMcpScreen() {
   const hubTools = useHubTools(agentId);
   const managed = hubTools.data?.server_name ?? 'corehub';
   const items = (servers.data?.items ?? []).filter((server) => server.name !== managed);
+  // Test and sign-in ask Hermes; a coding agent's page edits the agent's own file.
+  const hermes = !agent || agent.kind === 'hermes';
+  const unmanaged = servers.isError && notManaged(servers.error);
+  const file = agent ? AGENT_MCP_FILE[agent.slug] : undefined;
+  const note = hermes
+    ? t('mcp.restart_note')
+    : file
+      ? t('mcp.agent_note', { name: agent?.name ?? '', path: file })
+      : t('mcp.agent_note_no_path', { name: agent?.name ?? '' });
 
   return (
     <AppShell title={title}>
@@ -107,24 +142,34 @@ export function AgentMcpScreen() {
         <div className="flex flex-wrap items-center gap-2">
           <h1 className="text-lg font-semibold">{title}</h1>
           {items.length > 0 && <Badge>{String(items.length)}</Badge>}
-          <Button
-            className="ms-auto"
-            size="sm"
-            onClick={() => setEditing(null)}
-            data-testid="new-mcp"
-          >
-            {t('mcp.new')}
-          </Button>
+          {!unmanaged && (
+            <Button
+              className="ms-auto"
+              size="sm"
+              onClick={() => setEditing(null)}
+              data-testid="new-mcp"
+            >
+              {t('mcp.new')}
+            </Button>
+          )}
         </div>
-        <Notice>{t('mcp.restart_note')}</Notice>
-        <HubToolsCard agentId={agentId} />
+        {unmanaged ? (
+          <Notice testId="mcp-not-managed">
+            {t('mcp.not_managed', { name: agent?.name ?? '' })}
+          </Notice>
+        ) : (
+          <Notice testId="mcp-note">{note}</Notice>
+        )}
+        <HubToolsCard agentId={agentId} hermes={hermes} agentName={agent?.name ?? ''} />
 
         {servers.isPending && (
           <SkeletonGroup label={t('common.loading')}>
             <Skeleton height="4rem" radius="md" />
           </SkeletonGroup>
         )}
-        {servers.isError && <Notice tone="danger">{describeToolError(servers.error, t)}</Notice>}
+        {servers.isError && !unmanaged && (
+          <Notice tone="danger">{describeToolError(servers.error, t)}</Notice>
+        )}
         {servers.data &&
           (items.length === 0 ? (
             <EmptyState
@@ -138,6 +183,7 @@ export function AgentMcpScreen() {
                 <li key={server.name}>
                   <ServerRow
                     agentId={agentId}
+                    hermes={hermes}
                     server={server}
                     adopted={adopted[server.name] ?? null}
                     onEdit={() => setEditing(server)}
@@ -150,6 +196,7 @@ export function AgentMcpScreen() {
       {editing !== undefined && (
         <ServerEditor
           agentId={agentId}
+          hermes={hermes}
           server={editing}
           taken={(servers.data?.items ?? []).map((server) => server.name)}
           onSignInStarted={(name, flow) => {
@@ -165,11 +212,13 @@ export function AgentMcpScreen() {
 
 function ServerRow({
   agentId,
+  hermes,
   server,
   adopted,
   onEdit,
 }: {
   agentId: string | undefined;
+  hermes: boolean;
   server: McpServer;
   adopted: McpOAuthFlow | null;
   onEdit: () => void;
@@ -269,15 +318,17 @@ function ServerRow({
             {address}
           </span>
         </button>
-        <Button
-          size="sm"
-          variant="secondary"
-          disabled={probe.isPending}
-          data-testid={`mcp-test-${server.name}`}
-          onClick={runTest}
-        >
-          {probe.isPending ? t('mcp.test.running') : t('mcp.test.button')}
-        </Button>
+        {hermes && (
+          <Button
+            size="sm"
+            variant="secondary"
+            disabled={probe.isPending}
+            data-testid={`mcp-test-${server.name}`}
+            onClick={runTest}
+          >
+            {probe.isPending ? t('mcp.test.running') : t('mcp.test.button')}
+          </Button>
+        )}
         <Button
           size="sm"
           variant="secondary"
@@ -306,6 +357,9 @@ function ServerRow({
         </Button>
         {dialog}
       </div>
+      {(update.isError || remove.isError) && (
+        <Notice tone="danger">{describeToolError(update.error ?? remove.error, t)}</Notice>
+      )}
       {/* Folded, the part stays mounted (hidden): a sign-in in flight keeps its progress and
           still runs its test by itself when it lands. */}
       <div
@@ -399,12 +453,14 @@ function summarise(server: McpServer): string {
 
 function ServerEditor({
   agentId,
+  hermes,
   server,
   taken,
   onSignInStarted,
   onClose,
 }: {
   agentId: string | undefined;
+  hermes: boolean;
   server: McpServer | null;
   taken: readonly string[];
   onSignInStarted: (name: string, flow: McpOAuthFlow) => void;
@@ -465,7 +521,7 @@ function ServerEditor({
       }
     >
       <div className="flex flex-col gap-3">
-        {!server && (
+        {!server && hermes && (
           <Segmented
             label={t('mcp.signin_add.how')}
             value={mode}
@@ -516,7 +572,7 @@ function ServerEditor({
                 knowing about before the button is pressed. */}
             {!parsed.ok && <Notice tone="warning">{t('mcp.invalid_json')}</Notice>}
             {(create.isError || update.isError) && (
-              <Notice tone="danger">{describeError(create.error ?? update.error, t)}</Notice>
+              <Notice tone="danger">{describeToolError(create.error ?? update.error, t)}</Notice>
             )}
           </>
         )}

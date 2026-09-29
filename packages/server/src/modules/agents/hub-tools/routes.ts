@@ -16,8 +16,12 @@ export interface HubToolRouteHelpers {
   service(app: FastifyInstance): HubToolsService;
   scopeOf(request: FastifyRequest): WorkspaceScope;
   actorOf(request: FastifyRequest): { userId: string };
-  /** Throws unless the agent is Hermes (the only agent whose config the hub writes). */
-  assertHermes(request: FastifyRequest, agentId: string): void;
+  /**
+   * Throws unless the agent is offered the hub's tools: Hermes (from the block the hub writes
+   * in its profile) or a coding agent over ACP (in `session/new`). The settings are the
+   * profile's, the same on every one of these agents' MCP pages.
+   */
+  assertHubToolsAgent(request: FastifyRequest, agentId: string): void;
 }
 
 /** Where a call came from (decision §79); anything else — an unset `${…}` — is unknown. */
@@ -40,7 +44,7 @@ export function registerHubToolRoutes(
   defineRoute(app, deps, {
     operationId: 'agents.getHubTools',
     handler: (request, { params }) => {
-      helpers.assertHermes(request, params.agent_id as string);
+      helpers.assertHubToolsAgent(request, params.agent_id as string);
       return helpers.service(request.server).view(helpers.scopeOf(request));
     },
   });
@@ -48,7 +52,7 @@ export function registerHubToolRoutes(
   defineRoute(app, deps, {
     operationId: 'agents.updateHubTools',
     handler: (request, { params, body }) => {
-      helpers.assertHermes(request, params.agent_id as string);
+      helpers.assertHubToolsAgent(request, params.agent_id as string);
       const scope = helpers.scopeOf(request);
       const service = helpers.service(request.server);
       try {
