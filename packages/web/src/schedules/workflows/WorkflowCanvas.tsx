@@ -664,6 +664,8 @@ export function WorkflowCanvas({
                     .filter(Boolean)
                     .join(' · ')}
                   onPointerDown={(event) => event.stopPropagation()}
+                  // A trigger is not a step: Delete and the arrows leave the steps alone.
+                  onFocus={() => dispatch({ type: 'select', selection: null })}
                   onClick={() => onOpenTrigger?.(trigger.id)}
                   data-testid="workflow-trigger-node"
                   data-trigger-id={trigger.id}
