@@ -53,6 +53,9 @@ const HUB_NAME = PRODUCT.name;
 /** The two languages this client and this server are written in (`docs/CONTENT-DIRECTION`). */
 const LOCALES = ['ar', 'en'] as const;
 
+/** A module that takes this long to register is named in the log (it should take milliseconds). */
+const SLOW_MODULE_MS = 1_000;
+
 export interface RoutesReport {
   modules: string[];
   stubs: string[];
@@ -157,8 +160,17 @@ export async function registerRoutes(
       });
 
       for (const module of options.modules) {
+        const began = performance.now();
         await module.registerRoutes(api);
         report.modules.push(module.name);
+        // Mounting must not depend on the data's size or on other work finishing (Fastify gives
+        // the whole plugin `pluginTimeout`): each module's time is logged so a slow one is named.
+        const ms = Math.round(performance.now() - began);
+        if (ms >= SLOW_MODULE_MS) {
+          app.log.warn({ module: module.name, ms }, 'boot: a module took long to register');
+        } else {
+          app.log.debug({ module: module.name, ms }, 'boot: module registered');
+        }
       }
 
       // Contract operations nobody implements yet answer 501 with the documented envelope,

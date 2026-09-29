@@ -32,6 +32,7 @@ export const ENV_KEYS = [
   'COREHUB_TRUST_PROXY',
   'COREHUB_MODELS_CATALOG_URL',
   'COREHUB_TELEGRAM_API_BASE',
+  'COREHUB_PLUGIN_TIMEOUT_MS',
 ] as const;
 export type EnvKey = (typeof ENV_KEYS)[number];
 export type EnvSource = Partial<Record<EnvKey, string | undefined>> & {
@@ -107,6 +108,18 @@ const envSchema = z.object({
     .min(0, 'COREHUB_TASK_STUCK_MINUTES must be 0 (off) or more')
     .max(10_080, 'COREHUB_TASK_STUCK_MINUTES must be at most 10080 (a week)')
     .default(30),
+  /**
+   * How long Fastify lets a plugin mount (its `pluginTimeout`), in milliseconds. Mounting the
+   * API should take well under a second; the margin is for a slow or busy host, so a hub that
+   * mounts slowly still starts (and says which module was slow) instead of restarting in a
+   * loop. `0` waits without limit.
+   */
+  COREHUB_PLUGIN_TIMEOUT_MS: z.coerce
+    .number()
+    .int('COREHUB_PLUGIN_TIMEOUT_MS must be a whole number')
+    .min(0, 'COREHUB_PLUGIN_TIMEOUT_MS must be 0 (no limit) or more')
+    .max(3_600_000, 'COREHUB_PLUGIN_TIMEOUT_MS must be at most 3600000 (an hour)')
+    .default(120_000),
   /**
    * Push (DECISIONS §66). All optional: Web Push works with nothing set (the hub makes its own
    * VAPID keys), and FCM / APNs can be configured from Settings instead. When set here, the
@@ -295,6 +308,8 @@ export interface HubConfig {
   taskAutoStartMax: number;
   /** Minutes of silence before a running task is marked stuck (`COREHUB_TASK_STUCK_MINUTES`, 30; 0 = off). */
   taskStuckMinutes: number;
+  /** Fastify's `pluginTimeout` (`COREHUB_PLUGIN_TIMEOUT_MS`, 120000; 0 = no limit). */
+  pluginTimeoutMs?: number;
   /** Push senders' credentials from the environment (all optional). */
   push?: PushEnv;
   /** The owner's web terminal: off unless `COREHUB_WEB_TERMINAL=1` (DECISIONS §70). */
@@ -358,6 +373,7 @@ export function loadConfig(
     resetOwner: env.COREHUB_RESET_OWNER === '1' || env.COREHUB_RESET_OWNER === 'true',
     taskAutoStartMax: env.COREHUB_TASK_AUTO_START_MAX,
     taskStuckMinutes: env.COREHUB_TASK_STUCK_MINUTES,
+    pluginTimeoutMs: env.COREHUB_PLUGIN_TIMEOUT_MS,
     push: {
       contact: env.COREHUB_PUSH_CONTACT,
       fcmServiceAccount: env.COREHUB_FCM_SERVICE_ACCOUNT,

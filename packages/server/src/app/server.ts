@@ -20,6 +20,9 @@ import { registerRoutes, type RoutesReport } from './routes.js';
 import { createSockets, listNamespaces, registerModuleEvents } from './sockets.js';
 import { registerWebClient } from './web.js';
 
+/** Fastify's `pluginTimeout` when the config does not say (`COREHUB_PLUGIN_TIMEOUT_MS`). */
+export const DEFAULT_PLUGIN_TIMEOUT_MS = 120_000;
+
 export interface HubState {
   config: HubConfig;
   database: HubDatabase;
@@ -118,6 +121,10 @@ export async function buildServer(options: BuildOptions = {}): Promise<FastifyIn
   const app: FastifyInstance = Fastify<Server, IncomingMessage, ServerResponse, FastifyBaseLogger>({
     loggerInstance: logger,
     trustProxy: trust,
+    // Fastify's own default is 10 s for the whole API plugin; a slow host (or a slow module)
+    // then restarts the hub in a loop. The margin is generous and every module's time is logged
+    // (app/routes.ts), so slowness is named rather than fatal.
+    pluginTimeout: config.pluginTimeoutMs ?? DEFAULT_PLUGIN_TIMEOUT_MS,
   });
   const modules = options.modules ?? allModules;
   const contract = options.contract === undefined ? loadOpenApiDocument() : options.contract;

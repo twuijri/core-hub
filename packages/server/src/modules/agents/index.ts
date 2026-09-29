@@ -320,6 +320,8 @@ export interface AgentsOverrides {
   /** Hermes's own updater for `agents.upgrade` (a scripted one in tests). */
   hermesUpdate?: HermesUpdater;
   installer?: AgentInstaller;
+  /** How long each installed agent's health check may take at boot (a short one in tests). */
+  bootHealthTimeoutMs?: number;
   pathValue?: string;
   /** Options for the real adapter set (a stubbed `fetch` for the Hermes gateway probe). */
   adapterOptions?: Omit<AdapterSetOptions, 'host'>;
@@ -618,6 +620,12 @@ function toLibrary(status: LibraryStatus): Record<string, unknown> {
   };
 }
 
+/**
+ * How long the hub, getting ready, waits for the agents to be checked against the volume before
+ * it serves anyway and lets the check finish in the background.
+ */
+export const RECONCILE_BOOT_WAIT_MS = 1_000;
+
 const contexts = new WeakMap<SocketServer, AgentsContext>();
 
 function contextOf(app: FastifyInstance): AgentsContext {
@@ -741,6 +749,9 @@ function contextOf(app: FastifyInstance): AgentsContext {
     jobs: jobRunnerFor(app),
     adapters,
     installer: own.installer ?? createNpmInstaller({ dataDir: hub.config.dataDir, host }),
+    ...(own.bootHealthTimeoutMs !== undefined
+      ? { bootHealthTimeoutMs: own.bootHealthTimeoutMs }
+      : {}),
     models: () => modelsPorts.get(hub.io) ?? null,
     // A workspace is a Hermes profile (ADR 0014): its slug, or `default` for the hub's
     // default workspace whatever it is called. An archived or unknown one has none.
@@ -1134,20 +1145,47 @@ export const agentsModule = defineModule({
 
     // First boot seeds the catalog; every boot reconciles it against the data volume.
     // Rows the hub creates for itself are attributed to the owner account (domain README).
+    // Mounting only writes the catalog's rows: checking each agent runs its CLI, which may be
+    // slow on a busy host, so it happens once the hub is ready (below), never while it mounts.
     const owner = ownerUser(requireSqlite(app.hub.database));
-    const report = await service.bootstrap(owner?.id ?? 'system');
-    app.log.info(
-      {
-        installed: report.installed.length,
-        missing: report.missing.length,
-        interrupted: report.interrupted.length,
-      },
-      'agents: registry reconciled with the data volume',
-    );
+    const seeded = service.seed(owner?.id ?? 'system');
 
     // The Hermes runtime: decided once the server is ready to serve, stopped with it.
     const ctx = contextOf(app);
     app.addHook('onReady', async () => {
+      const began = performance.now();
+      const reconciled = service.reconcileInstalls().then(
+        (report) => {
+          app.log.info(
+            {
+              installed: report.installed.length,
+              missing: report.missing.length,
+              interrupted: seeded.interrupted.length,
+              ms: Math.round(performance.now() - began),
+            },
+            'agents: registry reconciled with the data volume',
+          );
+        },
+        (error: unknown) => {
+          app.log.warn({ err: error }, 'agents: could not reconcile the registry');
+        },
+      );
+      // A quick check is waited for, so the first request reads a checked registry; a slow
+      // one goes on while the hub serves (the rows keep what the last boot learned meanwhile).
+      let timer: ReturnType<typeof setTimeout> | undefined;
+      const waited = await Promise.race([
+        reconciled.then(() => true),
+        new Promise<false>((resolve) => {
+          timer = setTimeout(() => resolve(false), RECONCILE_BOOT_WAIT_MS);
+        }),
+      ]);
+      clearTimeout(timer);
+      if (!waited) {
+        app.log.warn(
+          { waited_ms: RECONCILE_BOOT_WAIT_MS },
+          'agents: checking the installed agents goes on in the background',
+        );
+      }
       const mode = await ctx.runtime.start();
       app.log.info({ mode, endpoint: ctx.runtime.endpoint }, 'agents: hermes runtime');
       migrateMemoryOfEveryProfile(ctx.runtime.status().home, app.log);
