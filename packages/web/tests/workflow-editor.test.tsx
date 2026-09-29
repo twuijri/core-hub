@@ -104,10 +104,14 @@ function fakeHub(
     sendTest?: (body: unknown) => { status: number; body: unknown; raw?: boolean };
     /** The values "Use the last run's values" gets back. */
     lastRunValues?: unknown;
+    /** Webhook triggers the saved workflow already has. */
+    triggers?: Array<Record<string, unknown>>;
+    /** Schedules whose target is the saved workflow. */
+    schedules?: Array<Record<string, unknown>>;
   } = {},
 ) {
   const seen: Seen[] = [];
-  const triggers: Array<Record<string, unknown>> = [];
+  const triggers: Array<Record<string, unknown>> = [...(options.triggers ?? [])];
   const lines: Array<Record<string, unknown>> = [];
   const json = (body: unknown, status = 200) =>
     Promise.resolve(
@@ -218,6 +222,12 @@ function fakeHub(
     if (path === '/sessions' && url.search.includes('limit=200')) {
       return json({
         items: [{ id: '01J8QK3ZR2W7M5N4P6T8V9X0SS', title: 'Reports', agent_id: AGENT }],
+        next_cursor: null,
+      });
+    }
+    if (path === '/schedules' && method === 'GET' && url.searchParams.get('workflow_id')) {
+      return json({
+        items: url.searchParams.get('workflow_id') === FLOW ? (options.schedules ?? []) : [],
         next_cursor: null,
       });
     }
@@ -390,6 +400,27 @@ async function pick(user: ReturnType<typeof userEvent.setup>, testId: string, op
   await user.click(await screen.findByRole('option', { name: option }));
 }
 
+/** Closes the step, connection or trigger dialog open over the canvas, if there is one. */
+async function closeDialog(user: ReturnType<typeof userEvent.setup>) {
+  const done = screen.queryByTestId('workflow-dialog-done');
+  if (!done) return;
+  await user.click(done);
+  await waitFor(() => expect(screen.queryByTestId('workflow-dialog-done')).toBeNull());
+}
+
+/** Adds a step from the canvas's "Add step" list (n8n's +); the step's dialog opens on it. */
+async function addStep(user: ReturnType<typeof userEvent.setup>, kind: string) {
+  await closeDialog(user);
+  await user.click(screen.getByTestId('workflow-add-step'));
+  await user.click(await screen.findByTestId(`workflow-pick-${kind}`));
+  await screen.findByTestId('workflow-node-dialog');
+}
+
+const canvasNode = (id: string) =>
+  within(screen.getByTestId('workflow-canvas'))
+    .getAllByTestId('workflow-node')
+    .find((each) => each.getAttribute('data-node-id') === id)!;
+
 describe('Workflows: its own page', () => {
   it("lists every profile's workflows and opens one in its own profile", async () => {
     const user = userEvent.setup();
@@ -418,23 +449,26 @@ describe('Workflows: its own page', () => {
     mount(fetchImpl, '/schedules?section=workflows&workflow=new&profile=default');
     await screen.findByTestId('workflow-editor');
     await user.type(screen.getByTestId('workflow-name'), 'Digest');
-    await user.click(screen.getByTestId('workflow-add-agent'));
+    await addStep(user, 'agent');
     await user.type(await screen.findByTestId('workflow-step-prompt'), 'Sum up the day');
-    await user.click(screen.getByTestId('workflow-add-notify'));
+    await addStep(user, 'notify');
 
     // The notice has no words yet: the hub's finding is marked on it, and Save waits.
-    const tell = await screen.findByRole('button', { name: /Notify · Notify/ });
-    await waitFor(() => expect(tell).toHaveAttribute('data-issues', '1'));
+    await waitFor(() => expect(canvasNode('notify_1')).toHaveAttribute('data-issues', '1'));
+    expect(canvasNode('notify_1')).toHaveAttribute('aria-label', 'Notify · Notify · 1 findings');
     expect(screen.getByTestId('workflow-save')).toBeDisabled();
     await user.type(screen.getByTestId('workflow-step-text'), 'Done');
     await waitFor(() => expect(screen.getByTestId('workflow-save')).toBeEnabled());
 
-    // Connected from the side panel, without a pointer.
+    // Connected from the step's dialog, without a pointer: a click on a step opens it.
+    await closeDialog(user);
     await user.click(screen.getAllByTestId('workflow-node')[0]!);
+    expect(await screen.findByTestId('workflow-panel')).toHaveAttribute('data-node-id', 'agent_1');
     await pick(user, 'workflow-connect-target', 'Notify');
     await user.click(screen.getByTestId('workflow-connect'));
     expect(screen.getAllByTestId('workflow-edge')).toHaveLength(1);
 
+    await closeDialog(user);
     await user.click(screen.getByTestId('workflow-save'));
     await waitFor(() =>
       expect(seen.some((c) => c.path === '/workflows' && c.method === 'POST')).toBe(true),
@@ -459,7 +493,7 @@ describe('Workflows: its own page', () => {
     mount(fetchImpl, '/schedules?section=workflows&workflow=new&profile=default');
     await screen.findByTestId('workflow-editor');
     expect(screen.getByText('Give the workflow a name before saving.')).toBeInTheDocument();
-    await user.click(screen.getByTestId('workflow-add-agent'));
+    await addStep(user, 'agent');
     await waitFor(() =>
       expect(
         seen.some(
@@ -473,6 +507,7 @@ describe('Workflows: its own page', () => {
     );
     expect(screen.queryByTestId('workflow-check-error')).toBeNull();
     expect(screen.getByTestId('workflow-save')).toBeDisabled();
+    await closeDialog(user);
     await user.type(screen.getByTestId('workflow-name'), 'Digest');
     expect(screen.queryByText('Give the workflow a name before saving.')).toBeNull();
     await waitFor(() => expect(screen.getByTestId('workflow-save')).toBeEnabled());
@@ -512,7 +547,7 @@ describe('Workflows: its own page', () => {
     });
     mount(fetchImpl, '/schedules?section=workflows&workflow=new&profile=default');
     await screen.findByTestId('workflow-editor');
-    await user.click(screen.getByTestId('workflow-add-agent'));
+    await addStep(user, 'agent');
     expect(await screen.findByText('The name is not accepted: is too long')).toBeInTheDocument();
     expect(screen.getByTestId('workflow-check-error')).toHaveTextContent(
       'The drawing could not be checked: fix the marked fields.',
@@ -531,9 +566,27 @@ describe('Workflows: its own page', () => {
     const { seen, fetchImpl } = fakeHub();
     mount(fetchImpl, `/schedules?section=workflows&workflow=${FLOW}&profile=designer`);
     await waitFor(() => expect(screen.getAllByTestId('workflow-node')).toHaveLength(4));
-    const panel = await screen.findByTestId('workflow-triggers');
-    await user.click(within(panel).getByTestId('workflow-trigger-add'));
-    const card = await within(panel).findByTestId('workflow-trigger');
+    // Added from the canvas, like a step: "Add trigger", then ClickUp from the list.
+    await user.click(screen.getByTestId('workflow-add-trigger'));
+    await user.click(await screen.findByTestId('workflow-pick-trigger-clickup'));
+    const dialog = await screen.findByTestId('workflow-trigger-dialog');
+    await within(dialog).findByTestId('workflow-trigger');
+    // Drawn as a node before the first step, with a line to it.
+    await closeDialog(user);
+    const node = screen
+      .getAllByTestId('workflow-trigger-node')
+      .find((each) => each.dataset.triggerId === TRIGGER)!;
+    expect(node).toHaveAttribute('data-trigger-kind', 'webhook');
+    expect(
+      screen
+        .getAllByTestId('workflow-trigger-edge')
+        .filter((edge) => edge.getAttribute('data-trigger-id') === TRIGGER)
+        .map((edge) => edge.getAttribute('data-to')),
+    ).toEqual(['check']);
+    await user.click(node);
+    const card = await within(await screen.findByTestId('workflow-trigger-dialog')).findByTestId(
+      'workflow-trigger',
+    );
     expect(
       seen.find((c) => c.path === `/workflows/${FLOW}/triggers` && c.method === 'POST'),
     ).toMatchObject({
@@ -584,7 +637,7 @@ describe('Workflows: its own page', () => {
     mount(fetchImpl, '/schedules?section=workflows&workflow=new&profile=default');
     await screen.findByTestId('workflow-editor');
     await user.type(screen.getByTestId('workflow-name'), 'Report');
-    await user.click(screen.getByTestId('workflow-add-send'));
+    await addStep(user, 'send');
     await user.type(await screen.findByTestId('workflow-step-text'), 'Done');
     await user.click(screen.getByTestId('workflow-send-telegram'));
     await user.type(screen.getByTestId('workflow-send-chat'), '-100404');
@@ -611,6 +664,7 @@ describe('Workflows: its own page', () => {
       },
     });
     await waitFor(() => expect(screen.getByTestId('workflow-save')).toBeEnabled());
+    await closeDialog(user);
     await user.click(screen.getByTestId('workflow-save'));
     await waitFor(() =>
       expect(seen.some((c) => c.path === '/workflows' && c.method === 'POST')).toBe(true),
@@ -630,7 +684,7 @@ describe('Workflows: its own page', () => {
     mount(fetchImpl, '/workflows?workflow=new&profile=default');
     await screen.findByTestId('workflow-editor');
     await user.type(screen.getByTestId('workflow-name'), 'Formatted');
-    await user.click(screen.getByTestId('workflow-add-send'));
+    await addStep(user, 'send');
     const words = await screen.findByTestId('workflow-step-text');
     fireEvent.change(words, {
       target: { value: '<b>اختبار</b> و <a href="https://x.test">رابط</a>' },
@@ -690,6 +744,7 @@ describe('Workflows: its own page', () => {
     });
 
     await waitFor(() => expect(screen.getByTestId('workflow-save')).toBeEnabled());
+    await closeDialog(user);
     await user.click(screen.getByTestId('workflow-save'));
     await waitFor(() =>
       expect(seen.some((c) => c.path === '/workflows' && c.method === 'POST')).toBe(true),
@@ -709,7 +764,8 @@ describe('Workflows: its own page', () => {
     const { seen, fetchImpl } = fakeHub();
     mount(fetchImpl, `/schedules?section=workflows&workflow=${FLOW}&profile=designer`);
     await screen.findByTestId('workflow-canvas');
-    await user.click(await screen.findByTestId('workflow-add-send'));
+    await screen.findByTestId('workflow-add-step');
+    await addStep(user, 'send');
     const words = await screen.findByTestId('workflow-step-text');
     fireEvent.change(words, {
       target: { value: 'Result: {{steps.check.output}} for {{input}} ({{ steps.check.output }})' },
@@ -776,7 +832,8 @@ describe('Workflows: its own page', () => {
     const { seen, fetchImpl } = fakeHub({ sendTest: () => answer });
     mount(fetchImpl, `/workflows?workflow=${FLOW}&profile=designer`);
     await screen.findByTestId('workflow-canvas');
-    await user.click(await screen.findByTestId('workflow-add-send'));
+    await screen.findByTestId('workflow-add-step');
+    await addStep(user, 'send');
     // Found again each time: the button is wrapped while it is off (its reason's tooltip).
     const button = () => screen.getByTestId('workflow-send-test');
 
@@ -870,7 +927,8 @@ describe('Workflows: its own page', () => {
     });
     mount(fetchImpl, `/workflows?workflow=${FLOW}&profile=designer`);
     await screen.findByTestId('workflow-canvas');
-    await user.click(await screen.findByTestId('workflow-add-send'));
+    await screen.findByTestId('workflow-add-step');
+    await addStep(user, 'send');
     fireEvent.change(await screen.findByTestId('workflow-step-text'), {
       target: { value: 'Result: {{steps.check.output}} {{input}}' },
     });
@@ -884,19 +942,13 @@ describe('Workflows: its own page', () => {
     expect(screen.getByTestId('workflow-editor')).toBeTruthy();
 
     // Another step, then this one again: the values are still there (never saved into the step).
-    fireEvent.focus(
-      within(screen.getByTestId('workflow-canvas'))
-        .getAllByTestId('workflow-node')
-        .find((each) => each.getAttribute('data-node-id') === 'check')!,
-    );
+    await closeDialog(user);
+    await user.click(canvasNode('check'));
     await waitFor(() =>
       expect(screen.getByTestId('workflow-panel')).toHaveAttribute('data-node-id', 'check'),
     );
-    fireEvent.focus(
-      within(screen.getByTestId('workflow-canvas'))
-        .getAllByTestId('workflow-node')
-        .find((each) => each.getAttribute('data-node-id') === 'notify_1')!,
-    );
+    await closeDialog(user);
+    await user.click(canvasNode('notify_1'));
     await waitFor(() =>
       expect(screen.getByTestId('workflow-panel')).toHaveAttribute('data-node-id', 'notify_1'),
     );
@@ -912,7 +964,7 @@ describe('Workflows: its own page', () => {
     mount(fetchImpl, '/schedules?section=workflows&workflow=new&profile=default');
     await screen.findByTestId('workflow-editor');
     await user.type(screen.getByTestId('workflow-name'), 'Alerted');
-    await user.click(screen.getByTestId('workflow-add-condition'));
+    await addStep(user, 'condition');
     await user.click(await screen.findByTestId('workflow-step-test'));
     await user.click(screen.getByTestId('workflow-step-test-run'));
     const tested = await screen.findByTestId('workflow-step-test-result');
@@ -925,12 +977,15 @@ describe('Workflows: its own page', () => {
     expect(sent).toMatchObject({ node: { kind: 'condition' }, execute: false });
     expect(sent.trigger.event).toBe('taskStatusUpdated');
 
-    // Nothing selected: the workflow's own settings, with who is told when a run fails.
-    fireEvent.keyDown(screen.getAllByTestId('workflow-node')[0]!, { key: 'Escape' });
+    // The workflow's own settings, with who is told when a run fails.
+    await closeDialog(user);
+    await user.click(screen.getByTestId('workflow-settings-open'));
     const alert = await screen.findByTestId('workflow-alert');
     await user.click(within(alert).getByTestId('workflow-alert-inbox'));
     await user.click(within(alert).getByTestId('workflow-alert-telegram'));
     await user.type(within(alert).getByTestId('workflow-alert-chat'), '-100777');
+    await user.keyboard('{Escape}');
+    await waitFor(() => expect(screen.queryByTestId('workflow-settings-dialog')).toBeNull());
     await waitFor(() => expect(screen.getByTestId('workflow-save')).toBeEnabled());
     await user.click(screen.getByTestId('workflow-save'));
     await waitFor(() =>
@@ -952,7 +1007,7 @@ describe('Workflows: its own page', () => {
     mount(fetchImpl, '/schedules?section=workflows&workflow=new&profile=default');
     await screen.findByTestId('workflow-editor');
     await user.type(screen.getByTestId('workflow-name'), 'Filter');
-    await user.click(screen.getByTestId('workflow-add-condition'));
+    await addStep(user, 'condition');
     await user.click(await screen.findByTestId('workflow-condition-rules'));
     const rules = await screen.findByTestId('workflow-rules');
     expect(within(rules).getAllByTestId('workflow-rule')).toHaveLength(1);
@@ -963,6 +1018,7 @@ describe('Workflows: its own page', () => {
     await user.type(within(second).getByTestId('workflow-rule-value'), 'taskCreated');
     await pick(user, 'workflow-rules-match', 'any one rule holds');
     await waitFor(() => expect(screen.getByTestId('workflow-save')).toBeEnabled());
+    await closeDialog(user);
     await user.click(screen.getByTestId('workflow-save'));
     await waitFor(() =>
       expect(seen.some((c) => c.path === '/workflows' && c.method === 'POST')).toBe(true),
@@ -977,11 +1033,12 @@ describe('Workflows: its own page', () => {
     });
   });
 
-  it('keeps the workflow’s limits in the side panel while no step is selected (§102)', async () => {
+  it('keeps the workflow’s limits in its settings, opened by the gear by the name (§102)', async () => {
     const user = userEvent.setup();
     const { seen, fetchImpl } = fakeHub();
     mount(fetchImpl, `/schedules?section=workflows&workflow=${FLOW}&profile=designer`);
     await waitFor(() => expect(screen.getAllByTestId('workflow-node')).toHaveLength(4));
+    await user.click(screen.getByTestId('workflow-settings-open'));
     const settings = await screen.findByTestId('workflow-settings');
     const time = await within(settings).findByTestId('workflow-limit-time');
     await waitFor(() => expect(time).toHaveValue('30'));
@@ -1003,11 +1060,10 @@ describe('Workflows: its own page', () => {
         },
       }),
     );
-    // A selected step takes the panel; the limits return with nothing selected.
-    const gate = screen.getAllByTestId('workflow-node').find((n) => n.dataset.nodeId === 'gate')!;
-    gate.focus();
-    await screen.findByTestId('workflow-panel');
-    expect(screen.queryByTestId('workflow-settings')).toBeNull();
+    // Escape closes the settings; the canvas is left as it was.
+    await user.keyboard('{Escape}');
+    await waitFor(() => expect(screen.queryByTestId('workflow-settings')).toBeNull());
+    expect(screen.getAllByTestId('workflow-node')).toHaveLength(4);
   });
 
   it('runs once with its own limits, starting from the workflow’s (§102)', async () => {
@@ -1048,12 +1104,228 @@ describe('Workflows: its own page', () => {
     await waitFor(() => expect(screen.getAllByTestId('workflow-node')).toHaveLength(4));
     const gate = screen.getAllByTestId('workflow-node').find((n) => n.dataset.nodeId === 'gate')!;
     gate.focus();
-    expect(await screen.findByTestId('workflow-panel')).toHaveAttribute('data-node-id', 'gate');
+    // Focus selects the step; it opens only on Enter or a click.
+    await waitFor(() => expect(gate).toHaveAttribute('aria-pressed', 'true'));
+    expect(screen.queryByTestId('workflow-node-dialog')).toBeNull();
     fireEvent.keyDown(gate, { key: 'Delete' });
     await waitFor(() => expect(screen.getAllByTestId('workflow-node')).toHaveLength(3));
     expect(screen.getAllByTestId('workflow-edge').map((e) => e.dataset.edgeId)).toEqual(['e3']);
     expect(screen.getByText('Unsaved changes')).toBeInTheDocument();
     await user.keyboard('{Escape}');
+  });
+
+  it('a new workflow like n8n: "Add a trigger", a first step from the trigger’s +, the next from the step’s +, and Save makes the trigger (2026-09-29)', async () => {
+    const user = userEvent.setup();
+    const { seen, fetchImpl } = fakeHub();
+    mount(fetchImpl, '/workflows?workflow=new&profile=default');
+    await screen.findByTestId('workflow-editor');
+    // Empty: one big "Add a trigger" in the middle, and nothing else drawn.
+    expect(screen.queryAllByTestId('workflow-trigger-node')).toHaveLength(0);
+    await user.click(screen.getByTestId('workflow-add-first'));
+    const picker = await screen.findByTestId('workflow-node-picker');
+    // The list is searched as it is typed.
+    await user.type(within(picker).getByTestId('workflow-picker-search'), 'click');
+    expect(
+      within(picker)
+        .getAllByRole('option')
+        .map((o) => o.dataset.testid),
+    ).toEqual(['workflow-pick-trigger-clickup']);
+    await user.keyboard('{Enter}');
+    // Not saved yet: the trigger waits for the first save, and says so.
+    expect(await screen.findByTestId('workflow-pending-trigger')).toBeInTheDocument();
+    await closeDialog(user);
+    const trigger = screen.getByTestId('workflow-trigger-node');
+    expect(trigger).toHaveAttribute('data-pending', 'true');
+    expect(screen.getByTestId('workflow-editor')).toHaveAttribute('data-unsaved', 'true');
+    expect(screen.getByTestId('workflow-unsaved')).toHaveTextContent('Unsaved changes');
+
+    // The trigger's +: the first step, which the trigger starts.
+    await user.click(screen.getByTestId('workflow-trigger-add-step'));
+    await user.click(await screen.findByTestId('workflow-pick-agent'));
+    await user.type(await screen.findByTestId('workflow-step-prompt'), 'Read the task');
+    await closeDialog(user);
+    // A line from each trigger ("Run by hand" appears with the first step) to that step.
+    expect(
+      screen
+        .getAllByTestId('workflow-trigger-edge')
+        .map((edge) => `${edge.getAttribute('data-trigger-id')}>${edge.getAttribute('data-to')}`),
+    ).toEqual(['manual>agent_1', 'pending-1>agent_1']);
+    // "Run by hand" is drawn too once there is a step.
+    expect(
+      screen.getAllByTestId('workflow-trigger-node').map((each) => each.dataset.triggerKind),
+    ).toEqual(['manual', 'webhook']);
+
+    // The step's +: the next step, connected on success.
+    const plus = screen
+      .getAllByTestId('workflow-node-add')
+      .find((each) => each.closest('[data-node-id="agent_1"]'))!;
+    await user.click(plus);
+    await user.click(await screen.findByTestId('workflow-pick-send'));
+    await user.type(
+      await screen.findByTestId('workflow-step-text'),
+      'Seen: {{steps.agent_1.output}}',
+    );
+    await closeDialog(user);
+    expect(screen.getAllByTestId('workflow-edge').map((edge) => edge.dataset.edgeId)).toEqual([
+      'e1',
+    ]);
+
+    await user.type(screen.getByTestId('workflow-name'), 'From ClickUp');
+    await waitFor(() => expect(screen.getByTestId('workflow-save')).toBeEnabled());
+    await user.click(screen.getByTestId('workflow-save'));
+    await waitFor(() =>
+      expect(seen.some((c) => c.path === `/workflows/${OTHER}/triggers`)).toBe(true),
+    );
+    const post = seen.find((c) => c.path === '/workflows' && c.method === 'POST')!;
+    expect(post.body).toMatchObject({
+      name: 'From ClickUp',
+      nodes: [
+        { id: 'agent_1', kind: 'agent', input: 'Read the task' },
+        { id: 'notify_1', kind: 'notify', send: { targets: [] } },
+      ],
+      edges: [{ id: 'e1', from: 'agent_1', to: 'notify_1', route: 'success' }],
+    });
+    // Nothing new in the drawing: the trigger is its own record, made once the workflow is.
+    expect(Object.keys(post.body as object).sort()).toEqual([
+      'description',
+      'edges',
+      'name',
+      'nodes',
+      'working_dir',
+    ]);
+    expect(seen.find((c) => c.path === `/workflows/${OTHER}/triggers`)).toMatchObject({
+      method: 'POST',
+      profile: 'default',
+      body: { preset: 'clickup', events: ['taskCreated', 'taskStatusUpdated'] },
+    });
+    await waitFor(() =>
+      expect(screen.getByTestId('workflow-editor')).toHaveAttribute('data-unsaved', 'false'),
+    );
+  });
+
+  it('an old workflow opens with its triggers drawn as nodes — by hand, a webhook, a schedule — and runs as before', async () => {
+    const user = userEvent.setup();
+    const { seen, fetchImpl } = fakeHub({
+      triggers: [
+        {
+          id: TRIGGER,
+          workflow_id: FLOW,
+          name: 'ClickUp',
+          preset: 'clickup',
+          enabled: true,
+          events: ['taskCreated'],
+          secret_stored: true,
+          signature_header: null,
+          signature_encoding: null,
+          signature_prefix: null,
+          path: `/api/v1/workflow-hooks/${TRIGGER}`,
+          last_delivery_at: null,
+        },
+      ],
+      schedules: [
+        {
+          id: '01J8QK3ZR2W7M5N4P6T8V9X0SC',
+          profile: 'designer',
+          name: 'Every morning',
+          enabled: false,
+          next_run_at: null,
+          trigger: {
+            kind: 'cron',
+            expression: '0 9 * * *',
+            every_minutes: null,
+            run_at: null,
+            timezone: 'UTC',
+          },
+        },
+      ],
+    });
+    mount(fetchImpl, `/workflows?workflow=${FLOW}&profile=designer`);
+    await waitFor(() => expect(screen.getAllByTestId('workflow-node')).toHaveLength(4));
+    await waitFor(() => expect(screen.getAllByTestId('workflow-trigger-node')).toHaveLength(3));
+    const nodes = screen.getAllByTestId('workflow-trigger-node');
+    expect(nodes.map((each) => each.dataset.triggerKind)).toEqual([
+      'manual',
+      'webhook',
+      'schedule',
+    ]);
+    expect(nodes[2]).toHaveAccessibleName(/Every morning · 0 9 \* \* \* · Off/);
+    // Each starts the one step nothing leads into, as the engine does.
+    expect([
+      ...new Set(screen.getAllByTestId('workflow-trigger-edge').map((e) => e.dataset.to)),
+    ]).toEqual(['check']);
+    expect(seen.find((c) => c.path === '/schedules')!.query).toContain(`workflow_id=${FLOW}`);
+    // Nothing changed: the drawing is not unsaved, and Run runs it from the start.
+    expect(screen.getByTestId('workflow-editor')).toHaveAttribute('data-unsaved', 'false');
+    await user.click(nodes[0]!);
+    await user.type(await screen.findByTestId('workflow-run-input'), 'v2');
+    await user.click(screen.getByTestId('workflow-manual-run'));
+    await waitFor(() =>
+      expect(seen.find((c) => c.path === `/workflows/${FLOW}/run`)).toMatchObject({
+        body: { input: 'v2', start_node_ids: null },
+      }),
+    );
+    expect(seen.some((c) => c.method === 'PATCH' && c.path === `/workflows/${FLOW}`)).toBe(false);
+    await waitFor(() => expect(screen.getByTestId('where')).toHaveTextContent(`run=${RUN}`));
+  });
+
+  it('Save sits by the name with an unsaved mark, Ctrl+S saves, and leaving with unsaved changes asks first', async () => {
+    const user = userEvent.setup();
+    const { seen, fetchImpl } = fakeHub();
+    mount(fetchImpl, `/workflows?workflow=${FLOW}&profile=designer`);
+    await waitFor(() => expect(screen.getAllByTestId('workflow-node')).toHaveLength(4));
+    expect(screen.getByTestId('workflow-all-saved')).toBeInTheDocument();
+    expect(screen.getByTestId('workflow-save')).toBeDisabled();
+
+    await user.type(screen.getByTestId('workflow-name'), ' 2');
+    expect(screen.getByTestId('workflow-unsaved')).toBeInTheDocument();
+    // Back asks; Stay keeps the work where it is.
+    await user.click(screen.getByTestId('workflow-back'));
+    const ask = await screen.findByTestId('workflow-leave-dialog');
+    expect(ask).toHaveTextContent('You have unsaved changes');
+    await user.click(within(ask).getByTestId('workflow-leave-stay'));
+    await waitFor(() => expect(screen.queryByTestId('workflow-leave-dialog')).toBeNull());
+    expect(screen.getByTestId('workflow-name')).toHaveValue('Release 2');
+
+    // Ctrl+S saves where the focus is.
+    await waitFor(() => expect(screen.getByTestId('workflow-save')).toBeEnabled());
+    fireEvent.keyDown(window, { key: 's', ctrlKey: true });
+    await waitFor(() =>
+      expect(
+        seen.find((c) => c.method === 'PATCH' && c.path === `/workflows/${FLOW}`),
+      ).toMatchObject({ body: { name: 'Release 2' } }),
+    );
+    await waitFor(() => expect(screen.getByTestId('workflow-all-saved')).toBeInTheDocument());
+
+    // Saved: Back leaves at once.
+    await user.type(screen.getByTestId('workflow-name'), '!');
+    await user.click(screen.getByTestId('workflow-back'));
+    await user.click(
+      within(await screen.findByTestId('workflow-leave-dialog')).getByTestId(
+        'workflow-leave-discard',
+      ),
+    );
+    await waitFor(() => expect(screen.getByTestId('where')).toHaveTextContent(/^\/workflows$/));
+    expect(seen.filter((c) => c.method === 'PATCH')).toHaveLength(1);
+  });
+
+  it('a link to another page while there are unsaved changes asks too, and Save and leave saves first', async () => {
+    const user = userEvent.setup();
+    const { seen, fetchImpl } = fakeHub();
+    mount(fetchImpl, `/workflows?workflow=${FLOW}&profile=designer`);
+    await waitFor(() => expect(screen.getAllByTestId('workflow-node')).toHaveLength(4));
+    await user.type(screen.getByTestId('workflow-name'), ' 3');
+    const link = screen
+      .getAllByRole('link')
+      .find((each) => each.getAttribute('href') === '/schedules')!;
+    await user.click(link);
+    const ask = await screen.findByTestId('workflow-leave-dialog');
+    await waitFor(() => expect(within(ask).getByTestId('workflow-leave-save')).toBeEnabled());
+    expect(screen.getByTestId('where')).toHaveTextContent('/workflows?');
+    await user.click(within(ask).getByTestId('workflow-leave-save'));
+    await waitFor(() => expect(screen.getByTestId('where')).toHaveTextContent(/^\/schedules$/));
+    expect(seen.find((c) => c.method === 'PATCH' && c.path === `/workflows/${FLOW}`)).toMatchObject(
+      { body: { name: 'Release 3' } },
+    );
   });
 
   it('shows a run on the canvas: states, output, edges taken, and the answers on the waiting step', async () => {
