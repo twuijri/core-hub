@@ -100,7 +100,15 @@ $ pnpm typecheck      (exit 0)
 
 الاختبارات الجديدة تفشل على الكود القديم: الوكيل الوهمي كان سيكتب `DATABASE_URL` و`HUB_ADMIN_PASSWORD` وغيرها في بيئته؛
 التثبيت القديم `claude-code-acp` لم يكن يُعثر عليه باسم `claude-agent-acp`؛ صفحة مهارات Claude Code كانت `409`.
-CI على PR #227: يُحدَّث بعد الدفع.
+CI على PR #227 بعد دفع 226467f1 (run 36634514074): كل فحوص الخادم خضراء — وحدات الخادم (3 أجزاء)، هرمز الحقيقي (floor وpinned)،
+صورة Docker و`/health`، سطح المكتب تحت Xvfb، رحلات الويب، Android، iOS، الترحيلات، سجل التغيير. الفحص الوحيد الأحمر
+«Lint, typecheck, contracts, client tests, build» سببه `tests/logical-css.test.ts` في `schedules/workflows/WorkflowCanvas.tsx`
+(`left-0` في السطرين 641 و737) — ملف محرّر سير العمل لوكيل آخر على الفرع نفسه، لم ألمسه:
+
+```
+FAIL tests/logical-css.test.ts > logical CSS properties only > schedules/workflows/WorkflowCanvas.tsx
+AssertionError: expected [ '641: left-0', '737: left-0' ] to deeply equal []
+```
 
 ## المخاطر والرجوع
 - وكيل كان يعتمد على متغير في بيئة الحاوية ليس في قائمته لن يراه بعد الآن (مثل `GITHUB_TOKEN`). الحل: وضعه في `env` إعدادات الوكيل، أو إضافته إلى `hostEnv` في الكتالوج بطلب مراجَع.
