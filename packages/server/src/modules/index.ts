@@ -635,17 +635,47 @@ registerWorkflowPorts((app) => {
         return posts.post(scope, input);
       },
     },
-    agentTurn: async (scope, input, control) => {
-      if (!control) {
-        const turn = sessionTurnsFor(app);
-        if (!turn) throw new Error('this hub composes no sessions module');
-        return turn(scope, { ...input, source: 'workflow' });
-      }
-      // Followed while it works: the engine reads its cost by run id, and a limit that runs
-      // out stops it the way the chat's Stop does (DECISIONS §53).
+    agentTurn: async (scope, { conversation, workflowId, ...input }, control) => {
       const runs = sessionRunsFor(app);
       if (!runs) throw new Error('this hub composes no sessions module');
-      const handle = await runs.start(scope, { ...input, source: 'workflow' });
+      // One existing conversation for every run (§136): the prompt is a new message in it,
+      // taken when its other turns have ended; `sessions` checks the profile, person and agent.
+      let handle: Awaited<ReturnType<typeof runs.start>> & {
+        created?: boolean;
+        title?: string | null;
+      };
+      if (conversation) {
+        const posts = workflowMessagesFor(app);
+        if (!posts) throw new Error('this hub composes no sessions module');
+        handle = await posts.startIn(
+          scope,
+          {
+            sessionId: conversation.sessionId,
+            agentId: input.agentId,
+            prompt: input.prompt,
+            model: input.model ?? null,
+            provider: input.provider ?? null,
+            createIfMissing: conversation.createIfMissing,
+            title: conversation.title,
+            workflowId: workflowId ?? null,
+            maxWaitMs: conversation.maxWaitMs,
+          },
+          control?.signal,
+        );
+      } else {
+        if (!input.agentId) throw new Error('this step names no agent');
+        const agentId = input.agentId;
+        if (!control) {
+          const turn = sessionTurnsFor(app);
+          if (!turn) throw new Error('this hub composes no sessions module');
+          return turn(scope, { ...input, agentId, source: 'workflow' });
+        }
+        handle = await runs.start(scope, { ...input, agentId, source: 'workflow' });
+      }
+      const made = { created: handle.created ?? false, title: handle.title ?? null };
+      if (!control) return { ...(await handle.done), ...made };
+      // Followed while it works: the engine reads its cost by run id, and a limit that runs
+      // out stops it the way the chat's Stop does (DECISIONS §53).
       control.started({ sessionId: handle.sessionId, runId: handle.runId });
       const stop = () => {
         void runs.cancel(scope, handle.sessionId, handle.runId).catch(() => undefined);
@@ -653,10 +683,18 @@ registerWorkflowPorts((app) => {
       if (control.signal.aborted) stop();
       else control.signal.addEventListener('abort', stop, { once: true });
       try {
-        return await handle.done;
+        return { ...(await handle.done), ...made };
       } finally {
         control.signal.removeEventListener('abort', stop);
       }
+    },
+    // "Test conversation" (§136): the rules the run applies, nothing sent.
+    conversations: {
+      check(scope, input) {
+        const posts = workflowMessagesFor(app);
+        if (!posts) throw new Error('this hub composes no sessions module');
+        return posts.check(scope, input);
+      },
     },
     // A turn's cost is the hub's per-turn estimate the usage ledger keeps (`Usage.cost`).
     cost: (scope, runId) => {

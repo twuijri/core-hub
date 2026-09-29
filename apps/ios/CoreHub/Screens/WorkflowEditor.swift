@@ -376,6 +376,26 @@ struct WorkflowStepPage: View {
                         draft.nodes[index].provider = nil
                     }
                 }
+                // The same conversation every run (§136): chosen on the web, shown and kept here.
+                if let conversation = draft.nodes[index].conversation, conversation.mode == "reuse" {
+                    VStack(alignment: .leading, spacing: Space.s1) {
+                        Text(l10n("workflow_editor.form.conversation_reuse"))
+                            .font(.system(size: FontSize.sizeSm, weight: .medium))
+                        Text(conversation.sessionId ?? "—")
+                            .font(.system(size: FontSize.sizeXs, design: .monospaced))
+                            .lineLimit(1)
+                            .truncationMode(.middle)
+                            .textSelection(.enabled)
+                        if conversation.createIfMissing == true {
+                            Text(l10n("workflow_editor.form.conversation_create"))
+                                .font(.system(size: FontSize.sizeXs)).foregroundStyle(Tone.textMuted)
+                        }
+                        Text(l10n("workflow_editor.form.conversation_hint"))
+                            .font(.system(size: FontSize.sizeXs)).foregroundStyle(Tone.textMuted)
+                    }
+                    .accessibilityElement(children: .combine)
+                    .accessibilityIdentifier("workflow.step.conversation")
+                }
             } header: {
                 Text(l10n("workflow_editor.form.agent"))
             }

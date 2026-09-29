@@ -14,6 +14,7 @@ import { useAuth } from '../auth/context.js';
 import { useI18n } from '../i18n/context.js';
 import { termKey } from '../navigation/manifest.js';
 import { WorkflowRunDialog } from '../schedules/ScheduleRuns.js';
+import { useScheduleEvents } from '../schedules/events.js';
 import { WorkflowsSection } from '../schedules/workflows/WorkflowsSection.js';
 import { PanelBoundary } from '../schedules/workflows/PanelBoundary.js';
 import { AppShell } from '../shell/AppShell.js';
@@ -33,6 +34,8 @@ export function workflowsQueryFromSchedules(search: string): string {
 export function WorkflowsScreen() {
   const { t } = useI18n();
   const title = t(termKey('workflows'));
+  // Live: a run started anywhere — a trigger, a schedule, another tab — shows on its card.
+  useScheduleEvents();
   const { homeProfile } = useAuth();
   const [params, setParams] = useSearchParams();
   const editing = params.get('workflow');

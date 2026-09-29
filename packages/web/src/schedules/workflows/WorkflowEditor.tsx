@@ -697,7 +697,8 @@ function RunView({
   return (
     <div className="flex flex-col gap-3" data-testid="workflow-run-view" data-run-id={wanted ?? ''}>
       <div className="flex flex-wrap items-end gap-2">
-        <div className="min-w-60">
+        {/* A fixed width, so a long run label ends in "…" instead of running over the search. */}
+        <div className="w-72 min-w-0 max-w-full">
           <Field label={t('workflows.editor.run_pick')}>
             {() => (
               <Select
@@ -792,6 +793,7 @@ function RunView({
           <StepRunPanel
             node={node}
             step={step}
+            profile={profile}
             state={node ? (states.get(node.id) ?? null) : null}
             gate={node ? gateFor(node.id, false) : null}
             onRerunFrom={

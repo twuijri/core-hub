@@ -10,7 +10,7 @@ import { PRODUCT } from '@corehub/contracts';
 import { HubError, notFound } from '../../lib/errors.js';
 import { t, type Language } from '../../i18n/index.js';
 import type { FastifyBaseLogger } from 'fastify';
-import { newUlid } from '../../db/ids.js';
+import { ULID_PATTERN as ULID_SHAPE, newUlid } from '../../db/ids.js';
 import { ensureWorkingDir, listWorkingDirs, workspaceRoot } from './working-dir.js';
 import type { AuditService } from '../audit/index.js';
 import { RunEngine, messageStatusOf, type EngineScope } from './engine.js';
@@ -128,6 +128,46 @@ export interface TurnResult {
   error: string | null;
   /** The run's error code (`stale` for one a restart cut short); `null` when it had none. */
   errorCode: string | null;
+  /** The agent's reply message of the run (its last), when it wrote one (§136). */
+  messageId?: string | null;
+}
+
+/**
+ * How a conversation stands for a workflow's agent step (DECISIONS §136), the contract's
+ * `WorkflowConversationCheckResult`: one answer for "Test conversation" and for the run.
+ */
+export interface WorkflowConversationCheck {
+  status: 'ready' | 'busy' | 'not_found' | 'not_allowed' | 'agent_mismatch';
+  session_id: string;
+  title: string | null;
+  agent_id: string | null;
+  active_run_id: string | null;
+  last_message_at: string | null;
+  reason: string | null;
+}
+
+/** How often a workflow turn looks whether a conversation's current turn has ended (§136). */
+const WORKFLOW_TURN_POLL_MS = 250;
+
+/** A turn a workflow's agent step sends into an existing conversation (§136). */
+export interface WorkflowTurnInput {
+  /** The conversation, rendered and cleaned. */
+  sessionId: string;
+  /** The step's agent; `null` lets the conversation's own agent answer. */
+  agentId: string | null;
+  prompt: string;
+  model?: string | null | undefined;
+  provider?: string | null | undefined;
+  /** Make the conversation when it does not exist in the profile, titled `title`. */
+  createIfMissing: boolean;
+  title: string;
+  /** The workflow the turn serves (the run's and a made conversation's `origin`). */
+  workflowId: string | null;
+  /**
+   * How long the turn may wait for the conversation's other turns to end before the step
+   * fails saying the conversation was busy; nothing is written into it then.
+   */
+  maxWaitMs: number;
 }
 
 /** A turn that has started: its ids now, its ending when it comes. */
@@ -1171,6 +1211,239 @@ export class SessionsService {
     };
   }
 
+  /**
+   * May a workflow's agent step talk in this conversation (DECISIONS §136)? It must be in the
+   * scope's workspace — the run's profile, as the person the run acts as reaches it; another
+   * profile's is `not_found`, the same as a deleted one, so nothing about it is told — and be
+   * a conversation a person has with an agent: a room seat's belongs to its room, and a
+   * person's own assistant (`global_agent`) to that person alone. When the step names an
+   * agent, the conversation's must be the same one: a conversation has one agent.
+   */
+  workflowConversation(
+    scope: EngineScope,
+    input: { sessionId: string; agentId: string | null },
+  ): WorkflowConversationCheck {
+    const session = ULID_SHAPE.test(input.sessionId)
+      ? this.store.getSession(scope.workspace, input.sessionId)
+      : undefined;
+    const base = {
+      session_id: input.sessionId,
+      title: session?.title ?? null,
+      agent_id: session?.agentId ?? null,
+      active_run_id: null,
+      last_message_at: session?.lastMessageAt?.toISOString() ?? null,
+    };
+    if (!session) {
+      return {
+        ...base,
+        status: 'not_found',
+        reason: `the conversation ${input.sessionId} was not found in this profile (it was deleted, or it is another profile's)`,
+      };
+    }
+    if (
+      session.source === 'room' ||
+      (session.source === 'global_agent' && session.ownerId !== scope.userId)
+    ) {
+      return {
+        ...base,
+        status: 'not_allowed',
+        reason:
+          session.source === 'room'
+            ? `the conversation ${session.id} is a room seat's; a workflow cannot talk in it`
+            : `the conversation ${session.id} is another person's assistant; a workflow cannot talk in it`,
+      };
+    }
+    if (input.agentId && session.agentId !== input.agentId) {
+      return {
+        ...base,
+        status: 'agent_mismatch',
+        reason: `the conversation's agent (${session.agentId}) is not this step's agent (${input.agentId}); pick the same agent, or leave the step's agent empty`,
+      };
+    }
+    const live = this.store.liveRuns(scope.workspace, session.id);
+    return live[0]
+      ? {
+          ...base,
+          active_run_id: live[0].id,
+          status: 'busy',
+          reason: 'a turn is going on in the conversation; a run would wait for it to end',
+        }
+      : { ...base, status: 'ready', reason: null };
+  }
+
+  /**
+   * A workflow's agent step talking in an existing conversation (DECISIONS §136).
+   *
+   * Turns into one conversation are taken **one at a time, whole**: a run waits until the
+   * workflow turns asked for the same conversation before it have ended and the conversation
+   * has no turn going on (a person's included), and only then writes its prompt and starts —
+   * so the history reads prompt, reply, prompt, reply, never two prompts before their
+   * replies, and each run reads its own run's reply, never another's. The wait is bounded by
+   * `maxWaitMs`: past it (or when `signal` stops the step) nothing is written and the step
+   * fails saying the conversation was busy.
+   *
+   * A conversation that is missing is made when the step asks for it (`createIfMissing`) —
+   * once: runs that were waiting for the same missing id use the one the first run made.
+   * Otherwise, and for a conversation the step may not use, nothing is written and the
+   * refusal says why.
+   */
+  async startWorkflowTurnIn(
+    scope: EngineScope,
+    input: WorkflowTurnInput,
+    signal?: AbortSignal,
+  ): Promise<TurnHandle & { created: boolean; title: string | null }> {
+    const key = `${scope.workspace}\u0000${input.sessionId || `new:${input.workflowId ?? ''}`}`;
+    // What a run of this workflow made for this id before (§136); another workflow makes its own.
+    const madeKey = `${key}\u0000${input.workflowId ?? ''}`;
+    const ask = (sessionId: string) =>
+      this.workflowConversation(scope, { sessionId, agentId: input.agentId });
+    const refuse = (check: WorkflowConversationCheck) => {
+      if (check.status === 'not_allowed' || check.status === 'agent_mismatch') {
+        throw new Error(check.reason ?? check.status);
+      }
+    };
+    // Said at once, before any wait: a conversation the step may not use, or one that is
+    // missing when nothing may make it.
+    const first = ask(input.sessionId);
+    refuse(first);
+    if (
+      first.status === 'not_found' &&
+      !input.createIfMissing &&
+      !this.madeForWorkflow.has(madeKey)
+    ) {
+      throw new Error(first.reason ?? 'not found');
+    }
+
+    const deadline = Date.now() + input.maxWaitMs;
+    const busy = () =>
+      new Error(
+        `the conversation was busy with another turn for ${Math.round(input.maxWaitMs / 1000)} s; this run did not send its message`,
+      );
+    const release = await this.workflowSlot(key, deadline, signal);
+    if (!release) throw signal?.aborted ? new Error('stopped before the turn started') : busy();
+    try {
+      // Looked at again now that it is this run's turn: a run before it may have made it.
+      let check = ask(input.sessionId);
+      const made = this.madeForWorkflow.get(madeKey);
+      if (check.status === 'not_found' && made) {
+        const again = ask(made);
+        // Gone again, or no longer one this step may use: made anew below, as if never made.
+        if (again.status === 'ready' || again.status === 'busy') check = again;
+      }
+      refuse(check);
+      let sessionId = check.session_id;
+      let created = false;
+      let title = check.title;
+      if (check.status === 'not_found') {
+        if (!input.createIfMissing) throw new Error(check.reason ?? 'not found');
+        if (!input.agentId) {
+          throw new Error(
+            `${check.reason}; the step names no agent to make a new conversation with`,
+          );
+        }
+        const session = await this.create(
+          scope,
+          {
+            agent_id: input.agentId,
+            title: input.title || null,
+            model: input.model ?? null,
+            provider: input.provider ?? null,
+          },
+          { source: 'workflow', kind: 'workflow', id: input.workflowId },
+        );
+        sessionId = String(session.id);
+        created = true;
+        title = (session.title as string | null) ?? (input.title || null);
+        this.madeForWorkflow.set(madeKey, sessionId);
+      }
+      // A turn going on — a person's, or a run's that named the conversation another way.
+      while (this.store.liveRuns(scope.workspace, sessionId).length > 0) {
+        if (signal?.aborted) throw new Error('stopped before the turn started');
+        if (Date.now() >= deadline) throw busy();
+        await new Promise((resolve) => setTimeout(resolve, WORKFLOW_TURN_POLL_MS));
+      }
+      const accepted = await this.createRun(
+        scope,
+        sessionId,
+        {
+          content: [{ type: 'text', text: input.prompt }],
+          model: input.model ?? null,
+          provider: input.provider ?? null,
+        },
+        { kind: 'workflow', id: input.workflowId },
+      );
+      const runId = String(accepted.payload.run_id);
+      const done = accepted.started.then(
+        () =>
+          this.turnResult(scope.workspace, runId) ?? {
+            sessionId,
+            runId,
+            status: 'failed' as const,
+            output: '',
+            error: 'the run was deleted before it ended',
+            errorCode: null,
+            messageId: null,
+          },
+      );
+      // The next run's turn begins when this one has ended, however it ends.
+      void done.finally(release);
+      return {
+        sessionId,
+        runId,
+        jobId: String(accepted.payload.job_id),
+        done,
+        created,
+        title,
+      };
+    } catch (error) {
+      release();
+      throw error;
+    }
+  }
+
+  /** Conversations made for a workflow step whose own was missing, by what it asked for (§136). */
+  private readonly madeForWorkflow = new Map<string, string>();
+  /** The workflow turns waiting for, or holding, each conversation (§136). */
+  private readonly workflowSlots = new Map<string, Promise<void>>();
+
+  /**
+   * This run's place in line for a conversation: resolves with its release once every run
+   * before it has released, or `null` when `deadline` passed or `signal` stopped it first —
+   * then its place is given up at once, so the runs after it wait only for those before it.
+   */
+  private async workflowSlot(
+    key: string,
+    deadline: number,
+    signal?: AbortSignal,
+  ): Promise<(() => void) | null> {
+    const before = this.workflowSlots.get(key) ?? Promise.resolve();
+    let release!: () => void;
+    const mine = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const link = before.then(() => mine);
+    this.workflowSlots.set(key, link);
+    void link.then(() => {
+      if (this.workflowSlots.get(key) === link) this.workflowSlots.delete(key);
+    });
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    let stop: (() => void) | undefined;
+    const late = new Promise<false>((resolve) => {
+      timer = setTimeout(() => resolve(false), Math.max(0, deadline - Date.now()));
+      stop = () => resolve(false);
+      if (signal?.aborted) stop();
+      else signal?.addEventListener('abort', stop, { once: true });
+    });
+    const turn = await Promise.race([before.then(() => true as const), late]);
+    clearTimeout(timer);
+    if (stop) signal?.removeEventListener('abort', stop);
+    if (!turn) {
+      release();
+      return null;
+    }
+    return release;
+  }
+
   /** The contract's `Run` of each id that exists in the workspace, in the order asked. */
   runsById(scope: EngineScope, runIds: readonly string[]): Record<string, unknown>[] {
     return runIds
@@ -1213,9 +1486,10 @@ export class SessionsService {
   turnResult(workspace: string, runId: string): TurnResult | null {
     const run = this.store.getRun(workspace, runId);
     if (!run) return null;
-    const output = this.store
+    const replies = this.store
       .allMessages(workspace, run.sessionId)
-      .filter((message) => message.runId === runId && message.role === 'assistant')
+      .filter((message) => message.runId === runId && message.role === 'assistant');
+    const output = replies
       .map((message) => message.content)
       .join('\n')
       .trim();
@@ -1226,6 +1500,7 @@ export class SessionsService {
       output,
       error: run.errorMessage ?? run.errorCode ?? null,
       errorCode: run.errorCode ?? null,
+      messageId: replies[replies.length - 1]?.id ?? null,
     };
   }
 

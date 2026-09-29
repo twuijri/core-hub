@@ -63,6 +63,7 @@ import { useNoticeStream } from '../notify/queries.js';
 import { useDesktopEffects } from '../desktop/effects.js';
 import { foldShortcutAria, foldShortcutLabel } from './sidebarFold.js';
 import { useSidebarGroups } from './sidebarGroups.js';
+import { WorkflowsRunningDot } from '../schedules/workflows/WorkflowActivity.js';
 import { LanguageMenuItems, LanguageSwitch } from '../i18n/LanguageSwitch.js';
 
 const SEGMENT_STORAGE = `${derived.storagePrefix}segment`;
@@ -95,7 +96,7 @@ export function Sidebar({
   useNoticeStream();
   useDesktopEffects();
   const { t, language } = useI18n();
-  const { user, signOut } = useAuth();
+  const { user, signOut, homeProfile } = useAuth();
   const { prefs, update } = useTheme();
   const realtime = useRealtime();
   const meta = useMeta();
@@ -224,6 +225,7 @@ export function Sidebar({
         icon={<Icon size={18} />}
         label={t(termKey(d.id))}
         emphasis={index === 0 ? 'primary' : 'normal'}
+        trailing={d.id === 'workflows' ? <WorkflowsRunningDot profile={homeProfile} /> : undefined}
         render={({ className, children }) => (
           <NavLink to={routeOf(d.id)} onClick={onNavigate} data-nav-id={d.id} className={className}>
             {children}
@@ -260,8 +262,18 @@ export function Sidebar({
             icon={<GroupIcon size={18} />}
             label={t(`nav.${group.title}`)}
             trailing={
-              folded ? undefined : (
-                <IconChevron size={14} className="ch-sidebar-chevron" aria-hidden="true" />
+              folded ? (
+                // Closed and folded, the heading is all there is of Workflows: the dot is there.
+                !open && members.some((m) => m.id === 'workflows') ? (
+                  <WorkflowsRunningDot profile={homeProfile} />
+                ) : undefined
+              ) : (
+                <span className="flex items-center gap-1">
+                  {!open && members.some((m) => m.id === 'workflows') && (
+                    <WorkflowsRunningDot profile={homeProfile} />
+                  )}
+                  <IconChevron size={14} className="ch-sidebar-chevron" aria-hidden="true" />
+                </span>
               )
             }
             render={({ className, children }) => (

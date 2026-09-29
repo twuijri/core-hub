@@ -147,6 +147,16 @@ function scriptFor(prompt: string, workspace = ''): Step[] {
     // (the scripted proxy below, whose first model is down with `auth_unavailable`).
     return [{ type: 'direct', workspace, text: prompt }];
   }
+  const followUp = /تابع المحادثة: (.+)/.exec(prompt);
+  if (followUp) {
+    // An agent step that talks in one existing conversation (journey 43, DECISIONS §136):
+    // each run's reply names what it was asked, so each run's own reply can be told apart.
+    return [
+      { type: 'delay', ms: 300 },
+      { type: 'message_delta', text: `تمت متابعة: ${followUp[1]!.trim()}` },
+      { type: 'completed' },
+    ];
+  }
   if (/راجع قائمة الإصدار/.test(prompt)) {
     // An agent step of a workflow drawn on the canvas (journey 32): a short answer the next
     // step reads as `{{steps.<id>.output}}`.

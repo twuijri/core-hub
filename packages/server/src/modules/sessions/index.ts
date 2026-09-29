@@ -23,7 +23,14 @@ import {
 import { registerSessionRoutes } from './routes.js';
 import { ChannelConversations, channelSourceFor } from './channel-conversations.js';
 import { derivedScopeResolver, type ScopeCaller, type ScopeResolver } from './scope.js';
-import { SessionsService, type TurnHandle, type TurnInput, type TurnResult } from './service.js';
+import {
+  SessionsService,
+  type TurnHandle,
+  type TurnInput,
+  type TurnResult,
+  type WorkflowConversationCheck,
+  type WorkflowTurnInput,
+} from './service.js';
 import type { EngineScope } from './engine.js';
 import { SessionsStore } from './store.js';
 import type {
@@ -190,6 +197,9 @@ export function createSessionsModule(options: SessionsModuleOptions = {}): HubMo
       });
       posts.set(app, {
         post: (scope, input) => serviceFor(app, app.log).postWorkflowMessage(scope, input),
+        check: (scope, input) => serviceFor(app, app.log).workflowConversation(scope, input),
+        startIn: (scope, input, signal) =>
+          serviceFor(app, app.log).startWorkflowTurnIn(scope, input, signal),
       });
       gates.set(app, {
         raise: (scope, input) => serviceFor(app, app.log).raiseWorkflowApproval(scope, input),
@@ -377,6 +387,18 @@ export interface WorkflowMessages {
     scope: EngineScope,
     input: { sessionId: string | null; title: string | null; agentId: string | null; text: string },
   ): Promise<{ sessionId: string; messageId: string; recreated: boolean; title: string | null }>;
+  /** May an agent step talk in this conversation (DECISIONS §136)? */
+  check(
+    scope: EngineScope,
+    input: { sessionId: string; agentId: string | null },
+  ): WorkflowConversationCheck;
+  /** An agent step's turn in an existing conversation (§136), queued behind its other turns. */
+  startIn(
+    scope: EngineScope,
+    input: WorkflowTurnInput,
+    /** Stops the wait for the conversation's turn: the step ended (a limit ran out). */
+    signal?: AbortSignal,
+  ): Promise<TurnHandle & { created: boolean; title: string | null }>;
 }
 const posts = new WeakMap<FastifyInstance, WorkflowMessages>();
 
@@ -474,7 +496,13 @@ export { RUN_FILES_DIR, collectOutputs, ensureRunFolders, runFolders } from './r
 export type { ProducedFile, ProducedFiles, ProducedRefusal } from './run-files.js';
 export type { ScopeResolver, RequestScope } from './scope.js';
 export type { SessionEventListener, SessionEventName } from './realtime.js';
-export type { TurnHandle, TurnInput, TurnResult } from './service.js';
+export type {
+  TurnHandle,
+  TurnInput,
+  TurnResult,
+  WorkflowConversationCheck,
+  WorkflowTurnInput,
+} from './service.js';
 export type { EngineScope } from './engine.js';
 export { runActivity } from './activity.js';
 export { skillUseOf } from './skill-use.js';

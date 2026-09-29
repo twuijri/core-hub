@@ -92,6 +92,8 @@ export interface TriggerDeliveryRow {
 
 /** How often a run still going is asked about, besides the realtime events. */
 const LIVE_POLL_MS = 2_000;
+/** How often the list is asked again with nothing running, besides the realtime events. */
+const LIST_IDLE_POLL_MS = 30_000;
 
 const inProfile = (profile: string) => ({ headers: { 'X-Hub-Profile': profile } });
 
@@ -207,6 +209,13 @@ export function useWorkflows() {
       return (data as unknown as { items: WorkflowRow[] }).items;
     },
     enabled: !!session,
+    // Behind the realtime events (a run a trigger started shows at once): with a run going the
+    // list is asked again soon, so the card turns back when it ends; otherwise now and then,
+    // for a socket that was away (owner, 2026-09-29).
+    refetchInterval: (query) =>
+      query.state.data?.some((workflow) => workflow.active_run_id !== null)
+        ? LIVE_POLL_MS
+        : LIST_IDLE_POLL_MS,
   });
 }
 
@@ -416,6 +425,38 @@ export interface ConversationRow {
   id: string;
   title: string | null;
   agent_id: string;
+  /** When someone last wrote in it; shown next to the title in the picker (§136). */
+  last_message_at?: string | null;
+  updated_at?: string | null;
+  source?: string;
+}
+
+/** "Test conversation" (§136): how the conversation stands for the step, from the hub. */
+export interface ConversationCheck {
+  status: 'ready' | 'busy' | 'not_found' | 'not_allowed' | 'agent_mismatch' | (string & {});
+  session_id: string;
+  title: string | null;
+  agent_id: string | null;
+  active_run_id: string | null;
+  last_message_at?: string | null;
+  reason: string | null;
+}
+
+/**
+ * Whether an agent step may talk in a conversation (§136): the rules the run applies,
+ * nothing sent. The profile is the workflow's.
+ */
+export function useConversationCheck(profile: string) {
+  const { client } = useAuth();
+  return useMutation({
+    mutationFn: async ({ sessionId, agentId }: { sessionId: string; agentId: string | null }) =>
+      (
+        await client.request('post', '/workflows/conversation-check', {
+          body: { session_id: sessionId, agent_id: agentId } as never,
+          ...inProfile(profile),
+        })
+      ).data as unknown as ConversationCheck,
+  });
 }
 
 export function useProfileConversations(profile: string, enabled: boolean) {

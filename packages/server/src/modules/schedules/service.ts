@@ -19,6 +19,7 @@ import { deliveryOfHermes, type HermesJob } from './hermes-jobs.js';
 import { NO_LIMITS, limitsOf } from './limits.js';
 import { MAX_DELAY_SECONDS } from './workflow-engine.js';
 import { hasSend, sendProblems } from './send.js';
+import { conversationProblems, conversationTemplates, reuseOf } from './agent-conversation.js';
 import {
   nodeRuns,
   scheduleRuns,
@@ -1114,6 +1115,34 @@ export class SchedulesService {
     return true;
   }
 
+  /**
+   * An agent step whose conversation was missing and was made for it (§136): the step now
+   * names the new conversation, so every later run talks there. Only a step that still names
+   * `from` is changed (a person may have picked another meanwhile), and the drawing's version
+   * is not bumped — it is the same workflow, pointed at where its conversation now is.
+   */
+  repointAgentConversation(workflowId: string, nodeId: string, from: string, to: string): boolean {
+    const row = this.workflowById(workflowId);
+    if (!row) return false;
+    const definition = row.definition as WorkflowDefinition;
+    let changed = false;
+    const nodes = definition.nodes.map((node) => {
+      const reuse = reuseOf(node);
+      if (node.id !== nodeId || !reuse || reuse.sessionId !== from || !node.conversation) {
+        return node;
+      }
+      changed = true;
+      return { ...node, conversation: { ...node.conversation, session_id: to } };
+    });
+    if (!changed) return false;
+    this.db
+      .update(workflows)
+      .set({ definition: { ...definition, nodes }, updatedAt: new Date() })
+      .where(eq(workflows.id, workflowId))
+      .run();
+    return true;
+  }
+
   updateWorkflowRun(id: string, patch: Partial<typeof workflowRuns.$inferInsert>): void {
     this.db
       .update(workflowRuns)
@@ -1420,8 +1449,8 @@ export function failureAlertOf(value: unknown): WorkflowFailureAlert | null {
 }
 
 /**
- * An app that does not know a condition's `rules` (§123) or a notice's `send` (§124) sends the
- * node without the field; what the saved node with the same id had is kept rather than erased.
+ * An app that does not know a condition's `rules` (§123), a notice's `send` (§124) or an agent
+ * step's `conversation` (§136) sends the node without the field; what the saved node with the same id had is kept rather than erased.
  * `null` removes it.
  */
 export function keepRules(nodes: WorkflowNode[], saved: WorkflowNode[]): WorkflowNode[] {
@@ -1436,6 +1465,10 @@ export function keepRules(nodes: WorkflowNode[], saved: WorkflowNode[]): Workflo
     }
     if (node.kind === 'notify' && !has(node, 'send') && old.send) {
       return { ...node, send: old.send };
+    }
+    // An agent step's conversation (§136), for an app that does not know the field.
+    if (node.kind === 'agent' && !has(node, 'conversation') && old.conversation) {
+      return { ...node, conversation: old.conversation };
     }
     return node;
   });
@@ -1529,6 +1562,14 @@ export function problemsOf(definition: WorkflowDefinition): WorkflowIssue[] {
         );
       }
     }
+    if (node.kind === 'agent') {
+      // Which conversation the step talks in (§136): a mode this hub knows, and an id to reuse.
+      for (const code of conversationProblems(node)) {
+        problems.push(
+          issue(code, `the conversation of "${name}" cannot be used (${code})`, { node: node.id }),
+        );
+      }
+    }
     if (node.kind === 'condition' && hasRules(node.rules)) {
       // Several rules (§123): each one is read now, and a `steps.` path must name a step.
       node.rules.items.forEach((rule, index) => {
@@ -1590,7 +1631,9 @@ export function problemsOf(definition: WorkflowDefinition): WorkflowIssue[] {
         );
       }
     }
-    for (const path of pathsIn(input)) {
+    // A reused conversation's id and title are templates too (§136).
+    const templates = [input, ...conversationTemplates(node)].join('\n');
+    for (const path of pathsIn(templates)) {
       const [root, second] = path.split('.');
       if (root !== 'input' && root !== 'trigger' && root !== 'steps') {
         problems.push(
@@ -1650,7 +1693,8 @@ export function warningIssuesOf(definition: WorkflowDefinition): WorkflowIssue[]
     );
   }
   for (const node of definition.nodes) {
-    if (node.kind === 'agent' && !node.agent_id) {
+    // A step that reuses a conversation may leave the agent to the conversation (§136).
+    if (node.kind === 'agent' && !node.agent_id && !reuseOf(node)) {
       warnings.push(
         issue('agent_missing', `the node "${node.title || node.id}" names no agent`, {
           node: node.id,

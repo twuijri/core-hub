@@ -28,6 +28,8 @@ import {
 } from '../../ui/index.js';
 import { Combobox } from '../../ui/Combobox.js';
 import { SendForm } from './SendForm.js';
+import { ConversationForm } from './ConversationForm.js';
+import { chatHref } from '../../chat/anchor.js';
 import { StepTest } from './StepTest.js';
 import { chatModels } from '../../models/queries.js';
 import { modelOption } from '../../models/useModelPicker.js';
@@ -207,7 +209,17 @@ export function StepPanel({
       </p>
 
       {node.kind === 'agent' && (
-        <AgentForm draft={draft} node={node} update={update} agents={agents} models={models} />
+        <>
+          <AgentForm draft={draft} node={node} update={update} agents={agents} models={models} />
+          {/* A new conversation every run, or the same one (§136). */}
+          <ConversationForm
+            key={node.id}
+            node={node}
+            profile={profile ?? 'default'}
+            agents={agents}
+            update={update}
+          />
+        </>
       )}
       {node.kind === 'condition' && <ConditionForm draft={draft} node={node} update={update} />}
       {node.kind === 'delay' && <DelayForm node={node} update={update} />}
@@ -925,9 +937,12 @@ export function StepRunPanel({
   gate,
   onRerunFrom,
   rerunBusy,
+  profile = null,
 }: {
   node: WfNode | null;
   step: RunStep | null;
+  /** The workflow's profile, where the step's conversation opens (§136). */
+  profile?: string | null;
   state: NodeRunState | null;
   /** The approval gate of a step waiting for a person. */
   gate: ReactNode;
@@ -939,7 +954,8 @@ export function StepRunPanel({
     return <p className="text-sm text-muted">{t('workflows.editor.no_selection')}</p>;
   }
   const output = step?.output ?? null;
-  const long = (output?.length ?? 0) > 280 || (output ?? '').split('\n').length > 6;
+  const shownOutput = readableOutput(output);
+  const long = (shownOutput.text.length ?? 0) > 280 || shownOutput.text.split('\n').length > 6;
   return (
     <div className="flex flex-col gap-3" data-testid="workflow-step-run" data-node-id={node.id}>
       <div className="flex items-center gap-2">
@@ -954,6 +970,16 @@ export function StepRunPanel({
         )}
       </div>
       {!step && <p className="text-xs text-muted">{t('workflows.editor.step_not_reached')}</p>}
+      {step?.session_id && (
+        // Where the agent talked, opened at its reply (§136).
+        <a
+          className="self-start text-xs text-accent underline-offset-2 hover:underline"
+          href={chatHref(step.session_id, step.message_id ?? null, undefined, profile)}
+          data-testid="workflow-step-conversation"
+        >
+          {t('workflows.conversation.open')}
+        </a>
+      )}
       {gate}
       {step?.error && (
         <Notice tone="danger">
@@ -978,17 +1004,20 @@ export function StepRunPanel({
                 </span>
                 <span className="text-accent">{t('workflows.editor.step_output_show')}</span>
               </summary>
-              <div className="mt-2 max-h-80 overflow-auto whitespace-pre-wrap text-xs" dir="auto">
-                {output}
+              <div
+                className="mt-2 max-h-80 overflow-auto whitespace-pre-wrap text-xs [overflow-wrap:anywhere]"
+                dir={shownOutput.json ? 'ltr' : 'auto'}
+              >
+                {shownOutput.text}
               </div>
             </details>
           ) : (
             <div
-              className="whitespace-pre-wrap rounded-md border border-line p-2 text-xs"
-              dir="auto"
+              className={`min-w-0 whitespace-pre-wrap rounded-md border border-line p-2 text-xs [overflow-wrap:anywhere]${shownOutput.json ? ' font-mono' : ''}`}
+              dir={shownOutput.json ? 'ltr' : 'auto'}
               data-testid="workflow-step-output"
             >
-              {output}
+              {shownOutput.text}
             </div>
           )}
         </div>
@@ -1010,4 +1039,21 @@ export function StepRunPanel({
       )}
     </div>
   );
+}
+
+/**
+ * A step's output as it is shown: a JSON answer (a Send message step's result, say) laid out on
+ * lines and read left to right; anything else as written.
+ */
+export function readableOutput(output: string | null): { text: string; json: boolean } {
+  const raw = output ?? '';
+  const trimmed = raw.trim();
+  if (trimmed.startsWith('{') || trimmed.startsWith('[')) {
+    try {
+      return { text: JSON.stringify(JSON.parse(trimmed), null, 2), json: true };
+    } catch {
+      // Not JSON after all: shown as written.
+    }
+  }
+  return { text: raw, json: false };
 }

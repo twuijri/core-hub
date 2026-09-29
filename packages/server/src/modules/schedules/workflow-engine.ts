@@ -55,6 +55,7 @@ import {
   type Context,
 } from './expr.js';
 import { NO_LIMITS, dollars, duration, microUsdOf, moneyOfMicro } from './limits.js';
+import { cleanConversationId, isTemplate, reuseOf } from './agent-conversation.js';
 import {
   chatIdOf,
   hasSend,
@@ -94,6 +95,38 @@ export interface AgentTurnResult {
   status: string;
   output: string;
   error: string | null;
+  /** The agent's reply message (§136); absent from a port that does not say. */
+  messageId?: string | null;
+  /** The conversation was missing and was made for this turn (§136). */
+  created?: boolean;
+  /** The conversation's title, when the turn went into an existing or made one. */
+  title?: string | null;
+}
+
+/**
+ * An agent step that talks in one existing conversation (DECISIONS §136), as the engine hands
+ * it to the port: the id rendered and cleaned, and how long the turn may wait behind the
+ * conversation's other turns.
+ */
+export interface TurnConversation {
+  sessionId: string;
+  createIfMissing: boolean;
+  title: string;
+  maxWaitMs: number;
+}
+
+/** How long a turn waits behind a reused conversation's other turns before it fails (§136). */
+export const CONVERSATION_WAIT_MS = 10 * 60_000;
+
+/** "Test conversation" (§136): how a conversation stands for an agent step. */
+export interface ConversationCheck {
+  status: string;
+  session_id: string;
+  title: string | null;
+  agent_id: string | null;
+  active_run_id: string | null;
+  last_message_at: string | null;
+  reason: string | null;
 }
 
 /**
@@ -431,16 +464,30 @@ export interface WorkflowPorts {
     | ((
         scope: RunScope,
         input: {
-          agentId: string;
+          /** The step's agent; `null` only with `conversation`, whose own agent then answers. */
+          agentId: string | null;
           prompt: string;
           title: string;
           /** The step's own model (`<provider>/<model>`), else the agent's. */
           model?: string | null;
           provider?: string | null;
+          /** Talk in this existing conversation instead of a new one (§136). */
+          conversation?: TurnConversation | null;
+          /** The workflow the turn serves, the origin of a conversation made for it. */
+          workflowId?: string | null;
         },
         control?: TurnControl,
       ) => Promise<AgentTurnResult>)
     | null;
+  /**
+   * "Test conversation" (§136): the same rules the run applies, nothing sent. Absent, the
+   * check says the hub cannot reach conversations.
+   */
+  conversations?: {
+    check(scope: RunScope, input: { sessionId: string; agentId: string | null }): ConversationCheck;
+  } | null;
+  /** How long a reused conversation's turn may wait behind others (§136); 10 minutes if absent. */
+  conversationWaitMs?: number;
   /**
    * What a turn has cost so far, by the hub's per-turn estimate. Absent, the cost budget
    * sees nothing to count and never stops a run.
@@ -507,6 +554,8 @@ interface StepResult {
   stop?: 'max_duration' | 'max_cost';
   /** The step ran past its own timeout (it failed; a `failure` edge may take it). */
   timedOut?: boolean;
+  /** An agent step's conversation and reply (§136), kept with the step and readable by later steps. */
+  conversation?: { sessionId: string; messageId: string | null } | null;
 }
 
 interface Live {
@@ -820,7 +869,7 @@ export class WorkflowEngine {
         unhandled = state.budget.reason(result.stop);
         return false;
       }
-      ctx.steps[node.id] = { output: result.output };
+      ctx.steps[node.id] = { output: result.output, ...agentFields(node, result) };
       const edges = outgoing.get(node.id) ?? [];
       let followed = 0;
       for (const edge of edges) {
@@ -1049,7 +1098,7 @@ export class WorkflowEngine {
     const abort = new AbortController();
     const timers: ReturnType<typeof setTimeout>[] = [];
     let poll: ReturnType<typeof setInterval> | null = null;
-    let turn: { runId: string } | null = null;
+    let turn: { runId: string; sessionId: string } | null = null;
     const turnCost = (): TurnCost | null =>
       turn && this.ports.cost ? this.ports.cost(scope, turn.runId) : null;
 
@@ -1083,7 +1132,7 @@ export class WorkflowEngine {
     const control: TurnControl = {
       signal: abort.signal,
       started: (ids) => {
-        turn = { runId: ids.runId };
+        turn = { runId: ids.runId, sessionId: ids.sessionId };
         if (maxCost === null || !this.ports.cost || poll) return;
         poll = setInterval(() => {
           const now = turnCost();
@@ -1111,7 +1160,12 @@ export class WorkflowEngine {
         result = { ...result, error: budget.reason('max_cost') };
       }
     }
-    if (turn && !result.runId) result = { ...result, runId: (turn as { runId: string }).runId };
+    const started = turn as { runId: string; sessionId: string } | null;
+    if (started && !result.runId) result = { ...result, runId: started.runId };
+    // A limit that ended the turn still says where it was (§136).
+    if (started && !result.conversation) {
+      result = { ...result, conversation: { sessionId: started.sessionId, messageId: null } };
+    }
     return result;
   }
 
@@ -1131,6 +1185,13 @@ export class WorkflowEngine {
       output: {
         ...(result.ok || result.route === 'failure' ? { value: result.output } : {}),
         route: state.cancelled || result.stop ? null : result.route,
+        // Where an agent step talked, and its reply (§136): `WorkflowStep.session_id`/`message_id`.
+        ...(result.conversation
+          ? {
+              session_id: result.conversation.sessionId,
+              message_id: result.conversation.messageId,
+            }
+          : {}),
       },
       error: result.error,
       runId: result.runId ?? null,
@@ -1216,6 +1277,51 @@ export class WorkflowEngine {
     else this.log.warn(fields, 'workflow send failed');
   }
 
+  /**
+   * A reused conversation was missing and one was made for the turn (§136). A step that names
+   * it by a plain id is pointed at the new one, so every later run talks there (as a "Send
+   * message" step is when its conversation was deleted, §124); one whose id is a template is
+   * not — the next run's values decide again. Either way the run owner's inbox says so.
+   */
+  private madeConversation(
+    service: SchedulesService,
+    run: WorkflowRunRow,
+    scope: RunScope,
+    node: WorkflowNode,
+    written: string,
+    asked: TurnConversation,
+    turn: AgentTurnResult,
+  ): void {
+    const plain = !isTemplate(written);
+    const moved =
+      plain && service.repointAgentConversation(run.workflowId, node.id, written, turn.sessionId);
+    const name = node.title || node.id;
+    const missing = asked.sessionId
+      ? `The conversation ${asked.sessionId} was not found`
+      : 'No conversation was named';
+    const body = moved
+      ? `${missing}, so a new one, "${turn.title ?? asked.title}" (${turn.sessionId}), was made. The step now talks there on every run.`
+      : `${missing}, so a new one, "${turn.title ?? asked.title}" (${turn.sessionId}), was made for this run.`;
+    this.log.info(
+      {
+        workflow_id: run.workflowId,
+        workflow_run_id: run.id,
+        node_id: node.id,
+        profile: scope.profile,
+        from: asked.sessionId || null,
+        session_id: turn.sessionId,
+        repointed: moved,
+      },
+      'workflow conversation made',
+    );
+    if (!this.ports.notice) return;
+    try {
+      this.ports.notice(scope, { title: `${name}: a new conversation`, body });
+    } catch (error) {
+      this.log.warn({ err: error, workflowRunId: run.id }, 'workflow: conversation notice failed');
+    }
+  }
+
   private async perform(
     service: SchedulesService,
     run: WorkflowRunRow,
@@ -1269,26 +1375,48 @@ export class WorkflowEngine {
         return succeed(text);
       }
       case 'agent': {
-        if (!node.agent_id) return fail('this step names no agent');
+        const reuse = reuseOf(node);
+        if (!node.agent_id && !reuse) return fail('this step names no agent');
         if (!rendered.trim()) return fail('this step has no prompt for the agent');
         if (!this.ports.agentTurn) return fail('this hub cannot run an agent');
+        // One existing conversation for every run (§136): its id and a made one's title are
+        // templates, rendered with the run's values like the prompt.
+        let conversation: TurnConversation | null = null;
+        if (reuse) {
+          const sessionId = cleanConversationId(render(reuse.sessionId, ctx));
+          if (!sessionId && !reuse.createIfMissing) {
+            return fail(`the conversation id "${reuse.sessionId}" gave nothing for this run`);
+          }
+          conversation = {
+            sessionId,
+            createIfMissing: reuse.createIfMissing,
+            title: render(reuse.title, ctx).trim() || node.title || node.id,
+            maxWaitMs: this.ports.conversationWaitMs ?? CONVERSATION_WAIT_MS,
+          };
+        }
         const turn = await this.ports.agentTurn(
           scope,
           {
-            agentId: node.agent_id,
+            agentId: node.agent_id ?? null,
             prompt: rendered,
             title: node.title || node.id,
             model: node.model ?? null,
             provider: node.provider ?? null,
+            ...(conversation ? { conversation, workflowId: run.workflowId } : {}),
           },
           control,
         );
+        if (reuse && conversation && turn.created) {
+          this.madeConversation(service, run, scope, node, reuse.sessionId, conversation, turn);
+        }
+        const where = { sessionId: turn.sessionId, messageId: turn.messageId ?? null };
         return turn.status === 'succeeded'
-          ? { ...succeed(turn.output), runId: turn.runId }
+          ? { ...succeed(turn.output), runId: turn.runId, conversation: where }
           : {
               ...fail(turn.error ?? `the agent's run ended ${turn.status}`),
               output: turn.output,
               runId: turn.runId,
+              conversation: where,
             };
       }
       default:
@@ -1308,7 +1436,8 @@ export function stepOf(step: NodeRunRow): Record<string, unknown> {
     node_id: step.nodeKey,
     attempt: step.attempt,
     status: step.status,
-    session_id: null,
+    session_id: storedId(step, 'session_id'),
+    message_id: storedId(step, 'message_id'),
     run_id: step.runId,
     approval_id: step.approvalId,
     output: outputText(step),
@@ -1316,6 +1445,28 @@ export function stepOf(step: NodeRunRow): Record<string, unknown> {
     error: step.error,
     started_at: step.startedAt?.toISOString() ?? null,
     finished_at: step.finishedAt?.toISOString() ?? null,
+  };
+}
+
+/** An id an agent step wrote down with its output (§136); `null` for others and older rows. */
+function storedId(step: NodeRunRow, field: 'session_id' | 'message_id'): string | null {
+  const value = (step.output as Record<string, unknown> | null)?.[field];
+  return typeof value === 'string' ? value : null;
+}
+
+/**
+ * What a later step may read of an agent step besides its `output` (§136):
+ * `{{steps.<id>.conversation_id}}` (also `session_id`), `message_id`, `run_id` and `status`.
+ */
+function agentFields(node: WorkflowNode, result: StepResult): Record<string, unknown> {
+  if (node.kind !== 'agent') return {};
+  const conversationId = result.conversation?.sessionId ?? null;
+  return {
+    conversation_id: conversationId,
+    session_id: conversationId,
+    message_id: result.conversation?.messageId ?? null,
+    run_id: result.runId ?? null,
+    status: result.ok ? 'succeeded' : 'failed',
   };
 }
 
