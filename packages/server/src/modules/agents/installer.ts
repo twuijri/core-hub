@@ -23,7 +23,7 @@
  * download`, DECISIONS §106) goes through `download-install.ts`: the file for this platform,
  * refused unless its SHA-256 is the pinned one, only its executable unpacked.
  */
-import { existsSync, readdirSync, rmSync } from 'node:fs';
+import { accessSync, constants, existsSync, readFileSync, readdirSync, rmSync } from 'node:fs';
 import path from 'node:path';
 import { runCommand, whichSync, type HostEnvironment } from './adapters/host.js';
 import {
@@ -259,15 +259,19 @@ export function createNpmInstaller(options: NpmInstallerOptions): AgentInstaller
     },
 
     async health(entry, check = {}) {
-      if (entry.health.kind !== 'command') {
+      if (entry.health.kind === 'http') {
         // An `http` check belongs to the adapter that owns the endpoint (Hermes).
         return { ok: false, version: null, error: 'this entry is checked by its adapter' };
       }
-      // The protocol binary must be there to be driven at all; the check itself may ask
-      // the CLI it drives (`HealthCheck.binary`).
-      if (!binaryIn(entry)) {
+      // The protocol binary must be there, and executable, to be driven at all.
+      const protocol = binaryIn(entry);
+      if (!protocol || !executable(protocol)) {
         return { ok: false, version: null, error: `${entry.binary} is not in the agent directory` };
       }
+      // What npm installed: the version the person gets, whatever the program prints.
+      const installed = installedVersion(options.dataDir, entry);
+      if (entry.health.kind === 'installed') return { ok: true, version: installed, error: null };
+      // The check itself may ask the CLI the bridge drives (`HealthCheck.binary`).
       const checked = entry.health.binary ?? entry.binary;
       const executablePath = binaryIn(entry, checked);
       if (!executablePath) {
@@ -278,13 +282,58 @@ export function createNpmInstaller(options: NpmInstallerOptions): AgentInstaller
         // Asked, not used: no update, prompt or telemetry on the way to a version line.
         ...(options.host.inherited ? { env: { ...options.host.inherited, ...QUIET_CLI_ENV } } : {}),
       });
-      return {
-        ok: result.ok,
-        version: versionFrom(`${result.stdout}${result.stderr}`),
-        error: result.ok ? null : (result.stderr || result.error || 'health check failed').trim(),
-      };
+      const printed = versionFrom(`${result.stdout}${result.stderr}`);
+      if (result.ok) return { ok: true, version: installed ?? printed, error: null };
+      // Could not even start: missing interpreter, broken link. That install does not work.
+      if (result.unstartable) {
+        return {
+          ok: false,
+          version: installed,
+          error: (result.stderr || result.error || 'health check failed').trim(),
+        };
+      }
+      // It ran and refused the flag, or served its protocol until the deadline: a bridge
+      // without `--version` (codex-acp, claude-code-acp). Installed, with npm's version.
+      return { ok: true, version: installed ?? printed, error: null };
     },
   };
+}
+
+/** Whether a file may be run (a link is followed). */
+function executable(file: string): boolean {
+  try {
+    accessSync(file, constants.X_OK);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * The version npm installed of an npm entry's own package, from its `package.json` under the
+ * agent's prefix (`lib/node_modules/<package>` on Linux and macOS, `node_modules/<package>` on
+ * Windows); `null` for a download, or when it cannot be read.
+ */
+export function installedVersion(dataDir: string, entry: CatalogEntry): string | null {
+  if (entry.install.kind !== 'npm') return null;
+  const prefix = agentPrefix(dataDir, entry.id);
+  const segments = entry.install.package.split('/');
+  for (const base of [
+    path.join(prefix, 'lib', 'node_modules'),
+    path.join(prefix, 'node_modules'),
+  ]) {
+    try {
+      const parsed = JSON.parse(
+        readFileSync(path.join(base, ...segments, 'package.json'), 'utf8'),
+      ) as { version?: unknown };
+      if (typeof parsed.version === 'string' && parsed.version.trim() !== '') {
+        return parsed.version.trim();
+      }
+    } catch {
+      // Not in this layout.
+    }
+  }
+  return null;
 }
 
 /** Kept local so the installer does not depend on the adapters' parsing helper. */

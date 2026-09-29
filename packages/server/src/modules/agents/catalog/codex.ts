@@ -14,7 +14,8 @@ export const codex: CatalogEntry = {
   install: { kind: 'npm', package: '@zed-industries/codex-acp', version: '0.16.0' },
   // Codex talks to OpenAI directly; `OPENAI_BASE_URL` stays the person's business.
   credentials: { openai: 'OPENAI_API_KEY' },
-  health: { kind: 'command', args: ['--version'] },
+  // The bridge has no version flag (it serves ACP, or exits 2): npm's package says (#226).
+  health: { kind: 'installed' },
   capabilities: ['streaming', 'tools', 'approvals', 'mcp', 'config_files'],
   sections: ['mcp', 'settings'],
   // codex-acp 0.16 sends no report of Codex's `spawn_agent` delegations (§56).

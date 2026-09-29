@@ -88,10 +88,26 @@ export interface AgentSignInRecipe {
   args: string[];
 }
 
-/** How the hub decides whether an installed agent actually works. */
+/**
+ * How the hub decides whether an installed agent actually works, and reads its version.
+ *
+ * An npm install's version is always its package's `package.json` (what npm installed), never
+ * only what a program prints. Many ACP bridges have no `--version` at all: `codex-acp` exits 2
+ * ("unexpected argument '--version'"), `claude-code-acp` ignores it and serves ACP on stdin. So
+ * a `command` check that runs and says no — any exit code, a deadline — does not make an
+ * installed agent an error; only a program that cannot start (missing, not executable, exit
+ * 126/127: its interpreter is gone) does.
+ */
 export type HealthCheck =
   | {
-      /** Run the binary with these arguments and expect exit 0. */
+      /**
+       * Nothing is run: the protocol binary is in the agent's own `bin` directory and
+       * executable, and the version is its npm package's. For a bridge with no version flag.
+       */
+      kind: 'installed';
+    }
+  | {
+      /** Run the binary with these arguments; a version it prints is read, if any. */
       kind: 'command';
       args: string[];
       /**

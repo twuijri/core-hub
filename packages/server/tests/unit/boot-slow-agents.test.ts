@@ -8,7 +8,9 @@
  * installed agent whose check hangs, one that answers only once its stdin is closed, hundreds
  * of conversations, and workflow runs a restart cut short (one of them waiting on a
  * conversation with a turn going on). The hub must mount and answer `/health` at once, and the
- * agents are still checked — after it is ready, each bounded, the hung one marked failed.
+ * agents are still checked — after it is ready, each bounded. (Since the same day's codex-acp
+ * report, a check that runs and says no, or is cut at its deadline, no longer marks an installed
+ * agent failed: `HealthCheck` in `catalog/types.ts`.)
  */
 import { chmodSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -65,6 +67,13 @@ function agentBinary(dataDir: string, id: string, binary: string, body: string):
   mkdirSync(bin, { recursive: true });
   writeFileSync(path.join(bin, binary), `#!/bin/sh\n${body}\n`);
   chmodSync(path.join(bin, binary), 0o755);
+}
+
+/** The package's own `package.json`, where npm puts it under the agent's prefix. */
+function agentPackage(dataDir: string, id: string, name: string, version: string): void {
+  const dir = path.join(dataDir, 'agents', id, 'lib', 'node_modules', ...name.split('/'));
+  mkdirSync(dir, { recursive: true });
+  writeFileSync(path.join(dir, 'package.json'), JSON.stringify({ name, version }));
 }
 
 /** Many conversations, and workflow runs a restart cut short, as the owner's volume had. */
@@ -251,10 +260,18 @@ describe.skipIf(process.platform === 'win32')('a hub booting on a full volume', 
     await first.app.close();
     apps.splice(apps.indexOf(first.app), 1);
     seed(file);
-    // Claude Code's health check hangs (as the owner's did); Codex's bridge reads its stdin to
-    // the end before it answers, the way `claude-code-acp` serves stdin.
+    // Gemini's version check hangs; Codex's bridge reads its stdin to the end and then refuses
+    // `--version` (as codex-acp does, exit 2); Claude Code's bridge would serve ACP forever.
+    agentBinary(dataDir, 'gemini-cli', 'gemini', 'exec sleep 600');
+    agentBinary(
+      dataDir,
+      'codex',
+      'codex-acp',
+      'cat >/dev/null\necho "error: unexpected argument \'--version\' found" >&2\nexit 2',
+    );
     agentBinary(dataDir, 'claude-code', 'claude-code-acp', 'exec sleep 600');
-    agentBinary(dataDir, 'codex', 'codex-acp', 'cat >/dev/null\necho "codex-acp 0.9.9"');
+    agentPackage(dataDir, 'gemini-cli', '@google/gemini-cli', '0.60.0');
+    agentPackage(dataDir, 'codex', '@zed-industries/codex-acp', '0.16.0');
 
     const { app, ms } = await boot(dataDir);
     // Mounting ran no agent CLI; getting ready waits at most a moment for their checks.
@@ -262,14 +279,24 @@ describe.skipIf(process.platform === 'win32')('a hub booting on a full volume', 
     const health = await app.inject({ method: 'GET', url: '/api/v1/health' });
     expect(health.statusCode).toBe(200);
 
-    // The checks go on after the hub is ready, and each one ends.
-    let claude = agentRow(file, 'claude-code');
-    for (let i = 0; i < 100 && claude.install_state !== 'failed'; i++) {
+    // The checks go on after the hub is ready, and each one ends: the one that hung is cut at
+    // its deadline, and none of them is an error — the programs are there, npm says which
+    // version, and a bridge without `--version` is not a broken install.
+    let gemini = agentRow(file, 'gemini-cli');
+    for (let i = 0; i < 100 && gemini.install_state !== 'installed'; i++) {
       await new Promise((resolve) => setTimeout(resolve, 50));
-      claude = agentRow(file, 'claude-code');
+      gemini = agentRow(file, 'gemini-cli');
     }
-    expect(claude.install_state).toBe('failed');
-    expect(claude.last_error).toMatch(/did not finish within 0\.3 s/);
-    expect(agentRow(file, 'codex')).toMatchObject({ install_state: 'installed', version: '0.9.9' });
+    expect(gemini).toMatchObject({
+      install_state: 'installed',
+      version: '0.60.0',
+      last_error: null,
+    });
+    expect(agentRow(file, 'codex')).toMatchObject({
+      install_state: 'installed',
+      version: '0.16.0',
+      last_error: null,
+    });
+    expect(agentRow(file, 'claude-code')).toMatchObject({ install_state: 'installed' });
   }, 60_000);
 });

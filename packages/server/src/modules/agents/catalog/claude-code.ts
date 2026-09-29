@@ -14,7 +14,8 @@ export const claudeCode: CatalogEntry = {
   install: { kind: 'npm', package: '@zed-industries/claude-code-acp', version: '0.16.2' },
   // Claude Code reads the Anthropic key from the standard variable.
   credentials: { anthropic: 'ANTHROPIC_API_KEY' },
-  health: { kind: 'command', args: ['--version'] },
+  // The bridge has no version flag (it serves ACP, or exits 2): npm's package says (#226).
+  health: { kind: 'installed' },
   capabilities: [
     'streaming',
     'tools',

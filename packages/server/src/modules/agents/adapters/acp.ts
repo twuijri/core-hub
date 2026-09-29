@@ -544,7 +544,11 @@ export function createAcpAdapter(options: AcpAdapterOptions): AgentAdapter {
       for (const entry of catalog) {
         const executablePath = whichSync(entry.binary, host);
         if (!executablePath) continue;
-        const probe = await runCommand([executablePath, ...entry.versionArgs]);
+        // A bridge with no version flag is not asked (`HealthCheck` `installed`).
+        const probe =
+          entry.health.kind === 'installed'
+            ? { ok: true, stdout: '', stderr: '' }
+            : await runCommand([executablePath, ...entry.versionArgs]);
         found.push({
           slug: entry.id,
           name: entry.name,
@@ -573,7 +577,12 @@ export function createAcpAdapter(options: AcpAdapterOptions): AgentAdapter {
         };
       }
       const entry = catalog.find((candidate) => candidate.id === target.slug);
-      const result = await runCommand([executablePath, ...(entry?.versionArgs ?? ['--version'])]);
+      // A bridge with no version flag is not asked; one that refuses the flag is still
+      // installed — only a program that cannot start is an error (`HealthCheck`).
+      const result =
+        entry?.health.kind === 'installed'
+          ? { ok: true, stdout: '', stderr: '', error: null, unstartable: false }
+          : await runCommand([executablePath, ...(entry?.versionArgs ?? ['--version'])]);
       return {
         installed: true,
         source: 'user_cli',
@@ -582,7 +591,7 @@ export function createAcpAdapter(options: AcpAdapterOptions): AgentAdapter {
         // An ACP agent is a process the hub starts per session: there is no long-lived
         // runtime to report, which is exactly what `not_applicable` means.
         runtime: { state: 'not_applicable', url: null, error: null },
-        error: result.ok ? null : result.error,
+        error: result.ok || !result.unstartable ? null : result.error,
       };
     },
 
