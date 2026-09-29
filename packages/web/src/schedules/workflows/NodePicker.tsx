@@ -15,7 +15,7 @@ import {
   IconNotify,
   IconPlay,
   IconScheduleClock,
-  IconSend,
+  IconSendMessage,
   IconWebhook,
 } from '../../ui/icons.js';
 
@@ -47,7 +47,7 @@ const STEP_ICON: Record<PickedStep, ReactNode> = {
   condition: <IconCondition size={18} />,
   delay: <IconDelay size={18} />,
   approval: <IconApproval size={18} />,
-  send: <IconSend size={18} />,
+  send: <IconSendMessage size={18} />,
   notify: <IconNotify size={18} />,
 };
 

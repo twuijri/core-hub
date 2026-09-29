@@ -13,6 +13,7 @@ import { createHmac } from 'node:crypto';
 import { mkdirSync } from 'node:fs';
 import path from 'node:path';
 import { expect, test, type Page } from '@playwright/test';
+import { addStep, closeDialog, connect } from './workflow-canvas.js';
 
 const PASSWORD = 'e2e-owner-password';
 const SECRET = 'e2e-clickup-webhook-secret';
@@ -54,7 +55,7 @@ test('33. a ClickUp trigger starts the workflow; a test event, a filtered event 
   await page.getByTestId('workflow-name').fill('من ClickUp إلى إشعار');
 
   // The filter: a condition with one rule, the trigger's event must be taskCreated.
-  await page.getByTestId('workflow-add-condition').click();
+  await addStep(page, 'condition');
   await page.getByTestId('workflow-condition-rules').click();
   const rules = page.getByTestId('workflow-rules');
   await rules.getByTestId('workflow-rule-add').click();
@@ -68,26 +69,19 @@ test('33. a ClickUp trigger starts the workflow; a test event, a filtered event 
   await expect(rules.getByTestId('workflow-rule-path')).toHaveValue('trigger.event');
 
   // What follows a yes: a notice that reads the task.
-  await page.getByTestId('workflow-add-notify').click();
+  await addStep(page, 'notify');
   await page.getByTestId('workflow-step-text').fill('مهمة جديدة {{trigger.task_id}}');
-  await page
-    .getByTestId('workflow-canvas')
-    .locator('[data-testid="workflow-node"][data-node-id="condition_1"]')
-    .focus();
-  await page.getByTestId('workflow-connect-target').click();
-  await page.getByRole('option', { name: 'إشعار', exact: true }).click();
-  await page.getByTestId('workflow-connect').click();
+  await connect(page, 'condition_1', 'إشعار');
   await expect(page.getByTestId('workflow-edge')).toHaveCount(1);
   await expect(page.getByTestId('workflow-check')).toHaveAttribute('data-valid', 'true');
 
   await page.getByTestId('workflow-save').click();
   await expect(editor).not.toHaveAttribute('data-workflow-id', 'new');
 
-  // Nothing selected: the side panel holds the triggers.
-  await page.getByTestId('workflow-canvas').press('Escape');
-  const triggers = page.getByTestId('workflow-triggers');
-  await triggers.getByTestId('workflow-trigger-add').click();
-  const card = triggers.getByTestId('workflow-trigger');
+  // The trigger is added on the canvas, like a step, and opens in its own dialog.
+  await page.getByTestId('workflow-add-trigger').click();
+  await page.getByTestId('workflow-pick-trigger-clickup').click();
+  const card = page.getByTestId('workflow-trigger-dialog').getByTestId('workflow-trigger');
   await expect(card).toHaveAttribute('data-preset', 'clickup');
   const url = await card.getByTestId('workflow-trigger-url').inputValue();
   expect(url).toMatch(/\/api\/v1\/workflow-hooks\/[0-9A-Z]{26}$/);
@@ -144,6 +138,16 @@ test('33. a ClickUp trigger starts the workflow; a test event, a filtered event 
   await expect(quiet).toHaveCount(1, { timeout: 20_000 });
   await expect(quiet).toContainText('task e2e-task-7');
   await shot(page, 'workflow-triggers-ar-light');
+  // On the canvas: the trigger before the condition, with a line to it.
+  await closeDialog(page);
+  const node = page.getByTestId('workflow-trigger-node').filter({ hasText: 'ClickUp' });
+  await expect(node).toHaveAttribute('data-trigger-kind', 'webhook');
+  await expect(
+    page.locator('[data-testid="workflow-trigger-edge"][data-to="condition_1"]'),
+  ).toHaveCount(2);
+  await shot(page, 'workflow-trigger-node-ar-light');
+  await node.focus();
+  await page.keyboard.press('Enter');
 
   // The filtered run opens from its line: succeeded, filtered, about that task.
   await quiet.getByTestId('workflow-delivery-run').click();

@@ -156,6 +156,8 @@ export const IconApproval = lucide('hand');
 export const IconNotify = lucide('bell');
 export const IconSave = lucide('save');
 export const IconTest = lucide('flask-conical');
+/** A "Send message" step: a paper plane, not the composer's send arrow. */
+export const IconSendMessage = lucide('send');
 
 /**
  * One picture per destination of docs/clients/navigation.json — the same Lucide name the iOS

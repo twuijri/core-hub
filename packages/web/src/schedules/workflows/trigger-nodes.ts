@@ -21,6 +21,8 @@ export interface CanvasTrigger {
   title: string;
   /** One line under the title: the preset, when it runs, the input to send. */
   detail: string;
+  /** The detail is code read left to right (a cron expression), whatever the page's language. */
+  detailLtr?: boolean;
   /** Made when the workflow is first saved. */
   pending: boolean;
   /** Off: it starts nothing until switched on again. */

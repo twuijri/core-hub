@@ -45,7 +45,7 @@ import {
   IconPlay,
   IconPlus,
   IconScheduleClock,
-  IconSend,
+  IconSendMessage,
   IconTrigger,
   IconWebhook,
 } from '../../ui/icons.js';
@@ -684,7 +684,10 @@ export function WorkflowCanvas({
                     <span className="truncate text-sm font-medium" dir="auto">
                       {trigger.title}
                     </span>
-                    <span className="truncate text-xs text-muted" dir="auto">
+                    <span
+                      className="max-w-full self-start truncate text-xs text-muted"
+                      dir={trigger.detailLtr && !trigger.pending ? 'ltr' : 'auto'}
+                    >
                       {trigger.pending ? t('workflows.nodes.pending') : trigger.detail}
                     </span>
                   </span>
@@ -779,7 +782,7 @@ export function WorkflowCanvas({
                     className={`grid size-9 shrink-0 place-items-center rounded-md ${KIND_TONE[node.kind]}`}
                     aria-hidden
                   >
-                    {node.send ? <IconSend size={18} /> : KIND_ICON[node.kind]}
+                    {node.send ? <IconSendMessage size={18} /> : KIND_ICON[node.kind]}
                   </span>
                   <span className="flex min-w-0 flex-1 flex-col gap-0.5">
                     <span className="flex items-center gap-1.5 text-[11px] font-medium uppercase tracking-wide text-muted">

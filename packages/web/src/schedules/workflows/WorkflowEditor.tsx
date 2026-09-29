@@ -449,6 +449,7 @@ export default function WorkflowEditor({
         kind: 'schedule',
         title: row.name,
         detail: scheduleWhen(row.trigger, t, (at) => when(at)),
+        detailLtr: row.trigger.kind === 'cron',
         pending: false,
         enabled: row.enabled,
       });
@@ -462,6 +463,7 @@ export default function WorkflowEditor({
             ? t(`workflows.triggers.presets.${each.preset}`)
             : t('workflows.nodes.trigger_kinds.schedule'),
         detail: each.kind === 'schedule' ? each.schedule.value : '',
+        detailLtr: each.kind === 'schedule' && each.schedule.mode === 'cron',
         pending: true,
         enabled: true,
       });

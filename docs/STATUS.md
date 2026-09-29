@@ -84,7 +84,7 @@ its approval.
   question in its room; a **category** takes a colour; the **context meter** splits the window by
   category (Hermes's `session.context_breakdown`, only while a conversation is open on the hub);
   a run still going shows its **"files changed" card so far** under the live reply; a
-  **workflow's limits** sit in the editor's side panel and Run has a "run with limits" for one
+  **workflow's limits** sit in the editor's settings (the gear by its name) and Run has a "run with limits" for one
   run; a member whose remembered profile was taken opens their first granted one — and since
   2026-09-27 **Settings → Linked hubs** (owners and admins; ADR
   0026): make an invite, use one, approve, rename, switch off, limit questions, unlink after a
@@ -177,7 +177,17 @@ its approval.
   the hub's check shown live on the steps it names; Run and Run from this step; and a run read
   on the same canvas — each step's state, its output, the connections taken, the answers on a
   step that waits, and Run again from this step. The canvas runs the way the page reads:
-  right-to-left in Arabic. Not offered because the engine has none: a notice's recipients (it
+  right-to-left in Arabic. Since 2026-09-29 (owner's request, after testers got lost) **laid out
+  like n8n**: the workflow's triggers — "Run by hand", each webhook trigger, each schedule that
+  runs it — are drawn as nodes before the steps a run starts at (the engine's own rule, so no
+  contract change), an empty workflow shows one big "Add a trigger", a "+" after a step (or a
+  connection dropped on empty canvas) adds the next step from a searchable list, and a step, a
+  connection or a trigger opens in its own dialog (the step's form beside what it reads and what it
+  said on the last run; a webhook's address, secret, events, test event and deliveries; a
+  schedule's time and on/off); Save sits by the name with an "Unsaved changes" mark, Ctrl/Cmd+S
+  saves, and leaving with unsaved work — a sidebar link, Back, closing the tab — asks Save / Discard
+  / Stay (the browser's own Back is not held; the work left behind is offered back when the workflow
+  is opened again). Triggers added before the first save are made right after it. Not offered because the engine has none: a notice's recipients (it
   reaches whoever runs it), an approval's timeout, attachments on a step; and since 2026-09-25 a «جداول شائعة» / "Common schedules" menu fills in
   the cron or the interval and the form shows the next three times the hub would run it, in
   the schedule's timezone, or why the hub cannot read it; and a workflow run's view shows the

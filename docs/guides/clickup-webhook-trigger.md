@@ -35,8 +35,9 @@ Save the workflow.
 
 ## 2. Add a ClickUp trigger
 
-With nothing selected on the canvas, the side panel shows **Triggers**. Choose **ClickUp** and
-**Add trigger**. The trigger shows its **Address**, for example:
+On the canvas press **Add trigger** (the lightning button in its corner — or the big **Add a
+trigger** of an empty workflow) and choose **ClickUp**. The trigger is drawn as a node before the
+first steps and opens in its own dialog, which shows its **Address**, for example:
 
 ```
 https://hub.example.com/api/v1/workflow-hooks/01J8QK3ZR2W7M5N4P6T8V9X0TG

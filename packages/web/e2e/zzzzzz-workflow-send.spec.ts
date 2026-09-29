@@ -12,6 +12,7 @@
 import { mkdirSync } from 'node:fs';
 import path from 'node:path';
 import { expect, test, type Page } from '@playwright/test';
+import { addStep, closeDialog, openStep, runByHand } from './workflow-canvas.js';
 
 const PASSWORD = 'e2e-owner-password';
 const GROUP = '-1009876543210';
@@ -62,7 +63,7 @@ test('34. a Send message step sends to Telegram and posts in a conversation', as
   await page.getByTestId('workflow-new').click();
   const editor = page.getByTestId('workflow-editor');
   await page.getByTestId('workflow-name').fill('تقرير إلى تيليجرام');
-  await page.getByTestId('workflow-add-send').click();
+  await addStep(page, 'send');
   await page.getByTestId('workflow-step-text').fill('التقرير: {{input}}');
   await page.getByTestId('workflow-send-telegram').click();
   await page.getByTestId('workflow-send-chat').fill('-100404');
@@ -108,10 +109,10 @@ test('34. a Send message step sends to Telegram and posts in a conversation', as
   await expect(page.getByTestId('workflow-check')).toHaveAttribute('data-valid', 'true');
   await shot(page, 'workflow-send-ar-light');
 
+  await closeDialog(page);
   await page.getByTestId('workflow-save').click();
   await expect(editor).not.toHaveAttribute('data-workflow-id', 'new');
-  await page.getByTestId('workflow-run-input').fill('كل المهام تمت');
-  await page.getByTestId('workflow-run').click();
+  await runByHand(page, 'كل المهام تمت');
   const run = page.getByTestId('workflow-run-view');
   await expect(run.getByTestId('workflow-run-state')).toContainText('تم', { timeout: 20_000 });
   expect((await sentToTelegram(page)).slice(before).map((m) => m.text)).toEqual([
@@ -121,7 +122,7 @@ test('34. a Send message step sends to Telegram and posts in a conversation', as
 
   // Back to the drawing: the test takes its value from that run.
   await page.getByTestId('workflow-modes').getByRole('tab', { name: 'تحرير' }).click();
-  await page.getByTestId('workflow-node').first().click();
+  await openStep(page, 'notify_1');
   await expect(page.getByTestId('workflow-send-value-input')).toHaveValue('');
   await expect(send).toBeDisabled();
   await page.getByTestId('workflow-send-last-run').click();

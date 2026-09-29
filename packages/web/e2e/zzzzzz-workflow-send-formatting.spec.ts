@@ -11,6 +11,7 @@
 import { mkdirSync } from 'node:fs';
 import path from 'node:path';
 import { expect, test, type Page } from '@playwright/test';
+import { addStep, closeDialog, openStep, runByHand } from './workflow-canvas.js';
 
 const PASSWORD = 'e2e-owner-password';
 const CHAT = '-1005550001111';
@@ -64,7 +65,7 @@ test('34c. Telegram formatting: the selector, the preview label, and the test se
   await page.getByTestId('workflow-new').click();
   const editor = page.getByTestId('workflow-editor');
   await page.getByTestId('workflow-name').fill('تنسيق تيليجرام');
-  await page.getByTestId('workflow-add-send').click();
+  await addStep(page, 'send');
   const words = page.getByTestId('workflow-step-text');
   await words.fill('<b>اختبار</b>');
   await page.getByTestId('workflow-send-telegram').click();
@@ -139,10 +140,10 @@ test('34c. Telegram formatting: the selector, the preview label, and the test se
   await page.getByTestId('workflow-send-formatting-html').click();
   await words.fill('<b>{{input}}</b> تم');
   await expect(page.getByTestId('workflow-check')).toHaveAttribute('data-valid', 'true');
+  await closeDialog(page);
   await page.getByTestId('workflow-save').click();
   await expect(editor).not.toHaveAttribute('data-workflow-id', 'new');
-  await page.getByTestId('workflow-run-input').fill('الإصدار');
-  await page.getByTestId('workflow-run').click();
+  await runByHand(page, 'الإصدار');
   await expect(
     page.getByTestId('workflow-run-view').getByTestId('workflow-run-state'),
   ).toContainText('تم', { timeout: 20_000 });
@@ -157,7 +158,7 @@ test('34c. Telegram formatting: the selector, the preview label, and the test se
   // Opened again: the step still says HTML.
   await page.reload();
   await page.getByTestId('workflow-modes').getByRole('tab', { name: 'تحرير' }).click();
-  await page.getByTestId('workflow-canvas').locator('[data-node-id="notify_1"]').first().click();
+  await openStep(page, 'notify_1');
   await expect(page.getByTestId('workflow-send-formatting-label')).toHaveText(
     'تنسيق تيليجرام: HTML',
   );
