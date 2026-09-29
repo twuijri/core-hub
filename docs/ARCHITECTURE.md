@@ -36,7 +36,7 @@ surface. A module owns its tables, its routes, its events and its tests.
 | `tasks` | Tasks (a kanban-style section) and their projects, assignment to agents, transitions, worktrees per task | clawboard, Vibe Kanban, Multica, Claw-Kanban |
 | `schedules` | cron jobs, workflows (DAG of runs), run history, approvals inside runs | Multica standups, Proliferate workflows |
 | `knowledge` | journal, notes/memory browser, files/attachments, search | clawboard |
-| `models` | providers, keys (secrets), model catalogue, fallbacks, STT/TTS providers | Ekko idea |
+| `models` | providers, keys (secrets), model catalogue, fallbacks, STT/TTS providers, the model gateway that lets every coding agent reach them with a session token (ADR 0029: its own loopback port, CLIProxyAPI behind it) | Ekko idea |
 | `devices` | phones/computers linked to the hub, capabilities they expose, media relay | our device:// rule |
 | `notify` | push/APNs/FCM, in-app notices, webhooks out | — |
 | `updates` | release channels for the clients, in-app update source | our test track |
