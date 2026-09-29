@@ -356,6 +356,10 @@
 .ch-dialog-lg {
   inline-size: min(48rem, calc(100vw - 2rem));
 }
+/* A focused editor with room beside its form (the workflow step editor, 2026-09-29). */
+.ch-dialog-xl {
+  inline-size: min(72rem, calc(100vw - 2rem));
+}
 .ch-dialog,
 .ch-sheet {
   max-block-size: calc(100dvh - 3rem);

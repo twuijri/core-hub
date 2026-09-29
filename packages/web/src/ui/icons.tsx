@@ -145,6 +145,17 @@ export const IconTasks = lucide('list-checks');
 export const IconSchedules = lucide('calendar-clock');
 export const IconUnarchive = lucide('archive-restore');
 export const IconRestart = lucide('rotate-cw');
+/** The workflow canvas (2026-09-29): a trigger, and the picture of each kind of step. */
+export const IconTrigger = lucide('zap');
+export const IconPlay = lucide('play');
+export const IconWebhook = lucide('webhook');
+export const IconScheduleClock = lucide('calendar-clock');
+export const IconCondition = lucide('split');
+export const IconDelay = lucide('timer');
+export const IconApproval = lucide('hand');
+export const IconNotify = lucide('bell');
+export const IconSave = lucide('save');
+export const IconTest = lucide('flask-conical');
 
 /**
  * One picture per destination of docs/clients/navigation.json — the same Lucide name the iOS
