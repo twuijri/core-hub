@@ -215,6 +215,17 @@ describe('workflows: an agent step that reuses a conversation (§136)', () => {
           `c=${chat} m=${history[index]!.id} r=${step.run_id as string} s=succeeded`,
         );
       }
+
+      // Run again from the notice: the agent step's ids are still there to read.
+      const rerun = await authed(hub, hub.token, {
+        method: 'POST',
+        url: `/api/v1/workflow-runs/${first.id as string}/rerun`,
+        payload: { from_node_id: 'tell' },
+      });
+      expect(rerun.statusCode, rerun.body).toBe(202);
+      await workflowEngineFor(hub.app).settled();
+      const again = await runOf(hub, (rerun.json() as Json).workflow_run_id as string);
+      expect(stepOf(again, 'tell').output).toBe(stepOf(first, 'tell').output);
     } finally {
       await hub.close();
     }

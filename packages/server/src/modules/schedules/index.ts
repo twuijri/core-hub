@@ -366,7 +366,20 @@ function outputsOf(
   // `stepsOf` is newest first; the first success seen per node is its latest.
   for (const step of steps) {
     if (step.status === 'succeeded' && !(step.nodeKey in out)) {
-      out[step.nodeKey] = { output: (step.output as { value?: unknown } | null)?.value ?? null };
+      const stored = step.output as { value?: unknown; session_id?: unknown } | null;
+      out[step.nodeKey] = {
+        output: stored?.value ?? null,
+        // An agent step's conversation and reply stay readable after a rerun (§136).
+        ...(typeof stored?.session_id === 'string'
+          ? {
+              conversation_id: stored.session_id,
+              session_id: stored.session_id,
+              message_id: (step.output as { message_id?: unknown }).message_id ?? null,
+              run_id: step.runId,
+              status: 'succeeded',
+            }
+          : {}),
+      };
     }
   }
   return out;
