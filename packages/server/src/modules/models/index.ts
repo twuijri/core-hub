@@ -136,6 +136,17 @@ export {
 export type { HermesProviderRoute, PropagationState, ResolvedCredential } from './propagation.js';
 export { mergeEnv, parseEnv, quoteValue } from './dotenv.js';
 export { providerAdapter } from './adapters/index.js';
+// The model gateway (ADR 0029).
+export { CliproxySupervisor } from './gateway/cliproxy.js';
+export { cliproxyConfig, upstreamModel, upstreamPrefix } from './gateway/cliproxy-config.js';
+export type { GatewayUpstream } from './gateway/cliproxy-config.js';
+export {
+  GATEWAY_MAIN_MODEL,
+  GATEWAY_SMALL_MODEL,
+  ModelGateway,
+} from './gateway/gateway.js';
+export type { GatewayGrant, GatewaySource, GatewayTarget } from './gateway/gateway.js';
+export { CLIPROXY_VERSION, devCliproxyPath, locateCliproxy } from './gateway/locate.js';
 
 /** Test seams: a scripted `fetch` for the provider adapters, an in-memory key ring. */
 export interface ModelsOverrides {

@@ -2,7 +2,7 @@
   "name": "corehub",
   "version": "1.1.5",
   "private": true,
-  "description": "Core Hub — a self-hosted hub for AI agents. Server first; every client renders one contract.",
+  "description": "Core Hub \u2014 a self-hosted hub for AI agents. Server first; every client renders one contract.",
   "license": "Apache-2.0",
   "type": "module",
   "engines": {
@@ -42,7 +42,8 @@
     "icons:agents": "node scripts/icons/agent-marks-mobile.mjs",
     "graph": "node scripts/graph.mjs",
     "graph:check": "node scripts/graph-check.mjs",
-    "image:sealed-check": "node scripts/image-sealed-check.mjs"
+    "image:sealed-check": "node scripts/image-sealed-check.mjs",
+    "cliproxy:fetch": "node scripts/cliproxy/fetch.mjs"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
