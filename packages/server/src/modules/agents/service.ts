@@ -69,6 +69,14 @@ const NOT_APPLICABLE: RuntimeState = { state: 'not_applicable', url: null, error
 /** Reconciling one catalog entry at boot longer than this is logged with its name. */
 const SLOW_RECONCILE_MS = 500;
 
+/** How long an installed agent's health check may take when the hub checks it at boot. */
+export const BOOT_HEALTH_TIMEOUT_MS = 10_000;
+
+/** An install or update of this process holds the row. */
+function busyInstalling(row: { installState: string }): boolean {
+  return row.installState === 'installing' || row.installState === 'updating';
+}
+
 /** Who asked for an install; only the id and the role matter here. */
 export interface Actor {
   userId: string;
@@ -103,6 +111,8 @@ export interface AgentsServiceOptions {
   catalog?: readonly CatalogEntry[];
   language?: Language;
   now?: () => Date;
+  /** How long each installed agent's health check may take at boot (10 s; tests shorten it). */
+  bootHealthTimeoutMs?: number;
   /**
    * Where `check-update` and the periodic check ask for a newer version
    * (`update-policy.ts`). Absent: the hub knows only the catalog's pins.
@@ -187,32 +197,37 @@ export class AgentsService implements UpdatePolicyStore {
 
   // ------------------------------------------------------------------ boot
 
-  /** Seeds the catalog and reconciles the table against the volume. Once per boot. */
+  /**
+   * Seeds the catalog and reconciles the table against the volume. Once per boot: `seed` while
+   * the hub mounts, `reconcileInstalls` once it is ready (it runs the agents' CLIs).
+   */
   async bootstrap(ownerId: string): Promise<ReconcileReport> {
+    const seeded = this.seed(ownerId);
+    const probed = await this.reconcileInstalls();
+    return { ...probed, interrupted: seeded.interrupted };
+  }
+
+  /**
+   * The catalog's rows, written from the catalog, and the installs a restart cut short settled.
+   * Database work only — no agent CLI runs and nothing is awaited — so the hub can do it while
+   * it mounts, however many agents the volume holds (a slow `--version` once kept the hub
+   * from starting at all).
+   */
+  seed(ownerId: string): ReconcileReport {
     assertCatalogIsWellFormed(this.catalog);
     const report: ReconcileReport = { installed: [], missing: [], interrupted: [] };
     // The harness adapter has no catalog entries yet but must exist as a row so a client
     // can see that the kind is declared (ADR 0002).
     this.adapterRowId('harness', ownerId);
     for (const entry of this.catalog) {
-      const began = performance.now();
       try {
         const row = this.seedEntry(entry, ownerId);
-        const outcome = await this.reconcile(entry, row);
-        if (outcome === 'installed') report.installed.push(entry.id);
-        if (outcome === 'missing') report.missing.push(entry.id);
-        if (outcome === 'interrupted') report.interrupted.push(entry.id);
+        if (this.settleInterrupted(entry, row)) report.interrupted.push(entry.id);
       } catch (error) {
         this.options.log.warn(
           { agent: entry.id, err: error },
-          'agents: could not reconcile a catalog entry',
+          'agents: could not seed a catalog entry',
         );
-      }
-      // A probe runs the agent's CLI (`hermes --version`, a managed agent's health check): a
-      // slow one is named, since the hub waits for it while it mounts.
-      const ms = Math.round(performance.now() - began);
-      if (ms >= SLOW_RECONCILE_MS) {
-        this.options.log.warn({ agent: entry.id, ms }, 'agents: reconciling an agent took long');
       }
     }
     if (report.interrupted.length > 0) {
@@ -220,6 +235,43 @@ export class AgentsService implements UpdatePolicyStore {
         { agents: report.interrupted },
         'agents: installs interrupted by a restart',
       );
+    }
+    return report;
+  }
+
+  /**
+   * Every catalog agent checked against the volume: a bundled one by its adapter's probe
+   * (`hermes --version`, the gateway's `/health`), a managed one by its health check. Each runs
+   * a CLI, so this is done once the hub serves, never while it mounts; an agent whose install
+   * a person started meanwhile is left to that install.
+   */
+  async reconcileInstalls(): Promise<ReconcileReport> {
+    const report: ReconcileReport = { installed: [], missing: [], interrupted: [] };
+    // Side by side: one slow CLI does not hold up the others' checks.
+    const outcomes = await Promise.all(
+      this.catalog.map(async (entry) => {
+        const began = performance.now();
+        let outcome: Awaited<ReturnType<AgentsService['reconcile']>> | null = null;
+        try {
+          const row = this.db.select().from(agents).where(eq(agents.slug, entry.id)).get();
+          if (row && !busyInstalling(row)) outcome = await this.reconcile(entry, row);
+        } catch (error) {
+          this.options.log.warn(
+            { agent: entry.id, err: error },
+            'agents: could not reconcile a catalog entry',
+          );
+        }
+        // A probe runs the agent's CLI: a slow one is named.
+        const ms = Math.round(performance.now() - began);
+        if (ms >= SLOW_RECONCILE_MS) {
+          this.options.log.warn({ agent: entry.id, ms }, 'agents: reconciling an agent took long');
+        }
+        return { id: entry.id, outcome };
+      }),
+    );
+    for (const { id, outcome } of outcomes) {
+      if (outcome === 'installed') report.installed.push(id);
+      if (outcome === 'missing') report.missing.push(id);
     }
     return report;
   }
@@ -1338,6 +1390,25 @@ export class AgentsService implements UpdatePolicyStore {
   }
 
   /**
+   * A row still `installing` or `updating` when the hub starts: nothing is running, so the job
+   * that set it died with the previous process. Whether the files are there decides.
+   */
+  private settleInterrupted(entry: CatalogEntry, row: AgentRow): boolean {
+    if (!busyInstalling(row)) return false;
+    this.db
+      .update(agents)
+      .set({
+        installState: this.options.installer.isPresent(entry) ? 'installed' : 'failed',
+        installJobId: null,
+        lastError: 'the install did not finish before the hub stopped',
+        updatedAt: this.now(),
+      })
+      .where(eq(agents.id, row.id))
+      .run();
+    return true;
+  }
+
+  /**
    * The volume is the truth about what is installed. This runs on every boot so a
    * container restart, a `docker pull` or a half-finished install leaves the table
    * agreeing with the disk.
@@ -1345,41 +1416,34 @@ export class AgentsService implements UpdatePolicyStore {
   private async reconcile(
     entry: CatalogEntry,
     row: AgentRow,
-  ): Promise<'installed' | 'missing' | 'interrupted' | 'unchanged'> {
+  ): Promise<'installed' | 'missing' | 'unchanged'> {
     const at = this.now();
-
-    if (row.installState === 'installing' || row.installState === 'updating') {
-      // Nothing is running: this process just started, so the job that set this state
-      // died with the previous one.
-      this.db
-        .update(agents)
-        .set({
-          installState: this.options.installer.isPresent(entry) ? 'installed' : 'failed',
-          installJobId: null,
-          lastError: 'the install did not finish before the hub stopped',
-          updatedAt: at,
-        })
-        .where(eq(agents.id, row.id))
-        .run();
-      return 'interrupted';
-    }
 
     if (!isManaged(entry)) {
       // Bundled: the adapter's probe decides, because the binary is in the image.
       const probe = await this.options.adapters.byKind(row.adapterKind).probe(this.targetOf(row));
-      this.applyProbe(row, probe);
+      // Read again: an install a person started while the probe ran owns the row now.
+      this.applyProbe(
+        this.db.select().from(agents).where(eq(agents.id, row.id)).get() ?? row,
+        probe,
+      );
       return probe.installed ? 'installed' : 'missing';
     }
 
     if (this.options.installer.isPresent(entry)) {
-      const health = await this.options.installer.health(entry);
+      const health = await this.options.installer.health(entry, {
+        timeoutMs: this.options.bootHealthTimeoutMs ?? BOOT_HEALTH_TIMEOUT_MS,
+      });
+      const now = this.db.select().from(agents).where(eq(agents.id, row.id)).get();
+      if (!now || busyInstalling(now)) return 'unchanged';
       this.db
         .update(agents)
         .set({
           installState: health.ok ? 'installed' : 'failed',
           source: 'managed',
           executablePath: `${this.options.installer.binDirFor(entry.id)}/${entry.binary}`,
-          version: health.version,
+          // A bridge that prints no version (`claude-code-acp`) keeps the one its install read.
+          version: health.version ?? now.version,
           detectedAt: at,
           lastError: health.error,
           updatedAt: at,
