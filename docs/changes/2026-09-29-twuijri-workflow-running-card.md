@@ -64,7 +64,10 @@ $ PLAYWRIGHT_CHANNEL=chrome pnpm exec playwright test e2e/zzzzzzzzzzzzzzzz-workf
 لعنوان المشغّل العام (لا أحد ضغط «شغّل») ← البطاقة `data-frame=running` وشارة «يعمل · انتظار قصير» ونقطة
 الشريط الجانبي، والحركة `task-frame-turn` تصبح `none` مع تقليل الحركة، ثم ترجع «متوقف» وتختفي النقطة.
 اختبار الوحدة يطلق `workflow_run.completed` على المقبس ويتحقق أن البطاقة ترجع بلا إعادة تحميل (يفشل على الكود
-القديم: الصفحة لم تكن تستمع). الحزم الكاملة تعمل على CI عند الدفع.
+القديم: الصفحة لم تكن تستمع).
+
+CI على PR #225 عند `7a9ecac1` (هذا العمل مدموجًا في الدفعة): كل الفحوص نجحت — Lint/typecheck/contracts/client tests/build،
+Web smoke journeys (Playwright against the real hub)، Server unit tests 1–3، Real Hermes (pinned وfloor)، Android، iOS، Desktop، Docker.
 
 ## المخاطر والرجوع
 - الشريط الجانبي يقرأ `GET /workflows?profiles=all` في كل صفحة (فقط حين يظهر مدخل سير العمل) مع استطلاع كل
