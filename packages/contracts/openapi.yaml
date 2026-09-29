@@ -6002,6 +6002,13 @@ paths:
         `platforms` that do not include the hub's own system (`linux`, `macos`, `windows`) is
         left out — Hermes never loads it here — and `enabled` is off for a skill in the
         profile's `skills.disabled` list.
+
+        Claude Code (contract decision §139): the same operations act on its own skills folder,
+        `~/.claude/skills` (`$CLAUDE_CONFIG_DIR/skills`), one set for every profile. Nothing of
+        Hermes's applies there: no `library`, no bundled skills, no `platforms` filter, and a
+        skill switched off has its `SKILL.md` renamed `SKILL.md.off` (Claude Code only loads
+        `SKILL.md`). Any other agent that is not Hermes answers `409 state_invalid`,
+        `skills_are_hermes_only`; the skill library operations stay Hermes's.
       x-rt-events: []
       responses:
         '200':
