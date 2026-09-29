@@ -46,6 +46,7 @@ describe('config', () => {
       'COREHUB_TRUST_PROXY',
       'COREHUB_MODELS_CATALOG_URL',
       'COREHUB_TELEGRAM_API_BASE',
+      'COREHUB_PLUGIN_TIMEOUT_MS',
     ]);
     const picked = pickEnv({
       DATA_DIR: '/x',

@@ -1082,6 +1082,15 @@ until then a run fails with the provider's own message and a named code, never
 silently. Coding agents install on demand from the curated catalog into the
 data volume (ADR 0006).
 
+Since 2026-09-29 **a hub starts whatever its volume holds**: mounting the API no longer runs
+any agent CLI. The installed agents are checked against the volume once the hub is ready — side
+by side, each health check bounded to 10 s, with a closed stdin (an ACP bridge such as
+`claude-code-acp` ignores `--version` and serves stdin; held open it hung for 30 s at every boot
+and restarted the owner's hub in a loop), its process group stopped at the deadline; a check that
+does not end marks that agent `failed` with the reason. The hub waits at most 1 s for them and
+goes on serving; every module's mount time over 1 s and every agent check over 0.5 s is logged
+by name, and Fastify's `pluginTimeout` is 120 s (`COREHUB_PLUGIN_TIMEOUT_MS`, `0` = no limit).
+
 ## Proven against fakes, not yet against the real thing
 - A full turn with a real model reply (needs a provider key on the owner's box).
   The direct path is proven end to end against a scripted provider, in the

@@ -5,12 +5,9 @@
  * Everything here uses argv arrays — no shell string is ever built (AGENTS.md hard rules),
  * so an agent name from the registry cannot become a command injection.
  */
-import { execFile, spawn } from 'node:child_process';
+import { spawn } from 'node:child_process';
 import { accessSync, constants } from 'node:fs';
 import path from 'node:path';
-import { promisify } from 'node:util';
-
-const run = promisify(execFile);
 
 /**
  * Where to look for a binary, and what a spawned agent inherits. Always injected: the
@@ -58,30 +55,86 @@ export interface CommandResult {
   error: string | null;
 }
 
-/** Runs argv with a deadline. Failure is a value, never an exception. */
+/** The most a command's stdout or stderr is kept (bytes); past it the command is stopped. */
+const MAX_COMMAND_OUTPUT = 1024 * 1024;
+
+/**
+ * Runs argv with a deadline. Failure is a value, never an exception.
+ *
+ * The program gets no input: its stdin is closed. An agent's ACP bridge asked for `--version`
+ * may ignore the flag and serve its protocol on stdin instead (`claude-code-acp` does, and
+ * keeps itself alive reading it), and with stdin held open it never ended until the deadline
+ * — at boot, 30 s per agent (the owner's hub of 2026-09-29). With stdin closed such a bridge
+ * reads the end at once and exits. On POSIX the program runs in its own process group, and a
+ * deadline stops the whole group, so a CLI that started helpers leaves none behind.
+ */
 export async function runCommand(
   argv: readonly string[],
   options: { timeoutMs?: number; env?: NodeJS.ProcessEnv; cwd?: string } = {},
 ): Promise<CommandResult> {
   const [command, ...args] = argv;
   if (!command) return { ok: false, stdout: '', stderr: '', error: 'empty command' };
-  try {
-    const { stdout, stderr } = await run(command, args, {
-      timeout: options.timeoutMs ?? 5_000,
-      maxBuffer: 1024 * 1024,
-      ...(options.env ? { env: options.env } : {}),
-      ...(options.cwd ? { cwd: options.cwd } : {}),
-    });
-    return { ok: true, stdout: String(stdout), stderr: String(stderr), error: null };
-  } catch (error) {
-    const failure = error as { stdout?: string; stderr?: string; message?: string };
-    return {
-      ok: false,
-      stdout: String(failure.stdout ?? ''),
-      stderr: String(failure.stderr ?? ''),
-      error: failure.message ?? 'command failed',
+  const timeoutMs = options.timeoutMs ?? 5_000;
+  const group = process.platform !== 'win32';
+  return new Promise((resolve) => {
+    let stdout = '';
+    let stderr = '';
+    let settled = false;
+    let stopped: string | null = null;
+    let child: ReturnType<typeof spawn>;
+    try {
+      child = spawn(command, args, {
+        stdio: ['ignore', 'pipe', 'pipe'],
+        detached: group,
+        windowsHide: true,
+        ...(options.env ? { env: options.env } : {}),
+        ...(options.cwd ? { cwd: options.cwd } : {}),
+      });
+    } catch (error) {
+      resolve({ ok: false, stdout: '', stderr: '', error: (error as Error).message });
+      return;
+    }
+    const stop = (reason: string) => {
+      if (stopped || child.exitCode !== null || child.signalCode !== null) return;
+      stopped = reason;
+      try {
+        if (group && child.pid) process.kill(-child.pid, 'SIGKILL');
+        else child.kill('SIGKILL');
+      } catch {
+        child.kill('SIGKILL');
+      }
     };
-  }
+    const timer = setTimeout(
+      () =>
+        stop(`${argv.join(' ')} did not finish within ${Number((timeoutMs / 1000).toFixed(1))} s`),
+      timeoutMs,
+    );
+    const finish = (result: CommandResult) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      resolve(result);
+    };
+    child.stdout?.on('data', (chunk: Buffer | string) => {
+      stdout += String(chunk);
+      if (stdout.length > MAX_COMMAND_OUTPUT) stop(`${argv.join(' ')} printed too much`);
+    });
+    child.stderr?.on('data', (chunk: Buffer | string) => {
+      stderr += String(chunk);
+      if (stderr.length > MAX_COMMAND_OUTPUT) stop(`${argv.join(' ')} printed too much`);
+    });
+    child.once('error', (error) => finish({ ok: false, stdout, stderr, error: error.message }));
+    child.once('close', (code, signal) => {
+      if (stopped) return finish({ ok: false, stdout, stderr, error: stopped });
+      if (code === 0) return finish({ ok: true, stdout, stderr, error: null });
+      finish({
+        ok: false,
+        stdout,
+        stderr,
+        error: `Command failed: ${argv.join(' ')} (${signal ? `stopped by ${signal}` : `exit code ${code ?? '?'}`})`,
+      });
+    });
+  });
 }
 
 /**

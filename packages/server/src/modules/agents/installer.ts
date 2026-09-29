@@ -70,8 +70,11 @@ export interface AgentInstaller {
     versions?: Readonly<Record<string, string>>,
   ): Promise<InstallOutcome>;
   uninstall(entry: CatalogEntry, report: InstallProgress): Promise<void>;
-  /** Runs the entry's health check against what is on disk. */
-  health(entry: CatalogEntry): Promise<HealthResult>;
+  /**
+   * Runs the entry's health check against what is on disk; `timeoutMs` bounds it (30 s by
+   * default — the hub's boot check uses a shorter one).
+   */
+  health(entry: CatalogEntry, options?: { timeoutMs?: number }): Promise<HealthResult>;
 }
 
 export interface NpmInstallerOptions {
@@ -86,6 +89,22 @@ export interface NpmInstallerOptions {
   /** Largest file a `download` recipe may fetch (bytes); 1 GiB by default. */
   maxDownloadBytes?: number;
 }
+
+/** How long an agent's health check may take unless the caller says (after an install). */
+export const HEALTH_TIMEOUT_MS = 30_000;
+
+/**
+ * What a health check's CLI is told: it runs unattended, so it must not update itself, ask
+ * anything or phone home first. Each variable is one a common agent CLI documents; the rest
+ * ignore them.
+ */
+export const QUIET_CLI_ENV: Readonly<Record<string, string>> = {
+  CI: '1',
+  DISABLE_AUTOUPDATER: '1',
+  DISABLE_TELEMETRY: '1',
+  NO_UPDATE_NOTIFIER: '1',
+  npm_config_update_notifier: 'false',
+};
 
 /** `<DATA_DIR>/agents` — the parent of every installed agent (ADR 0006). */
 export function agentsRoot(dataDir: string): string {
@@ -239,7 +258,7 @@ export function createNpmInstaller(options: NpmInstallerOptions): AgentInstaller
       }
     },
 
-    async health(entry) {
+    async health(entry, check = {}) {
       if (entry.health.kind !== 'command') {
         // An `http` check belongs to the adapter that owns the endpoint (Hermes).
         return { ok: false, version: null, error: 'this entry is checked by its adapter' };
@@ -255,7 +274,9 @@ export function createNpmInstaller(options: NpmInstallerOptions): AgentInstaller
         return { ok: false, version: null, error: `${checked} is not in the agent directory` };
       }
       const result = await runCommand([executablePath, ...entry.health.args], {
-        timeoutMs: 30_000,
+        timeoutMs: check.timeoutMs ?? HEALTH_TIMEOUT_MS,
+        // Asked, not used: no update, prompt or telemetry on the way to a version line.
+        ...(options.host.inherited ? { env: { ...options.host.inherited, ...QUIET_CLI_ENV } } : {}),
       });
       return {
         ok: result.ok,
