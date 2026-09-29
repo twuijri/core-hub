@@ -3874,7 +3874,8 @@
     "invalid_json": "This is not valid JSON, so nothing was written: {message}",
     "symlink_outside": "This file is a link to somewhere outside the agent's folder and the home, so Core Hub will not open it.",
     "not_text": "This file is not UTF-8 text, so it cannot be edited here.",
-    "too_large": "The file is larger than 1 MiB, the most this page edits."
+    "too_large": "The file is larger than 1 MiB, the most this page edits.",
+    "empty_placeholder": "The file is empty. Write its settings here; the file is made when you save."
   },
   "channel_accounts": {
     "title": "Messaging accounts",

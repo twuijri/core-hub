@@ -1176,6 +1176,10 @@ button.files-name:focus-visible {
   caret-color: var(--ch-color-text);
   outline: none;
 }
+.files-editor-input::placeholder {
+  color: var(--ch-color-text-muted);
+  opacity: 1;
+}
 .files-editor-input::selection {
   background: var(--ch-color-accent-soft);
   color: transparent;
