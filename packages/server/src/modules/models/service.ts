@@ -93,6 +93,8 @@ import {
   type SpeechProviderSettings,
 } from './schema.js';
 import type { SecretStore } from './secrets.js';
+import type { GatewayUpstream, UpstreamKind } from './gateway/cliproxy-config.js';
+import type { GatewayTarget } from './gateway/gateway.js';
 import { ModelsStore } from './store.js';
 import { joinAudio, type AudioPart } from './speech/audio.js';
 import { splitForSpeech } from './speech/split.js';
@@ -233,6 +235,8 @@ export interface ModelsServiceOptions {
    * with the reason rather than started somewhere its credential could not be used.
    */
   signIn?: () => SignInRuntime | null;
+  /** Whether this hub runs the model gateway (ADR 0029): `Model.agent_gateway` is said then. */
+  gatewayAvailable?: () => boolean;
 }
 
 /** A sign-in the hub started and still answers polls for (contract `ProviderSignIn`). */
@@ -1475,8 +1479,18 @@ export class ModelsService {
       .filter((row) => !after || catalogueCursorOf(row) > after);
     const page = matching.slice(0, limit);
     const last = page.at(-1);
+    // Which of them a coding agent can run through the model gateway (ADR 0029); said only by a
+    // hub whose gateway is on.
+    const served = this.options.gatewayAvailable?.() ? this.gatewayProviderIds(scope.id) : null;
     return {
-      items: page.map((row) => serializeModel(row, bySlug.get(row.providerId)!.slug)),
+      items: page.map((row) => {
+        const model = serializeModel(row, bySlug.get(row.providerId)!.slug);
+        if (!served) return model;
+        return {
+          ...model,
+          agent_gateway: served.has(row.providerId) && row.kind === 'chat' && row.enabled,
+        };
+      }),
       next_cursor:
         matching.length > limit && last ? encodeCatalogueCursor(catalogueCursorOf(last)) : null,
     };
@@ -2934,6 +2948,138 @@ export class ModelsService {
   /** The slug of one of this profile's providers, for naming the model that answered. */
   providerSlug(workspace: string, providerId: string): string | null {
     return this.effectiveFor(workspace, providerId)?.slug ?? null;
+  }
+
+  // ------------------------------------------------- the model gateway (ADR 0029)
+
+  /**
+   * How CLIProxyAPI reaches a provider row, or null when the gateway cannot serve it: a row that
+   * is off, not a chat provider, a subscription signed in to through Hermes (the owner,
+   * 2026-09-29: never lent to another vendor's agent), or one with no key where it needs one.
+   */
+  private gatewayRoute(row: ProviderRow): { kind: UpstreamKind; baseUrl: string } | null {
+    if (row.archivedAt || !row.enabled || row.kind !== 'llm') return null;
+    if (row.authKind === 'oauth') return null;
+    const entry = this.entryOf(row);
+    if (entry?.signIn) return null;
+    if (row.authKind === 'api_key' && !this.options.secrets.has(row.workspace, row.apiKeySecretId)) {
+      return null;
+    }
+    const base = (row.baseUrl ?? entry?.baseUrl ?? '').trim().replace(/\/+$/, '');
+    if (!/^https?:\/\//.test(base)) return null;
+    switch (entry?.protocol ?? 'openai') {
+      case 'anthropic':
+        return { kind: 'claude', baseUrl: base.replace(/\/v1$/, '') };
+      case 'google':
+        return { kind: 'gemini', baseUrl: base.replace(/\/v1(beta)?$/, '') };
+      case 'ollama':
+        return { kind: 'openai-compatibility', baseUrl: /\/v1$/.test(base) ? base : `${base}/v1` };
+      case 'openai':
+      case 'groq':
+        return { kind: 'openai-compatibility', baseUrl: base };
+      default:
+        return null;
+    }
+  }
+
+  /** A row's chat models the gateway can hand CLIProxyAPI. */
+  private gatewayModelsOf(row: ProviderRow): ModelRow[] {
+    return this.store
+      .modelsOf(row.id)
+      .filter((model) => !model.archivedAt && model.enabled && model.kind === 'chat');
+  }
+
+  /**
+   * Every provider CLIProxyAPI may serve, with its key: the input of its configuration file
+   * (`gateway/cliproxy-config.ts`). All profiles' rows at once, each under its own row id.
+   */
+  gatewayUpstreams(): GatewayUpstream[] {
+    const out: GatewayUpstream[] = [];
+    for (const row of this.store.everyProviderRow()) {
+      const route = this.gatewayRoute(row);
+      if (!route) continue;
+      const apiKey = row.apiKeySecretId
+        ? this.options.secrets.reveal(row.workspace, row.apiKeySecretId)
+        : null;
+      if (row.authKind === 'api_key' && !apiKey) continue;
+      out.push({
+        providerId: row.id,
+        kind: route.kind,
+        baseUrl: route.baseUrl,
+        apiKey: apiKey ?? null,
+        headers: { ...row.headers },
+        models: this.gatewayModelsOf(row).map((model) => ({
+          id: model.modelKey,
+          contextWindow: model.contextWindow ?? null,
+        })),
+      });
+    }
+    return out.sort((a, b) => a.providerId.localeCompare(b.providerId));
+  }
+
+  /** The providers of a profile the gateway serves, by row id. */
+  private gatewayProviderIds(workspace: string): Set<string> {
+    return new Set(
+      this.effectiveRows(workspace, 'llm')
+        .filter((row) => this.gatewayRoute(row) !== null)
+        .map((row) => row.id),
+    );
+  }
+
+  /** The catalogue keys (`"<provider slug>/<model>"`) a profile's coding agents can run. */
+  gatewayModelKeys(workspace: string): string[] {
+    const keys: string[] = [];
+    for (const row of this.effectiveRows(workspace, 'llm')) {
+      if (!this.gatewayRoute(row)) continue;
+      for (const model of this.gatewayModelsOf(row)) {
+        if (!model.visible || !this.passesVisibility(row, model.modelKey)) continue;
+        keys.push(`${row.slug}/${model.modelKey}`);
+      }
+    }
+    return keys;
+  }
+
+  /** Whether the gateway can serve a profile's provider row (the one it uses for that slug). */
+  gatewayServes(workspace: string, providerId: string): boolean {
+    const row = this.effectiveFor(workspace, providerId);
+    return !!row && this.gatewayRoute(row) !== null;
+  }
+
+  /** A model row's context window, for the agents that must be told it (Claude Code, Codex). */
+  gatewayContextWindow(workspace: string, providerId: string, model: string): number | null {
+    const row = this.effectiveFor(workspace, providerId);
+    if (!row) return null;
+    return this.store.model(row.id, model)?.contextWindow ?? null;
+  }
+
+  /** The row and model a turn's choice runs on through the gateway, or why it cannot. */
+  gatewayTarget(workspace: string, providerId: string, model: string): GatewayTarget | { refusal: string } {
+    const provider = this.effectiveFor(workspace, providerId);
+    if (!provider || provider.archivedAt) {
+      return { refusal: 'the chosen model belongs to a provider this profile does not have' };
+    }
+    if (!this.gatewayRoute(provider)) {
+      return {
+        refusal: `${provider.label} is not available to coding agents through Core Hub: it has no key the hub can use, or it is a signed-in subscription, which the hub does not lend to other agents`,
+      };
+    }
+    const row = this.store.model(provider.id, model);
+    if (!row || row.archivedAt || !row.enabled || row.kind !== 'chat') {
+      return {
+        refusal: `${model} is not in ${provider.label}'s model list; refresh its models in Settings → Models`,
+      };
+    }
+    return {
+      providerId: provider.id,
+      model: row.modelKey,
+      modelLabel: row.alias ?? row.label,
+      price: (usage) => costOf(row.pricing, usage),
+    };
+  }
+
+  /** The profile's catalogue keys the gateway serves, for `Model.agent_gateway`. */
+  gatewayServedIds(workspace: string): Set<string> {
+    return this.gatewayProviderIds(workspace);
   }
 
   /**

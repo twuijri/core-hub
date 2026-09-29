@@ -22017,6 +22017,20 @@ components:
                 conversation with it gets; the model picker shows it. Absent when its settings
                 name none (the vendor's default, which the hub cannot know), for Hermes and the
                 hub's own agent (their default is `default_model`), and from older hubs.
+            model_source:
+              type: string
+              description: >-
+                `hub` or `agent` (a string, not an enum: a client reads any other value as "not
+                known"). Where an installed coding agent's model calls go in this profile (added
+                2026-09-30, DECISIONS §140, ADR 0029): `hub` — through the hub's model gateway, to
+                the model picked for the conversation from the hub's own providers (`Model.agent_gateway`),
+                with no provider key handed to the agent, and its default is `default_model`;
+                `agent` — to the agent's own account or settings, as before. Chosen in the agent's
+                settings (`model_source`: automatic, the hub, the agent's own); automatic is `hub` in
+                the container image and, on a computer, `hub` unless the agent is signed in to its
+                own account. `agent` also when the hub has no model to give it. Absent for Hermes,
+                the hub's own agent, agents the gateway does not wire yet, hubs whose gateway is off,
+                and older hubs.
     AgentPatch:
       type: object
       properties:
@@ -26584,6 +26598,15 @@ components:
             leave it out of every chat-model picker (the composer, the defaults, the fallback
             chain). A model that draws and also chats (`gemini-*-image`) is not image-only.
             Absent from an older hub, which means `false`.
+        agent_gateway:
+          type: boolean
+          description: >-
+            Coding agents (Claude Code, Codex, Goose, OpenCode, Qwen Code, Kimi Code) can run this
+            model through the hub's model gateway (added 2026-09-30, DECISIONS §140, ADR 0029):
+            its provider has a key the hub holds and is not a subscription signed in to through
+            Hermes, which the hub does not lend to other agents. The model picker of an agent
+            whose `model_source` is `hub` lists these models only. Absent from an older hub,
+            which has no gateway.
         pricing:
           oneOf:
             - $ref: '#/components/schemas/ModelPricing'

@@ -109,6 +109,12 @@ export interface UsageWrite {
   costSource?: CostSource;
   originKind?: UsageOrigin;
   originId?: string | null;
+  /**
+   * Add these counts to what the run already has for this model, instead of replacing it: for a
+   * writer that reports each call on its own rather than a running total — the model gateway's
+   * call that ended after its turn did (ADR 0029).
+   */
+  accumulate?: boolean;
 }
 
 export interface SkillUseWrite {
@@ -428,7 +434,8 @@ export class AuditService {
 
   /**
    * Record what a run cost. Idempotent per (run, model label): a second report for the
-   * same pair replaces the first, because adapters re-send cumulative totals.
+   * same pair replaces the first, because adapters re-send cumulative totals — unless the writer
+   * says its counts are one call's (`accumulate`), which are added.
    */
   recordUsage(input: UsageWrite): void {
     const row = {
@@ -450,6 +457,29 @@ export class AuditService {
       originId: input.originId ?? null,
       recordedAt: new Date(),
     };
+    if (input.accumulate) {
+      // Per call: added to the row, so several calls of one run in one model are all counted.
+      // An estimate added to an unknown stays the estimate; the row's source is the latest word.
+      this.db
+        .insert(usageRecords)
+        .values({ id: newUlid(), ...row })
+        .onConflictDoUpdate({
+          target: [usageRecords.runId, usageRecords.modelLabel],
+          set: {
+            inputTokens: sql`${usageRecords.inputTokens} + ${row.inputTokens}`,
+            outputTokens: sql`${usageRecords.outputTokens} + ${row.outputTokens}`,
+            cacheReadTokens: sql`${usageRecords.cacheReadTokens} + ${row.cacheReadTokens}`,
+            cacheWriteTokens: sql`${usageRecords.cacheWriteTokens} + ${row.cacheWriteTokens}`,
+            reasoningTokens: sql`${usageRecords.reasoningTokens} + ${row.reasoningTokens}`,
+            costMicroUsd: sql`${usageRecords.costMicroUsd} + ${row.costMicroUsd}`,
+            ...(row.costSource === 'unknown' ? {} : { costSource: row.costSource }),
+            recordedAt: row.recordedAt,
+            updatedAt: new Date(),
+          },
+        })
+        .run();
+      return;
+    }
     this.db
       .insert(usageRecords)
       .values({ id: newUlid(), ...row })

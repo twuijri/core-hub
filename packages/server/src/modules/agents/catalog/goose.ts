@@ -68,6 +68,20 @@ export const goose: CatalogEntry = {
   },
   // Goose's own settings (`GOOSE_PROVIDER`, `GOOSE_MODEL` …) and every provider it can use.
   hostEnv: ['GOOSE_*', ...PROVIDER_HOST_ENV],
+  // On the hub's model gateway (ADR 0029): Goose's OpenAI provider, pointed at the gateway's Chat
+  // Completions path explicitly — a model named like `gpt-5*` would otherwise flip it to
+  // Responses (its docs, 1.52.0). Environment only; its `config.yaml` is left alone.
+  gateway: {
+    wire: 'openai-chat',
+    env: (gw) => ({
+      GOOSE_PROVIDER: 'openai',
+      GOOSE_MODEL: gw.mainModel,
+      OPENAI_HOST: gw.origin,
+      OPENAI_BASE_PATH: 'gateway/openai/v1/chat/completions',
+      OPENAI_API_KEY: gw.token,
+    }),
+    clears: ['OPENAI_CUSTOM_HEADERS', 'GOOSE_LEAD_PROVIDER', 'GOOSE_LEAD_MODEL'],
+  },
   health: { kind: 'command', args: ['--version'] },
   capabilities: ['streaming', 'tools', 'approvals', 'mcp', 'resume', 'config_files'],
   sections: ['mcp', 'settings'],

@@ -69,6 +69,9 @@ export async function testHub(env: EnvSource = {}, options: TestHubOptions = {})
     DATA_DIR: dataDir,
     PORT: '0',
     COREHUB_MODELS_CATALOG_URL: 'off',
+    // The model gateway (ADR 0029) would run a developer's own CLIProxyAPI copy; a test that
+    // wants it switches it on and hands a fake (`models.cliproxyBin`).
+    COREHUB_MODEL_GATEWAY: 'off',
     ...(relayGiven ? {} : { COREHUB_PUSH_RELAY: 'off' }),
     ...env,
   });

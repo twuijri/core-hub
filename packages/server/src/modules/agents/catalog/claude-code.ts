@@ -49,6 +49,35 @@ export const claudeCode: CatalogEntry = {
     'SSH_CONNECTION',
     'SSH_TTY',
   ],
+  // On the hub's model gateway (ADR 0029): Claude Code's own "LLM gateway" route. The token goes
+  // as `Authorization: Bearer` (`ANTHROPIC_AUTH_TOKEN`, no interactive approval), every model
+  // name it may ask for is one of the hub's aliases, and the betas and fields a non-Claude model
+  // does not know are left out. It replaces a claude.ai sign-in for these calls, which is why a
+  // signed-in Claude Code on a person's computer stays on its own account unless switched.
+  gateway: {
+    wire: 'anthropic',
+    env: (gw) => ({
+      ANTHROPIC_BASE_URL: gw.anthropicBaseUrl,
+      ANTHROPIC_AUTH_TOKEN: gw.token,
+      ANTHROPIC_MODEL: gw.mainModel,
+      ANTHROPIC_DEFAULT_OPUS_MODEL: gw.mainModel,
+      ANTHROPIC_DEFAULT_SONNET_MODEL: gw.mainModel,
+      ANTHROPIC_DEFAULT_HAIKU_MODEL: gw.smallModel,
+      CLAUDE_CODE_SUBAGENT_MODEL: gw.mainModel,
+      CLAUDE_CODE_DISABLE_EXPERIMENTAL_BETAS: '1',
+      CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC: '1',
+      ...(gw.contextWindow ? { CLAUDE_CODE_MAX_CONTEXT_TOKENS: String(gw.contextWindow) } : {}),
+    }),
+    clears: [
+      'ANTHROPIC_API_KEY',
+      'ANTHROPIC_SMALL_FAST_MODEL',
+      'ANTHROPIC_DEFAULT_FABLE_MODEL',
+      'CLAUDE_CODE_OAUTH_TOKEN',
+      'CLAUDE_CODE_USE_BEDROCK',
+      'CLAUDE_CODE_USE_VERTEX',
+      'CLAUDE_CODE_USE_FOUNDRY',
+    ],
+  },
   // The hub asks npm's package for the version (#226), so nothing is run at boot.
   health: { kind: 'installed' },
   capabilities: [

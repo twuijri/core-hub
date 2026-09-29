@@ -243,6 +243,10 @@ export {
 export type { PackageRegistry, UpdateCheckReport } from './update-policy.js';
 export type {
   AgentDirectoryPort,
+  AgentGatewayGrant,
+  AgentGatewayPort,
+  AgentGatewayTurn,
+  AgentGatewayUsage,
   AgentInfo,
   AgentModelsPort,
   AgentRunnerPort,
@@ -763,6 +767,8 @@ function contextOf(app: FastifyInstance): AgentsContext {
       ...(own.agentHome ? { home: own.agentHome } : {}),
     },
     models: () => modelsPorts.get(hub.io) ?? null,
+    // The container image says `hub` (ADR 0029); a computer's hub decides per agent.
+    modelSourceDefault: () => hub.config.modelGateway?.defaultSource ?? 'auto',
     // A workspace is a Hermes profile (ADR 0014): its slug, or `default` for the hub's
     // default workspace whatever it is called. An archived or unknown one has none.
     profileOf: (workspaceId: string) => {

@@ -70,6 +70,9 @@ import {
   type SpeechPatchInput,
 } from './service.js';
 import type { SpeechFormat } from './adapters/types.js';
+import { CliproxySupervisor } from './gateway/cliproxy.js';
+import { ModelGateway } from './gateway/gateway.js';
+import { locateCliproxy } from './gateway/locate.js';
 
 export { ModelsService } from './service.js';
 export type {
@@ -156,6 +159,8 @@ export interface ModelsOverrides {
    * one; absent, it is Hermes's own server where the hub supervises Hermes.
    */
   signIn?: SignInRuntime | null;
+  /** The model gateway's CLIProxyAPI executable (ADR 0029): a test's fake, or `null` for none. */
+  cliproxyBin?: string | null;
 }
 
 let pendingOverrides: ModelsOverrides | null = null;
@@ -168,6 +173,76 @@ export function overrideModels(next: ModelsOverrides | null): void {
 
 const contexts = new WeakMap<SocketServer, ModelsService>();
 const rings = new WeakMap<SocketServer, DataKeyRing>();
+const gateways = new WeakMap<SocketServer, ModelGateway>();
+
+/**
+ * The hub's model gateway (ADR 0029): one per hub, started the first time an agent needs it,
+ * closed with the hub. `models` owns it because it owns what it serves — the providers and
+ * their keys; `agents` only ever sees a token and an address (the `gateway` port).
+ */
+export function modelGatewayFor(app: FastifyInstance): ModelGateway {
+  const { hub } = app;
+  const existing = gateways.get(hub.io);
+  if (existing) return existing;
+  if (pendingOverrides) {
+    overrides.set(hub.io, pendingOverrides);
+    pendingOverrides = null;
+  }
+  const own = overrides.get(hub.io) ?? {};
+  // A config built by hand (older tests) has no gateway section: off.
+  const settings = hub.config.modelGateway ?? { enabled: false, cliproxyBin: null, defaultSource: 'auto' as const };
+  const binary =
+    own.cliproxyBin !== undefined
+      ? own.cliproxyBin
+      : settings.enabled
+        ? locateCliproxy({ configured: settings.cliproxyBin })
+        : null;
+  const cliproxy = new CliproxySupervisor({
+    binary,
+    stateDir: path.join(hub.config.dataDir, 'gateway'),
+    log: app.log,
+    env: hub.config.hostEnv.inherited ?? {},
+  });
+  const gateway = new ModelGateway({
+    cliproxy,
+    enabled: settings.enabled,
+    log: app.log,
+    source: {
+      upstreams: () => contextOf(app).gatewayUpstreams(),
+      resolveKey: (workspace, key) => {
+        const ref = contextOf(app).resolveModelKey(workspace, key);
+        return ref ? { providerId: ref.provider_id, model: ref.model } : null;
+      },
+      target: (workspace, providerId, model) =>
+        contextOf(app).gatewayTarget(workspace, providerId, model),
+      modelKeys: (workspace) => contextOf(app).gatewayModelKeys(workspace),
+      // A call that ended after its turn: added to that run's row (the ledger keeps one row per
+      // run and model, so the per-call counts are summed rather than replacing the turn's).
+      recordLate: (grant, runId, usage) => {
+        if (!grant.userId) return;
+        auditFor(app).recordUsage({
+          workspace: grant.workspace,
+          ownerId: grant.userId,
+          runId,
+          sessionId: grant.sessionId,
+          agentId: grant.agentId,
+          providerId: usage.providerId,
+          modelLabel: usage.modelLabel,
+          inputTokens: usage.inputTokens,
+          outputTokens: usage.outputTokens,
+          cacheReadTokens: usage.cacheReadTokens,
+          cacheWriteTokens: usage.cacheWriteTokens,
+          reasoningTokens: usage.reasoningTokens,
+          ...(usage.costMicroUsd === undefined ? {} : { costMicroUsd: usage.costMicroUsd }),
+          costSource: usage.costSource,
+          accumulate: true,
+        });
+      },
+    },
+  });
+  gateways.set(hub.io, gateway);
+  return gateway;
+}
 
 /**
  * The hub's one data key ring (`${DATA_DIR}/keys/data.key`). Lent to the composition root
@@ -264,6 +339,7 @@ function contextOf(app: FastifyInstance): ModelsService {
     ...(own.fetchImpl ? { fetchImpl: own.fetchImpl } : {}),
     catalog: own.catalog ?? catalog,
     hostEnv,
+    gatewayAvailable: () => modelGatewayFor(app).available(),
     ...(own.restartDelayMs === undefined ? {} : { restartDelayMs: own.restartDelayMs }),
     // Hermes signs in to a provider account through its own server (ADR 0015), which only a
     // hub that supervises Hermes runs (decision §55).
@@ -492,8 +568,21 @@ export const modelsModule = defineModule({
       prepareGatewayProfile(profile, home) {
         contextOf(app).prepareGateway(profile, home);
       },
+      // The model gateway (ADR 0029): a coding agent gets an address and a session token, never
+      // a key; which model a token reaches is set per turn by the runner.
+      gateway: {
+        available: () => modelGatewayFor(app).available(),
+        serves: (workspace, providerId) => contextOf(app).gatewayServes(workspace, providerId),
+        contextWindow: (workspace, providerId, model) =>
+          contextOf(app).gatewayContextWindow(workspace, providerId, model),
+        open: (input) => modelGatewayFor(app).open(input),
+      },
     };
     registerAgentModelsPort(app.hub.io, port);
+    // The gateway's listener and CLIProxyAPI stop with the hub.
+    app.addHook('onClose', async () => {
+      await gateways.get(app.hub.io)?.close();
+    });
 
     /**
      * Boot reconciliation (ADR 0010 §Propagation).

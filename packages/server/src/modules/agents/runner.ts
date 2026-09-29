@@ -58,6 +58,7 @@ import type {
   RunnerSubagentSignal,
   RunnerToolKind,
 } from './ports.js';
+import type { AgentGatewayGrant, AgentGatewayUsage } from './ports.js';
 import type { AgentsService } from './service.js';
 import type { RunLeases } from './hub-tools/leases.js';
 
@@ -87,6 +88,10 @@ interface LiveSession {
   sessionId: string;
   /** Stops forwarding its subagent reports (§56). */
   unwatch: () => void;
+  /** Where its model calls go (ADR 0029): chosen when the process started, for its life. */
+  modelSource: 'hub' | 'agent' | null;
+  /** Its model gateway token, when `modelSource` is `hub`. */
+  gateway: AgentGatewayGrant | null;
 }
 
 interface LiveRun {
@@ -141,7 +146,7 @@ export class AgentRunner implements AgentRunnerPort {
       provider: request.provider,
     });
 
-    const live = await this.open(row, request);
+    const live = await this.open(row, request, selection);
 
     const run: LiveRun = {
       runId: request.runId,
@@ -166,6 +171,17 @@ export class AgentRunner implements AgentRunnerPort {
       workspaceId: request.workspace,
       userId: request.userId ?? null,
     });
+
+    // On the hub's models (ADR 0029) the agent names an alias; the gateway serves this turn's
+    // choice, and hands back each call's usage for the run's ledger.
+    if (live.gateway && selection.providerId && selection.model) {
+      live.gateway.setTurn({
+        runId: run.runId,
+        providerId: selection.providerId,
+        model: selection.model,
+        report: (usage) => this.gatewayUsage(run, usage),
+      });
+    }
 
     // The turn: events are pumped from the session stream while `send()` drives the agent.
     // Neither is awaited here — the engine consumes `stream()` and `send()` resolves on the
@@ -213,7 +229,8 @@ export class AgentRunner implements AgentRunnerPort {
       | 'model'
       | 'provider'
       | 'reasoningEffort'
-    >,
+    > & { userId?: string | null },
+    selection?: ReturnType<AgentsService['selectionFor']>,
   ): Promise<LiveSession> {
     const { service, adapters } = this.deps;
     let live = this.sessions.get(request.sessionId);
@@ -221,19 +238,53 @@ export class AgentRunner implements AgentRunnerPort {
       // Its process went away between turns — a Hermes TUI gateway retired after a key
       // change and closed once idle: reopen by the stored ref rather than hand the turn to
       // a session that can only refuse it ("Hermes session is closed").
-      live.unwatch();
-      this.sessions.delete(request.sessionId);
+      this.drop(live);
+      live = undefined;
+    }
+    // Where this process's model calls go is fixed when it starts (its environment says so):
+    // a turn that should go elsewhere — the person switched the agent between the hub's models
+    // and its own, or the hub now has a model to give it — reopens it by its stored ref.
+    const chosen = selection ?? service.selectionFor(row, request.workspace, request);
+    const source = service.modelSourceFor(row, request.workspace, chosen);
+    if (live && live.modelSource !== source && live.adapterKind === 'acp') {
+      this.drop(live);
+      void live.session.close().catch(() => undefined);
       live = undefined;
     }
     if (!live) {
+      let gateway: AgentGatewayGrant | null = null;
+      let current: LiveSession | undefined;
+      if (source === 'hub') {
+        try {
+          gateway = await service.openGateway(row, request.workspace, {
+            sessionId: request.sessionId,
+            userId: request.userId ?? null,
+            // The token dies with the process.
+            alive: () => !current || !isClosed(current.session),
+          });
+        } catch (error) {
+          // The agent still runs, on its own account as before the gateway; the log says why.
+          this.deps.log.warn(
+            { err: error, agent: row.slug },
+            'agents: the model gateway could not start; the agent runs on its own account',
+          );
+        }
+      }
       const target = service.targetFor(row, request.workspace, {
         sessionRef: request.agentSessionRef ?? mintSessionRef(row.adapterKind, request.sessionId),
         cwd: request.workingDir,
         model: request.model,
         provider: request.provider,
         reasoningEffort: request.reasoningEffort,
+        gateway,
       });
-      const session = await adapters.byKind(row.adapterKind).start(target);
+      let session: AgentSession;
+      try {
+        session = await adapters.byKind(row.adapterKind).start(target);
+      } catch (error) {
+        gateway?.revoke();
+        throw error;
+      }
       const sessionId = request.sessionId;
       // A subagent's reports are the conversation's, not the turn's: forwarded as they come,
       // between turns too (Hermes's asynchronous delegation).
@@ -241,10 +292,49 @@ export class AgentRunner implements AgentRunnerPort {
         session.subagents?.watch((signal) => {
           for (const listener of this.subagentListeners) listener(sessionId, signal);
         }) ?? (() => undefined);
-      live = { session, adapterKind: row.adapterKind, agentId: row.id, sessionId, unwatch };
+      current = {
+        session,
+        adapterKind: row.adapterKind,
+        agentId: row.id,
+        sessionId,
+        unwatch,
+        // What was asked for, even when the gateway could not start and the agent fell back to
+        // its own account: the next turn does not restart it to try again.
+        modelSource: source,
+        gateway,
+      };
+      live = current;
       this.sessions.set(request.sessionId, live);
     }
     return live;
+  }
+
+  /** Forgets a live session: no more subagent reports, and its gateway token stops working. */
+  private drop(live: LiveSession): void {
+    live.unwatch();
+    live.gateway?.revoke();
+    if (this.sessions.get(live.sessionId) === live) this.sessions.delete(live.sessionId);
+  }
+
+  /** A call through the model gateway ended: the turn's totals for that model, into the run. */
+  private gatewayUsage(run: LiveRun, usage: AgentGatewayUsage): void {
+    if (run.ended) return;
+    const event = toRunnerEvent(
+      {
+        type: 'usage',
+        modelLabel: usage.modelLabel,
+        providerId: usage.providerId,
+        inputTokens: usage.inputTokens,
+        outputTokens: usage.outputTokens,
+        cacheReadTokens: usage.cacheReadTokens,
+        cacheWriteTokens: usage.cacheWriteTokens,
+        reasoningTokens: usage.reasoningTokens,
+        ...(usage.costMicroUsd === undefined ? {} : { costMicroUsd: usage.costMicroUsd }),
+        costSource: usage.costSource,
+      },
+      { interruptRequested: run.interruptRequested },
+    );
+    if (event) this.push(run, event);
   }
 
   /**
@@ -324,8 +414,7 @@ export class AgentRunner implements AgentRunnerPort {
         live.retire = true;
         continue;
       }
-      live.unwatch();
-      this.sessions.delete(sessionId);
+      this.drop(live);
       void live.session.close().catch((error: unknown) => {
         this.deps.log.warn({ err: error, sessionId }, 'agents: close after update failed');
       });
@@ -520,6 +609,7 @@ export class AgentRunner implements AgentRunnerPort {
   /** Shutdown: end every live agent session (ACP children exit, Hermes streams close). */
   async closeAll(): Promise<void> {
     const open = [...this.sessions.values()];
+    for (const live of open) live.gateway?.revoke();
     this.sessions.clear();
     await Promise.all(
       open.map((live) =>
@@ -631,18 +721,19 @@ export class AgentRunner implements AgentRunnerPort {
   private end(run: LiveRun): void {
     if (run.ended) return;
     run.ended = true;
+    // A call still streaming after the turn is added to this run's ledger row by the gateway.
+    run.live.gateway?.setTurn(null);
     for (const waiter of run.waiting.splice(0)) waiter({ value: undefined as never, done: true });
     this.runs.delete(run.runId);
     this.deps.leases?.close(run.runId);
     // A session whose process died is not reusable; forget it so the next turn opens a
     // fresh one (an ACP child, or the Hermes TUI gateway). Hermes's HTTP sessions stay.
     if (isClosed(run.live.session)) {
-      if (this.sessions.get(run.sessionId) === run.live) run.live.unwatch();
-      this.sessions.delete(run.sessionId);
+      if (this.sessions.get(run.sessionId) === run.live) this.drop(run.live);
+      else run.live.gateway?.revoke();
     } else if (run.live.retire && this.sessions.get(run.sessionId) === run.live) {
       // Updated under this turn: the process is the old CLI, so it goes now.
-      run.live.unwatch();
-      this.sessions.delete(run.sessionId);
+      this.drop(run.live);
       void run.live.session.close().catch(() => undefined);
     }
   }

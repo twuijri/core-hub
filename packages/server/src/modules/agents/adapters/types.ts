@@ -49,6 +49,12 @@ export interface AgentTarget {
   /** Non-secret environment for the process. */
   env?: Record<string, string>;
   /**
+   * Variables taken out of the process's environment after everything else is merged — the
+   * credential routes that would win over the model gateway's token (ADR 0029), wherever they
+   * came from.
+   */
+  envRemove?: readonly string[];
+  /**
    * The workspace's stored settings for this agent, exactly as the adapter's own
    * `settings()` form declared them. A process adapter has no use for them — its
    * configuration is its argv and its environment — but an adapter the hub *is* reads

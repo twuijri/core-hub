@@ -21,10 +21,12 @@
  */
 import {
   credentialState,
+  ownSignIn,
   type CredentialProbeOptions,
   type CredentialState,
 } from './agent-credentials.js';
 import { agentOwnModel } from './agent-own-model.js';
+import { GATEWAY_MAIN_MODEL, GATEWAY_SMALL_MODEL } from './gateway-models.js';
 import { and, eq, inArray, isNull } from 'drizzle-orm';
 import type { FastifyBaseLogger } from 'fastify';
 import type { ModuleDb } from '../../lib/db.js';
@@ -60,7 +62,7 @@ import {
   type UpdateCandidate,
   type UpdatePolicyStore,
 } from './update-policy.js';
-import type { AgentModelsPort } from './ports.js';
+import type { AgentGatewayGrant, AgentModelsPort } from './ports.js';
 import { agents, agentSettings, agentAdapters } from './schema.js';
 import {
   serializeAgent,
@@ -124,6 +126,11 @@ export interface AgentsServiceOptions {
    * environment the hub hands its agents and their home. Absent: no card says either way.
    */
   credentialProbe?: CredentialProbeOptions;
+  /**
+   * An agent's automatic model source (ADR 0029): `hub` — the gateway for every coding agent (the
+   * container image); `auto` — the gateway unless the agent has its own sign-in (a computer).
+   */
+  modelSourceDefault?: () => 'hub' | 'auto';
   /**
    * Where `check-update` and the periodic check ask for a newer version
    * (`update-policy.ts`). Absent: the hub knows only the catalog's pins.
@@ -1097,15 +1104,19 @@ export class AgentsService implements UpdatePolicyStore {
       model: string | null;
       provider?: string | null;
       reasoningEffort: string | null;
+      /** The model gateway's grant, when this process runs on the hub's models (ADR 0029). */
+      gateway?: AgentGatewayGrant | null;
     },
   ): AgentTarget {
     const settings = this.settingsRow(workspaceId, row.id);
     const cwd = run.cwd ?? settings?.workingDir ?? null;
-    const env = this.environmentFor(row, workspaceId, settings);
     const selection = this.selectionFor(row, workspaceId, run);
+    const onGateway = run.gateway ? this.gatewayEnvironment(row, workspaceId, settings, selection, run.gateway) : null;
+    const env = onGateway?.env ?? this.environmentFor(row, workspaceId, settings);
     return {
       ...this.targetOf(row),
       ...(Object.keys(env).length > 0 ? { env } : {}),
+      ...(onGateway ? { envRemove: onGateway.remove } : {}),
       ...(cwd ? { cwd } : {}),
       // The hub's own adapter has no process to hand an environment to: it resolves the
       // workspace's provider at the moment of each turn (`adapters/direct.ts`).
@@ -1235,6 +1246,131 @@ export class AgentsService implements UpdatePolicyStore {
     }
   }
 
+  // ------------------------------------------------- the model gateway (ADR 0029)
+
+  /**
+   * Where this agent's model calls go in this profile: `hub` — through the model gateway, to the
+   * model the turn chose, with no provider key handed to it; `agent` — its own account or
+   * settings, as before the gateway. `null` where it is not the hub's to say: Hermes, the hub's
+   * own agent, an agent the gateway does not wire yet, a hub whose gateway is off.
+   *
+   * The person's choice in the agent's settings (`model_source`) wins. Automatic is the image's
+   * `hub` (the owner, 2026-09-29: in the container every coding agent uses the gateway), and on a
+   * computer `hub` unless the agent is signed in to its own account there. Either way `agent`
+   * when the hub has no model to give it — no model chosen and no default — so an agent that
+   * worked before the gateway still does.
+   */
+  modelSourceFor(
+    row: AgentRow,
+    workspaceId: string,
+    selection: AgentSelection,
+  ): 'hub' | 'agent' | null {
+    const entry = this.catalog.find((candidate) => candidate.id === row.slug);
+    if (!entry?.gateway) return null;
+    const gateway = this.options.models?.()?.gateway;
+    if (!gateway?.available()) return null;
+    const chosen = this.settingsRow(workspaceId, row.id)?.settings?.model_source;
+    if (chosen === 'agent') return 'agent';
+    if (!selection.providerId || !selection.model) return 'agent';
+    if (chosen === 'hub') return 'hub';
+    let serves = false;
+    try {
+      serves = gateway.serves(workspaceId, selection.providerId);
+    } catch {
+      serves = false;
+    }
+    if (!serves) return 'agent';
+    if ((this.options.modelSourceDefault?.() ?? 'auto') === 'hub') return 'hub';
+    const probe = this.options.credentialProbe;
+    return probe && ownSignIn(row.slug, probe) ? 'agent' : 'hub';
+  }
+
+  /** A gateway token for one agent process (the runner revokes it when the process goes). */
+  openGateway(
+    row: AgentRow,
+    workspaceId: string,
+    input: { sessionId: string; userId: string | null; alive(): boolean },
+  ): Promise<AgentGatewayGrant> {
+    const gateway = this.options.models?.()?.gateway;
+    if (!gateway) return Promise.reject(new Error('this hub has no model gateway'));
+    return gateway.open({
+      workspace: workspaceId,
+      agentId: row.id,
+      agentSlug: row.slug,
+      sessionId: input.sessionId,
+      userId: input.userId,
+      alive: input.alive,
+    });
+  }
+
+  /**
+   * An agent's environment on the gateway: its own settings `env` and `secret_refs` as ever, but
+   * none of the profile's provider keys, and nothing that would outrank the token (the entry's
+   * `clears` and its key variables); then the gateway's address, token and model alias. A proxy
+   * the host sets is told to leave the loopback gateway alone.
+   */
+  private gatewayEnvironment(
+    row: AgentRow,
+    workspaceId: string,
+    settings: AgentSettingsRow | undefined,
+    selection: AgentSelection,
+    grant: AgentGatewayGrant,
+  ): { env: Record<string, string>; remove: string[] } {
+    const entry = this.catalog.find((candidate) => candidate.id === row.slug)!;
+    const wiring = entry.gateway!;
+    const port = this.options.models?.() ?? null;
+    let own: Record<string, string> = { ...(settings?.env ?? {}) };
+    if (port) {
+      try {
+        // No `declared` families: the profile's keys are exactly what the agent must not get.
+        own = port.environmentFor(workspaceId, {}, {
+          ...(settings?.env ? { settingsEnv: settings.env } : {}),
+          ...(settings?.secretRefs ? { secretRefs: settings.secretRefs } : {}),
+        });
+      } catch (error) {
+        this.options.log.warn(
+          { agent: row.slug, err: error },
+          'agents: could not resolve the agent settings for the model gateway',
+        );
+      }
+    }
+    let contextWindow: number | null = null;
+    try {
+      contextWindow =
+        selection.providerId && selection.model
+          ? (port?.gateway?.contextWindow(workspaceId, selection.providerId, selection.model) ?? null)
+          : null;
+    } catch {
+      contextWindow = null;
+    }
+    const wired = wiring.env({
+      anthropicBaseUrl: grant.anthropicBaseUrl,
+      openaiBaseUrl: grant.openaiBaseUrl,
+      origin: grant.origin,
+      token: grant.token,
+      mainModel: GATEWAY_MAIN_MODEL,
+      smallModel: GATEWAY_SMALL_MODEL,
+      contextWindow,
+    });
+    const remove = [...new Set([...wiring.clears, ...Object.values(entry.credentials)])].filter(
+      (name) => !(name in wired),
+    );
+    const gone = new Set(remove.map((name) => name.toUpperCase()));
+    const env: Record<string, string> = {};
+    for (const [name, value] of Object.entries(own)) {
+      if (!gone.has(name.toUpperCase())) env[name] = value;
+    }
+    Object.assign(env, wired);
+    const loopback = ['127.0.0.1', 'localhost', '::1'];
+    const hostEnv = this.options.credentialProbe?.env ?? {};
+    for (const name of ['NO_PROXY', 'no_proxy']) {
+      const current = env[name] ?? hostEnv[name] ?? '';
+      const listed = current.split(',').map((part) => part.trim()).filter(Boolean);
+      env[name] = [...listed, ...loopback.filter((host) => !listed.includes(host))].join(',');
+    }
+    return { env, remove };
+  }
+
   /**
    * The model this agent uses when a run does not name one: the model pinned to it in
    * this workspace, else the workspace default for its kind (ADR 0010).
@@ -1282,7 +1418,12 @@ export class AgentsService implements UpdatePolicyStore {
     settings: AgentSettingsRow | undefined,
     language: Language = this.language,
   ): ContractAgent {
+    const modelSource =
+      row.adapterKind === 'acp' && row.installState === 'installed'
+        ? this.modelSourceSafe(row, scope.id)
+        : null;
     return serializeAgent(row, {
+      modelSource,
       profile: scope.slug,
       hasAvatar: this.options.avatars?.has(row.id) ?? false,
       settings,
@@ -1290,7 +1431,8 @@ export class AgentsService implements UpdatePolicyStore {
       defaultModel: this.defaultModelOf(row, scope.id),
       name: this.displayName(row, language),
       selfUpdate: this.selfUpdates(row),
-      credentials: this.credentialsOf(row, scope.id, settings),
+      // On the hub's models it answers with the hub's providers, whatever it has of its own.
+      credentials: modelSource === 'hub' ? 'ready' : this.credentialsOf(row, scope.id, settings),
       ownModel:
         this.options.credentialProbe &&
         row.adapterKind === 'acp' &&
@@ -1298,6 +1440,16 @@ export class AgentsService implements UpdatePolicyStore {
           ? agentOwnModel(row.slug, this.options.credentialProbe)
           : null,
     });
+  }
+
+  /** `modelSourceFor` at the profile's default, for the card; never throws. */
+  private modelSourceSafe(row: AgentRow, workspaceId: string): 'hub' | 'agent' | null {
+    try {
+      return this.modelSourceFor(row, workspaceId, this.selectionFor(row, workspaceId, {}));
+    } catch (error) {
+      this.options.log.warn({ agent: row.slug, err: error }, 'agents: could not read the model source');
+      return null;
+    }
   }
 
   /**

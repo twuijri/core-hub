@@ -26,6 +26,35 @@ export const opencode: CatalogEntry = {
   },
   // OpenCode's own settings and every provider it can use.
   hostEnv: ['OPENCODE_*', ...PROVIDER_HOST_ENV],
+  // On the hub's model gateway (ADR 0029): a provider of the hub's own in `OPENCODE_CONFIG_CONTENT`
+  // (inline JSON, above every file but managed settings), OpenAI-compatible, keyed by the session
+  // token, and models.dev left unasked. Its `opencode.json` is left alone.
+  gateway: {
+    wire: 'openai-chat',
+    env: (gw) => {
+      const limit = { context: gw.contextWindow ?? 128_000, output: 32_000 };
+      return {
+        COREHUB_GATEWAY_TOKEN: gw.token,
+        OPENCODE_DISABLE_MODELS_FETCH: '1',
+        OPENCODE_CONFIG_CONTENT: JSON.stringify({
+          provider: {
+            corehub: {
+              npm: '@ai-sdk/openai-compatible',
+              name: 'Core Hub',
+              options: { baseURL: gw.openaiBaseUrl, apiKey: '{env:COREHUB_GATEWAY_TOKEN}' },
+              models: {
+                [gw.mainModel]: { name: 'Core Hub', tool_call: true, limit },
+                [gw.smallModel]: { name: 'Core Hub (small)', tool_call: true, limit },
+              },
+            },
+          },
+          model: `corehub/${gw.mainModel}`,
+          small_model: `corehub/${gw.smallModel}`,
+        }),
+      };
+    },
+    clears: [],
+  },
   health: { kind: 'command', args: ['--version'] },
   capabilities: ['streaming', 'tools', 'approvals', 'mcp'],
   sections: ['mcp', 'settings'],

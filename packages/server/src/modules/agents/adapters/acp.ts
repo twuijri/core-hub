@@ -514,10 +514,19 @@ export interface AcpAdapterOptions {
  */
 export function agentEnvironment(
   inherited: NodeJS.ProcessEnv,
-  target: Pick<AgentTarget, 'executablePath' | 'env'>,
+  target: Pick<AgentTarget, 'executablePath' | 'env' | 'envRemove'>,
   names: readonly string[] = [],
 ): NodeJS.ProcessEnv {
   const env: NodeJS.ProcessEnv = { ...pickHostEnv(inherited, names), ...(target.env ?? {}) };
+  // A variable the hub does not hand out wins over one the host has (the model gateway's
+  // token over a host's own key, ADR 0029): taken out, whatever case the host wrote it in.
+  if (target.envRemove && target.envRemove.length > 0) {
+    const gone = new Set(target.envRemove.map((name) => name.toUpperCase()));
+    const handed = new Set(Object.keys(target.env ?? {}));
+    for (const name of Object.keys(env)) {
+      if (gone.has(name.toUpperCase()) && !handed.has(name)) delete env[name];
+    }
+  }
   if (target.executablePath && path.isAbsolute(target.executablePath)) {
     const own = path.dirname(target.executablePath);
     const rest = (env.PATH ?? '').split(path.delimiter).filter((dir) => dir && dir !== own);
@@ -630,7 +639,55 @@ export function createAcpAdapter(options: AcpAdapterOptions): AgentAdapter {
       };
     },
 
-    settings(_target, stored): SettingsSection[] {
+    settings(target, stored): SettingsSection[] {
+      // Where its model calls go (ADR 0029), for an agent the hub can point at its model gateway.
+      const models: SettingsSection[] = entryOf(target.slug)?.gateway
+        ? [
+            {
+              key: 'models',
+              title: { ar: 'النماذج', en: 'Models' },
+              restart_required: false,
+              applies: 'next_message',
+              note: {
+                ar: 'يسري من الرسالة التالية؛ تبدأ المحادثة المفتوحة من جديد على المصدر المختار وتكمل من حيث توقفت.',
+                en: 'Takes effect from the next message: an open conversation restarts the agent on the chosen source and carries on where it was.',
+              },
+              fields: [
+                {
+                  key: 'model_source',
+                  label: { ar: 'مصدر النماذج', en: 'Model source' },
+                  kind: 'choice',
+                  value: typeof stored.model_source === 'string' ? stored.model_source : null,
+                  default: 'auto',
+                  options: [
+                    {
+                      value: 'auto',
+                      label: 'Automatic',
+                      labels: { ar: 'تلقائي', en: 'Automatic' },
+                    },
+                    {
+                      value: 'hub',
+                      label: "Core Hub's models",
+                      labels: { ar: 'نماذج كور هب', en: "Core Hub's models" },
+                    },
+                    {
+                      value: 'agent',
+                      label: "The agent's own account",
+                      labels: { ar: 'حساب الوكيل نفسه', en: "The agent's own account" },
+                    },
+                  ],
+                  min: null,
+                  max: null,
+                  hint: null,
+                  help: {
+                    ar: 'نماذج كور هب: يعمل الوكيل على أي نموذج أضفته في الإعدادات ← النماذج، تختاره من منتقي النماذج، ولا يُعطى أي مفتاح. حساب الوكيل نفسه: يعمل على حسابه أو إعداداته كما كان. التلقائي: نماذج كور هب في الحاوية، وعلى جهازك نماذج كور هب إلا إن كان الوكيل مسجَّل الدخول بحسابه.',
+                    en: "Core Hub's models: the agent runs on any model you added in Settings → Models, picked in the model picker, and is given no key. The agent's own account: it runs on its own account or settings, as before. Automatic: Core Hub's models in the container; on your computer, Core Hub's models unless the agent is signed in to its own account.",
+                  },
+                },
+              ],
+            },
+          ]
+        : [];
       return [
         {
           key: 'session',
@@ -663,6 +720,7 @@ export function createAcpAdapter(options: AcpAdapterOptions): AgentAdapter {
             },
           ],
         },
+        ...models,
       ];
     },
 
