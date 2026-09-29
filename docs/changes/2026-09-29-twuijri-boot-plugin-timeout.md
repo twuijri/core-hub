@@ -87,7 +87,17 @@ $ eslint … ; prettier --check …                     All matched files use Pr
            18:48:28.090 Server listening   → claude-code: installed
 ```
 وعلى صورة المالك نفسها سجّلت نسخة التشخيص f6514220: `claude-code ms:30137` و`agents ms:34659`.
-نتيجة CI: تُضاف بعد الدفع.
+نتيجة CI على PR #226 (الرأس 61cd3985) — كل الفحوص الأربعة عشر ناجحة:
+```
+Lint, typecheck, contracts, tests, build	pass
+Server unit tests (shard 1/3, 2/3, 3/3)	pass
+Docker image builds and answers /health	pass
+Real Hermes suites (floor, pinned)	pass
+Web smoke journeys (Playwright against the real hub)	pass
+Desktop app smoke (Electron under Xvfb against the real hub)	pass
+db:generate + db:migrate (SQLite and PostgreSQL)	pass
+PR adds or updates a change record	pass
+```
 
 ## المخاطر والرجوع
 - `runCommand` صارت تُشغَّل بـ`spawn` مع stdin مغلق ومجموعة عمليات مستقلة. من يستدعيها (فحوص النسخة والصحة، وفك tar،
