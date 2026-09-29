@@ -412,7 +412,8 @@ export class ModelGateway {
   }
 }
 
-function isLoopback(address: string | undefined): boolean {
+/** Whether a peer address is this computer's own (IPv4, IPv6, IPv4-mapped IPv6). */
+export function isLoopback(address: string | undefined): boolean {
   if (!address) return false;
   return (
     address === '::1' ||
