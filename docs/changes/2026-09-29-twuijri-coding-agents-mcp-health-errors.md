@@ -133,8 +133,16 @@ $ (web) vitest run agent-mcp-coding agent-run-help default-model-label agent-ver
  Test Files  9 passed (9)
       Tests  63 passed (63)
 ```
-- Playwright لم يُشغَّل محلياً. مواصفات e2e كلها على صفحة هرمز، وسلوكها لم يتغيّر. CI يشغّلها.
-- نتيجة CI على #227 تُضاف هنا عند انتهائها.
+- **CI على #227 عند 10f700a1** فشل في «Web smoke journeys»: `pseudo-locales` ‏(ar-XB، الهاتف، `/agents`) وجد رأس بطاقة Claude Code
+  يفيض (324px تحمل 329px)، بسبب شارة «يحتاج مزوّدًا أو تسجيل دخول» الثانية في الرأس. الإصلاح: صارت سطراً خاصاً (Notice) تحت الرأس.
+- محلياً بعد الإصلاح:
+```
+$ PLAYWRIGHT_CHANNEL=chrome pnpm --filter @corehub/web exec playwright test e2e/zzzzzzzzzzzzzzzzz-pseudo-locales.spec.ts --workers=1
+  ✓  3 [chromium] › e2e/zzzzzzzzzzzzzzzzz-pseudo-locales.spec.ts:77:3 › ar-XB: every main screen fits at desktop and phone width (35.4s)
+  5 passed (2.5m)
+```
+- **CI على #227 عند 24fc170f:** كل الفحوص ناجحة (Web smoke journeys، وServer unit tests 1–3/3، وReal Hermes suites،
+  وiOS، وAndroid، وDocker، وTranslations fit their labels، وغيرها). «Upload the listing to App Store Connect» تُتخطّى كالعادة.
 
 ## المخاطر والرجوع
 - **الكتابة في `~/.claude.json`** ملف حالة Claude Code.
