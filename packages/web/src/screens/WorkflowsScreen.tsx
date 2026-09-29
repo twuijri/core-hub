@@ -15,6 +15,7 @@ import { useI18n } from '../i18n/context.js';
 import { termKey } from '../navigation/manifest.js';
 import { WorkflowRunDialog } from '../schedules/ScheduleRuns.js';
 import { WorkflowsSection } from '../schedules/workflows/WorkflowsSection.js';
+import { PanelBoundary } from '../schedules/workflows/PanelBoundary.js';
 import { AppShell } from '../shell/AppShell.js';
 import { Skeleton } from '../ui/index.js';
 
@@ -68,18 +69,20 @@ export function WorkflowsScreen() {
     <AppShell title={title}>
       <h1 className="sr-only">{title}</h1>
       {editing ? (
-        <Suspense fallback={<Skeleton height="30rem" radius="md" />}>
-          <WorkflowEditor
-            workflowId={editing === 'new' ? null : editing}
-            profile={editingProfile}
-            runId={params.get('run')}
-            onBack={() => showWorkflow(null)}
-            onSaved={(id) => showWorkflow({ id, profile: editingProfile })}
-            onShowRun={(run, id) =>
-              showWorkflow({ id: id ?? editing, profile: editingProfile }, run)
-            }
-          />
-        </Suspense>
+        <PanelBoundary resetKey={editing} testId="workflow-editor-failed">
+          <Suspense fallback={<Skeleton height="30rem" radius="md" />}>
+            <WorkflowEditor
+              workflowId={editing === 'new' ? null : editing}
+              profile={editingProfile}
+              runId={params.get('run')}
+              onBack={() => showWorkflow(null)}
+              onSaved={(id) => showWorkflow({ id, profile: editingProfile })}
+              onShowRun={(run, id) =>
+                showWorkflow({ id: id ?? editing, profile: editingProfile }, run)
+              }
+            />
+          </Suspense>
+        </PanelBoundary>
       ) : (
         <WorkflowsSection
           onOpen={(workflow) => showWorkflow(workflow)}

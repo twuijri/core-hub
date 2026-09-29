@@ -56,11 +56,13 @@ import {
 } from './expr.js';
 import { NO_LIMITS, dollars, duration, microUsdOf, moneyOfMicro } from './limits.js';
 import {
+  chatIdOf,
   hasSend,
   resultOf,
   splitMessage,
   targetKey,
   telegramSend,
+  withoutToken,
   type SendResult,
 } from './send.js';
 import type {
@@ -137,8 +139,39 @@ export interface SentMemory {
 }
 
 /**
+ * What happened at one target of a send, for the hub's log (never the bot token or the
+ * words): the platform, where, whether it went, the platform's ids, and why not.
+ */
+export interface SendReport {
+  platform: string;
+  target: string;
+  chat_id: string | null;
+  session_id: string | null;
+  status: 'sent' | 'failed';
+  message_ids: string[];
+  error_code: string | null;
+  error: string | null;
+}
+
+/** A log line's fields for one target of a send (`report` of `deliverSend`). */
+export function sendLogFields(report: SendReport): Record<string, unknown> {
+  return {
+    platform: report.platform,
+    target: report.target,
+    ...(report.chat_id !== null ? { chat_id: report.chat_id } : {}),
+    ...(report.session_id !== null ? { session_id: report.session_id } : {}),
+    status: report.status,
+    ...(report.message_ids.length > 0
+      ? { message_id: report.message_ids[0], message_ids: report.message_ids }
+      : {}),
+    ...(report.error !== null ? { error_code: report.error_code, error: report.error } : {}),
+  };
+}
+
+/**
  * Send the words to every target of a "Send message" step (or of its test): each target on
  * its own, a failure of one never stopping another, and the result says exactly what went.
+ * `report` hears each target's outcome, for the hub's log.
  */
 export async function deliverSend(
   messages: MessagePorts | null | undefined,
@@ -147,32 +180,72 @@ export async function deliverSend(
   text: string,
   memory: SentMemory | null,
   moved: (from: string | null, to: { sessionId: string; title: string | null }) => void,
+  report: (entry: SendReport) => void = () => undefined,
 ): Promise<{ result: SendResult; notes: string[] }> {
   const delivered: Array<{ target: string; ids: string[] }> = [];
   const failures: Array<{ target: string; reason: string }> = [];
   const notes: string[] = [];
+  const tell = (entry: SendReport) => {
+    try {
+      report(entry);
+    } catch {
+      // A log line never changes what was sent.
+    }
+  };
+  const failed = (
+    target: WorkflowSend['targets'][number],
+    key: string,
+    code: string,
+    reason: string,
+  ) => {
+    failures.push({ target: key, reason });
+    tell({
+      platform: String(target.platform),
+      target: key,
+      chat_id: target.platform === 'telegram' ? chatIdOf(target.chat_id) : null,
+      session_id: target.platform === 'core_hub' ? (target.session_id ?? null) : null,
+      status: 'failed',
+      message_ids: [],
+      error_code: code,
+      error: reason,
+    });
+  };
   for (const target of send.targets) {
     const key = targetKey(target);
     if (!messages) {
-      failures.push({ target: key, reason: 'this hub cannot send messages' });
+      failed(target, key, 'no_messages', 'this hub cannot send messages');
       continue;
     }
     if (target.platform === 'telegram') {
-      const chat = (target.chat_id ?? '').trim();
-      const token = messages.telegramToken(scope);
+      const chat = chatIdOf(target.chat_id);
       if (!chat) {
-        failures.push({ target: key, reason: 'no chat id' });
+        failed(target, key, 'no_chat_id', 'no chat id');
+        continue;
+      }
+      let token: string | null;
+      try {
+        token = messages.telegramToken(scope);
+      } catch (error) {
+        const said = error instanceof Error ? error.message : String(error);
+        failed(
+          target,
+          key,
+          'token_unreadable',
+          `the profile's Telegram bot could not be read (${said})`,
+        );
         continue;
       }
       if (!token) {
-        failures.push({
-          target: key,
-          reason: 'this profile has no Telegram bot (TELEGRAM_BOT_TOKEN in its .env)',
-        });
+        failed(
+          target,
+          key,
+          'no_bot',
+          'this profile has no Telegram bot (TELEGRAM_BOT_TOKEN in its .env)',
+        );
         continue;
       }
       const ids: string[] = [];
-      let failed: string | null = null;
+      let refusal: { code: string; reason: string } | null = null;
       const parts = splitMessage(text);
       for (let part = 0; part < parts.length; part += 1) {
         const before = memory?.seen(key, part) ?? null;
@@ -188,17 +261,33 @@ export async function deliverSend(
           parts[part]!,
         );
         if (!answer.ok) {
-          failed =
-            parts.length > 1
-              ? `part ${part + 1} of ${parts.length}: ${answer.reason}`
-              : answer.reason;
+          refusal = {
+            code: answer.code,
+            reason:
+              parts.length > 1
+                ? `part ${part + 1} of ${parts.length}: ${answer.reason}`
+                : answer.reason,
+          };
           break;
         }
         memory?.keep(key, part, answer.messageId);
         ids.push(answer.messageId);
       }
-      if (failed) failures.push({ target: key, reason: failed });
-      else delivered.push({ target: key, ids });
+      if (refusal) {
+        failed(target, key, refusal.code, withoutToken(refusal.reason, token));
+      } else {
+        delivered.push({ target: key, ids });
+        tell({
+          platform: 'telegram',
+          target: key,
+          chat_id: chat,
+          session_id: null,
+          status: 'sent',
+          message_ids: ids,
+          error_code: null,
+          error: null,
+        });
+      }
       continue;
     }
     if (target.platform === 'core_hub') {
@@ -223,16 +312,24 @@ export async function deliverSend(
             );
           }
         }
-        delivered.push({ target: `core_hub:${posted.sessionId}`, ids: [posted.messageId] });
-      } catch (error) {
-        failures.push({
-          target: key,
-          reason: error instanceof Error ? error.message : String(error),
+        const where = `core_hub:${posted.sessionId}`;
+        delivered.push({ target: where, ids: [posted.messageId] });
+        tell({
+          platform: 'core_hub',
+          target: where,
+          chat_id: null,
+          session_id: posted.sessionId,
+          status: 'sent',
+          message_ids: [posted.messageId],
+          error_code: null,
+          error: null,
         });
+      } catch (error) {
+        failed(target, key, 'post_failed', error instanceof Error ? error.message : String(error));
       }
       continue;
     }
-    failures.push({ target: key, reason: `this hub cannot send to "${target.platform}"` });
+    failed(target, key, 'platform_unknown', `this hub cannot send to "${target.platform}"`);
   }
   return { result: resultOf(delivered, failures), notes };
 }
@@ -851,6 +948,7 @@ export class WorkflowEngine {
               service.recordSent(run, { runKey, nodeKey: '__on_failure', target, part }, id),
           },
           () => undefined,
+          (report) => this.logSend(scope, run, '__on_failure', report),
         );
       }
     } catch (failure) {
@@ -1075,6 +1173,7 @@ export class WorkflowEngine {
       text,
       memory,
       (from, to) => service.repointConversation(run.workflowId, node.id, from, to),
+      (report) => this.logSend(scope, run, node.id, report),
     );
     const title = node.title || 'Send message';
     const said = [
@@ -1101,6 +1200,20 @@ export class WorkflowEngine {
       };
     }
     return succeed(result);
+  }
+
+  /** One log line per target a run's send reached (§124): where, what came of it, never the token. */
+  private logSend(scope: RunScope, run: WorkflowRunRow, nodeId: string, report: SendReport): void {
+    const fields = {
+      workflow_id: run.workflowId,
+      workflow_run_id: run.id,
+      node_id: nodeId,
+      profile: scope.profile,
+      test: false,
+      ...sendLogFields(report),
+    };
+    if (report.status === 'sent') this.log.info(fields, 'workflow send');
+    else this.log.warn(fields, 'workflow send failed');
   }
 
   private async perform(

@@ -22312,6 +22312,92 @@ components:
           $ref: '#/components/schemas/Timestamp'
         oauth:
           $ref: '#/components/schemas/McpOAuthState'
+        last_test:
+          description: >-
+            What Hermes found the last time the server was tested in this profile (contract
+            decision §134), kept by the hub so a client can show the tools without testing again.
+            Refreshed by `agents.testMcpServer` and by an OAuth sign-in that lands; `null` when the
+            server was never tested here. Absent from older hubs.
+          oneOf:
+            - $ref: '#/components/schemas/McpLastTest'
+            - type: 'null'
+        tool_filter:
+          $ref: '#/components/schemas/McpToolFilter'
+    McpToolFilter:
+      type: object
+      description: >-
+        Which of a server's tools Hermes gives the agent (contract decision §134): Hermes's own
+        `tools.include` / `tools.exclude` of the server's block in the profile's `config.yaml`.
+        Entries are exact tool names or globs (`*`, `?`, `[…]`). `include` set (even `[]`, which
+        allows none) is an allow-list and wins: a tool the server adds later is not allowed until
+        it is listed. Otherwise `exclude` is a block-list. Both `null`: every tool. On
+        `McpServer`, present from hubs that know it. On `McpServerPatch`, both `null` removes the
+        filter; `include` as a list writes an allow-list and drops `exclude`; otherwise `exclude`
+        as a list writes a block-list. Hermes applies it when it next connects to the server (the
+        restart the page describes).
+      required: [include, exclude]
+      properties:
+        include:
+          type: [array, 'null']
+          maxItems: 2000
+          items:
+            type: string
+            minLength: 1
+            maxLength: 200
+        exclude:
+          type: [array, 'null']
+          maxItems: 2000
+          items:
+            type: string
+            minLength: 1
+            maxLength: 200
+    McpLastTest:
+      type: object
+      description: >-
+        The last test of an MCP server in a profile, as the hub keeps it (contract decision §134).
+        `tools` lists every tool the server offered, whatever the filter. `stale` — the server's
+        connection settings changed after this test (anything but `enabled`, `tools` and the
+        `oauth` block), so the list may be out of date until it is tested again.
+      required: [ok, tools, tool_count, error, tested_at, duration_ms, stale]
+      properties:
+        ok:
+          type: boolean
+        tools:
+          type: array
+          items:
+            $ref: '#/components/schemas/McpTestedTool'
+        tool_count:
+          type: integer
+          minimum: 0
+        error:
+          type: [string, 'null']
+        tested_at:
+          $ref: '#/components/schemas/Timestamp'
+        duration_ms:
+          type: integer
+        stale:
+          type: boolean
+    McpTestedTool:
+      type: object
+      description: >-
+        One tool from a server's last test. `access` is the hub's reading of what the tool does:
+        `read` — it only reads, lists, searches or gets; `write` — it changes something (create,
+        update, delete, send, run…); `unknown` — its name says neither. `access_source` says where
+        that came from: `annotation` — the server marked it `readOnlyHint` (as Hermes recorded it
+        in the profile), `name` — the verbs in its name. A client may offer "read-only" from it;
+        the person decides.
+      required: [name, description, access, access_source]
+      properties:
+        name:
+          type: string
+        description:
+          type: [string, 'null']
+        access:
+          type: string
+          enum: [read, write, unknown]
+        access_source:
+          type: string
+          enum: [annotation, name]
     McpOAuthState:
       type: object
       description: >-
@@ -22400,6 +22486,12 @@ components:
         config:
           type: object
           additionalProperties: true
+        tool_filter:
+          description: >-
+            Which tools Hermes gives the agent (contract decision §134). Written into the server's
+            block after `config`, leaving the block's other keys (and `tools.resources` /
+            `tools.prompts`) as they are.
+          $ref: '#/components/schemas/McpToolFilter'
     McpTestResult:
       type: object
       required: [ok, tools, error, duration_ms]
@@ -26058,6 +26150,19 @@ components:
           oneOf:
             - $ref: '#/components/schemas/Ulid'
             - type: 'null'
+        workflow_id:
+          description: >-
+            The workflow the step belongs to, when it is saved. Only named in the hub's log
+            line for the test, so a failed test can be found; it changes nothing that is sent.
+          oneOf:
+            - $ref: '#/components/schemas/Ulid'
+            - type: 'null'
+        node_id:
+          type: [string, 'null']
+          maxLength: 64
+          description: >-
+            The step's id in the drawing (`notify_1`), saved or not. Only named in the hub's log
+            line for the test.
     WorkflowSampleValues:
       type: [object, 'null']
       description: >-

@@ -10,7 +10,7 @@ import type { FastifyInstance, FastifyRequest } from 'fastify';
 import { newUlid } from '../../db/ids.js';
 import { HubError, notFound } from '../../lib/errors.js';
 import { defineRoute, type RouteDeps } from '../../lib/route.js';
-import { testMcpServer, type HermesApiCall } from './hermes-tools.js';
+import { testMcpServer, type HermesApiCall, type McpTestResult } from './hermes-tools.js';
 import { McpError, getMcpServer, prepareOAuthLogin, type McpServer } from './mcp.js';
 import {
   McpOAuthFlows,
@@ -41,6 +41,8 @@ export interface McpOAuthRouteHelpers {
   fetchImpl?: typeof fetch;
   /** The contract's `McpServer`, `oauth` included. */
   toMcpServer(server: McpServer, home: string): Record<string, unknown>;
+  /** Keep a test's answer as the server's last test in this profile (DECISIONS §134). */
+  rememberTest?(home: string, name: string, result: McpTestResult): void;
   /** The hub's own block is not signed in from here (§67). */
   refuseManaged(name: string): void;
   mcpFault(error: unknown): never;
@@ -84,7 +86,8 @@ export function registerMcpOAuthRoutes(
 
   /**
    * Once signed in, the tools Hermes then lists — asked of Hermes's own test, once, so the page
-   * and the MCP screen can show the count. A test that fails leaves the list empty.
+   * and the MCP screen can show the count. A test that fails leaves the list empty. Either way
+   * the answer becomes the server's last test in the profile (DECISIONS §134).
    */
   const askTools = (record: McpOAuthFlowRecord): Promise<void> => {
     if (record.toolsAsked) return record.toolsAsked;
@@ -99,6 +102,7 @@ export function registerMcpOAuthRoutes(
           language: 'en',
         });
         if (result.ok) record.tools = result.tools;
+        helpers.rememberTest?.(record.home, record.serverName, result);
       } catch {
         // The sign-in stands; the list is only a courtesy.
       }

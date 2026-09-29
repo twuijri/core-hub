@@ -14,6 +14,7 @@ import {
   listMcpServers,
   putMcpServer,
   prepareOAuthLogin,
+  setMcpToolFilter,
 } from './mcp.js';
 
 const homes: string[] = [];
@@ -227,5 +228,92 @@ describe('a remote server that signs in (DECISIONS §122)', () => {
     expect(() => prepareOAuthLogin(own, 'ghost', 'https://b.example/', 1, ours)).toThrow(
       /not_found/,
     );
+  });
+});
+
+describe('which tools Hermes gives the agent (DECISIONS §134)', () => {
+  const FILTERED = `# kept
+mcp_servers:
+  github:
+    url: https://mcp.example/github
+    tools:
+      resources: false
+      exclude: [delete_repo]
+  local:
+    command: node
+`;
+
+  it('reads include and exclude as Hermes does; no key is no filter, and `[]` allows none', () => {
+    const dir = home(FILTERED + '  none:\n    command: x\n    tools:\n      include: []\n');
+    const byName = Object.fromEntries(listMcpServers(dir).map((s) => [s.name, s.toolFilter]));
+    expect(byName.github).toEqual({ include: null, exclude: ['delete_repo'] });
+    expect(byName.local).toEqual({ include: null, exclude: null });
+    expect(byName.none).toEqual({ include: [], exclude: null });
+  });
+
+  it("writes Hermes's `tools.include`, drops `exclude`, and keeps the block's other keys", () => {
+    const dir = home(FILTERED);
+    const written = setMcpToolFilter(dir, 'github', {
+      include: ['get_issue', 'list_repos', 'get_issue'],
+      exclude: ['ignored'],
+    });
+    expect(written.toolFilter).toEqual({ include: ['get_issue', 'list_repos'], exclude: null });
+    const text = read(dir);
+    expect(text).toContain('# kept');
+    expect(text).toMatch(
+      / {4}tools:\n {6}resources: false\n {6}include:\n {8}- get_issue\n {8}- list_repos\n/,
+    );
+    expect(text).not.toContain('exclude');
+    expect(text).toContain('  local:\n    command: node');
+  });
+
+  it('writes `include: []` as it is: Hermes then registers none of the tools', () => {
+    const dir = home(FILTERED);
+    expect(setMcpToolFilter(dir, 'local', { include: [], exclude: null }).toolFilter).toEqual({
+      include: [],
+      exclude: null,
+    });
+    expect(read(dir)).toMatch(/ {2}local:\n {4}command: node\n {4}tools:\n {6}include: \[\]\n/);
+  });
+
+  it('writes a block-list, and removes the filter (and an emptied `tools`) with both null', () => {
+    const dir = home(FILTERED);
+    setMcpToolFilter(dir, 'local', { include: null, exclude: ['run_*'] });
+    expect(getMcpServer(dir, 'local')!.toolFilter).toEqual({ include: null, exclude: ['run_*'] });
+    setMcpToolFilter(dir, 'local', { include: null, exclude: null });
+    expect(read(dir)).toContain('  local:\n    command: node\n');
+    expect(read(dir)).not.toMatch(/local:\n {4}command: node\n {4}tools/);
+    // github keeps `tools.resources` when its filter goes.
+    setMcpToolFilter(dir, 'github', { include: null, exclude: null });
+    expect(read(dir)).toMatch(/ {4}tools:\n {6}resources: false\n/);
+    expect(getMcpServer(dir, 'github')!.toolFilter).toEqual({ include: null, exclude: null });
+  });
+
+  it('refuses a server that is not there and a `tools` that is not a block', () => {
+    const dir = home('mcp_servers:\n  odd:\n    command: x\n    tools: yes\n');
+    expect(() => setMcpToolFilter(dir, 'nope', { include: [], exclude: null })).toThrow(
+      new McpError('mcp_not_found'),
+    );
+    expect(() => setMcpToolFilter(dir, 'odd', { include: [], exclude: null })).toThrow(
+      new McpError('mcp_tools_block_invalid'),
+    );
+  });
+
+  it('changes the fingerprint for the connection, not for the switch, the filter or the sign-in', () => {
+    const dir = home(FILTERED);
+    const before = getMcpServer(dir, 'github')!.fingerprint;
+    putMcpServer(dir, 'github', { enabled: false });
+    setMcpToolFilter(dir, 'github', { include: ['a'], exclude: null });
+    prepareOAuthLogin(dir, 'github', 'https://hub.example/cb', 4100, () => true);
+    const signIn = getMcpServer(dir, 'github')!;
+    // `auth: oauth` is part of how it connects; the `oauth` block (redirect, port) is not.
+    const withAuth = signIn.fingerprint;
+    expect(withAuth).not.toBe(before);
+    prepareOAuthLogin(dir, 'github', 'https://hub.example/cb', 4200, () => true);
+    expect(getMcpServer(dir, 'github')!.fingerprint).toBe(withAuth);
+    putMcpServer(dir, 'github', {
+      config: { ...signIn.config, url: 'https://mcp.example/github/v2' },
+    });
+    expect(getMcpServer(dir, 'github')!.fingerprint).not.toBe(withAuth);
   });
 });

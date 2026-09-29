@@ -39,6 +39,7 @@ import { WorkflowCanvas, type CanvasIssues } from './WorkflowCanvas.js';
 import { IssueList, StepPanel, StepRunPanel } from './StepPanel.js';
 import { WorkflowTriggers } from './WorkflowTriggers.js';
 import { FailureAlertForm } from './SendForm.js';
+import { PanelBoundary } from './PanelBoundary.js';
 import {
   NODE_KINDS,
   emptyDraft,
@@ -476,52 +477,58 @@ export default function WorkflowEditor({
                 </Button>
               </div>
               <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_20rem]">
-                <WorkflowCanvas
-                  draft={draft}
-                  selected={state.selected}
-                  dispatch={dispatch}
-                  readOnly={false}
-                  issues={canvasIssues}
-                  run={null}
-                />
-                <Card testId="workflow-side">
-                  <StepPanel
+                <PanelBoundary testId="workflow-canvas-failed">
+                  <WorkflowCanvas
                     draft={draft}
-                    node={selectedNode}
-                    edge={selectedEdge}
+                    selected={state.selected}
                     dispatch={dispatch}
-                    agents={agents.data ?? []}
-                    models={models.data ?? []}
-                    issues={selectedIssues}
-                    problems={problems}
-                    onRunFrom={(id) => void runFrom([id]).catch(() => undefined)}
-                    runFromBusy={writes.run.isPending}
-                    profile={profile}
-                    lastRunId={runs.data?.[0]?.id ?? null}
-                    settings={
-                      <section
-                        className="flex flex-col gap-2 border-t border-line pt-3"
-                        data-testid="workflow-settings"
-                      >
-                        <h3 className="text-sm font-medium">{t('schedules.limits.title')}</h3>
-                        {workflowId ? (
-                          <WorkflowLimitsForm workflowId={workflowId} profile={profile} />
-                        ) : (
-                          <p className="text-xs text-muted">{t('schedules.limits.save_first')}</p>
-                        )}
-                        <FailureAlertForm
-                          alert={draft.on_failure ?? null}
-                          profile={profile}
-                          onChange={(alert) => dispatch({ type: 'alert', alert })}
-                        />
-                        <WorkflowTriggers
-                          workflowId={workflowId}
-                          profile={profile}
-                          onShowRun={(id) => onShowRun(id)}
-                        />
-                      </section>
-                    }
+                    readOnly={false}
+                    issues={canvasIssues}
+                    run={null}
                   />
+                </PanelBoundary>
+                <Card testId="workflow-side">
+                  {/* An error in a step's form closes that form only; another step opens it again. */}
+                  <PanelBoundary resetKey={selectedNode?.id ?? selectedEdge?.id ?? null}>
+                    <StepPanel
+                      draft={draft}
+                      node={selectedNode}
+                      edge={selectedEdge}
+                      dispatch={dispatch}
+                      agents={agents.data ?? []}
+                      models={models.data ?? []}
+                      issues={selectedIssues}
+                      problems={problems}
+                      onRunFrom={(id) => void runFrom([id]).catch(() => undefined)}
+                      runFromBusy={writes.run.isPending}
+                      profile={profile}
+                      workflowId={workflowId}
+                      lastRunId={runs.data?.[0]?.id ?? null}
+                      settings={
+                        <section
+                          className="flex flex-col gap-2 border-t border-line pt-3"
+                          data-testid="workflow-settings"
+                        >
+                          <h3 className="text-sm font-medium">{t('schedules.limits.title')}</h3>
+                          {workflowId ? (
+                            <WorkflowLimitsForm workflowId={workflowId} profile={profile} />
+                          ) : (
+                            <p className="text-xs text-muted">{t('schedules.limits.save_first')}</p>
+                          )}
+                          <FailureAlertForm
+                            alert={draft.on_failure ?? null}
+                            profile={profile}
+                            onChange={(alert) => dispatch({ type: 'alert', alert })}
+                          />
+                          <WorkflowTriggers
+                            workflowId={workflowId}
+                            profile={profile}
+                            onShowRun={(id) => onShowRun(id)}
+                          />
+                        </section>
+                      }
+                    />
+                  </PanelBoundary>
                 </Card>
               </div>
               <IssueList
@@ -535,16 +542,18 @@ export default function WorkflowEditor({
         </TabPanel>
         <TabPanel value="runs">
           {mode === 'runs' && workflowId && (
-            <RunView
-              profile={profile}
-              runId={runId}
-              runs={runs.data ?? null}
-              runsError={runs.error}
-              saved={workflow.data ? fromWorkflow(workflow.data) : draft}
-              onShowRun={onShowRun}
-              when={when}
-              onAnswered={() => void queryClient.invalidateQueries({ queryKey: ['schedules'] })}
-            />
+            <PanelBoundary resetKey={runId} testId="workflow-run-failed">
+              <RunView
+                profile={profile}
+                runId={runId}
+                runs={runs.data ?? null}
+                runsError={runs.error}
+                saved={workflow.data ? fromWorkflow(workflow.data) : draft}
+                onShowRun={onShowRun}
+                when={when}
+                onAnswered={() => void queryClient.invalidateQueries({ queryKey: ['schedules'] })}
+              />
+            </PanelBoundary>
           )}
         </TabPanel>
       </Tabs>

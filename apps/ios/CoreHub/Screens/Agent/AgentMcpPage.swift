@@ -54,7 +54,8 @@ struct AgentMcpPage: View {
                                 }
                             },
                             edit: { editing = server },
-                            runTest: { Task { await test(server.name) } },
+                            // The hub keeps the answer as the server's last test (§134): read it back.
+                            runTest: { Task { await test(server.name); reload() } },
                             delete: {
                                 question = ToolQuestion(title: l10n("agents2.mcp.delete_title", ["name": server.name]), body: l10n("agents2.mcp.delete_body"),
                                                         confirm: l10n("kit.delete")) {
@@ -153,6 +154,7 @@ struct McpServerRow: View {
             HStack(spacing: Space.s2) {
                 Text(server.name).font(.system(size: FontSize.sizeMd, weight: .semibold))
                 StatusPill(text: server.transport.rawValue)
+                if let count = toolCount { count }
                 Spacer()
                 StatusPill(text: server.connected ? l10n("mcp.connected") : (server.enabled ? l10n("mcp.not_connected") : l10n("agents2.mcp.off")),
                            kind: server.connected ? .good : .neutral)
@@ -165,9 +167,14 @@ struct McpServerRow: View {
                 Text(summary).font(.system(size: FontSize.sizeXs, design: .monospaced)).foregroundStyle(Tone.textMuted).lineLimit(2)
                     .environment(\.layoutDirection, .leftToRight)
             }
-            Text(l10n("mcp.tools", ["count": String(server.tools.count)])).font(.system(size: FontSize.sizeXs)).foregroundStyle(Tone.textMuted)
+            if let last = server.lastTest {
+                McpLastTestView(server: server, last: last)
+            } else {
+                Text(l10n("mcp.tools", ["count": String(server.tools.count)])).font(.system(size: FontSize.sizeXs)).foregroundStyle(Tone.textMuted)
+            }
             if let error = server.error { NoticeView(text: error, tone: .danger) }
-            McpTestView(name: server.name, test: result)
+            // The kept test above says what this one said; a refusal by the hub is still shown here.
+            if server.lastTest == nil || result?.error != nil { McpTestView(name: server.name, test: result) }
             if let oauth { oauth }
             HStack {
                 Button(action: runTest) {
@@ -191,6 +198,65 @@ struct McpServerRow: View {
             Button(action: edit) { LucideLabel(l10n("agents2.mcp.edit"), icon: .pencil) }
         }
         .accessibilityIdentifier("mcp.\(server.name)")
+    }
+}
+
+extension McpServerRow {
+    /// "61 tools", "12 of 61 tools", or that the last test failed — from the kept test (§134).
+    fileprivate var toolCount: StatusPill? {
+        guard let last = server.lastTest else { return nil }
+        guard last.ok else { return StatusPill(text: l10n("agents2.mcp.test_failed_short"), kind: .bad) }
+        let count = McpRules.toolCount(last.tools.map(\.name), include: server.toolFilter?.include, exclude: server.toolFilter?.exclude)
+        let text = count.filtered
+            ? l10n("agents2.mcp.tool_count_filtered", ["allowed": String(count.allowed), "total": String(count.total)])
+            : l10n("agents2.mcp.tool_count", ["count": String(count.total)])
+        return StatusPill(text: text, kind: last.stale ? .warn : .neutral)
+    }
+}
+
+/// The last test the hub kept for a server in this profile (DECISIONS §134): its tools without testing
+/// again, each with how the hub reads it and whether the agent may use it. Choosing them is on the web.
+struct McpLastTestView: View {
+    let server: McpServer
+    let last: McpLastTest
+    @Environment(\.l10n) private var l10n
+
+    private func access(_ tool: McpTestedTool) -> String {
+        if tool.access == .read { return l10n("agents2.mcp.access_read") }
+        if tool.access == .write { return l10n("agents2.mcp.access_write") }
+        return l10n("agents2.mcp.access_unknown")
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: Space.s1) {
+            if last.stale { NoticeView(text: l10n("agents2.mcp.tools_stale"), tone: .warning) }
+            if last.ok {
+                NoticeView(text: l10n("agents2.mcp.test_ok", ["count": String(last.tools.count), "seconds": McpRules.seconds(last.durationMs)])
+                    + (last.tools.isEmpty ? " " + l10n("agents2.mcp.no_tools") : ""), tone: .success)
+                ForEach(last.tools, id: \.name) { tool in
+                    let on = McpRules.allowed(tool.name, include: server.toolFilter?.include, exclude: server.toolFilter?.exclude)
+                    VStack(alignment: .leading, spacing: 2) {
+                        HStack(spacing: Space.s1) {
+                            Text(verbatim: tool.name)
+                                .font(.system(size: FontSize.sizeXs, design: .monospaced))
+                                .foregroundStyle(on ? Tone.text : Tone.textMuted)
+                            StatusPill(text: access(tool), kind: tool.access == .read ? .good : (tool.access == .write ? .warn : .neutral))
+                            if !on { StatusPill(text: l10n("agents2.mcp.tool_off")) }
+                        }
+                        if let description = tool.description, !description.isEmpty {
+                            Text(description).font(.system(size: FontSize.sizeXs)).foregroundStyle(Tone.textMuted).contentDirection(of: description)
+                        }
+                    }
+                    .accessibilityIdentifier("mcp.\(server.name).tool.\(tool.name)")
+                }
+                if !last.tools.isEmpty {
+                    Text(l10n("agents2.mcp.tools_pick_on_web")).font(.system(size: FontSize.sizeXs)).foregroundStyle(Tone.textMuted)
+                }
+            } else {
+                NoticeView(text: l10n("agents2.mcp.test_failed") + " " + (last.error ?? ""), tone: .danger)
+            }
+        }
+        .accessibilityIdentifier("mcp.\(server.name).last")
     }
 }
 

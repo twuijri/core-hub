@@ -27,8 +27,14 @@
  * the full address or command, the sign-in and its Reconnect / Disconnect, the last test. Edit
  * is its own button now, so opening a row never opens the editor. Which rows are open is kept
  * on this device (`mcpExpanded.ts`); a row that needs the person starts open.
+ *
+ * **The tools without pressing Test** (owner, 2026-09-29, DECISIONS §134). The hub keeps each
+ * server's last test in the profile: the folded row says how many tools ("61 tools", or "12 of
+ * 61 tools" when only some are allowed), and opening it shows them with a box each — which the
+ * agent may use (`McpToolsPanel.tsx`). A server never tested is tested once, by itself, the
+ * first time its row is open. A hub that keeps no tests (older) gets the page as it was.
  */
-import { useEffect, useId, useState } from 'react';
+import { useEffect, useId, useRef, useState } from 'react';
 import { useParams } from 'react-router';
 import { describeError } from '../auth/client.js';
 import { useAgents } from '../hub/queries.js';
@@ -72,6 +78,7 @@ import {
   useMcpOAuthConnect,
 } from './McpOAuthControls.js';
 import { expandedKey, useMcpExpanded, writeExpanded } from './mcpExpanded.js';
+import { McpToolsPanel, toolCountLabel } from './McpToolsPanel.js';
 
 const TEMPLATE = `{
   "command": "npx",
@@ -184,9 +191,29 @@ function ServerRow({
     setOpen(true);
     probe.mutate(server.name);
   };
+  // A hub that keeps tests says so by sending `last_test` (null until the first one, §134).
+  const remembers = 'last_test' in server;
+  const last = server.last_test ?? null;
+  // Open and never tested: test once, by itself — not again on every render or reopening.
+  const autoTested = useRef(false);
+  useEffect(() => {
+    if (!open || !remembers || last !== null || autoTested.current) return;
+    if (probe.isPending || probe.isError || probe.data) return;
+    autoTested.current = true;
+    probe.mutate(server.name);
+  }, [open, remembers, last, probe, server.name]);
+  // What the page shows: the kept test, or (a hub that keeps none) this page's own.
+  const failure =
+    remembers && last
+      ? last.ok
+        ? null
+        : last.error
+      : probe.data && !probe.data.ok
+        ? probe.data.error
+        : null;
   // Hermes said the server wants a sign-in: offer it where the failure is read (§122).
   const signInHere =
-    probe.data && !probe.data.ok && offersOAuth(server) && needsOAuth(probe.data.error) ? (
+    failure !== null && offersOAuth(server) && needsOAuth(failure) ? (
       <>
         <span className="text-sm">{t('mcp.oauth.test_needs')}</span>
         <Button
@@ -236,6 +263,7 @@ function ServerRow({
             </span>
             <Badge>{server.transport}</Badge>
             <McpOAuthChip server={server} />
+            <ToolCount server={server} />
           </span>
           <span className="skill-description" dir="ltr">
             {address}
@@ -306,7 +334,16 @@ function ServerRow({
             <Notice tone="danger">{describeToolError(probe.error, t)}</Notice>
           </div>
         )}
-        {probe.data && <TestResult name={server.name} result={probe.data} action={signInHere} />}
+        {remembers && (last || probe.isPending) ? (
+          <McpToolsPanel
+            agentId={agentId}
+            server={server}
+            testing={probe.isPending}
+            failureAction={signInHere}
+          />
+        ) : (
+          probe.data && <TestResult name={server.name} result={probe.data} action={signInHere} />
+        )}
         <McpOAuthControls
           agentId={agentId}
           server={server}
@@ -316,6 +353,26 @@ function ServerRow({
       </div>
     </div>
   );
+}
+
+/** The folded row's count of tools, from the kept test; a failed one says so instead. */
+function ToolCount({ server }: { server: McpServer }) {
+  const { t } = useI18n();
+  const last = server.last_test;
+  if (!last) return null;
+  if (!last.ok) {
+    return (
+      <Badge tone="danger" testId={`mcp-tool-count-${server.name}`}>
+        {t('mcp.tools.failed_badge')}
+      </Badge>
+    );
+  }
+  const label = toolCountLabel(server, t);
+  return label ? (
+    <Badge tone={last.stale ? 'warning' : 'neutral'} testId={`mcp-tool-count-${server.name}`}>
+      {label}
+    </Badge>
+  ) : null;
 }
 
 /**

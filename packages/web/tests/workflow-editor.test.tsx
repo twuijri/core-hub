@@ -100,6 +100,10 @@ function fakeHub(
     validate?: (body: unknown) => { status: number; body: unknown } | null;
     /** How long the saved workflow takes to arrive. */
     workflowDelayMs?: number;
+    /** Answers "Send test message" instead of the default partial send. */
+    sendTest?: (body: unknown) => { status: number; body: unknown; raw?: boolean };
+    /** The values "Use the last run's values" gets back. */
+    lastRunValues?: unknown;
   } = {},
 ) {
   const seen: Seen[] = [];
@@ -173,7 +177,7 @@ function fakeHub(
         output: null,
         error: null,
         executed: false,
-        values: { 'steps.check.output': 'All checks passed.' },
+        values: options.lastRunValues ?? { 'steps.check.output': 'All checks passed.' },
       });
     }
     if (path === '/workflows/test-step') {
@@ -195,6 +199,12 @@ function fakeHub(
               executed: false,
             },
       );
+    }
+    if (path === '/workflows/send-test' && options.sendTest) {
+      const answer = options.sendTest(body);
+      return answer.raw
+        ? Promise.resolve(new Response(String(answer.body), { status: answer.status }))
+        : json(answer.body, answer.status);
     }
     if (path === '/workflows/send-test') {
       return json({
@@ -586,6 +596,8 @@ describe('Workflows: its own page', () => {
     expect(result).toHaveTextContent('Bad Request: chat not found');
     expect(seen.find((c) => c.path === '/workflows/send-test')!.body).toEqual({
       text: 'Done',
+      // Named in the hub's log only; a new workflow has no id yet (2026-09-29).
+      node_id: 'notify_1',
       send: {
         targets: [
           { platform: 'telegram', chat_id: '-100404' },
@@ -664,7 +676,154 @@ describe('Workflows: its own page', () => {
       text: 'Result: {{steps.check.output}} for {{input}} ({{ steps.check.output }})',
       values: { 'steps.check.output': 'All checks passed.', input: 'release 2' },
       send: { targets: [{ platform: 'telegram', chat_id: '-1001' }] },
+      workflow_id: FLOW,
+      node_id: 'notify_1',
     });
+  });
+
+  it('"Send test message" always ends in words: why it is off, the ids and where it went, or the real error (2026-09-29)', async () => {
+    const user = userEvent.setup();
+    let answer: { status: number; body: unknown; raw?: boolean } = {
+      status: 200,
+      body: {
+        status: 'sent',
+        message_id: '812',
+        message_ids: ['812'],
+        delivered_to: ['telegram:-1003938641118'],
+        failures: [],
+      },
+    };
+    const { seen, fetchImpl } = fakeHub({ sendTest: () => answer });
+    mount(fetchImpl, `/workflows?workflow=${FLOW}&profile=designer`);
+    await screen.findByTestId('workflow-canvas');
+    await user.click(await screen.findByTestId('workflow-add-send'));
+    // Found again each time: the button is wrapped while it is off (its reason's tooltip).
+    const button = () => screen.getByTestId('workflow-send-test');
+
+    // Off, and it says why: no target, then a Telegram target without its chat id, then no words.
+    expect(button()).toBeDisabled();
+    expect(screen.getByTestId('workflow-send-blocked')).toHaveTextContent(
+      'Choose where to send it first',
+    );
+    await user.click(screen.getByTestId('workflow-send-telegram'));
+    expect(screen.getByTestId('workflow-send-blocked')).toHaveTextContent(
+      'Type the Telegram chat id first.',
+    );
+    // Copied out of right-to-left text: an invisible mark in front of the id.
+    fireEvent.change(screen.getByTestId('workflow-send-chat'), {
+      target: { value: '\u200e-1003938641118 ' },
+    });
+    expect(screen.getByTestId('workflow-send-blocked')).toHaveTextContent(
+      'Write the message first.',
+    );
+    fireEvent.change(screen.getByTestId('workflow-step-text'), {
+      target: { value: 'CORE_HUB_TELEGRAM_TEST_OK' },
+    });
+    expect(screen.queryByTestId('workflow-send-blocked')).toBeNull();
+    expect(button()).toBeEnabled();
+
+    // Sent: the state, where, and Telegram's message id.
+    await user.click(button());
+    const result = await screen.findByTestId('workflow-send-test-result');
+    expect(result).toHaveAttribute('data-status', 'sent');
+    expect(result).toHaveTextContent('Sent');
+    expect(result).toHaveTextContent('telegram:-1003938641118');
+    expect(result).toHaveTextContent('Message id: 812');
+    expect(seen.find((c) => c.path === '/workflows/send-test')!.body).toEqual({
+      text: 'CORE_HUB_TELEGRAM_TEST_OK',
+      send: { targets: [{ platform: 'telegram', chat_id: '-1003938641118' }] },
+      workflow_id: FLOW,
+      node_id: 'notify_1',
+    });
+
+    // Telegram refused: its own words.
+    answer = {
+      status: 200,
+      body: {
+        status: 'failed',
+        message_id: null,
+        message_ids: [],
+        delivered_to: [],
+        failures: [
+          {
+            target: 'telegram:-1003938641118',
+            reason: 'Forbidden: bot is not a member of the supergroup chat',
+          },
+        ],
+      },
+    };
+    await user.click(button());
+    await waitFor(() =>
+      expect(screen.getByTestId('workflow-send-test-result')).toHaveAttribute(
+        'data-status',
+        'failed',
+      ),
+    );
+    expect(screen.getByTestId('workflow-send-test-result')).toHaveTextContent('Not sent');
+    expect(screen.getByTestId('workflow-send-test-result')).toHaveTextContent(
+      'Forbidden: bot is not a member of the supergroup chat',
+    );
+
+    // The hub refused: its message, never silence.
+    answer = {
+      status: 500,
+      body: { error: 'Internal error', code: 'internal', details: { request_id: 'req-7' } },
+    };
+    await user.click(button());
+    expect(await screen.findByTestId('workflow-send-test-error')).toHaveTextContent(
+      'Internal error (req-7)',
+    );
+    expect(screen.queryByTestId('workflow-send-test-result')).toBeNull();
+
+    // A page that is not the hub's answer (a proxy's): said, not drawn as nothing.
+    answer = { status: 200, body: '<html>proxy</html>', raw: true };
+    await user.click(button());
+    await waitFor(() =>
+      expect(screen.getByTestId('workflow-send-test-error')).toHaveTextContent('could not be read'),
+    );
+  });
+
+  it('"Use the last run\'s values" with an answer it did not expect never blanks the page, and the values stay when the step is opened again', async () => {
+    const user = userEvent.setup();
+    const { fetchImpl } = fakeHub({
+      lastRunValues: { 'steps.check.output': { text: 'All checks passed.' }, input: null },
+    });
+    mount(fetchImpl, `/workflows?workflow=${FLOW}&profile=designer`);
+    await screen.findByTestId('workflow-canvas');
+    await user.click(await screen.findByTestId('workflow-add-send'));
+    fireEvent.change(await screen.findByTestId('workflow-step-text'), {
+      target: { value: 'Result: {{steps.check.output}} {{input}}' },
+    });
+    await user.click(screen.getByTestId('workflow-send-last-run'));
+    await screen.findByTestId('workflow-send-last-run-filled');
+    expect(screen.getByTestId('workflow-send-value-steps.check.output')).toHaveValue(
+      '{"text":"All checks passed."}',
+    );
+    // What the run had nothing for is named.
+    expect(screen.getByTestId('workflow-send-last-run-empty')).toHaveTextContent('{{input}}');
+    expect(screen.getByTestId('workflow-editor')).toBeTruthy();
+
+    // Another step, then this one again: the values are still there (never saved into the step).
+    fireEvent.focus(
+      within(screen.getByTestId('workflow-canvas'))
+        .getAllByTestId('workflow-node')
+        .find((each) => each.getAttribute('data-node-id') === 'check')!,
+    );
+    await waitFor(() =>
+      expect(screen.getByTestId('workflow-panel')).toHaveAttribute('data-node-id', 'check'),
+    );
+    fireEvent.focus(
+      within(screen.getByTestId('workflow-canvas'))
+        .getAllByTestId('workflow-node')
+        .find((each) => each.getAttribute('data-node-id') === 'notify_1')!,
+    );
+    await waitFor(() =>
+      expect(screen.getByTestId('workflow-panel')).toHaveAttribute('data-node-id', 'notify_1'),
+    );
+    expect(screen.getByTestId('workflow-send-sample')).toBeTruthy();
+    expect(screen.getByTestId('workflow-send-value-steps.check.output')).toHaveValue(
+      '{"text":"All checks passed."}',
+    );
   });
 
   it('a failure alert is saved with the workflow, and a step is tried with a sample (§127)', async () => {
