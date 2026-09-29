@@ -45,6 +45,7 @@ import {
 import type { WorkflowDefinition, WorkflowNode, WorkflowSend } from './schema.js';
 import { HermesCron, refusedByHermesCron, type HermesCronPort } from './hermes-cron.js';
 import { sendProblems } from './send.js';
+import { cleanConversationId, isTemplate } from './agent-conversation.js';
 import { pathsIn, render, unresolvedIn, type Context } from './expr.js';
 import { runContext, valuesIn, withValues } from './sample.js';
 import {
@@ -1414,6 +1415,24 @@ export const schedulesModule = defineModule({
           },
         );
         return result;
+      },
+    });
+
+    // ---------------------------------------- an agent step's conversation (§136)
+
+    defineRoute(app, deps, {
+      operationId: 'schedules.checkWorkflowConversation',
+      handler: async (request, { body }) => {
+        const scope = runScopeOf(request);
+        const ask = body as { session_id: string; agent_id?: string | null };
+        const sessionId = cleanConversationId(ask.session_id);
+        // A template is filled only when the step runs; there is nothing to look up yet.
+        if (isTemplate(ask.session_id)) {
+          throw new HubError('bad_request', { details: { reason: 'conversation_id_template' } });
+        }
+        const conversations = portsFor(request.server).conversations;
+        if (!conversations) throw new Error('this hub composes no sessions module');
+        return conversations.check(scope, { sessionId, agentId: ask.agent_id ?? null });
       },
     });
 

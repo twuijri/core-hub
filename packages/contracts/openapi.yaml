@@ -12910,6 +12910,50 @@ paths:
           $ref: '#/components/responses/Unauthorized'
         '404':
           $ref: '#/components/responses/NotFound'
+  /workflows/conversation-check:
+    post:
+      operationId: schedules.checkWorkflowConversation
+      tags: [schedules]
+      summary: Check that an agent step may use a conversation (nothing is sent)
+      description: >-
+        "Test conversation" of an agent step with `conversation.mode: reuse` (DECISIONS §136):
+        whether the conversation exists in this profile, may be used by the caller and the
+        step's agent, and whether a turn is going on in it. The same rules the run applies;
+        nothing is sent and nothing is saved. A conversation of another profile is
+        `not_found`, as a missing one is.
+      parameters:
+        - $ref: '#/components/parameters/Profile'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/WorkflowConversationCheck'
+            example:
+              session_id: 01J8QK3ZR2W7M5N4P6T8V9X0SA
+              agent_id: 01J8QK3ZR2W7M5N4P6T8V9X0AG
+      x-rt-events: []
+      responses:
+        '200':
+          description: How the conversation stands for the step.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WorkflowConversationCheckResult'
+              example:
+                status: ready
+                session_id: 01J8QK3ZR2W7M5N4P6T8V9X0SA
+                title: 'تقارير ClickUp'
+                agent_id: 01J8QK3ZR2W7M5N4P6T8V9X0AG
+                active_run_id: null
+                last_message_at: '2026-09-29T08:00:00Z'
+                reason: null
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
   /workflows/test-step:
     post:
       operationId: schedules.testWorkflowStep
@@ -25347,6 +25391,16 @@ components:
           oneOf:
             - $ref: '#/components/schemas/WorkflowRules'
             - type: 'null'
+        conversation:
+          description: >-
+            An `agent` step's conversation (DECISIONS §136): absent or `null`, every run opens
+            a new conversation as before (`mode: new`); `mode: reuse` sends each run's prompt
+            into one existing conversation of the step's profile. On `updateWorkflow`, an
+            agent node sent without this field keeps the saved node's (an app that does not
+            know the field does not erase it); `null` removes it.
+          oneOf:
+            - $ref: '#/components/schemas/WorkflowAgentConversation'
+            - type: 'null'
         position:
           type: object
           required: [x, y]
@@ -25355,6 +25409,96 @@ components:
               type: number
             y:
               type: number
+    WorkflowAgentConversation:
+      type: object
+      description: >-
+        Which conversation an `agent` step talks in (DECISIONS §136). `mode` is a plain
+        string so a mode can be added later without an older app meeting a value it cannot
+        read: `new` (a new conversation for every run, the default) or `reuse` (the
+        conversation `session_id` names, every run). An unknown mode is refused when the
+        workflow is saved (`conversation_mode_unknown`), as is `reuse` without an id
+        (`conversation_id_missing`) or with one that is neither a conversation id nor a
+        template (`conversation_id_invalid`). At run time the conversation must be in the
+        run's profile, open to the person the run acts as, and have the step's agent (or the
+        step names none); anything else fails the step with the reason, never a new
+        conversation in silence — unless `create_if_missing` is on and the conversation does
+        not exist: then one is made (titled `title`, else the step's title), the turn goes
+        there, and a step whose `session_id` is a plain id is pointed at it, with a notice in
+        the run owner's inbox. Runs that reach the same conversation take their turns one
+        after another; each step's output is its own turn's reply.
+      required: [mode]
+      properties:
+        mode:
+          type: string
+          maxLength: 20
+          description: '`new` or `reuse`.'
+        session_id:
+          type: [string, 'null']
+          maxLength: 400
+          description: >-
+            `reuse`: the conversation's id, or a template (`{{trigger.body.conversation}}`)
+            rendered like the prompt when the step runs.
+        create_if_missing:
+          type: boolean
+          description: >-
+            `reuse`: make the conversation when it does not exist. Off (the default), a
+            missing, deleted or foreign conversation fails the step.
+        title:
+          type: [string, 'null']
+          maxLength: 200
+          description: >-
+            `reuse` with `create_if_missing`: the title of a conversation made for the step, a
+            template; the step's title when empty.
+    WorkflowConversationCheck:
+      type: object
+      description: >-
+        "Test conversation" (DECISIONS §136): may an agent step use this conversation now?
+        Nothing is sent and nothing is saved.
+      required: [session_id]
+      properties:
+        session_id:
+          type: string
+          minLength: 1
+          maxLength: 400
+        agent_id:
+          description: The step's agent, when it names one; the conversation's must be the same.
+          oneOf:
+            - $ref: '#/components/schemas/Ulid'
+            - type: 'null'
+    WorkflowConversationCheckResult:
+      type: object
+      description: >-
+        How the conversation stands for an agent step (DECISIONS §136). `status` is a plain
+        string: `ready` (it exists in the profile, the step may use it, and no turn is going
+        on), `busy` (the same, with a turn going on or waiting: a run would wait its turn),
+        `not_found` (no such conversation in this profile — deleted, never made, or
+        another profile's), `not_allowed` (a room seat's conversation or another person's
+        assistant), `agent_mismatch` (its agent is not the step's). `reason` says it in words.
+      required: [status, session_id, title, agent_id, active_run_id, reason]
+      properties:
+        status:
+          type: string
+          maxLength: 40
+        session_id:
+          type: string
+        title:
+          type: [string, 'null']
+        agent_id:
+          description: "The conversation's agent; `null` when it was not found."
+          oneOf:
+            - $ref: '#/components/schemas/Ulid'
+            - type: 'null'
+        active_run_id:
+          description: The turn going on or waiting in it; `null` when it is free.
+          oneOf:
+            - $ref: '#/components/schemas/Ulid'
+            - type: 'null'
+        last_message_at:
+          oneOf:
+            - $ref: '#/components/schemas/Timestamp'
+            - type: 'null'
+        reason:
+          type: [string, 'null']
     WorkflowEdge:
       type: object
       required: [id, from, to, route]
@@ -25546,7 +25690,17 @@ components:
           oneOf:
             - $ref: '#/components/schemas/Ulid'
             - type: 'null'
-          description: The session where the step's agent worked; its output is that session's last assistant message.
+          description: >-
+            The session where the step's agent worked; its output is that run's reply. Filled
+            for agent steps since DECISIONS §136 (`null` before), so an app can open the
+            conversation.
+        message_id:
+          description: >-
+            The agent's reply message in that session (DECISIONS §136); `null` for other steps,
+            and absent from an older hub.
+          oneOf:
+            - $ref: '#/components/schemas/Ulid'
+            - type: 'null'
         run_id:
           oneOf:
             - $ref: '#/components/schemas/Ulid'

@@ -153,7 +153,20 @@ export type WorkflowNode = {
    * (DECISIONS §124).
    */
   send?: WorkflowSend | null;
+  /**
+   * `agent`: which conversation the step talks in (DECISIONS §136); absent or `null`, a new
+   * one every run.
+   */
+  conversation?: WorkflowAgentConversation | null;
   position?: { x: number; y: number };
+};
+
+/** An agent step's conversation, in the contract's words (`WorkflowAgentConversation`). */
+export type WorkflowAgentConversation = {
+  mode: string;
+  session_id?: string | null;
+  create_if_missing?: boolean;
+  title?: string | null;
 };
 
 /** A "Send message" step's targets, in the contract's words (`WorkflowSend`). */
