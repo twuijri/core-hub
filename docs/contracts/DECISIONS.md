@@ -4421,3 +4421,47 @@ fields shows the words that will go, and Send stays off while a variable has no 
 the words filled in; taking values from the last run on a phone is a follow-up.
 
 **What a run does is unchanged**: it still reads a variable with nothing as empty (§123).
+
+## 134. The hub keeps each MCP server's last test, and writes Hermes's own per-server tool filter
+
+Proposed (2026-09-29) — owner's request on Agent → Hermes → MCP: see a server's tools without
+pressing Test every time, and choose which of them the agent may use. Owner to confirm. Additive
+contract change only.
+
+**The last test is kept.** `McpServer.last_test` (`McpLastTest`, or `null` when never tested in
+this profile; absent from older hubs) carries what Hermes found: `ok`, the tools with their
+descriptions, `tool_count`, `error`, `tested_at`, `duration_ms`. The hub writes it on every
+`agents.testMcpServer` and when an OAuth sign-in lands (§122, the tools it then asks Hermes for),
+into one JSON file of its own state (`<data>/mcp-last-tests.json`, keyed by the profile's Hermes home
+and the server's name) — not Hermes's home, and no migration. Deleting the server forgets it. With
+each test the hub keeps a hash of the server's connection settings (the block without `enabled`,
+`tools` and the `oauth` block); when they differ now, `stale: true` says the list may be out of date.
+
+**Read or write.** Each kept tool says `access` — `read`, `write` or `unknown` — and
+`access_source`. Hermes's test answer carries no MCP annotations, and Hermes records only
+`readOnlyHint: true` (in the profile's `cache/mcp_schema_cache.json`, for the tools it registered;
+no `destructiveHint` anywhere), so the hub reads that when it is there (`annotation`) and otherwise
+the verbs in the name (`name`): any changing verb (create, update, delete, move, merge, add, remove,
+send, upload, start, stop, execute, run…) makes it `write`, else a looking verb (get, list, search,
+read, fetch, query…) makes it `read`. It is a suggestion; the person ticks the boxes.
+
+**The filter is Hermes's.** `McpServer.tool_filter` and `McpServerPatch.tool_filter`
+(`McpToolFilter {include, exclude}`) are the server block's `tools.include` / `tools.exclude` in the
+profile's `config.yaml` — the keys Hermes reads at the floor (v2026.9.14) and the pinned tag
+(v2026.9.24) in `tools/mcp_tool_registration.py` `_make_tool_filter`, and writes itself in `hermes mcp
+configure`: exact names or `fnmatch` globs; `include` (even `[]`, which allows none) wins; otherwise
+`exclude`; neither — every tool. A patch with `include` writes the allow-list and drops `exclude`;
+with only `exclude`, the block-list and drops `include`; both `null` removes them; the block's other
+keys (`tools.resources`, `tools.prompts`) and every other byte of the file stay. Hermes applies it
+when it next connects to the server — the restart the page already asks for. Hermes's test still
+lists every tool, so the picker always sees the whole list. A real-Hermes suite proves both versions
+register only the allowed tools (`mcp-tool-filter.real.test.ts`).
+
+**Clients.** The web shows the count on the folded row ("61 tools", "12 of 61 tools"), the list on
+opening, and tests a never-tested server once by itself when its row first opens; each tool has a
+box, with All / None / Read-only. Every box ticked saves no filter; a filter that was a block-list
+stays one; otherwise the ticked tools become an allow-list, and the page says a tool the server adds
+later stays off until it is ticked. A hand-written glob is kept and the tools it decides cannot be
+changed by a box. iOS and Android show the count and the list (with each tool's reading and whether
+it is allowed); choosing on a phone is a follow-up. A hub without `last_test` gets every client's
+page as it was.
