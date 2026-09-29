@@ -284,6 +284,15 @@ export class ConfigFileStore {
     return { dir, display, roots };
   }
 
+  /**
+   * The agent's own folder (`$CLAUDE_CONFIG_DIR` or `~/.claude` for Claude Code), or null for an
+   * agent with none here. Its skills live in `skills/` below it (DECISIONS §139).
+   */
+  agentFolder(slug: string): string | null {
+    const agent = Object.hasOwn(CONFIG_FILES, slug) ? CONFIG_FILES[slug] : undefined;
+    return agent ? this.folderOf(agent.folder).dir : null;
+  }
+
   private spec(slug: string, key: string): { agent: AgentFiles; file: ConfigFileSpec } {
     const agent = Object.hasOwn(CONFIG_FILES, slug) ? CONFIG_FILES[slug] : undefined;
     const file = agent?.files.find((entry) => entry.key === key);

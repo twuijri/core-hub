@@ -46,6 +46,11 @@
  * **A skill for another system is not listed**, as Hermes does not list it: a front matter
  * `platforms:` naming systems (`macos`, `linux`, `windows`) that do not include the one the hub
  * runs on means Hermes never loads it here.
+ *
+ * **Claude Code's skills are the same folders** (`~/.claude/skills/<name>/SKILL.md`, DECISIONS
+ * §139), read here with `{ agent: 'plain' }`: nothing of Hermes's applies — no `config.yaml`
+ * list, no bundle, no `platforms:` filter — so on and off is the rename above, which Claude Code
+ * honours because it only loads a file named `SKILL.md`.
  */
 import {
   existsSync,
@@ -126,6 +131,16 @@ export interface Skill {
   /** Hermes seeded it from its bundle (`.bundled_manifest`): read-only through the hub. */
   bundled: boolean;
 }
+
+/**
+ * Whose folder this is: Hermes's (its own on/off list, bundle and platforms), or a plain folder
+ * of `SKILL.md` skills another agent reads (Claude Code), where off is only the rename.
+ */
+export interface SkillFolderOptions {
+  agent?: 'hermes' | 'plain';
+}
+
+const isPlain = (options: SkillFolderOptions | undefined): boolean => options?.agent === 'plain';
 
 export function skillsDir(home: string): string {
   return path.join(home, 'skills');
@@ -276,8 +291,12 @@ interface HermesView {
   platform: string;
 }
 
-function viewOf(home: string, platform: string = process.platform): HermesView {
-  return { disabled: hermesDisabledSkills(home), platform };
+function viewOf(
+  home: string,
+  platform: string = process.platform,
+  options?: SkillFolderOptions,
+): HermesView {
+  return { disabled: isPlain(options) ? new Set() : hermesDisabledSkills(home), platform };
 }
 
 function readOne(
@@ -339,14 +358,20 @@ function readOne(
  * out, and one in Hermes's disabled list reads as off. `platform` is the system to list for —
  * the hub's own, which is the system Hermes runs on beside it.
  */
-export function listSkills(home: string, platform: string = process.platform): Skill[] {
-  const bundled = bundledNames(home);
-  const view = viewOf(home, platform);
+export function listSkills(
+  home: string,
+  platform: string = process.platform,
+  options?: SkillFolderOptions,
+): Skill[] {
+  const bundled = isPlain(options) ? new Set<string>() : bundledNames(home);
+  const view = viewOf(home, platform, options);
   const out: Skill[] = [];
   for (const where of walk(home)) {
     const skill = readOne(where, bundled, view);
     if (!skill) continue;
-    if (skill.content !== null && !matchesPlatform(skill.content, platform)) continue;
+    if (!isPlain(options) && skill.content !== null && !matchesPlatform(skill.content, platform)) {
+      continue;
+    }
     out.push({ ...skill, content: null });
   }
   return out.sort((a, b) => a.name.localeCompare(b.name));
@@ -480,9 +505,11 @@ export function categoryDescription(home: string, category: string): string | nu
   return text.length > 500 ? `${text.slice(0, 499)}…` : text;
 }
 
-export function getSkill(home: string, key: string): Skill | null {
+export function getSkill(home: string, key: string, options?: SkillFolderOptions): Skill | null {
   const where = locate(home, key);
-  return where ? readOne(where, bundledNames(home), viewOf(home)) : null;
+  if (!where) return null;
+  const bundled = isPlain(options) ? new Set<string>() : bundledNames(home);
+  return readOne(where, bundled, viewOf(home, process.platform, options));
 }
 
 export class SkillError extends Error {
@@ -544,10 +571,28 @@ function writable(home: string, key: string): { where: Located; bundled: Set<str
  * own skills can be switched too — except that switching on renames back a `SKILL.md` an older
  * hub renamed off. Hermes's manual is never off (`skill_essential`).
  */
-export function setSkillEnabled(home: string, key: string, enabled: boolean): Skill {
+export function setSkillEnabled(
+  home: string,
+  key: string,
+  enabled: boolean,
+  options?: SkillFolderOptions,
+): Skill {
   if (!LOOKUP_KEY.test(key)) throw new SkillError('skill_key_invalid');
   const where = locate(home, key);
   if (!where) throw new SkillError('skill_not_found');
+  const enabledPath = path.join(where.folder, SKILL_FILE);
+  const disabledPath = enabledPath + DISABLED_SUFFIX;
+  if (isPlain(options)) {
+    // Another agent's folder: off is `SKILL.md` renamed, which that agent does not load.
+    if (enabled && !existsSync(enabledPath) && existsSync(disabledPath)) {
+      renameSync(disabledPath, enabledPath);
+    } else if (!enabled && existsSync(enabledPath) && !existsSync(disabledPath)) {
+      renameSync(enabledPath, disabledPath);
+    }
+    const skill = readOne(where, new Set(), viewOf(home, process.platform, options));
+    if (!skill) throw new SkillError('skill_not_found');
+    return skill;
+  }
   const bundled = bundledNames(home);
   const before = readOne(where, bundled);
   if (!before) throw new SkillError('skill_not_found');
@@ -564,10 +609,8 @@ export function setSkillEnabled(home: string, key: string, enabled: boolean): Sk
     disabled.add(before.name);
     writeHermesDisabled(home, disabled);
   }
-  if (enabled) {
-    const enabledPath = path.join(where.folder, SKILL_FILE);
-    const disabledPath = enabledPath + DISABLED_SUFFIX;
-    if (!existsSync(enabledPath) && existsSync(disabledPath)) renameSync(disabledPath, enabledPath);
+  if (enabled && !existsSync(enabledPath) && existsSync(disabledPath)) {
+    renameSync(disabledPath, enabledPath);
   }
   const skill = readOne(where, bundled, viewOf(home));
   if (!skill) throw new SkillError('skill_not_found');

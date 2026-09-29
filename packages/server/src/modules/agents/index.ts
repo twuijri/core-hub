@@ -196,6 +196,7 @@ import {
   putSkill,
   setSkillEnabled,
   type Skill,
+  type SkillFolderOptions,
 } from './skills.js';
 import {
   LIBRARY_CATEGORY,
@@ -1300,6 +1301,26 @@ export const agentsModule = defineModule({
     const skillHome = (request: FastifyRequest, agentId: string): string =>
       toolHome(request, agentId).home;
 
+    /**
+     * Where an agent's skills are, for the Skills page (DECISIONS §139): Hermes's profile home, or
+     * Claude Code's own folder (`$CLAUDE_CONFIG_DIR` or `~/.claude`), whose `skills/` holds the
+     * same `SKILL.md` folders — one set for every profile, as its Config files and MCP pages are.
+     * Any other agent is still `skills_are_hermes_only`.
+     */
+    const PLAIN_SKILLS: ReadonlySet<string> = new Set(['claude-code']);
+    const skillPlace = (
+      request: FastifyRequest,
+      agentId: string,
+    ): { home: string; options: SkillFolderOptions } => {
+      const context = contextOf(request.server);
+      const row = context.service.get(scopeOf(request), agentId, request.language);
+      if (row.kind !== 'hermes' && PLAIN_SKILLS.has(row.slug)) {
+        const home = context.configFiles.agentFolder(row.slug);
+        if (home) return { home, options: { agent: 'plain' } };
+      }
+      return { home: toolHome(request, agentId).home, options: { agent: 'hermes' } };
+    };
+
     /** The agent's name as the hub shows it to the person asking. */
     const agentNameOf = (request: FastifyRequest, agentId: string): string =>
       contextOf(request.server).service.get(scopeOf(request), agentId, request.language).name;
@@ -1504,15 +1525,18 @@ export const agentsModule = defineModule({
       operationId: 'agents.listSkills',
       handler: (request, { params }) => {
         const agentId = params.agent_id as string;
-        const home = skillHome(request, agentId);
+        const { home, options } = skillPlace(request, agentId);
+        const pinned = contextOf(request.server).service.pinnedSkills(scopeOf(request), agentId);
+        if (options.agent === 'plain') {
+          // Core Hub's library is Hermes's (§71): another agent's folder lists without it.
+          return {
+            categories: categorise(home, listSkills(home, process.platform, options), pinned),
+            home: skillsDir(home),
+          };
+        }
         const library = libraryStatus(home);
         return {
-          categories: categorise(
-            home,
-            listSkills(home),
-            contextOf(request.server).service.pinnedSkills(scopeOf(request), agentId),
-            library,
-          ),
+          categories: categorise(home, listSkills(home), pinned, library),
           library: toLibrary(library),
           // Which folder this is. A Hermes somebody else started with a different home
           // would otherwise read as "no skills", and a path on screen is the difference
@@ -1527,13 +1551,13 @@ export const agentsModule = defineModule({
       handler: (request, { params }) => {
         const agentId = params.agent_id as string;
         const key = params.skill_key as string;
-        const home = skillHome(request, agentId);
-        const skill = getSkill(home, key);
+        const { home, options } = skillPlace(request, agentId);
+        const skill = getSkill(home, key, options);
         if (!skill) throw notFound({ resource: 'skill', id: key });
         return toSkill(
           skill,
           contextOf(request.server).service.pinnedSkills(scopeOf(request), agentId),
-          libraryStatus(home),
+          options.agent === 'plain' ? undefined : libraryStatus(home),
         );
       },
     });
@@ -1543,7 +1567,7 @@ export const agentsModule = defineModule({
       handler: (request, { params, body }) => {
         const agentId = params.agent_id as string;
         const key = params.skill_key as string;
-        const home = skillHome(request, agentId);
+        const { home, options } = skillPlace(request, agentId);
         try {
           const written = putSkill(home, key, {
             content: String((body as { content: string }).content),
@@ -1551,7 +1575,7 @@ export const agentsModule = defineModule({
           return toSkill(
             written,
             contextOf(request.server).service.pinnedSkills(scopeOf(request), agentId),
-            libraryStatus(home),
+            options.agent === 'plain' ? undefined : libraryStatus(home),
           );
         } catch (error) {
           return skillFault(error);
@@ -1564,14 +1588,16 @@ export const agentsModule = defineModule({
       handler: (request, { params, body }) => {
         const agentId = params.agent_id as string;
         const key = params.skill_key as string;
-        const home = skillHome(request, agentId);
+        const { home, options } = skillPlace(request, agentId);
         const patch = body as { enabled?: boolean; pinned?: boolean };
         const service = contextOf(request.server).service;
         const scope = scopeOf(request);
         try {
-          let skill = getSkill(home, key);
+          let skill = getSkill(home, key, options);
           if (!skill) throw notFound({ resource: 'skill', id: key });
-          if (patch.enabled !== undefined) skill = setSkillEnabled(home, key, patch.enabled);
+          if (patch.enabled !== undefined) {
+            skill = setSkillEnabled(home, key, patch.enabled, options);
+          }
           let pinned = service.pinnedSkills(scope, agentId);
           if (patch.pinned !== undefined) {
             pinned = service.setPinnedSkills(
@@ -1580,7 +1606,11 @@ export const agentsModule = defineModule({
               patch.pinned ? [...pinned, key] : pinned.filter((entry) => entry !== key),
             );
           }
-          return toSkill(skill, pinned, libraryStatus(home));
+          return toSkill(
+            skill,
+            pinned,
+            options.agent === 'plain' ? undefined : libraryStatus(home),
+          );
         } catch (error) {
           return skillFault(error);
         }
@@ -1590,7 +1620,7 @@ export const agentsModule = defineModule({
     defineRoute(app, deps, {
       operationId: 'agents.deleteSkill',
       handler: (request, { params }) => {
-        const home = skillHome(request, params.agent_id as string);
+        const { home } = skillPlace(request, params.agent_id as string);
         try {
           deleteSkill(home, params.skill_key as string);
         } catch (error) {
@@ -1647,7 +1677,7 @@ export const agentsModule = defineModule({
       status: 201,
       handler: (request, { params, body }) => {
         const agentId = params.agent_id as string;
-        const { home } = toolHome(request, agentId);
+        const { home, options } = skillPlace(request, agentId);
         const scope = scopeOf(request);
         const ids = [...new Set((body as { attachment_ids: string[] }).attachment_ids)];
         const port = attachmentsFactory?.(request.server);
@@ -1669,7 +1699,7 @@ export const agentsModule = defineModule({
           const pinned = contextOf(request.server).service.pinnedSkills(scope, agentId);
           return {
             items: keys
-              .map((key) => getSkill(home, key))
+              .map((key) => getSkill(home, key, options))
               .filter((skill): skill is Skill => skill !== null)
               .map((skill) => toSkill({ ...skill, content: null }, pinned)),
           };
