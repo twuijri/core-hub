@@ -12,7 +12,7 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { MemoryRouter, Route, Routes, useLocation } from 'react-router';
+import { MemoryRouter, Route, Routes, useLocation, useNavigate } from 'react-router';
 import { afterEach, describe, expect, it } from 'vitest';
 import { AuthProvider } from '../src/auth/context.js';
 import { SessionStore } from '../src/auth/store.js';
@@ -345,7 +345,18 @@ function fakeHub(
 
 function Where() {
   const location = useLocation();
-  return <output data-testid="where">{`${location.pathname}${location.search}`}</output>;
+  const navigate = useNavigate();
+  return (
+    <>
+      <output data-testid="where">{`${location.pathname}${location.search}`}</output>
+      {/* The browser's own Back: a move no link or button of the page makes. */}
+      <input
+        aria-label="address bar"
+        data-testid="address-bar"
+        onChange={(event) => navigate(event.target.value)}
+      />
+    </>
+  );
 }
 
 function mount(fetchImpl: typeof fetch, at: string, language: 'en' | 'ar' = 'en') {
@@ -1326,6 +1337,25 @@ describe('Workflows: its own page', () => {
     expect(seen.find((c) => c.method === 'PATCH' && c.path === `/workflows/${FLOW}`)).toMatchObject(
       { body: { name: 'Release 3' } },
     );
+  });
+
+  it('work left by the browser’s Back (which cannot be held) is offered back when the workflow opens again', async () => {
+    const user = userEvent.setup();
+    const { seen, fetchImpl } = fakeHub();
+    mount(fetchImpl, `/workflows?workflow=${FLOW}&profile=designer`);
+    await waitFor(() => expect(screen.getAllByTestId('workflow-node')).toHaveLength(4));
+    await user.type(screen.getByTestId('workflow-name'), ' 4');
+    fireEvent.change(screen.getByTestId('address-bar'), { target: { value: '/workflows' } });
+    await screen.findByTestId('workflows-section');
+    fireEvent.change(screen.getByTestId('address-bar'), {
+      target: { value: `/workflows?workflow=${FLOW}&profile=designer` },
+    });
+    const offer = await screen.findByTestId('workflow-restore');
+    expect(screen.getByTestId('workflow-name')).toHaveValue('Release');
+    await user.click(within(offer).getByTestId('workflow-restore-yes'));
+    expect(screen.getByTestId('workflow-name')).toHaveValue('Release 4');
+    expect(screen.getByTestId('workflow-unsaved')).toBeInTheDocument();
+    expect(seen.some((c) => c.method === 'PATCH')).toBe(false);
   });
 
   it('shows a run on the canvas: states, output, edges taken, and the answers on the waiting step', async () => {
