@@ -1293,6 +1293,8 @@ export class SessionsService {
     signal?: AbortSignal,
   ): Promise<TurnHandle & { created: boolean; title: string | null }> {
     const key = `${scope.workspace}\u0000${input.sessionId || `new:${input.workflowId ?? ''}`}`;
+    // What a run of this workflow made for this id before (§136); another workflow makes its own.
+    const madeKey = `${key}\u0000${input.workflowId ?? ''}`;
     const ask = (sessionId: string) =>
       this.workflowConversation(scope, { sessionId, agentId: input.agentId });
     const refuse = (check: WorkflowConversationCheck) => {
@@ -1304,7 +1306,11 @@ export class SessionsService {
     // missing when nothing may make it.
     const first = ask(input.sessionId);
     refuse(first);
-    if (first.status === 'not_found' && !input.createIfMissing && !this.madeForWorkflow.has(key)) {
+    if (
+      first.status === 'not_found' &&
+      !input.createIfMissing &&
+      !this.madeForWorkflow.has(madeKey)
+    ) {
       throw new Error(first.reason ?? 'not found');
     }
 
@@ -1318,8 +1324,12 @@ export class SessionsService {
     try {
       // Looked at again now that it is this run's turn: a run before it may have made it.
       let check = ask(input.sessionId);
-      const made = this.madeForWorkflow.get(key);
-      if (check.status === 'not_found' && made) check = ask(made);
+      const made = this.madeForWorkflow.get(madeKey);
+      if (check.status === 'not_found' && made) {
+        const again = ask(made);
+        // Gone again, or no longer one this step may use: made anew below, as if never made.
+        if (again.status === 'ready' || again.status === 'busy') check = again;
+      }
       refuse(check);
       let sessionId = check.session_id;
       let created = false;
@@ -1344,7 +1354,7 @@ export class SessionsService {
         sessionId = String(session.id);
         created = true;
         title = (session.title as string | null) ?? (input.title || null);
-        this.madeForWorkflow.set(key, sessionId);
+        this.madeForWorkflow.set(madeKey, sessionId);
       }
       // A turn going on — a person's, or a run's that named the conversation another way.
       while (this.store.liveRuns(scope.workspace, sessionId).length > 0) {
