@@ -316,9 +316,10 @@ export function SendForm({
         {t('workflows.send.test')}
       </Button>
       {/* Why it cannot be pressed, in words — not only in a tooltip (2026-09-29). */}
-      {blocked && !missing.length && (
+      {/* (Variables without a value already have their own notice above.) */}
+      {blockedKey && (
         <p className="text-xs text-muted" data-testid="workflow-send-blocked">
-          {blocked}
+          {t(blockedKey)}
         </p>
       )}
       {test.isPending && (
