@@ -8,9 +8,13 @@
  * needs a value — typed, or taken from the workflow's last run — and the preview shows the
  * text that will go. Send stays off while any is empty, and the hub renders it with the run's
  * own code and refuses a variable left without one, so a phone never gets `{{…}}`.
+ *
+ * Telegram formatting (DECISIONS §137): the Telegram target says how Telegram reads the words —
+ * plain text, HTML or MarkdownV2 — and the preview says which and draws the words formatted,
+ * from a tree of Telegram's own entities (never the words' HTML put into the page).
  */
 import { HubApiError } from '@corehub/contracts';
-import { useState } from 'react';
+import { useState, type ReactNode } from 'react';
 import { describeError } from '../../auth/client.js';
 import { useI18n } from '../../i18n/context.js';
 import {
@@ -18,10 +22,12 @@ import {
   Checkbox,
   Input,
   Notice,
+  Segmented,
   Select,
   Spinner,
   Switch,
   Textarea,
+  Tooltip,
 } from '../../ui/index.js';
 import {
   toWrite,
@@ -39,7 +45,28 @@ import {
   useStepTest,
   type SendResult,
 } from './queries.js';
+import {
+  TELEGRAM_FORMATTINGS,
+  formattingOf,
+  parseModeName,
+  parseTelegram,
+  type TgNode,
+} from './telegram-preview.js';
 import { fillTemplate, filledValues, missingIn, variablesIn } from './template.js';
+
+/** Telegram's own syntax, the same in every language (Bot API "Formatting options"). */
+const FORMATTING_EXAMPLES = {
+  html: [
+    '<b>bold</b> <i>italic</i> <u>underline</u> <s>strike</s> <tg-spoiler>spoiler</tg-spoiler>',
+    '<code>code</code> <pre>block</pre> <a href="https://example.com">link</a> <blockquote>quote</blockquote>',
+    '&lt; &gt; &amp;',
+  ].join('\n'),
+  markdown_v2: [
+    '*bold* _italic_ __underline__ ~strike~ ||spoiler|| `code` [link](https://example.com)',
+    '```block``` >quote',
+    '\\_ \\* \\[ \\] \\( \\) \\~ \\` \\> \\# \\+ \\- \\= \\| \\{ \\} \\. \\!',
+  ].join('\n'),
+} as const;
 
 /** Telegram and/or a conversation, as a `Send`'s targets. */
 export function SendTargets({
@@ -47,11 +74,14 @@ export function SendTargets({
   profile,
   onChange,
   testPrefix = 'workflow-send',
+  formatting = false,
 }: {
   send: Send;
   profile: string;
   onChange: (send: Send) => void;
   testPrefix?: string;
+  /** Offer Telegram formatting (§137): a step's words; a failure alert is always plain. */
+  formatting?: boolean;
 }) {
   const { t } = useI18n();
   const telegram = send.targets.find((target) => target.platform === 'telegram') ?? null;
@@ -70,7 +100,16 @@ export function SendTargets({
       <Checkbox
         checked={!!telegram}
         onChange={(next) =>
-          setTarget('telegram', next ? { platform: 'telegram', chat_id: cleanChatId(chat) } : null)
+          setTarget(
+            'telegram',
+            next
+              ? {
+                  platform: 'telegram',
+                  chat_id: cleanChatId(chat),
+                  ...(formatting ? { formatting: 'plain' } : {}),
+                }
+              : null,
+          )
         }
         label={t('workflows.send.telegram')}
         testId={`${testPrefix}-telegram`}
@@ -81,7 +120,9 @@ export function SendTargets({
             value={chat}
             onChange={(event) => {
               setChat(event.target.value);
+              // Everything else the target says (its formatting) stays as it is.
               setTarget('telegram', {
+                ...telegram,
                 platform: 'telegram',
                 chat_id: cleanChatId(event.target.value),
               });
@@ -92,6 +133,35 @@ export function SendTargets({
             data-testid={`${testPrefix}-chat`}
           />
           <p className="text-xs text-muted">{t('workflows.send.telegram_hint')}</p>
+          {formatting && (
+            <div className="flex flex-col gap-1" data-testid={`${testPrefix}-formatting-field`}>
+              <p className="text-xs font-medium">{t('workflows.send.formatting')}</p>
+              <Segmented
+                size="sm"
+                label={t('workflows.send.formatting')}
+                value={formattingOf(telegram.formatting)}
+                onChange={(value) => setTarget('telegram', { ...telegram, formatting: value })}
+                options={TELEGRAM_FORMATTINGS.map((value) => ({
+                  value,
+                  label: t(`workflows.send.formatting_${value}`),
+                  itemProps: { 'data-testid': `${testPrefix}-formatting-${value}` },
+                }))}
+                testId={`${testPrefix}-formatting`}
+              />
+              <p className="text-xs text-muted">
+                {t(`workflows.send.formatting_${formattingOf(telegram.formatting)}_hint`)}
+              </p>
+              {formattingOf(telegram.formatting) !== 'plain' && (
+                <code
+                  dir="ltr"
+                  className="block whitespace-pre-wrap break-all rounded bg-sunken p-1 text-start text-xs"
+                  data-testid={`${testPrefix}-formatting-example`}
+                >
+                  {FORMATTING_EXAMPLES[formattingOf(telegram.formatting) as 'html' | 'markdown_v2']}
+                </code>
+              )}
+            </div>
+          )}
         </>
       )}
       <Checkbox
@@ -194,6 +264,9 @@ export function SendForm({
       return value;
     });
   const [notFound, setNotFound] = useState<string[]>([]);
+  const telegramTarget = send.targets.find((target) => target.platform === 'telegram') ?? null;
+  /** How Telegram will read the words; `null` when the step does not send to Telegram. */
+  const telegramFormatting = telegramTarget ? formattingOf(telegramTarget.formatting) : null;
   const missing = missingIn(text, values);
   const preview = fillTemplate(text, values);
   const refused = unresolvedOf(test.error);
@@ -239,7 +312,12 @@ export function SendForm({
   return (
     <div className="flex flex-col gap-2" data-testid="workflow-send">
       <p className="text-xs font-medium">{t('workflows.send.targets')}</p>
-      <SendTargets send={send} profile={profile} onChange={(next) => update({ send: next })} />
+      <SendTargets
+        send={send}
+        profile={profile}
+        onChange={(next) => update({ send: next })}
+        formatting
+      />
       {variables.length > 0 && (
         <section className="flex flex-col gap-2" data-testid="workflow-send-sample">
           <p className="text-xs font-medium">{t('workflows.send.sample_title')}</p>
@@ -288,18 +366,7 @@ export function SendForm({
           ))}
         </section>
       )}
-      {text && (
-        <div className="flex flex-col gap-1">
-          <p className="text-xs font-medium">{t('workflows.send.preview')}</p>
-          <div
-            className="whitespace-pre-wrap rounded-md border border-line p-2 text-sm"
-            dir="auto"
-            data-testid="workflow-send-preview"
-          >
-            {preview}
-          </div>
-        </div>
-      )}
+      {text && <SendPreview text={preview} formatting={telegramFormatting} />}
       {missing.length > 0 && (
         <div data-testid="workflow-send-missing">
           <Notice tone="warning">{t('workflows.send.missing', { names: namesOf(missing) })}</Notice>
@@ -343,6 +410,118 @@ export function SendForm({
       {!test.isPending && test.data && <SendTestResult result={test.data} />}
     </div>
   );
+}
+
+/**
+ * What will be sent (§137): the words with their values, and — when they go to Telegram — which
+ * formatting Telegram reads them with, drawn formatted from Telegram's own entities. Markup
+ * Telegram would refuse is said, and the words are shown as written.
+ */
+function SendPreview({
+  text,
+  formatting,
+}: {
+  text: string;
+  formatting: 'plain' | 'html' | 'markdown_v2' | null;
+}) {
+  const { t } = useI18n();
+  const parsed = formatting && formatting !== 'plain' ? parseTelegram(text, formatting) : null;
+  return (
+    <div className="flex flex-col gap-1">
+      <div className="flex flex-wrap items-baseline justify-between gap-2">
+        <p className="text-xs font-medium">{t('workflows.send.preview')}</p>
+        {formatting && (
+          <p
+            className="text-xs text-muted"
+            data-testid="workflow-send-formatting-label"
+            data-formatting={formatting}
+          >
+            {t('workflows.send.preview_formatting', {
+              mode:
+                formatting === 'plain'
+                  ? t('workflows.send.formatting_plain')
+                  : parseModeName(formatting),
+            })}
+          </p>
+        )}
+      </div>
+      <div
+        className="whitespace-pre-wrap rounded-md border border-line p-2 text-sm"
+        dir="auto"
+        data-testid="workflow-send-preview"
+        data-formatting={formatting ?? 'plain'}
+        data-rendered={parsed?.ok ? 'formatted' : 'text'}
+      >
+        {parsed?.ok ? renderTelegram(parsed.nodes) : text}
+      </div>
+      {parsed && !parsed.ok && (
+        <div data-testid="workflow-send-preview-invalid">
+          <Notice tone="warning">
+            {t('workflows.send.preview_invalid', {
+              mode: parseModeName(formatting!),
+            })}{' '}
+            <code dir="ltr" className="break-all">
+              {parsed.error}
+            </code>
+          </Notice>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** Telegram's entities as React elements; a link is shown, not followed. */
+function renderTelegram(nodes: TgNode[]): ReactNode[] {
+  return nodes.map((node, index) => {
+    if (node.kind === 'text') return node.text;
+    const children = renderTelegram(node.children);
+    switch (node.kind) {
+      case 'bold':
+        return <strong key={index}>{children}</strong>;
+      case 'italic':
+        return <em key={index}>{children}</em>;
+      case 'underline':
+        return <u key={index}>{children}</u>;
+      case 'strike':
+        return <s key={index}>{children}</s>;
+      case 'spoiler':
+        return (
+          <span key={index} className="rounded bg-sunken px-0.5" data-entity="spoiler">
+            {children}
+          </span>
+        );
+      case 'code':
+        return (
+          <code key={index} className="rounded bg-sunken px-1 font-mono text-xs">
+            {children}
+          </code>
+        );
+      case 'pre':
+        return (
+          <pre
+            key={index}
+            dir="ltr"
+            className="my-1 overflow-x-auto rounded bg-sunken p-2 font-mono text-xs"
+          >
+            {children}
+          </pre>
+        );
+      case 'quote':
+        return (
+          <blockquote key={index} className="my-1 border-s border-line-strong ps-2">
+            {children}
+          </blockquote>
+        );
+      case 'link':
+        return (
+          <Tooltip key={index} label={node.href}>
+            <span className="text-accent underline" data-entity="link" data-href={node.href}>
+              {children}
+            </span>
+          </Tooltip>
+        );
+    }
+  });
 }
 
 /** What a test send did: the state, where it went with the platform's ids, and each failure. */

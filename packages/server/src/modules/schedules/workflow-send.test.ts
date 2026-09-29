@@ -166,6 +166,37 @@ describe('the "Send message" step', () => {
         message_ids: ['701', '702', 'M-1'],
         delivered_to: ['telegram:-1001234567890', `core_hub:${NEW_SESSION}`],
         failures: [],
+        // §137: the Telegram target's formatting and parts, and what each target did.
+        formatting: 'plain',
+        parse_mode: null,
+        chat_id: '-1001234567890',
+        parts_count: 2,
+        targets: [
+          {
+            target: 'telegram:-1001234567890',
+            platform: 'telegram',
+            chat_id: '-1001234567890',
+            session_id: null,
+            formatting: 'plain',
+            parse_mode: null,
+            status: 'sent',
+            message_ids: ['701', '702'],
+            parts_count: 2,
+            reason: null,
+          },
+          {
+            target: `core_hub:${NEW_SESSION}`,
+            platform: 'core_hub',
+            chat_id: null,
+            session_id: NEW_SESSION,
+            formatting: null,
+            parse_mode: null,
+            status: 'sent',
+            message_ids: ['M-1'],
+            parts_count: 1,
+            reason: null,
+          },
+        ],
       });
       expect(notices).toEqual([]);
 
@@ -438,6 +469,24 @@ describe('a test send is never silent, and the hub logs it (2026-09-29)', () => 
         message_ids: ['812'],
         delivered_to: ['telegram:-1003938641118'],
         failures: [],
+        formatting: 'plain',
+        parse_mode: null,
+        chat_id: '-1003938641118',
+        parts_count: 1,
+        targets: [
+          {
+            target: 'telegram:-1003938641118',
+            platform: 'telegram',
+            chat_id: '-1003938641118',
+            session_id: null,
+            formatting: 'plain',
+            parse_mode: null,
+            status: 'sent',
+            message_ids: ['812'],
+            parts_count: 1,
+            reason: null,
+          },
+        ],
       });
       expect(calls.map((call) => [call.chat, call.text])).toEqual([
         ['-1003938641118', 'CORE_HUB_TELEGRAM_TEST_OK'],

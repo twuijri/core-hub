@@ -4585,3 +4585,67 @@ the prompt in the session's own run queue at once (two runs would write two prom
 reply, and a run that gave up would leave an unanswered prompt behind); letting a step switch a
 conversation's agent (a conversation has one agent in every client); telling another profile's
 conversation apart from a missing one (it would confirm that it exists).
+
+## 137. A "Send message" step chooses how Telegram reads its words: plain, HTML or MarkdownV2
+
+Owner's request (2026-09-29): a Send message step (§124) sent no `parse_mode`, so `**` or `<b>`
+arrived as written. Generic for every hub. The details below are proposed — owner to confirm.
+Additive contract change only.
+
+**Per step, per Telegram target.** `WorkflowSendTarget.formatting` (optional, nullable) is a plain
+string — `plain`, `html` or `markdown_v2` — like §124's `platform`, so a later value never meets an
+older app's enum. Absent or `null` is `plain`: every step saved before this reads and sends exactly as
+before, and nothing is rewritten. Any other value (`HTML`, `Markdown`, `''`…) is refused when the
+workflow is saved or tested (`send_formatting_unknown`); a stored value is never handed to Telegram
+as it is. It is a property of the step, not of the bot or the profile. A conversation target
+ignores it (the conversation renders its own Markdown). A failure alert (§127) is always sent
+plain: the hub writes its words, and an error may hold `<` or `*`.
+
+**What Telegram receives.** `plain`: no `parse_mode` field at all, the words as they are. `html`:
+`parse_mode: "HTML"` — Telegram's own tags only (b/strong, i/em, u/ins, s/strike/del, code, pre,
+`a href`, tg-spoiler / `span class="tg-spoiler"`, blockquote; Bot API "HTML style"), nothing is
+sanitized or escaped by the hub. `markdown_v2`: `parse_mode: "MarkdownV2"`, never the legacy
+`Markdown`. The formatting applies to the words after their variables are filled (`render`), so a
+variable's value is part of the markup: a value with `<`, `&` or an unescaped `.` can make Telegram
+refuse it (escaping a variable's value is a follow-up).
+
+**A refusal is said, never hidden.** When Telegram cannot parse the markup (`Bad Request: can't
+parse entities: …`) the target fails with `Telegram HTML formatting failed: can't parse entities: …`
+(or `MarkdownV2`) — the mode and Telegram's own words; the hub never resends it plain and never says
+`sent`: `message_id` only for what Telegram took. Other refusals stay Telegram's words.
+
+**Long messages.** Plain words are split exactly as before (§124). A formatted one is measured on
+what Telegram counts — the text after its entities are parsed (tags, markers and escapes count
+nothing; `&lt;` counts one) — against 4000 (Telegram's 4096 with a margin), and cut on a paragraph,
+then a line, then a word, else between two characters; never inside a tag, an entity (`&amp;`), an
+escape (`\.`), a custom emoji or a date. The spans open at a cut are closed at the end of the part and
+opened again at the start of the next (`<b>`, `<a href="…">`, `<pre><code class="language-x">`; in
+MarkdownV2 `*`, `_`, `__`, `~`, `||`, a code block with its language, a link's `](url)`, a quote
+line's `>`, an expandable quote's `||` / `**>`; an empty bold `**` keeps a closing `_` from reading
+as `__`), so each part is valid on its own. A text that fits is sent whole and untouched (Telegram
+judges it); a longer one whose markup cannot be walked is refused before any part is sent. Each part
+is remembered as before (`workflow_sent_parts`, same run/node/target/part key), so a retry or a
+rerun sends only the parts that did not go.
+
+**Output and log.** `WorkflowSendResult` gains `formatting`, `parse_mode` (`null` for plain),
+`chat_id` and `parts_count` of the (first) Telegram target, and `targets` — `WorkflowSendTargetResult`
+per target (`target`, `platform`, `chat_id`, `session_id`, `formatting`, `parse_mode`, `status`,
+`message_ids`, `parts_count`, `reason`); a target that failed part way keeps the ids of the parts
+that went. The `workflow send` / `workflow send test` log lines add `formatting`, `parse_mode` and
+`parts_count`; the token is still cut out of every reason (§135).
+
+**Keeping it.** An app that knows `send` but not `formatting` rebuilds the Telegram target from the
+chat id and saves it without the field; `updateWorkflow` gives each such Telegram target the
+formatting of the saved Telegram target in the same place (the first with the first), so an older
+phone does not turn an HTML step plain. `null` sent on purpose is plain.
+
+**Clients.** The web's Send message form has "Telegram formatting" (Plain text / HTML / MarkdownV2)
+under the chat id; the preview says "Telegram formatting: HTML" and shows the words formatted — parsed
+by the web into Telegram's tags only (no HTML is injected), with a note when the markup looks broken;
+"Send test message" sends with the chosen formatting. iOS and Android show the formatting on the
+step, can change it, and keep it when the chat id is edited.
+
+Rejected: a per-bot or per-profile setting (the owner asked per step); falling back to plain when
+Telegram refuses the markup (it would send words the person did not mean, and say success);
+Telegram's legacy `Markdown` (no nesting, no underline/spoiler/quote); an enum in the contract
+(older generated clients cannot decode a value added later).

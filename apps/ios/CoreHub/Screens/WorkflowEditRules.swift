@@ -372,8 +372,26 @@ enum WorkflowEditRules {
         return WorkflowSend(targets: targets)
     }
 
-    static func telegramTarget(chatID: String) -> WorkflowSendTarget {
-        WorkflowSendTarget(platform: telegram, chatId: chatID.trimmingCharacters(in: .whitespacesAndNewlines))
+    /// A Telegram target. `formatting` (§137) is carried over when the chat id is edited, so a step
+    /// sent as HTML stays HTML; nil leaves it out (the hub keeps the saved one).
+    static func telegramTarget(chatID: String, formatting: String? = nil) -> WorkflowSendTarget {
+        WorkflowSendTarget(platform: telegram, chatId: chatID.trimmingCharacters(in: .whitespacesAndNewlines), formatting: formatting)
+    }
+
+    /// How Telegram reads a step's words (§137): plain text, HTML or MarkdownV2 — no other value.
+    static let formattings = ["plain", "html", "markdown_v2"]
+
+    /// A target's formatting as this app shows it: absent (a step saved before §137) is plain.
+    static func formatting(of target: WorkflowSendTarget?) -> String {
+        guard let value = target?.formatting, formattings.contains(value) else { return "plain" }
+        return value
+    }
+
+    /// The Telegram target with another formatting; its chat id and anything else stay.
+    static func withFormatting(_ send: WorkflowSend, _ formatting: String) -> WorkflowSend {
+        guard var current = target(send, telegram) else { return send }
+        current.formatting = formattings.contains(formatting) ? formatting : "plain"
+        return setTarget(send, platform: telegram, current)
     }
 
     /// A conversation of the profile, with what lets the hub make it again if it is deleted; none

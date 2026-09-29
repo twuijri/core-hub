@@ -600,7 +600,7 @@ describe('Workflows: its own page', () => {
       node_id: 'notify_1',
       send: {
         targets: [
-          { platform: 'telegram', chat_id: '-100404' },
+          { platform: 'telegram', chat_id: '-100404', formatting: 'plain' },
           {
             platform: 'core_hub',
             session_id: '01J8QK3ZR2W7M5N4P6T8V9X0SS',
@@ -622,6 +622,86 @@ describe('Workflows: its own page', () => {
     ).nodes[0]!;
     expect(node).toMatchObject({ kind: 'notify', input: 'Done' });
     expect((node.send as { targets: unknown[] }).targets).toHaveLength(2);
+  });
+
+  it('Telegram formatting: chosen per step, named and drawn in the preview, used by the test and saved (§137)', async () => {
+    const user = userEvent.setup();
+    const { seen, fetchImpl } = fakeHub();
+    mount(fetchImpl, '/workflows?workflow=new&profile=default');
+    await screen.findByTestId('workflow-editor');
+    await user.type(screen.getByTestId('workflow-name'), 'Formatted');
+    await user.click(screen.getByTestId('workflow-add-send'));
+    const words = await screen.findByTestId('workflow-step-text');
+    fireEvent.change(words, {
+      target: { value: '<b>اختبار</b> و <a href="https://x.test">رابط</a>' },
+    });
+    // No Telegram target yet: nothing to say about Telegram's formatting.
+    expect(screen.queryByTestId('workflow-send-formatting-label')).toBeNull();
+    await user.click(screen.getByTestId('workflow-send-telegram'));
+    fireEvent.change(screen.getByTestId('workflow-send-chat'), { target: { value: '-1001' } });
+
+    // Plain by default: said, and the tags shown as written.
+    const label = () => screen.getByTestId('workflow-send-formatting-label');
+    const preview = () => screen.getByTestId('workflow-send-preview');
+    expect(label()).toHaveTextContent('Telegram formatting: Plain text');
+    expect(preview()).toHaveAttribute('data-formatting', 'plain');
+    expect(preview()).toHaveTextContent('<b>اختبار</b>');
+    expect(preview().querySelector('strong')).toBeNull();
+
+    // HTML: bold drawn from Telegram's entities; the link shown, never followed.
+    await user.click(screen.getByTestId('workflow-send-formatting-html'));
+    expect(label()).toHaveTextContent('Telegram formatting: HTML');
+    expect(preview()).toHaveAttribute('data-rendered', 'formatted');
+    expect(preview().querySelector('strong')).toHaveTextContent('اختبار');
+    expect(preview().querySelector('a')).toBeNull();
+    expect(preview().querySelector('[data-entity="link"]')).toHaveAttribute(
+      'data-href',
+      'https://x.test',
+    );
+    expect(preview()).not.toHaveTextContent('<b>');
+
+    // Markup Telegram would refuse is said before sending; nothing of it enters the page as HTML.
+    fireEvent.change(words, { target: { value: '<b>open <script>x</script>' } });
+    expect(screen.getByTestId('workflow-send-preview-invalid')).toHaveTextContent(
+      'Telegram would refuse this HTML',
+    );
+    expect(preview().querySelector('script')).toBeNull();
+    expect(preview()).toHaveTextContent('<b>open <script>x</script>');
+
+    // MarkdownV2.
+    await user.click(screen.getByTestId('workflow-send-formatting-markdown_v2'));
+    fireEvent.change(words, { target: { value: '*عريض* _مائل_ انتهى\\.' } });
+    expect(label()).toHaveTextContent('Telegram formatting: MarkdownV2');
+    expect(preview().querySelector('strong')).toHaveTextContent('عريض');
+    expect(preview().querySelector('em')).toHaveTextContent('مائل');
+    expect(preview()).toHaveTextContent('عريض مائل انتهى.');
+    expect(screen.queryByTestId('workflow-send-preview-invalid')).toBeNull();
+
+    // The test is sent with the chosen formatting.
+    await user.click(screen.getByTestId('workflow-send-formatting-html'));
+    fireEvent.change(words, { target: { value: '<b>اختبار</b>' } });
+    // The chat id stays when the formatting changes, and the formatting when the chat id does.
+    fireEvent.change(screen.getByTestId('workflow-send-chat'), { target: { value: '-1002' } });
+    await user.click(screen.getByTestId('workflow-send-test'));
+    await screen.findByTestId('workflow-send-test-result');
+    expect(seen.filter((c) => c.path === '/workflows/send-test').at(-1)!.body).toMatchObject({
+      text: '<b>اختبار</b>',
+      send: { targets: [{ platform: 'telegram', chat_id: '-1002', formatting: 'html' }] },
+    });
+
+    await waitFor(() => expect(screen.getByTestId('workflow-save')).toBeEnabled());
+    await user.click(screen.getByTestId('workflow-save'));
+    await waitFor(() =>
+      expect(seen.some((c) => c.path === '/workflows' && c.method === 'POST')).toBe(true),
+    );
+    const node = (
+      seen.find((c) => c.path === '/workflows' && c.method === 'POST')!.body as {
+        nodes: Array<{ send: { targets: unknown[] } }>;
+      }
+    ).nodes[0]!;
+    expect(node.send.targets).toEqual([
+      { platform: 'telegram', chat_id: '-1002', formatting: 'html' },
+    ]);
   });
 
   it('a Send message test with variables: values from the last run or typed, a preview, and no send until each has one (§124)', async () => {
@@ -675,7 +755,7 @@ describe('Workflows: its own page', () => {
     expect(seen.find((c) => c.path === '/workflows/send-test')!.body).toEqual({
       text: 'Result: {{steps.check.output}} for {{input}} ({{ steps.check.output }})',
       values: { 'steps.check.output': 'All checks passed.', input: 'release 2' },
-      send: { targets: [{ platform: 'telegram', chat_id: '-1001' }] },
+      send: { targets: [{ platform: 'telegram', chat_id: '-1001', formatting: 'plain' }] },
       workflow_id: FLOW,
       node_id: 'notify_1',
     });
@@ -731,7 +811,7 @@ describe('Workflows: its own page', () => {
     expect(result).toHaveTextContent('Message id: 812');
     expect(seen.find((c) => c.path === '/workflows/send-test')!.body).toEqual({
       text: 'CORE_HUB_TELEGRAM_TEST_OK',
-      send: { targets: [{ platform: 'telegram', chat_id: '-1003938641118' }] },
+      send: { targets: [{ platform: 'telegram', chat_id: '-1003938641118', formatting: 'plain' }] },
       workflow_id: FLOW,
       node_id: 'notify_1',
     });

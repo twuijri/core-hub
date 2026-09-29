@@ -295,12 +295,18 @@ describe.skipIf(!doc)('contract: the workflow editor', () => {
         send: {
           targets: [
             { platform: 'core_hub', session_id: null, title: 'تقارير', agent_id: AGENT },
-            { platform: 'telegram', chat_id: '-1001' },
+            { platform: 'telegram', chat_id: '-1001', formatting: 'html' },
           ],
         },
       },
     });
     expect(result.status).toBe('partial');
+    // §137: the Telegram target's formatting, and what each target did, as the contract says.
+    expect(result).toMatchObject({ formatting: 'html', parse_mode: 'HTML', chat_id: '-1001' });
+    expect((result.targets as Array<{ platform: string }>).map((t) => t.platform)).toEqual([
+      'core_hub',
+      'telegram',
+    ]);
     const delivered = result.delivered_to as string[];
     expect(delivered).toHaveLength(1);
     const sessionId = delivered[0]!.replace('core_hub:', '');
@@ -311,6 +317,12 @@ describe.skipIf(!doc)('contract: the workflow editor', () => {
     expect(JSON.stringify(history.items)).toContain('رسالة تجريبية');
     await call('schedules.testWorkflowSend', 400, {
       body: { text: 'x', send: { targets: [{ platform: 'fax' }] } },
+    });
+    await call('schedules.testWorkflowSend', 400, {
+      body: {
+        text: 'x',
+        send: { targets: [{ platform: 'telegram', chat_id: '-1001', formatting: 'Markdown' }] },
+      },
     });
   });
 

@@ -12,16 +12,19 @@ struct SendTargetsForm: View {
     let send: WorkflowSend
     let profile: String
     var tag = "workflow.send"
+    /// Offer Telegram formatting (§137): a step's words; a failure alert is always plain.
+    var formatting = false
     let onChange: (WorkflowSend) -> Void
     @Environment(AppModel.self) private var app
     @Environment(\.l10n) private var l10n
     @State private var chat: String
     @State private var conversations: [Session]?
 
-    init(send: WorkflowSend, profile: String, tag: String = "workflow.send", onChange: @escaping (WorkflowSend) -> Void) {
+    init(send: WorkflowSend, profile: String, tag: String = "workflow.send", formatting: Bool = false, onChange: @escaping (WorkflowSend) -> Void) {
         self.send = send
         self.profile = profile
         self.tag = tag
+        self.formatting = formatting
         self.onChange = onChange
         _chat = State(initialValue: WorkflowEditRules.target(send, WorkflowEditRules.telegram)?.chatId ?? "")
     }
@@ -32,7 +35,8 @@ struct SendTargetsForm: View {
         Toggle(l10n("workflow_editor.send.telegram"), isOn: Binding(
             get: { telegram != nil },
             set: { on in
-                onChange(WorkflowEditRules.setTarget(send, platform: WorkflowEditRules.telegram, on ? WorkflowEditRules.telegramTarget(chatID: chat) : nil))
+                onChange(WorkflowEditRules.setTarget(send, platform: WorkflowEditRules.telegram,
+                                                     on ? WorkflowEditRules.telegramTarget(chatID: chat, formatting: formatting ? "plain" : nil) : nil))
             }
         ))
         .accessibilityIdentifier("\(tag).telegram")
@@ -42,7 +46,9 @@ struct SendTargetsForm: View {
                     get: { chat },
                     set: { value in
                         chat = value
-                        onChange(WorkflowEditRules.setTarget(send, platform: WorkflowEditRules.telegram, WorkflowEditRules.telegramTarget(chatID: value)))
+                        // Everything else the target says (its formatting) stays as it is.
+                        onChange(WorkflowEditRules.setTarget(send, platform: WorkflowEditRules.telegram,
+                                                             WorkflowEditRules.telegramTarget(chatID: value, formatting: telegram?.formatting)))
                     }
                 ))
                 .monoField()
@@ -50,6 +56,21 @@ struct SendTargetsForm: View {
                 .accessibilityLabel(l10n("workflow_editor.send.chat_id"))
                 .accessibilityIdentifier("\(tag).chat")
                 Text(l10n("workflow_editor.send.telegram_hint")).font(.system(size: FontSize.sizeXs)).foregroundStyle(Tone.textMuted)
+                if formatting {
+                    let current = WorkflowEditRules.formatting(of: telegram)
+                    Text(l10n("workflow_editor.send.formatting")).font(.system(size: FontSize.sizeSm, weight: .medium))
+                    Picker(l10n("workflow_editor.send.formatting"), selection: Binding(
+                        get: { current },
+                        set: { value in onChange(WorkflowEditRules.withFormatting(send, value)) }
+                    )) {
+                        ForEach(WorkflowEditRules.formattings, id: \.self) { value in
+                            Text(l10n("workflow_editor.send.formatting_\(value)")).tag(value)
+                        }
+                    }
+                    .pickerStyle(.segmented)
+                    .accessibilityIdentifier("\(tag).formatting")
+                    Text(l10n("workflow_editor.send.formatting_\(current)_hint")).font(.system(size: FontSize.sizeXs)).foregroundStyle(Tone.textMuted)
+                }
             }
         }
         Toggle(l10n("workflow_editor.send.conversation"), isOn: Binding(
