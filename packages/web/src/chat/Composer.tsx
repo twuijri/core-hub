@@ -138,6 +138,12 @@ export interface ComposerProps {
   models?: readonly ComboboxOption[];
   /** Model values chosen most recently in this workspace, newest first. */
   recentModels?: readonly string[];
+  /**
+   * What "no model chosen" runs on, as the picker says it: "Default · gemini-2.5-pro", or
+   * "Agent's own default" when only the agent knows (`defaultModelLabel`). Absent: "Default
+   * model", as before.
+   */
+  defaultModelLabel?: string | null;
   onModel?: ((value: string | null) => void) | undefined;
   /**
    * How hard the model should think for the next turn (`RunCreate.reasoning_effort`).
@@ -192,6 +198,7 @@ export function Composer({
   model = null,
   models = [],
   recentModels = [],
+  defaultModelLabel = null,
   onModel,
   reasoningEffort = null,
   onReasoningEffort,
@@ -581,7 +588,7 @@ export function Composer({
             onChange={(value) => onModel?.(value)}
             options={models}
             label={t('composer.model')}
-            placeholder={t('composer.model_default')}
+            placeholder={defaultModelLabel ?? t('composer.model_default')}
             disabled={disabled || !onModel}
             recent={recentModels}
             testId="composer-model"

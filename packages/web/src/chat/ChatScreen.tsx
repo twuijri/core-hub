@@ -57,7 +57,7 @@ import { useCatalogue, useRuntimeReport } from '../models/queries.js';
 import { activeRun, isBusy, textOf } from './transcript.js';
 import { runProgress, turnsOf } from './turns.js';
 import { useRecentModels } from '../models/useModelPicker.js';
-import { useApprovalMode, useComposerModels } from './useComposerControls.js';
+import { defaultModelLabel, useApprovalMode, useComposerModels } from './useComposerControls.js';
 import { useFollowBottom } from './followBottom.js';
 import { useLoadOlderOnScroll } from './olderMessages.js';
 import { useSessionStream } from './useSessionStream.js';
@@ -745,6 +745,11 @@ function OpenSessionBody({ sessionId, title: pageTitle, intro }: OpenSessionProp
                 model={state.session?.model ?? null}
                 models={models}
                 recentModels={recent}
+                defaultModelLabel={defaultModelLabel(
+                  (agents.data ?? []).find((agent) => agent.id === agentId),
+                  models,
+                  t,
+                )}
                 onModel={(value) => {
                   remember(value);
                   patch.mutate({ model: value });

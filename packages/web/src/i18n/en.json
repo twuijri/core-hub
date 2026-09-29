@@ -389,6 +389,8 @@
     "drop_hint": "Or drop files straight onto the composer.",
     "model": "Model",
     "model_default": "Default model",
+    "model_default_named": "Default · {model}",
+    "model_agent_default": "Agent's own default",
     "approval": "Approvals",
     "approval_no_agent": "Pick an agent first.",
     "approval_unsupported": "This agent declares no approval mode.",

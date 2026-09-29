@@ -389,6 +389,8 @@
     "drop_hint": "أو أفلت الملفات في مربع الكتابة مباشرةً.",
     "model": "النموذج",
     "model_default": "النموذج الافتراضي",
+    "model_default_named": "الافتراضي · {model}",
+    "model_agent_default": "افتراضي الوكيل نفسه",
     "approval": "وضع الصلاحيات",
     "approval_no_agent": "اختر وكيلًا أولًا.",
     "approval_unsupported": "هذا الوكيل لا يعلن وضع صلاحيات.",

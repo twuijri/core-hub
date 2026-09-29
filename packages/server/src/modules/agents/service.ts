@@ -24,6 +24,7 @@ import {
   type CredentialProbeOptions,
   type CredentialState,
 } from './agent-credentials.js';
+import { agentOwnModel } from './agent-own-model.js';
 import { and, eq, inArray, isNull } from 'drizzle-orm';
 import type { FastifyBaseLogger } from 'fastify';
 import type { ModuleDb } from '../../lib/db.js';
@@ -1290,6 +1291,12 @@ export class AgentsService implements UpdatePolicyStore {
       name: this.displayName(row, language),
       selfUpdate: this.selfUpdates(row),
       credentials: this.credentialsOf(row, scope.id, settings),
+      ownModel:
+        this.options.credentialProbe &&
+        row.adapterKind === 'acp' &&
+        row.installState === 'installed'
+          ? agentOwnModel(row.slug, this.options.credentialProbe)
+          : null,
     });
   }
 

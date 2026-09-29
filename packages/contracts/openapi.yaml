@@ -21999,6 +21999,17 @@ components:
                 or a sign-in. Absent where the hub cannot know (Hermes, the hub's own agent, an
                 agent not installed, an agent whose sign-in the hub does not recognise) and from
                 older hubs.
+            agent_default_model:
+              type: string
+              description: >-
+                The model an installed coding agent's own settings name as its default (added
+                2026-09-29, DECISIONS §138) — Claude Code's `settings.json` `model`, Codex's
+                top-level `config.toml` `model`, Gemini CLI's and Qwen Code's `settings.json`
+                `model.name`, Goose's `GOOSE_MODEL`, OpenCode's `opencode.json` `model`. A coding
+                agent runs on the model its own settings choose, so this is the default a
+                conversation with it gets; the model picker shows it. Absent when its settings
+                name none (the vendor's default, which the hub cannot know), for Hermes and the
+                hub's own agent (their default is `default_model`), and from older hubs.
     AgentPatch:
       type: object
       properties:
