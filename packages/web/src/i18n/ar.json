@@ -1624,6 +1624,11 @@
       "waiting": "ينتظر",
       "error": "خطأ"
     },
+    "activity": {
+      "running_step": "يعمل · {step}",
+      "waiting": "ينتظر الموافقة",
+      "waiting_step": "ينتظر الموافقة · {step}"
+    },
     "kinds": {
       "agent": "وكيل",
       "condition": "شرط",

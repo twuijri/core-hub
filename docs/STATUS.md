@@ -69,7 +69,7 @@ its approval.
   one expandable entry holding Agents (owners and admins), Tasks, **Workflows — now its own page
   `/workflows`** (the old `/schedules?section=workflows…` address redirects) — and Schedules; closed
   or open is remembered per device, and closed on one of its pages it is marked as the place (web and
-  desktop; since 2026-09-28 the iPhone and Android drawers too, with Search as an icon in the drawer's header and Workflows a page of its own — DECISIONS §128) — since 2026-09-28 (DECISIONS §125)
+  desktop; since 2026-09-28 the iPhone and Android drawers too, with Search as an icon in the drawer's header and Workflows a page of its own — DECISIONS §128) — since 2026-09-29 (owner's request) **a running workflow is seen on the Workflows page**: its card gets the task board's turning green edge and a badge «يعمل · <step>» / "Running · <step>" ("Waiting for approval" with a still amber edge while it waits), live over `/rt/schedules` — the page listens again since it left Schedules, so a run a trigger's delivery or a schedule started shows without a reload — with a poll behind it; the sidebar's Workflows entry (or the closed Tools heading) shows a small breathing green dot while any workflow of the selected profile runs; reduced motion keeps the edge green and still (phones: follow-up) — since 2026-09-28 (DECISIONS §125)
   **Settings → Secrets** for the owner alone (web and desktop): the account password asked again on
   every visit (`auth.stepUp`, a five-minute grant held in memory, sign-in lockout on wrong tries),
   the names of the provider keys, channel variables, MCP credentials and webhook secrets grouped by

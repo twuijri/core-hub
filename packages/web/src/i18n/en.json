@@ -1624,6 +1624,11 @@
       "waiting": "Waiting",
       "error": "Error"
     },
+    "activity": {
+      "running_step": "Running · {step}",
+      "waiting": "Waiting for approval",
+      "waiting_step": "Waiting for approval · {step}"
+    },
     "kinds": {
       "agent": "Agent",
       "condition": "Condition",

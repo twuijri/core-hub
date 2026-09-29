@@ -92,6 +92,8 @@ export interface TriggerDeliveryRow {
 
 /** How often a run still going is asked about, besides the realtime events. */
 const LIVE_POLL_MS = 2_000;
+/** How often the list is asked again with nothing running, besides the realtime events. */
+const LIST_IDLE_POLL_MS = 30_000;
 
 const inProfile = (profile: string) => ({ headers: { 'X-Hub-Profile': profile } });
 
@@ -207,6 +209,13 @@ export function useWorkflows() {
       return (data as unknown as { items: WorkflowRow[] }).items;
     },
     enabled: !!session,
+    // Behind the realtime events (a run a trigger started shows at once): with a run going the
+    // list is asked again soon, so the card turns back when it ends; otherwise now and then,
+    // for a socket that was away (owner, 2026-09-29).
+    refetchInterval: (query) =>
+      query.state.data?.some((workflow) => workflow.active_run_id !== null)
+        ? LIVE_POLL_MS
+        : LIST_IDLE_POLL_MS,
   });
 }
 

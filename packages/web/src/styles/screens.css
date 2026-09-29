@@ -1393,3 +1393,66 @@ button.files-name:focus-visible {
   outline: 2px solid var(--ch-color-focus);
   outline-offset: 2px;
 }
+
+/* A workflow card while its run goes (owner, 2026-09-29): the task board's running card —
+   a green frame whose brighter sweep turns (`--task-frame-angle`, `task-frame-turn` above) —
+   and an amber frame, still, while the run waits for a person. */
+.workflow-card[data-frame='running'] {
+  border-color: transparent;
+  background:
+    linear-gradient(var(--ch-color-surface), var(--ch-color-surface)) padding-box,
+    conic-gradient(
+        from var(--task-frame-angle),
+        var(--ch-color-status-running-sweep),
+        var(--ch-color-status-running) 18%,
+        var(--ch-color-status-running) 82%,
+        var(--ch-color-status-running-sweep)
+      )
+      border-box;
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--ch-color-status-running) 16%, transparent);
+  animation: task-frame-turn 2.8s linear infinite;
+}
+.workflow-card[data-frame='waiting'] {
+  border-color: var(--ch-color-status-scheduled);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--ch-color-status-scheduled) 14%, transparent);
+}
+/* The badge carries the step's title: one line, cut short rather than pushing the actions. */
+.workflow-status .ch-badge-label {
+  display: inline-block;
+  max-inline-size: 16rem;
+  white-space: nowrap;
+  vertical-align: middle;
+}
+.workflow-card-live {
+  display: inline-block;
+  inline-size: 0.4rem;
+  block-size: 0.4rem;
+  margin-inline-end: var(--ch-space-1);
+  border-radius: var(--ch-radius-full);
+  background: currentColor;
+  vertical-align: middle;
+  animation: task-live 1.6s ease-in-out infinite;
+}
+/* The sidebar's Workflows entry while one of the profile's workflows runs. */
+.workflows-running-dot {
+  display: inline-block;
+  inline-size: 0.5rem;
+  block-size: 0.5rem;
+  border-radius: var(--ch-radius-full);
+  background: var(--ch-color-status-running);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--ch-color-status-running) 25%, transparent);
+  animation: task-live 1.6s ease-in-out infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .workflow-card-live,
+  .workflows-running-dot {
+    animation: none;
+  }
+  /* Still a green frame — it just stops going round. */
+  .workflow-card[data-frame='running'] {
+    animation: none;
+    background:
+      linear-gradient(var(--ch-color-surface), var(--ch-color-surface)) padding-box,
+      linear-gradient(var(--ch-color-status-running), var(--ch-color-status-running)) border-box;
+  }
+}

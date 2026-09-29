@@ -10,7 +10,6 @@ import { useI18n } from '../../i18n/context.js';
 import { ProfileBadge } from '../../shell/ProfileBadge.js';
 import { useManyProfiles, useProfileName } from '../../shell/profiles.js';
 import {
-  Badge,
   Button,
   Card,
   CardHeader,
@@ -19,18 +18,11 @@ import {
   Skeleton,
   SkeletonGroup,
   useConfirm,
-  type BadgeTone,
 } from '../../ui/index.js';
 import { IconCopy, IconPlus, IconSchedules, IconTrash } from '../../ui/icons.js';
 import { fromWorkflow } from './model.js';
-import { useWorkflowWrites, useWorkflows, type WorkflowRow } from './queries.js';
-
-const STATUS_TONE: Record<WorkflowRow['status'], BadgeTone> = {
-  idle: 'neutral',
-  running: 'info',
-  waiting: 'warning',
-  error: 'danger',
-};
+import { useWorkflowWrites, useWorkflows } from './queries.js';
+import { WorkflowActivity, WorkflowActivityBadge, frameOf } from './WorkflowActivity.js';
 
 export function WorkflowsSection({
   onOpen,
@@ -89,104 +81,113 @@ export function WorkflowsSection({
       <ul className="flex flex-col gap-3" data-testid="workflow-list">
         {(workflows.data ?? []).map((workflow) => (
           <li key={`${workflow.profile}:${workflow.id}`}>
-            <Card testId="workflow-card" data-workflow-id={workflow.id}>
-              <CardHeader
-                title={<span dir="auto">{workflow.name}</span>}
-                subtitle={`${t('workflows.steps_count', { count: workflow.nodes.length })} · ${t('workflows.runs_count', { count: workflow.run_count })}`}
-                actions={
-                  <span className="flex items-center gap-1">
-                    {many && (
-                      <ProfileBadge profile={workflow.profile} testId="workflow-card-profile" />
-                    )}
-                    <Badge tone={STATUS_TONE[workflow.status]}>
-                      {t(`workflows.status.${workflow.status}`)}
-                    </Badge>
-                  </span>
-                }
-              />
-              {workflow.description && (
-                <p className="text-xs text-muted" dir="auto">
-                  {workflow.description}
-                </p>
+            <WorkflowActivity workflow={workflow}>
+              {(activity) => (
+                <Card
+                  testId="workflow-card"
+                  data-workflow-id={workflow.id}
+                  className="workflow-card"
+                  data-frame={frameOf(activity)}
+                >
+                  <CardHeader
+                    title={<span dir="auto">{workflow.name}</span>}
+                    subtitle={`${t('workflows.steps_count', { count: workflow.nodes.length })} · ${t('workflows.runs_count', { count: workflow.run_count })}`}
+                    actions={
+                      <span className="flex items-center gap-1">
+                        {many && (
+                          <ProfileBadge profile={workflow.profile} testId="workflow-card-profile" />
+                        )}
+                        <WorkflowActivityBadge activity={activity} />
+                      </span>
+                    }
+                  />
+                  {workflow.description && (
+                    <p className="text-xs text-muted" dir="auto">
+                      {workflow.description}
+                    </p>
+                  )}
+                  <div className="mt-3 flex flex-wrap items-center gap-2">
+                    <Button
+                      size="sm"
+                      variant="secondary"
+                      onClick={() => onOpen(workflow)}
+                      data-testid="workflow-open"
+                    >
+                      {t('workflows.open')}
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="secondary"
+                      disabled={workflow.nodes.length === 0}
+                      loading={writes.run.isPending && writes.run.variables?.id === workflow.id}
+                      onClick={() => {
+                        setNotice(null);
+                        writes.run.mutate(
+                          { profile: workflow.profile, id: workflow.id, input: null },
+                          {
+                            onSuccess: (started) => {
+                              setNotice(t('workflows.started', { name: workflow.name }));
+                              onShowRun(workflow, started.workflow_run_id);
+                            },
+                          },
+                        );
+                      }}
+                      data-testid="workflow-card-run"
+                    >
+                      {t('workflows.run')}
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      icon={<IconCopy size={14} />}
+                      loading={
+                        writes.create.isPending &&
+                        writes.create.variables?.draft.name ===
+                          t('workflows.copy_name', { name: workflow.name })
+                      }
+                      onClick={() => {
+                        setNotice(null);
+                        const draft = fromWorkflow(workflow);
+                        writes.create.mutate(
+                          {
+                            profile: workflow.profile,
+                            draft: {
+                              ...draft,
+                              name: t('workflows.copy_name', { name: workflow.name }).slice(0, 120),
+                            },
+                          },
+                          {
+                            onSuccess: (copy) => onOpen({ id: copy.id, profile: workflow.profile }),
+                          },
+                        );
+                      }}
+                      data-testid="workflow-duplicate"
+                    >
+                      {t('workflows.duplicate')}
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      iconOnly
+                      className="ms-auto"
+                      tooltip={t('common.delete')}
+                      aria-label={t('common.delete')}
+                      icon={<IconTrash size={14} />}
+                      onClick={() => {
+                        void ask({
+                          title: t('workflows.confirm_delete', { name: workflow.name }),
+                          confirmLabel: t('common.delete'),
+                        }).then((sure) => {
+                          if (sure)
+                            writes.remove.mutate({ profile: workflow.profile, id: workflow.id });
+                        });
+                      }}
+                      data-testid="workflow-delete"
+                    />
+                  </div>
+                </Card>
               )}
-              <div className="mt-3 flex flex-wrap items-center gap-2">
-                <Button
-                  size="sm"
-                  variant="secondary"
-                  onClick={() => onOpen(workflow)}
-                  data-testid="workflow-open"
-                >
-                  {t('workflows.open')}
-                </Button>
-                <Button
-                  size="sm"
-                  variant="secondary"
-                  disabled={workflow.nodes.length === 0}
-                  loading={writes.run.isPending && writes.run.variables?.id === workflow.id}
-                  onClick={() => {
-                    setNotice(null);
-                    writes.run.mutate(
-                      { profile: workflow.profile, id: workflow.id, input: null },
-                      {
-                        onSuccess: (started) => {
-                          setNotice(t('workflows.started', { name: workflow.name }));
-                          onShowRun(workflow, started.workflow_run_id);
-                        },
-                      },
-                    );
-                  }}
-                  data-testid="workflow-card-run"
-                >
-                  {t('workflows.run')}
-                </Button>
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  icon={<IconCopy size={14} />}
-                  loading={
-                    writes.create.isPending &&
-                    writes.create.variables?.draft.name ===
-                      t('workflows.copy_name', { name: workflow.name })
-                  }
-                  onClick={() => {
-                    setNotice(null);
-                    const draft = fromWorkflow(workflow);
-                    writes.create.mutate(
-                      {
-                        profile: workflow.profile,
-                        draft: {
-                          ...draft,
-                          name: t('workflows.copy_name', { name: workflow.name }).slice(0, 120),
-                        },
-                      },
-                      { onSuccess: (copy) => onOpen({ id: copy.id, profile: workflow.profile }) },
-                    );
-                  }}
-                  data-testid="workflow-duplicate"
-                >
-                  {t('workflows.duplicate')}
-                </Button>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  iconOnly
-                  className="ms-auto"
-                  tooltip={t('common.delete')}
-                  aria-label={t('common.delete')}
-                  icon={<IconTrash size={14} />}
-                  onClick={() => {
-                    void ask({
-                      title: t('workflows.confirm_delete', { name: workflow.name }),
-                      confirmLabel: t('common.delete'),
-                    }).then((sure) => {
-                      if (sure)
-                        writes.remove.mutate({ profile: workflow.profile, id: workflow.id });
-                    });
-                  }}
-                  data-testid="workflow-delete"
-                />
-              </div>
-            </Card>
+            </WorkflowActivity>
           </li>
         ))}
       </ul>

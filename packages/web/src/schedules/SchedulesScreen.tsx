@@ -18,7 +18,7 @@
  * DECISIONS §52) — were a second tab here until 2026-09-28; they have their own page now
  * (`screens/WorkflowsScreen.tsx`, DECISIONS §126), and `?section=workflows…` redirects there.
  */
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { Link, Navigate, useLocation, useSearchParams } from 'react-router';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '../auth/context.js';
@@ -27,14 +27,13 @@ import { describeError } from '../auth/client.js';
 import { useAgents } from '../hub/queries.js';
 import { useI18n } from '../i18n/context.js';
 import { routeOf, termKey } from '../navigation/manifest.js';
-import { useRealtime } from '../realtime/context.js';
-import { SCHEDULE_EVENTS, isEnvelope } from '../realtime/envelope.js';
 import { AppShell } from '../shell/AppShell.js';
 import { ProfileBadge } from '../shell/ProfileBadge.js';
 import { NextRuns, ScheduleTemplateMenu } from './ScheduleTemplates.js';
 import { useManyProfiles, useProfileInLink, useProfileName } from '../shell/profiles.js';
 import { chatHref } from '../chat/anchor.js';
 import { ScheduleHistory, WorkflowRunDialog } from './ScheduleRuns.js';
+import { useScheduleEvents } from './events.js';
 import { workflowsQueryFromSchedules } from '../screens/WorkflowsScreen.js';
 import {
   DEFAULT_RUN_OPTIONS,
@@ -119,33 +118,6 @@ function useSchedules() {
     },
     enabled: !!session,
   });
-}
-
-/**
- * The page follows `/rt/schedules`, which hears every profile the person may enter
- * (`profiles: 'all'`, realtime/context.tsx): a schedule made, changed or fired anywhere —
- * another tab, Hermes — redraws it.
- */
-function useScheduleEvents(): void {
-  const realtime = useRealtime();
-  const queryClient = useQueryClient();
-  useEffect(() => {
-    const socket = realtime.socket('schedules');
-    const handler = (raw: unknown) => {
-      if (!isEnvelope(raw)) return;
-      void queryClient.invalidateQueries({ queryKey: ['schedules'] });
-    };
-    // What happened while the socket was away is not replayed on this namespace: a
-    // (re)connection asks again.
-    const reconnected = () => void queryClient.invalidateQueries({ queryKey: ['schedules'] });
-    for (const name of SCHEDULE_EVENTS) socket.on(name, handler);
-    socket.on('connect', reconnected);
-    if (!socket.connected) socket.connect();
-    return () => {
-      for (const name of SCHEDULE_EVENTS) socket.off(name, handler);
-      socket.off('connect', reconnected);
-    };
-  }, [queryClient, realtime.epoch]);
 }
 
 /** Every write goes to the schedule's own profile, whichever one the top selector shows. */
