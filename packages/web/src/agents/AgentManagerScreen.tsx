@@ -170,9 +170,17 @@ function AgentCard({ agent, jobs }: { agent: Agent; jobs: Record<string, Job> })
         subtitle={`${agent.vendor ?? '—'} · ${agent.kind}${agent.install.version ? ` · ${agent.install.version}` : ''}`}
         media={<Avatar name={agent.name} size="md" mark={agentMark(agent.slug, 18)} />}
         actions={
-          <Badge tone={STATUS_TONE[agent.status] ?? 'neutral'} dot={running}>
-            {t(`agents.status.${agent.status}`)}
-          </Badge>
+          <>
+            <Badge tone={STATUS_TONE[agent.status] ?? 'neutral'} dot={running}>
+              {t(`agents.status.${agent.status}`)}
+            </Badge>
+            {/* Installed, but nothing to answer with: said, so it does not look ready. */}
+            {agent.credentials === 'missing' && (
+              <Badge tone="warning" testId="agent-needs-setup">
+                {t('agents.needs_setup')}
+              </Badge>
+            )}
+          </>
         }
       />
       {agent.limited && <Notice tone="warning">{t('agents.limited')}</Notice>}

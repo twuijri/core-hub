@@ -636,6 +636,7 @@ function OpenSessionBody({ sessionId, title: pageTitle, intro }: OpenSessionProp
                       <RunFailureNotice
                         failure={entry.failure}
                         runtime={runtime.data}
+                        agent={(agents.data ?? []).find((agent) => agent.id === agentId)}
                         onDismiss={() => setDismissed((held) => new Set(held).add(entry.runId))}
                       />
                     ) : null;

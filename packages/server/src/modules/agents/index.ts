@@ -755,6 +755,11 @@ function contextOf(app: FastifyInstance): AgentsContext {
     ...(own.bootHealthTimeoutMs !== undefined
       ? { bootHealthTimeoutMs: own.bootHealthTimeoutMs }
       : {}),
+    // The same home and environment as the Config files page (`config-files.ts`).
+    credentialProbe: {
+      env: hub.config.hostEnv.inherited ?? {},
+      ...(own.agentHome ? { home: own.agentHome } : {}),
+    },
     models: () => modelsPorts.get(hub.io) ?? null,
     // A workspace is a Hermes profile (ADR 0014): its slug, or `default` for the hub's
     // default workspace whatever it is called. An archived or unknown one has none.

@@ -29,6 +29,7 @@ import { PRODUCT, derived } from '@corehub/contracts';
 import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process';
 import path from 'node:path';
 import { createInterface } from 'node:readline';
+import { redactSecrets } from '../../../lib/redact-text.js';
 import type { AgentCapability } from '../schema.js';
 import { entriesFor, type CatalogEntry } from '../catalog/index.js';
 import { EventQueue } from './event-queue.js';
@@ -68,6 +69,11 @@ interface JsonRpcMessage {
 }
 
 export interface AcpTransport {
+  /**
+   * The last lines the agent wrote to its stderr, if the transport keeps them: what explains a
+   * bare "Internal error" (`describeAcpError`).
+   */
+  recentStderr?(): string;
   /** Write one JSON-RPC message (the transport adds the newline). */
   write(message: JsonRpcMessage): void;
   /** Called for every message the agent sends. */
@@ -102,10 +108,13 @@ export function childProcessTransport(child: ChildProcessWithoutNullStreams): Ac
     const reason =
       code === 0
         ? null
-        : `agent exited (${signal ?? `code ${code ?? '?'}`})${stderr ? `: ${stderr.trim()}` : ''}`;
+        : `agent exited (${signal ?? `code ${code ?? '?'}`})${
+            stderr ? `: ${redactSecrets(stderr.trim().slice(-ERROR_DETAIL_CHARS))}` : ''
+          }`;
     for (const handler of closeHandlers) handler(reason);
   });
   return {
+    recentStderr: () => stderr,
     write(message) {
       if (child.stdin.writable) child.stdin.write(`${JSON.stringify(message)}\n`);
     },
@@ -254,8 +263,11 @@ export class AcpSession implements AgentSession {
       const pending = this.pending.get(Number(message.id));
       if (!pending) return;
       this.pending.delete(Number(message.id));
-      if (message.error) pending.reject(new Error(message.error.message));
-      else pending.resolve(message.result ?? {});
+      if (message.error) {
+        pending.reject(
+          new Error(describeAcpError(message.error, this.transport.recentStderr?.() ?? '')),
+        );
+      } else pending.resolve(message.result ?? {});
       return;
     }
     if (!message.method) return;
@@ -642,6 +654,55 @@ export function createAcpAdapter(options: AcpAdapterOptions): AgentAdapter {
       return session;
     },
   };
+}
+
+/** The most of an agent's own explanation kept with a failed run. */
+const ERROR_DETAIL_CHARS = 600;
+const STDERR_TAIL_LINES = 6;
+
+/** A JSON-RPC error's `data`, as words: its `details` / `message` / `error`, or itself. */
+function detailOf(data: unknown): string {
+  if (data === undefined || data === null) return '';
+  if (typeof data === 'string') return data.trim();
+  if (typeof data === 'object') {
+    const record = data as Record<string, unknown>;
+    for (const key of ['details', 'message', 'error', 'reason']) {
+      const value = record[key];
+      if (typeof value === 'string' && value.trim()) return value.trim();
+    }
+  }
+  try {
+    return JSON.stringify(data);
+  } catch {
+    return '';
+  }
+}
+
+/**
+ * What an agent's JSON-RPC error says, in full (owner, 2026-09-29: a chat with Goose ended in a
+ * bare "Internal error"). The error's own message, then what its `data` adds; when that is all
+ * the agent said and it is only "Internal error", the last lines of its stderr, which is where
+ * a bridge writes the real reason. Credentials are masked, and the whole is bounded.
+ */
+export function describeAcpError(
+  error: { code?: number; message?: string; data?: unknown },
+  stderr = '',
+): string {
+  const base = (error.message ?? '').trim() || `agent error ${String(error.code ?? '')}`.trim();
+  const detail = detailOf(error.data);
+  let text = detail && !base.includes(detail) ? `${base}: ${detail}` : base;
+  const generic = !detail && /^internal error\.?$/i.test(base);
+  if (generic) {
+    const tail = stderr
+      .split('\n')
+      .map((line) => line.trim())
+      .filter(Boolean)
+      .slice(-STDERR_TAIL_LINES)
+      .join(' · ');
+    if (tail) text = `${base} — ${tail}`;
+  }
+  const safe = redactSecrets(text);
+  return safe.length > ERROR_DETAIL_CHARS ? `${safe.slice(0, ERROR_DETAIL_CHARS - 1)}…` : safe;
 }
 
 /**

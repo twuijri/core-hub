@@ -37,6 +37,9 @@ beforeEach(() => {
   vi.stubEnv('CLAUDE_CONFIG_DIR', '');
   vi.stubEnv('GEMINI_CLI_HOME', '');
   vi.stubEnv('QWEN_HOME', '');
+  for (const name of ['ANTHROPIC_API_KEY', 'ANTHROPIC_AUTH_TOKEN', 'CLAUDE_CODE_OAUTH_TOKEN']) {
+    vi.stubEnv(name, '');
+  }
 });
 afterEach(async () => {
   vi.unstubAllEnvs();
@@ -142,6 +145,30 @@ describe('the MCP page of every agent, on a hub booted like the owner’s', () =
       payload: { enabled: false },
     });
     expect(on.statusCode, on.body).toBe(200);
+  }, 30_000);
+
+  it('says on the card when an installed agent has no key or sign-in to answer with', async () => {
+    const { h, dir, agentOf } = await boot();
+    const card = async () =>
+      (
+        await authed(h, h.token, { method: 'GET', url: `/api/v1/agents/${agentOf('claude-code')}` })
+      ).json() as { status: string; credentials?: string };
+    expect(await card()).toMatchObject({ status: 'available', credentials: 'missing' });
+    // `claude login` done on the hub's home.
+    mkdirSync(path.join(dir, '.claude'), { recursive: true });
+    writeFileSync(path.join(dir, '.claude', '.credentials.json'), '{}');
+    expect(await card()).toMatchObject({ credentials: 'ready' });
+    // Hermes, and an agent not installed, say nothing either way.
+    const hermes = await authed(h, h.token, {
+      method: 'GET',
+      url: `/api/v1/agents/${agentOf('hermes')}`,
+    });
+    expect(hermes.json()).not.toHaveProperty('credentials');
+    const codex = await authed(h, h.token, {
+      method: 'GET',
+      url: `/api/v1/agents/${agentOf('codex')}`,
+    });
+    expect(codex.json()).not.toHaveProperty('credentials');
   }, 30_000);
 
   it("lists, adds, switches and deletes Claude Code's own servers in ~/.claude.json", async () => {

@@ -8,6 +8,12 @@
  *   agent's own words stay underneath. They are never replaced and never hidden: they are
  *   what says *which* provider refused, and a person who reads them can act on them even
  *   when our guess about the cause is wrong.
+ * - a coding agent's failure the hub recognises (owner, 2026-09-29): Goose with no provider set,
+ *   Claude Code / Codex / Gemini CLI with no key or sign-in, an agent that needs its own
+ *   account sign-in — our sentence naming the agent, one action where the hub has one (its
+ *   Config files, Settings → Models, its sign-in), and the agent's own words underneath, which
+ *   the hub now carries in full (`describeAcpError`). An agent whose card already says it has
+ *   nothing to answer with (`credentials: missing`) gets its guidance whatever the words.
  * - everything else — the existing one line, the agent's message with its code.
  *
  * A component of its own because the choice between them is the whole point of the
@@ -17,8 +23,8 @@ import type { ReactNode } from 'react';
 import { Link } from 'react-router';
 import { useI18n } from '../i18n/context.js';
 import { RuntimeChecks } from '../models/RuntimeChecks.js';
-import { routeOf } from '../navigation/manifest.js';
-import type { Message, Run, RuntimeReport } from '../types.js';
+import { agentRoute, routeOf } from '../navigation/manifest.js';
+import type { Agent, Message, Run, RuntimeReport } from '../types.js';
 import { Button } from '../ui/index.js';
 import { IconClose } from '../ui/icons.js';
 import { Notice } from '../ui/Notice.js';
@@ -32,6 +38,57 @@ export interface RunFailure {
 
 /** The Defaults tab of the Models screen, by name — no client invents a path. */
 export const DEFAULTS_ROUTE = `${routeOf('models')}?tab=auxiliary`;
+
+type HelpAction = 'config_files' | 'models' | 'sign_in';
+
+/** What each coding agent's known failures mean, by the words the agent and its bridge use. */
+const AUTH = /auth|log ?in|sign ?in|api[ _-]?key|credential|unauthori[sz]ed|\b40[13]\b/i;
+const AGENT_HELP: Readonly<Record<string, { match: RegExp; key: string; action: HelpAction }>> = {
+  goose: {
+    match: /provider|GOOSE_PROVIDER|GOOSE_MODEL|configure|internal error/i,
+    key: 'goose_provider',
+    action: 'config_files',
+  },
+  'claude-code': { match: AUTH, key: 'claude_auth', action: 'models' },
+  codex: { match: /OPENAI_API_KEY|chatgpt/i, key: 'codex_auth', action: 'models' },
+  'gemini-cli': { match: /GEMINI_API_KEY|GOOGLE_API_KEY/i, key: 'gemini_auth', action: 'models' },
+  'qwen-code': { match: AUTH, key: 'provider_auth', action: 'models' },
+  opencode: { match: AUTH, key: 'provider_auth', action: 'models' },
+  pi: { match: AUTH, key: 'provider_auth', action: 'models' },
+};
+
+export interface AgentHelp {
+  key: string;
+  action: HelpAction | null;
+}
+
+/**
+ * The guidance for a coding agent's failed run, or `null` when the hub does not recognise it.
+ * An agent with its own account sign-in (Kimi, Grok) is sent to it; one whose card says it
+ * has no key or sign-in (`credentials: missing`) gets its guidance whatever the words.
+ */
+export function agentHelp(
+  agent: Pick<Agent, 'slug' | 'kind' | 'credentials' | 'install'> | undefined,
+  failure: RunFailure,
+): AgentHelp | null {
+  if (!agent || agent.kind !== 'acp') return null;
+  if (failure.code !== 'agent_error' && failure.code !== 'provider_unauthorized') return null;
+  const text = failure.error ?? '';
+  if (agent.install.sign_in && AUTH.test(text)) return { key: 'sign_in', action: 'sign_in' };
+  const known = AGENT_HELP[agent.slug];
+  const missing = agent.credentials === 'missing';
+  if (known && (missing || known.match.test(text) || AUTH.test(text))) {
+    return { key: known.key, action: known.action };
+  }
+  if (missing) return { key: 'provider_auth', action: 'models' };
+  return null;
+}
+
+function helpRoute(action: HelpAction, agentId: string): string {
+  if (action === 'config_files') return agentRoute('agent_config_files', agentId);
+  if (action === 'sign_in') return agentRoute('agent_settings', agentId);
+  return routeOf('models');
+}
 
 /**
  * Which message each failed run's notice hangs under (owner, 2026-09-25: «الخطا يبتل ما
@@ -73,9 +130,12 @@ export function failuresByMessage(
 export function RunFailureNotice({
   failure,
   runtime,
+  agent,
   onDismiss,
 }: {
   failure: RunFailure;
+  /** The conversation's agent: a coding agent's known failures get their way out. */
+  agent?: Pick<Agent, 'id' | 'slug' | 'name' | 'kind' | 'credentials' | 'install'> | undefined;
   /**
    * Which step of propagation is missing, read now rather than remembered from when the
    * run failed — the person may already have fixed half of it in another tab. Passed in
@@ -99,6 +159,37 @@ export function RunFailureNotice({
       data-testid="run-failed-dismiss"
     />
   ) : null;
+  const help = agentHelp(agent, failure);
+  if (help && agent) {
+    const actionLabel =
+      help.action === 'config_files'
+        ? t('chat.agent_help.open_config_files', { name: agent.name })
+        : help.action === 'sign_in'
+          ? t('chat.agent_help.open_sign_in', { name: agent.name })
+          : t('chat.agent_help.open_models');
+    return (
+      <Notice tone="danger" className="run-failure space-y-1" testId="run-failed-agent-help">
+        {dismiss}
+        <p data-testid="run-failed-reason">
+          {t(`chat.agent_help.${help.key}`, { name: agent.name })}
+        </p>
+        {help.action && (
+          <p>
+            <Link
+              to={helpRoute(help.action, agent.id)}
+              className="link underline"
+              data-testid="run-failed-action"
+            >
+              {actionLabel}
+            </Link>
+          </p>
+        )}
+        <p className="text-xs opacity-80" data-testid="run-failed-detail" dir="auto">
+          {t('chat.agent_help.agent_said', { name: agent.name })} {failure.error}
+        </p>
+      </Notice>
+    );
+  }
   if (failure.code !== 'provider_not_configured') {
     return (
       <Notice tone="danger" className="run-failure">

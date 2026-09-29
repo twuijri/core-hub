@@ -330,6 +330,18 @@
     "empty_title": "بم نبدأ؟",
     "no_provider": "‏لم يُضبط مزوّد نماذج لهذا البروفايل بعد، لذلك لا يمكن للوكيل الرد.",
     "no_provider_action": "‏افتح الإعدادات ← النماذج ← الافتراضيات",
+    "agent_help": {
+      "goose_provider": "لم يُضبط مزوّد نماذج لـ{name} بعد: ملف إعداده يحتاج GOOSE_PROVIDER وGOOSE_MODEL.",
+      "claude_auth": "{name} يحتاج تسجيل دخول أو مزوّدًا متوافقًا مع Anthropic. أضف مزوّد Anthropic من «النماذج»، أو سجّل دخول Claude Code على جهاز المركز.",
+      "codex_auth": "{name} يحتاج مفتاح OpenAI أو تسجيل دخول ChatGPT. أضف مزوّد OpenAI من «النماذج».",
+      "gemini_auth": "{name} يحتاج تسجيل دخول Google أو مفتاح Gemini API. أضف مزوّد Google من «النماذج».",
+      "provider_auth": "ليس لدى {name} مفتاح أو تسجيل دخول يرد به. أضف مزوّدًا يستطيع استخدامه من «النماذج».",
+      "sign_in": "{name} يحتاج تسجيل الدخول إلى حسابه.",
+      "open_config_files": "افتح ملفات إعداد {name}",
+      "open_models": "افتح الإعدادات ← النماذج",
+      "open_sign_in": "سجّل دخول {name}",
+      "agent_said": "قال {name}:"
+    },
     "no_key": "‏رفض المزوّد المفتاح المحفوظ، فلم يستطع الوكيل الوصول إليه.",
     "no_key_action": "‏افتح الإعدادات ← النماذج",
     "you": "أنت",
@@ -563,6 +575,7 @@
     "restart_done": "تمّت إعادة التشغيل",
     "restart_failed": "تعذّرت إعادة التشغيل",
     "limited": "هذا الوكيل يعمل عبر حزام العمليات وهو محدود.",
+    "needs_setup": "يحتاج مزوّدًا أو تسجيل دخول",
     "update_available": "تحديث متاح: {version}",
     "under_agent": "تحت الوكيل",
     "status": {

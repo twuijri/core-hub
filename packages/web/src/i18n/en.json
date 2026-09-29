@@ -330,6 +330,18 @@
     "empty_title": "What shall we start with?",
     "no_provider": "No model provider is configured for this profile, so the agent has nothing to run on.",
     "no_provider_action": "Open Settings → Models → Defaults",
+    "agent_help": {
+      "goose_provider": "{name} has no model provider set up yet: its config file needs GOOSE_PROVIDER and GOOSE_MODEL.",
+      "claude_auth": "{name} needs a sign-in or an Anthropic-compatible provider. Add an Anthropic provider under Models, or sign Claude Code in on the hub's computer.",
+      "codex_auth": "{name} needs an OpenAI key or a ChatGPT sign-in. Add an OpenAI provider under Models.",
+      "gemini_auth": "{name} needs a Google sign-in or a Gemini API key. Add a Google provider under Models.",
+      "provider_auth": "{name} has no key or sign-in to answer with. Add a provider it can use under Models.",
+      "sign_in": "{name} needs its own account sign-in.",
+      "open_config_files": "Open {name}'s config files",
+      "open_models": "Open Settings → Models",
+      "open_sign_in": "Sign {name} in",
+      "agent_said": "{name} said:"
+    },
     "no_key": "The provider rejected the stored key, so the agent could not reach it.",
     "no_key_action": "Open Settings → Models",
     "you": "You",
@@ -563,6 +575,7 @@
     "restart_done": "Restarted",
     "restart_failed": "The restart failed",
     "limited": "This agent runs through the process harness and is limited.",
+    "needs_setup": "Needs a provider or sign-in",
     "update_available": "Update available: {version}",
     "under_agent": "Under the agent",
     "status": {
