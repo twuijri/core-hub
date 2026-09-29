@@ -954,7 +954,8 @@ export function StepRunPanel({
     return <p className="text-sm text-muted">{t('workflows.editor.no_selection')}</p>;
   }
   const output = step?.output ?? null;
-  const long = (output?.length ?? 0) > 280 || (output ?? '').split('\n').length > 6;
+  const shownOutput = readableOutput(output);
+  const long = (shownOutput.text.length ?? 0) > 280 || shownOutput.text.split('\n').length > 6;
   return (
     <div className="flex flex-col gap-3" data-testid="workflow-step-run" data-node-id={node.id}>
       <div className="flex items-center gap-2">
@@ -1003,17 +1004,20 @@ export function StepRunPanel({
                 </span>
                 <span className="text-accent">{t('workflows.editor.step_output_show')}</span>
               </summary>
-              <div className="mt-2 max-h-80 overflow-auto whitespace-pre-wrap text-xs" dir="auto">
-                {output}
+              <div
+                className="mt-2 max-h-80 overflow-auto whitespace-pre-wrap text-xs [overflow-wrap:anywhere]"
+                dir={shownOutput.json ? 'ltr' : 'auto'}
+              >
+                {shownOutput.text}
               </div>
             </details>
           ) : (
             <div
-              className="whitespace-pre-wrap rounded-md border border-line p-2 text-xs"
-              dir="auto"
+              className={`min-w-0 whitespace-pre-wrap rounded-md border border-line p-2 text-xs [overflow-wrap:anywhere]${shownOutput.json ? ' font-mono' : ''}`}
+              dir={shownOutput.json ? 'ltr' : 'auto'}
               data-testid="workflow-step-output"
             >
-              {output}
+              {shownOutput.text}
             </div>
           )}
         </div>
@@ -1035,4 +1039,21 @@ export function StepRunPanel({
       )}
     </div>
   );
+}
+
+/**
+ * A step's output as it is shown: a JSON answer (a Send message step's result, say) laid out on
+ * lines and read left to right; anything else as written.
+ */
+export function readableOutput(output: string | null): { text: string; json: boolean } {
+  const raw = output ?? '';
+  const trimmed = raw.trim();
+  if (trimmed.startsWith('{') || trimmed.startsWith('[')) {
+    try {
+      return { text: JSON.stringify(JSON.parse(trimmed), null, 2), json: true };
+    } catch {
+      // Not JSON after all: shown as written.
+    }
+  }
+  return { text: raw, json: false };
 }
