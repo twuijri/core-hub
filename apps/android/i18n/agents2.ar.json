@@ -399,5 +399,14 @@
   "agents2_wh_copy_url": "نسخ العنوان",
   "agents2_wh_copy_secret": "نسخ السرّ",
   "agents2_mcp_row_open": "مفتوح",
-  "agents2_mcp_row_folded": "مطويّ"
+  "agents2_mcp_row_folded": "مطويّ",
+  "agents2_mcp_tool_count": "الأدوات: %1$s",
+  "agents2_mcp_tool_count_filtered": "الأدوات: %1$s من %2$s",
+  "agents2_mcp_test_failed_short": "فشل الاختبار",
+  "agents2_mcp_tools_stale": "تغيّرت إعدادات هذا الخادم بعد آخر اختبار، فقد لا تكون القائمة محدّثة. اختبره مرة أخرى.",
+  "agents2_mcp_access_read": "قراءة",
+  "agents2_mcp_access_write": "تعديل",
+  "agents2_mcp_access_unknown": "غير واضح",
+  "agents2_mcp_tool_off": "غير مسموحة للوكيل",
+  "agents2_mcp_tools_pick_on_web": "اختيار الأدوات المسموحة للوكيل من الويب، في صفحة MCP لهذا الخادم."
 }

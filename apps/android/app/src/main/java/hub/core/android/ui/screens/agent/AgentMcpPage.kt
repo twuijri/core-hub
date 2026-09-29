@@ -65,6 +65,7 @@ import hub.core.android.ui.kit.Segmented
 import hub.core.android.ui.theme.LocalTokens
 import hub.core.client.model.Agent
 import hub.core.client.model.McpServer
+import hub.core.client.model.McpLastTest
 import hub.core.client.model.McpServerPatch
 import hub.core.client.model.McpTestResult
 import kotlinx.coroutines.launch
@@ -117,6 +118,8 @@ private fun McpPage(agent: Agent, profile: String) {
                                 scope.launch {
                                     ops.testServer(server.name).onSuccess { tests[server.name] = McpTest(result = it) }.onFailure { tests[server.name] = McpTest(error = it as HubError) }
                                     testing[server.name] = false
+                                    // The hub keeps the answer as the server's last test (§134): read it back.
+                                    load.reload()
                                 }
                             },
                             onDelete = { deleting.ask(server) },
@@ -174,6 +177,7 @@ internal fun McpServerRow(
             LucideIcon(if (open) Lucide.ChevronDown else Lucide.ChevronRight, null, size = 16.dp, tint = t.textMuted)
             Text(server.name, fontSize = FontTokens.sizeMd.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f, fill = false))
             Badge(server.transport.value)
+            McpToolCount(server)
             Row(Modifier.weight(1f), horizontalArrangement = Arrangement.End) {
                 Badge(
                     stringResource(if (server.connected) R.string.mcp_connected else if (server.enabled) R.string.mcp_not_connected else R.string.agents2_mcp_off),
@@ -187,9 +191,12 @@ internal fun McpServerRow(
             Text(summary, fontSize = FontTokens.sizeXs.sp, color = t.textMuted, fontFamily = FontFamily.Monospace, maxLines = if (open) 6 else 1, overflow = TextOverflow.Ellipsis)
         }
         if (open) {
-            Text(stringResource(R.string.agent_tools, server.tools.size), fontSize = FontTokens.sizeXs.sp, color = t.textMuted)
+            val last = server.lastTest
+            if (last != null) McpLastTestView(server, last)
+            else Text(stringResource(R.string.agent_tools, server.tools.size), fontSize = FontTokens.sizeXs.sp, color = t.textMuted)
             server.error?.let { NoticeBox(it, BadgeTone.Danger) }
-            McpTestView(server.name, test)
+            // The kept test above says what this one said; a refusal by the hub is still shown here.
+            if (last == null || test?.error != null) McpTestView(server.name, test)
         }
         oauth?.invoke(open)
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -208,6 +215,70 @@ internal fun McpServerRow(
                 )
             }
         }
+    }
+}
+
+/** "61 tools", "12 of 61 tools", or that the last test failed — from the test the hub kept (§134). */
+@Composable
+private fun McpToolCount(server: McpServer) {
+    val last = server.lastTest ?: return
+    if (!last.ok) {
+        Badge(stringResource(R.string.agents2_mcp_test_failed_short), Modifier.testTag("mcp.${server.name}.count"), tone = BadgeTone.Danger)
+        return
+    }
+    val count = McpRules.toolCount(last.tools.map { it.name }, server.toolFilter?.include, server.toolFilter?.exclude)
+    val text = if (count.filtered) {
+        stringResource(R.string.agents2_mcp_tool_count_filtered, count.allowed.toString(), count.total.toString())
+    } else {
+        stringResource(R.string.agents2_mcp_tool_count, count.total.toString())
+    }
+    Badge(text, Modifier.testTag("mcp.${server.name}.count"), tone = if (last.stale) BadgeTone.Warning else BadgeTone.Neutral)
+}
+
+/**
+ * The last test the hub kept for a server in this profile (DECISIONS §134): its tools without testing
+ * again, each with how the hub reads it and whether the agent may use it. Choosing them is on the web.
+ */
+@Composable
+private fun McpLastTestView(server: McpServer, last: McpLastTest) {
+    val t = LocalTokens.current
+    Column(Modifier.testTag("mcp.${server.name}.last"), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        if (last.stale) NoticeBox(stringResource(R.string.agents2_mcp_tools_stale), BadgeTone.Warning)
+        if (!last.ok) {
+            NoticeBox(stringResource(R.string.agents2_mcp_test_failed) + " " + (last.error ?: ""), BadgeTone.Danger)
+            return@Column
+        }
+        NoticeBox(
+            stringResource(R.string.agents2_mcp_test_ok, last.tools.size.toString(), McpRules.seconds(last.durationMs)) +
+                if (last.tools.isEmpty()) " " + stringResource(R.string.agents2_mcp_no_tools) else "",
+            BadgeTone.Success,
+        )
+        last.tools.forEach { tool ->
+            val on = McpRules.allowed(tool.name, server.toolFilter?.include, server.toolFilter?.exclude)
+            val access = tool.access.value
+            Column(Modifier.testTag("mcp.${server.name}.tool.${tool.name}")) {
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Text(tool.name, fontSize = FontTokens.sizeXs.sp, fontFamily = FontFamily.Monospace, color = if (on) t.text else t.textMuted)
+                    Badge(
+                        stringResource(
+                            when (access) {
+                                "read" -> R.string.agents2_mcp_access_read
+                                "write" -> R.string.agents2_mcp_access_write
+                                else -> R.string.agents2_mcp_access_unknown
+                            },
+                        ),
+                        tone = when (access) {
+                            "read" -> BadgeTone.Success
+                            "write" -> BadgeTone.Warning
+                            else -> BadgeTone.Neutral
+                        },
+                    )
+                    if (!on) Badge(stringResource(R.string.agents2_mcp_tool_off))
+                }
+                tool.description?.takeIf { it.isNotEmpty() }?.let { Text(it, fontSize = FontTokens.sizeXs.sp, color = t.textMuted) }
+            }
+        }
+        if (last.tools.isNotEmpty()) Text(stringResource(R.string.agents2_mcp_tools_pick_on_web), fontSize = FontTokens.sizeXs.sp, color = t.textMuted)
     }
 }
 

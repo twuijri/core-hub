@@ -158,6 +158,48 @@ object McpRules {
     /** The servers the page lists: not the hub's own block, which its card manages (decision §67). */
     fun listed(servers: List<McpServer>, hubServer: String?): List<McpServer> = servers.filter { it.name != (hubServer ?: "corehub") }
 
+    /**
+     * Whether Hermes gives the agent [name] under a server's `tools.include` / `tools.exclude`
+     * (DECISIONS §134): the allow-list wins, then the block-list; entries are names or globs.
+     */
+    fun allowed(name: String, include: List<String>?, exclude: List<String>?): Boolean = when {
+        include != null -> include.any { matches(name, it) }
+        exclude != null -> exclude.none { matches(name, it) }
+        else -> true
+    }
+
+    /** An exact name, or a glob (`*`, `?`, `[…]`, `[!…]`) matched as Hermes's `fnmatch` does. */
+    fun matches(name: String, entry: String): Boolean {
+        if (entry == name) return true
+        if (entry.none { it == '*' || it == '?' || it == '[' }) return false
+        val regex = StringBuilder()
+        var i = 0
+        while (i < entry.length) {
+            val c = entry[i]
+            when {
+                c == '*' -> regex.append(".*")
+                c == '?' -> regex.append('.')
+                c == '[' && entry.indexOf(']', i + 2) != -1 -> {
+                    val end = entry.indexOf(']', i + 2)
+                    var body = entry.substring(i + 1, end)
+                    val negate = body.startsWith("!")
+                    if (negate) body = body.substring(1)
+                    regex.append('[').append(if (negate) "^" else "").append(body.replace("\\", "\\\\").replace("^", "\\^")).append(']')
+                    i = end
+                }
+                else -> regex.append(Regex.escape(c.toString()))
+            }
+            i++
+        }
+        return runCatching { Regex(regex.toString(), RegexOption.DOT_MATCHES_ALL).matches(name) }.getOrDefault(false)
+    }
+
+    /** The folded row's count from the kept test: how many tools the filter allows, of how many. */
+    data class ToolCount(val allowed: Int, val total: Int, val filtered: Boolean)
+
+    fun toolCount(names: List<String>, include: List<String>?, exclude: List<String>?): ToolCount =
+        ToolCount(names.count { allowed(it, include, exclude) }, names.size, include != null || exclude != null)
+
     /** "0.8" seconds from a test's milliseconds, with a point whatever the language. */
     fun seconds(ms: Int): String = String.format(java.util.Locale.ROOT, "%.1f", ms / 1000.0)
 }

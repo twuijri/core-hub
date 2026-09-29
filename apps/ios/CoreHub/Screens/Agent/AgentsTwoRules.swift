@@ -171,6 +171,28 @@ enum McpRules {
     static func listed(_ servers: [McpServer], hubServer: String?) -> [McpServer] { servers.filter { $0.name != (hubServer ?? "corehub") } }
 
     /// "0.8" seconds from a test's milliseconds, with a point whatever the language.
+    /// Whether Hermes gives the agent `name` under a server's `tools.include` / `tools.exclude`
+    /// (DECISIONS §134): the allow-list wins, then the block-list; entries are names or globs.
+    static func allowed(_ name: String, include: [String]?, exclude: [String]?) -> Bool {
+        if let include { return include.contains { matches(name, $0) } }
+        if let exclude { return !exclude.contains { matches(name, $0) } }
+        return true
+    }
+
+    /// An exact name, or a glob (`*`, `?`, `[…]`) matched as Hermes's `fnmatch` does.
+    static func matches(_ name: String, _ entry: String) -> Bool {
+        if entry == name { return true }
+        guard entry.contains(where: { "*?[".contains($0) }) else { return false }
+        return fnmatch(entry, name, 0) == 0
+    }
+
+    /// The folded row's count from the kept test: every tool, or how many of them the filter allows.
+    static func toolCount(_ names: [String], include: [String]?, exclude: [String]?) -> (allowed: Int, total: Int, filtered: Bool) {
+        let filtered = include != nil || exclude != nil
+        let allowed = names.filter { Self.allowed($0, include: include, exclude: exclude) }.count
+        return (allowed, names.count, filtered)
+    }
+
     static func seconds(_ ms: Int) -> String { String(format: "%.1f", locale: Locale(identifier: "en_US_POSIX"), Double(ms) / 1000) }
 }
 

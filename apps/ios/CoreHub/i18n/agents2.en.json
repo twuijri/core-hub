@@ -38,7 +38,16 @@
       "as_json": "Edit as JSON",
       "as_form": "Edit as a form",
       "kept": "Other keys in this server are kept as they are: {keys}.",
-      "off": "Off"
+      "off": "Off",
+      "tool_count": "{count} tools",
+      "tool_count_filtered": "{allowed} of {total} tools",
+      "test_failed_short": "Test failed",
+      "tools_stale": "This server's settings changed after the last test, so the list may be out of date. Test it again.",
+      "access_read": "Reads",
+      "access_write": "Changes",
+      "access_unknown": "Unclear",
+      "tool_off": "Off for the agent",
+      "tools_pick_on_web": "Choose which tools the agent may use on the web, on this server's MCP page."
     },
     "hub": {
       "title": "Core Hub tools",
