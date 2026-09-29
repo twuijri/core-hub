@@ -578,6 +578,10 @@
     "restart_failed": "The restart failed",
     "limited": "This agent runs through the process harness and is limited.",
     "needs_setup": "Needs a provider or sign-in",
+    "model_source": {
+      "hub": "Models: Core Hub's providers",
+      "agent": "Models: the agent's own account"
+    },
     "update_available": "Update available: {version}",
     "under_agent": "Under the agent",
     "status": {

@@ -13,7 +13,7 @@ import { useAgentSettings, useSaveAgentSetting } from '../hub/queries.js';
 import { useI18n } from '../i18n/context.js';
 import { chatModels, useCatalogue } from '../models/queries.js';
 import { modelOption } from '../models/useModelPicker.js';
-import type { Agent, SettingsSection } from '../types.js';
+import type { Agent, Model, SettingsSection } from '../types.js';
 import type { ComboboxOption } from '../ui/Combobox.js';
 import type { SelectOption } from '../ui/Select.js';
 
@@ -95,12 +95,13 @@ export function findApprovalMode(
  * knows — "Agent's own default". `null` keeps the plain "Default model".
  */
 export function defaultModelLabel(
-  agent: Pick<Agent, 'kind' | 'default_model' | 'agent_default_model'> | undefined,
+  agent: Pick<Agent, 'kind' | 'default_model' | 'agent_default_model' | 'model_source'> | undefined,
   models: readonly ComboboxOption[],
   t: (key: string, values?: Record<string, string | number>) => string,
 ): string | null {
   if (!agent) return null;
-  if (agent.kind === 'acp') {
+  // A coding agent on the hub's models (ADR 0029) runs on the hub's default, as Hermes does.
+  if (agent.kind === 'acp' && agent.model_source !== 'hub') {
     const own = agent.agent_default_model;
     return own
       ? t('composer.model_default_named', { model: own })
@@ -114,15 +115,37 @@ export function defaultModelLabel(
   return t('composer.model_default_named', { model: option?.label ?? ref.model });
 }
 
-export function useComposerModels(): ComboboxOption[] {
+/**
+ * The chat models an agent's picker offers. A coding agent on the hub's models (ADR 0029) is
+ * offered what the gateway can serve it — every hub provider's model, but not a subscription
+ * signed in to through Hermes (`Model.agent_gateway`); every other agent, the whole catalogue.
+ */
+export function composerModelOptions(
+  catalogue: readonly Model[],
+  agent?: Pick<Agent, 'kind' | 'model_source'> | undefined,
+): ComboboxOption[] {
+  const gatewayOnly = agent?.kind === 'acp' && agent.model_source === 'hub';
+  return (
+    chatModels([...catalogue])
+      .filter((model) => model.visible && !model.disabled)
+      .filter((model) => !gatewayOnly || model.agent_gateway === true)
+      // `key` is `<provider>/<model>`, which is what a session stores.
+      .map((model) => modelOption(model, model.key))
+  );
+}
+
+export function useComposerModels(
+  agent?: Pick<Agent, 'kind' | 'model_source'> | undefined,
+): ComboboxOption[] {
   const catalogue = useCatalogue();
+  const gatewayOnly = agent?.kind === 'acp' && agent.model_source === 'hub';
   return useMemo(
     () =>
-      chatModels(catalogue.data ?? [])
-        .filter((model) => model.visible && !model.disabled)
-        // `key` is `<provider>/<model>`, which is what a session stores.
-        .map((model) => modelOption(model, model.key)),
-    [catalogue.data],
+      composerModelOptions(
+        catalogue.data ?? [],
+        gatewayOnly ? { kind: 'acp', model_source: 'hub' } : undefined,
+      ),
+    [catalogue.data, gatewayOnly],
   );
 }
 

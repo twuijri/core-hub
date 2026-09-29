@@ -287,7 +287,9 @@ function OpenSessionBody({ sessionId, title: pageTitle, intro }: OpenSessionProp
   const agentId = state.session?.agent_id ?? null;
   const agents = useAgents();
   const catalogue = useCatalogue();
-  const models = useComposerModels();
+  const models = useComposerModels(
+    (agents.data ?? []).find((candidate) => candidate.id === agentId),
+  );
   const { recent, remember } = useRecentModels();
   const approval = useApprovalMode(agentId);
 

@@ -51,7 +51,7 @@ export function NewChatScreen() {
   const [workingDir, setWorkingDir] = useState<string | null>(null);
   const [model, setModel] = useState<string | null>(null);
   const [error, setError] = useState<unknown>(null);
-  const models = useComposerModels();
+  const models = useComposerModels((agents.data ?? []).find((agent) => agent.id === agentId));
   const { recent, remember } = useRecentModels();
   const approval = useApprovalMode(agentId);
 
