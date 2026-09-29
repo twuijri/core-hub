@@ -38,7 +38,8 @@
   التشغيل الخطوةَ — تفشل الخطوة «the conversation was busy…» ولا يُكتب شيء في المحادثة.
 - **المخرجات**: `WorkflowStep.session_id` (موجود منذ §52 لكنه كان `null` دائمًا) صار يُملأ لكل خطوة وكيل،
   و`WorkflowStep.message_id` جديد اختياري (ردّ الوكيل)؛ `output` كما هو نصًا. والخطوات اللاحقة تقرأ
-  `{{steps.<id>.conversation_id}}` (و`session_id`) و`message_id` و`run_id` و`status`.
+  `{{steps.<id>.conversation_id}}` (و`session_id`) و`message_id` و`run_id` و`status`، وتبقى مقروءة عند
+  إعادة التشغيل من خطوة لاحقة.
 - **«اختبر المحادثة»**: عملية إضافية `schedules.checkWorkflowConversation` (`POST /workflows/conversation-check`)
   بالدالة نفسها التي يطبقها التشغيل: `ready` / `busy` / `not_found` / `not_allowed` / `agent_mismatch` مع العنوان
   والوكيل والدور الجاري والسبب؛ لا ترسل ولا تحفظ شيئًا. القالب `400 conversation_id_template`.
@@ -118,7 +119,24 @@ pnpm nav:check                → OK — 41 destinations …
 
 لا Java على الجهاز، فعملاء Kotlin/Swift وعرض الهاتف يُتحقق منهم في CI (بناء Android واختباراته، ومحاكي iOS).
 
-CI على الـ PR: يُضاف بعد اكتماله.
+CI على PR ‏#225 (رأس `002939df`) — كل الفحوص ناجحة:
+
+```text
+Android build, unit tests, lint | pass
+Build and test on the iOS simulator | pass
+Desktop app smoke (Electron under Xvfb against the real hub) | pass
+Docker image builds and answers /health | pass
+Generate the Swift client (CoreHubClient) | pass
+Lint, typecheck, contracts, client tests, build | pass
+Lint, typecheck, contracts, tests, build | pass
+PR adds or updates a change record | pass
+Real Hermes suites (floor) | pass
+Real Hermes suites (pinned) | pass
+Server unit tests (shard 1/3, 2/3, 3/3) | pass
+Translations fit their labels (measured widths) | pass
+db:generate + db:migrate (SQLite and PostgreSQL) | pass
+Web smoke journeys (Playwright against the real hub) | pass
+```
 
 ## المخاطر والرجوع
 
