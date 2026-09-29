@@ -4649,3 +4649,56 @@ Rejected: a per-bot or per-profile setting (the owner asked per step); falling b
 Telegram refuses the markup (it would send words the person did not mean, and say success);
 Telegram's legacy `Markdown` (no nesting, no underline/spoiler/quote); an enum in the contract
 (older generated clients cannot decode a value added later).
+
+## 138. A coding agent's MCP page edits its own file; an agent is installed without `--version`; a failed agent says why
+
+The owner's hub (2026-09-29, image from `main` after #226): Claude Code's MCP page answered "That
+is not allowed in the current state." in its server list and its "Core Hub tools" card although
+the agent was Available; installing Codex ended in "Error" with codex-acp's own "unexpected argument
+'--version'"; a chat with Goose (installed, no provider set) ended in a bare "Internal error" and
+Claude Code in "Authentication required", both cards looking ready; the model picker said "Default
+model" without saying which. Proposed here — owner to confirm:
+
+- **The MCP operations serve the coding agents the catalog offers the page to.** For Hermes nothing
+  changes. For Claude Code they edit the `mcpServers` of its global config `~/.claude.json`
+  (`$CLAUDE_CONFIG_DIR/.claude.json`; a legacy `.config.json` wins when present) — the user-scope
+  servers the CLI reads on every session its ACP bridge starts (`settingSources: user, project,
+  local` at `@zed-industries/claude-code-acp` 0.16.2). Claude Code rewrites that file itself, under
+  a lock folder `<file>.lock` (stale after 10 s); the hub takes the same lock, reads the file again
+  inside it, changes `mcpServers` only and renames a new file over it, keeping its mode. For Gemini
+  CLI and Qwen Code they edit `mcpServers` in `settings.json`; a file with comments is read but
+  never rewritten (`400`, `config_has_comments`). None of these files has a per-server "off", so a
+  server switched off is taken out of the agent's file and kept in
+  `<DATA_DIR>/agent-mcp/<agent>.json` (0600) until it is switched on. Credentials read as
+  `[stored]` as for Hermes. One set for every profile, as on the Config files page (§78). A coding
+  agent's `McpServer` carries no `last_test`, `oauth` or `tool_filter` (Hermes's), and a
+  `tool_filter` write is `409 tool_filter_is_hermes_only`. Codex, Goose, OpenCode, Kimi, Grok and Pi
+  answer `409 state_invalid`, `mcp_not_managed`, and the page says their servers are in their
+  settings file (Config files); `config_busy` when Claude Code holds its lock past 3 s.
+- **The Core Hub tools card is the profile's, on every agent's page.** `agents.getHubTools` /
+  `updateHubTools` answer for any agent over ACP (the agent is handed the server in `session/new`,
+  §67); the card says the settings are shared and keeps Test (which asks Hermes) to Hermes's page.
+- **Installed is decided by the files, not by `--version`.** A catalog `HealthCheck` may be
+  `installed`: nothing is run, the protocol binary must be in the agent's `bin` and executable
+  (Claude Code, Codex). An npm agent's version is its package's `package.json` under its prefix. A
+  `command` check that runs and says no (any exit code) or reaches its deadline leaves the agent
+  installed; only a program that cannot start (spawn error, exit 126/127, not executable) fails.
+- **A failed agent says why.** An ACP error carries what its `data` adds; a bare "Internal error"
+  the last lines of the bridge's stderr; credentials masked, 600 characters at most. The web's
+  failure notice names the agent's known cases with one action where the hub has one — Goose → its
+  Config files, Claude Code / Codex / Gemini CLI / Qwen / OpenCode / Pi → Settings → Models, Kimi and
+  Grok → their own sign-in — with the agent's words underneath.
+- **`Agent.credentials`** (optional string, `ready` | `missing`): for an installed Claude Code,
+  Codex, Gemini CLI, Qwen Code or Goose, whether a key it reads is handed or set, or its own sign-in
+  or provider setting is in its folder (Goose: `GOOSE_PROVIDER`). The card says "Needs a provider or
+  sign-in". A string, not an enum (§137's reason).
+- **`Agent.agent_default_model`** (optional string): the model a coding agent's own settings name
+  (Claude Code `model`, Codex top-level `model`, Gemini/Qwen `model.name`, Goose `GOOSE_MODEL`,
+  OpenCode `model`); the picker says "Default · <model>", or "Agent's own default" when none is
+  named; Hermes and the hub's own agent say "Default · <default_model>".
+
+Rejected: an MCP list kept by the hub and handed in `session/new` (a second list beside the one the
+agent already reads, and invisible to the agent run by hand); an ACP `initialize` handshake as the
+health check (a process per agent at every boot, and a sign-in some agents want first); a new
+`ErrorCode` for "sign-in needed" (older generated clients cannot decode it); the phones in this
+change (they still say "Default model" and show no badge — a follow-up).

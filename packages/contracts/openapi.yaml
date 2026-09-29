@@ -21990,9 +21990,9 @@ components:
               $ref: '#/components/schemas/SubagentSupport'
             credentials:
               type: string
-              enum: [ready, missing]
               description: >-
-                Whether an installed coding agent has a key or a sign-in to answer with (added
+                `ready` or `missing` (a string, not an enum: a client reads any other value as
+                "not known"). Whether an installed coding agent has a key or a sign-in to answer with (added
                 2026-09-29, DECISIONS §138): `missing` when none of the variables it reads is
                 handed to it or set, and no sign-in or provider setting of its own is in its folder
                 (Goose: no `GOOSE_PROVIDER` in its config) — the card then says it needs a provider
