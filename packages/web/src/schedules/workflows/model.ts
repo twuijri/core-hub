@@ -82,6 +82,8 @@ export interface SendTarget {
   session_id?: string | null;
   title?: string | null;
   agent_id?: string | null;
+  /** Telegram (§137): `plain` (absent or null), `html` or `markdown_v2`. */
+  formatting?: string | null;
 }
 
 export interface Send {

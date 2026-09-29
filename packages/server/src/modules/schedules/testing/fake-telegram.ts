@@ -102,9 +102,7 @@ export function parseTelegramHtml(value: string): { text: string; entities: Tele
       if (slash) {
         const top = open.pop();
         if (!top) {
-          throw new TelegramParseError(
-            `Unexpected end tag at byte offset ${utf8Offset(value, i)}`,
-          );
+          throw new TelegramParseError(`Unexpected end tag at byte offset ${utf8Offset(value, i)}`);
         }
         if (top.name !== name) {
           throw new TelegramParseError(

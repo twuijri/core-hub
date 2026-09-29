@@ -81,7 +81,8 @@ async function run(hub: Hub, id: string, input = 'تم') {
   ).json() as Json & { steps: Array<Json>; status: string; id: string };
 }
 
-const outputOf = (done: { steps: Array<Json> }) => JSON.parse(String(done.steps[0]!.output)) as Json;
+const outputOf = (done: { steps: Array<Json> }) =>
+  JSON.parse(String(done.steps[0]!.output)) as Json;
 
 describe('Telegram formatting of a Send message step', () => {
   it('plain sends no parse_mode at all, and the tags arrive as written', async () => {
@@ -90,7 +91,10 @@ describe('Telegram formatting of a Send message step', () => {
     const hub = await signedInHub();
     try {
       const id = await workflow(hub, [
-        step({ platform: 'telegram', chat_id: CHAT, formatting: 'plain' }, '<b>اختبار</b> {{input}}'),
+        step(
+          { platform: 'telegram', chat_id: CHAT, formatting: 'plain' },
+          '<b>اختبار</b> {{input}}',
+        ),
       ]);
       const done = await run(hub, id);
       expect(done.status).toBe('succeeded');
@@ -115,7 +119,9 @@ describe('Telegram formatting of a Send message step', () => {
     withTelegram(telegram);
     const hub = await signedInHub();
     try {
-      const id = await workflow(hub, [step({ platform: 'telegram', chat_id: CHAT }, '*نجمة* {{input}}')]);
+      const id = await workflow(hub, [
+        step({ platform: 'telegram', chat_id: CHAT }, '*نجمة* {{input}}'),
+      ]);
       const done = await run(hub, id);
       expect(done.status).toBe('succeeded');
       expect(telegram.requests[0]!.body).not.toHaveProperty('parse_mode');
@@ -217,7 +223,10 @@ describe('Telegram formatting of a Send message step', () => {
       expect(done.status).toBe('failed');
       const reason =
         'Telegram HTML formatting failed: can\'t parse entities: Can\'t find end tag corresponding to start tag "b"';
-      expect(done.steps[0]).toMatchObject({ status: 'failed', error: `telegram:${CHAT}: ${reason}` });
+      expect(done.steps[0]).toMatchObject({
+        status: 'failed',
+        error: `telegram:${CHAT}: ${reason}`,
+      });
       expect(outputOf(done)).toMatchObject({
         status: 'failed',
         message_id: null,
@@ -248,21 +257,28 @@ describe('Telegram formatting of a Send message step', () => {
     const telegram = fakeTelegram();
     // The second part is refused once (Telegram busy), then taken.
     let refusedOnce = false;
-    withTelegram(telegram, (inner) => (async (url, init) => {
-      if (telegram.sent.length === 1 && !refusedOnce) {
-        refusedOnce = true;
-        return Response.json(
-          { ok: false, error_code: 429, description: 'Too Many Requests: retry after 1' },
-          { status: 429 },
-        );
-      }
-      return inner(url, init);
-    }) as typeof fetch);
+    withTelegram(
+      telegram,
+      (inner) =>
+        (async (url, init) => {
+          if (telegram.sent.length === 1 && !refusedOnce) {
+            refusedOnce = true;
+            return Response.json(
+              { ok: false, error_code: 429, description: 'Too Many Requests: retry after 1' },
+              { status: 429 },
+            );
+          }
+          return inner(url, init);
+        }) as typeof fetch,
+    );
     const hub = await signedInHub();
     try {
       const long = 'تقرير مفصل عن المهمة '.repeat(300).trim(); // ~6300 counted
       const id = await workflow(hub, [
-        step({ platform: 'telegram', chat_id: CHAT, formatting: 'html' }, `<b>${long}</b> {{input}}`),
+        step(
+          { platform: 'telegram', chat_id: CHAT, formatting: 'html' },
+          `<b>${long}</b> {{input}}`,
+        ),
       ]);
       const first = await run(hub, id);
       expect(first.status).toBe('failed');

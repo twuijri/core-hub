@@ -174,7 +174,10 @@ describe('splitting MarkdownV2', () => {
   });
 
   it('reopens a link, a code block and a quote line', () => {
-    const link = parts(`[${'نص الرابط '.repeat(500).trim()}](https://example.com/a\\)b)`, 'markdown_v2');
+    const link = parts(
+      `[${'نص الرابط '.repeat(500).trim()}](https://example.com/a\\)b)`,
+      'markdown_v2',
+    );
     expect(link).toHaveLength(2);
     expect(link[0]!.endsWith('](https://example.com/a\\)b)')).toBe(true);
     expect(link[1]!.startsWith('[')).toBe(true);

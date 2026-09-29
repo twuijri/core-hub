@@ -251,7 +251,11 @@ export async function deliverSend(
   };
   /** The formatting a Telegram target is sent with; `null` for one this hub does not know. */
   const formattingFor = (target: WorkflowSend['targets'][number]): SendFormatting | null =>
-    target.platform !== 'telegram' ? 'plain' : plainOnly ? 'plain' : formattingOf(target.formatting);
+    target.platform !== 'telegram'
+      ? 'plain'
+      : plainOnly
+        ? 'plain'
+        : formattingOf(target.formatting);
   const outcome = (
     target: WorkflowSend['targets'][number],
     key: string,
@@ -265,8 +269,7 @@ export async function deliverSend(
       chat_id: telegram ? chatIdOf(target.chat_id) : null,
       session_id: target.platform === 'core_hub' ? (target.session_id ?? null) : null,
       formatting,
-      parse_mode:
-        telegram && formattingFor(target) ? parseModeOf(formattingFor(target)!) : null,
+      parse_mode: telegram && formattingFor(target) ? parseModeOf(formattingFor(target)!) : null,
       status: 'failed',
       message_ids: [],
       parts_count: 0,
@@ -294,7 +297,11 @@ export async function deliverSend(
       error_code: code,
       error: reason,
       ...(target.platform === 'telegram'
-        ? { formatting: done.formatting, parse_mode: done.parse_mode, parts_count: done.parts_count }
+        ? {
+            formatting: done.formatting,
+            parse_mode: done.parse_mode,
+            parts_count: done.parts_count,
+          }
         : {}),
     });
   };
@@ -422,7 +429,9 @@ export async function deliverSend(
       const before = memory?.seen(key, 0) ?? null;
       if (before) {
         delivered.push({ target: key, ids: [before] });
-        outcomes.push(outcome(target, key, { status: 'sent', message_ids: [before], parts_count: 1 }));
+        outcomes.push(
+          outcome(target, key, { status: 'sent', message_ids: [before], parts_count: 1 }),
+        );
         continue;
       }
       try {

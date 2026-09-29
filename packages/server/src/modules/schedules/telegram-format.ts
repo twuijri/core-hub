@@ -21,7 +21,9 @@ export const FORMATTED_MAX_CHARS = 4000;
 /** A target's formatting: absent or `null` is plain (every step saved before §137); anything else unknown is `null`. */
 export function formattingOf(value: unknown): SendFormatting | null {
   if (value === undefined || value === null) return 'plain';
-  return (SEND_FORMATTINGS as readonly unknown[]).includes(value) ? (value as SendFormatting) : null;
+  return (SEND_FORMATTINGS as readonly unknown[]).includes(value)
+    ? (value as SendFormatting)
+    : null;
 }
 
 /** Telegram's `parse_mode` for a formatting; plain sends none at all. */
@@ -236,13 +238,7 @@ export function tokenizeMarkdownV2(value: string): Tokenized {
   let quoteLine = false;
   let expandable = false;
   const push = (atom: Omit<Atom, 'prefix' | 'cutClose'>, marker = false) => {
-    const prefix = expandable
-      ? marker
-        ? '**'
-        : '**>'
-      : quoteLine && !marker
-        ? '>'
-        : '';
+    const prefix = expandable ? (marker ? '**' : '**>') : quoteLine && !marker ? '>' : '';
     atoms.push({ ...atom, prefix, cutClose: expandable ? '||' : '' });
   };
   const top = () => stack.at(-1)?.type;
@@ -432,11 +428,7 @@ class Builder {
   add(raw: string, underscore: boolean, synthetic: boolean): void {
     if (!raw) return;
     // `_` next to `__` reads as another marker; an empty bold entity keeps them apart (Bot API).
-    if (
-      underscore &&
-      this.lastUnderscore &&
-      (synthetic || this.lastUnderscore === 'synthetic')
-    ) {
+    if (underscore && this.lastUnderscore && (synthetic || this.lastUnderscore === 'synthetic')) {
       this.pieces.push('**');
     }
     this.pieces.push(raw);
