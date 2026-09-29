@@ -57,6 +57,7 @@ import {
 import { NO_LIMITS, dollars, duration, microUsdOf, moneyOfMicro } from './limits.js';
 import { cleanConversationId, isTemplate, reuseOf } from './agent-conversation.js';
 import {
+  TELEGRAM_TIMEOUT_MS,
   chatIdOf,
   hasSend,
   resultOf,
@@ -65,7 +66,16 @@ import {
   telegramSend,
   withoutToken,
   type SendResult,
+  type SendTargetResult,
 } from './send.js';
+import {
+  formattingName,
+  formattingOf,
+  formattingRefusal,
+  parseModeOf,
+  splitFormatted,
+  type SendFormatting,
+} from './telegram-format.js';
 import type {
   WorkflowBudgetUse,
   WorkflowDefinition,
@@ -184,6 +194,10 @@ export interface SendReport {
   message_ids: string[];
   error_code: string | null;
   error: string | null;
+  /** Telegram (§137): the formatting, the `parse_mode` sent (null for plain) and the parts. */
+  formatting?: string | null;
+  parse_mode?: string | null;
+  parts_count?: number;
 }
 
 /** A log line's fields for one target of a send (`report` of `deliverSend`). */
@@ -197,6 +211,13 @@ export function sendLogFields(report: SendReport): Record<string, unknown> {
     ...(report.message_ids.length > 0
       ? { message_id: report.message_ids[0], message_ids: report.message_ids }
       : {}),
+    ...(report.formatting !== undefined
+      ? {
+          formatting: report.formatting,
+          parse_mode: report.parse_mode ?? null,
+          parts_count: report.parts_count ?? 0,
+        }
+      : {}),
     ...(report.error !== null ? { error_code: report.error_code, error: report.error } : {}),
   };
 }
@@ -204,7 +225,8 @@ export function sendLogFields(report: SendReport): Record<string, unknown> {
 /**
  * Send the words to every target of a "Send message" step (or of its test): each target on
  * its own, a failure of one never stopping another, and the result says exactly what went.
- * `report` hears each target's outcome, for the hub's log.
+ * `report` hears each target's outcome, for the hub's log. A Telegram target is sent with its
+ * formatting (§137) unless `plainOnly` (a failure alert, whose words the hub writes).
  */
 export async function deliverSend(
   messages: MessagePorts | null | undefined,
@@ -214,9 +236,11 @@ export async function deliverSend(
   memory: SentMemory | null,
   moved: (from: string | null, to: { sessionId: string; title: string | null }) => void,
   report: (entry: SendReport) => void = () => undefined,
+  plainOnly = false,
 ): Promise<{ result: SendResult; notes: string[] }> {
   const delivered: Array<{ target: string; ids: string[] }> = [];
   const failures: Array<{ target: string; reason: string }> = [];
+  const outcomes: SendTargetResult[] = [];
   const notes: string[] = [];
   const tell = (entry: SendReport) => {
     try {
@@ -225,22 +249,53 @@ export async function deliverSend(
       // A log line never changes what was sent.
     }
   };
+  /** The formatting a Telegram target is sent with; `null` for one this hub does not know. */
+  const formattingFor = (target: WorkflowSend['targets'][number]): SendFormatting | null =>
+    target.platform !== 'telegram' ? 'plain' : plainOnly ? 'plain' : formattingOf(target.formatting);
+  const outcome = (
+    target: WorkflowSend['targets'][number],
+    key: string,
+    fields: Partial<SendTargetResult>,
+  ): SendTargetResult => {
+    const telegram = target.platform === 'telegram';
+    const formatting = telegram ? (formattingFor(target) ?? String(target.formatting)) : null;
+    return {
+      target: key,
+      platform: String(target.platform),
+      chat_id: telegram ? chatIdOf(target.chat_id) : null,
+      session_id: target.platform === 'core_hub' ? (target.session_id ?? null) : null,
+      formatting,
+      parse_mode:
+        telegram && formattingFor(target) ? parseModeOf(formattingFor(target)!) : null,
+      status: 'failed',
+      message_ids: [],
+      parts_count: 0,
+      reason: null,
+      ...fields,
+    };
+  };
   const failed = (
     target: WorkflowSend['targets'][number],
     key: string,
     code: string,
     reason: string,
+    fields: Partial<SendTargetResult> = {},
   ) => {
     failures.push({ target: key, reason });
+    const done = outcome(target, key, { ...fields, status: 'failed', reason });
+    outcomes.push(done);
     tell({
       platform: String(target.platform),
       target: key,
       chat_id: target.platform === 'telegram' ? chatIdOf(target.chat_id) : null,
       session_id: target.platform === 'core_hub' ? (target.session_id ?? null) : null,
       status: 'failed',
-      message_ids: [],
+      message_ids: done.message_ids,
       error_code: code,
       error: reason,
+      ...(target.platform === 'telegram'
+        ? { formatting: done.formatting, parse_mode: done.parse_mode, parts_count: done.parts_count }
+        : {}),
     });
   };
   for (const target of send.targets) {
@@ -255,6 +310,18 @@ export async function deliverSend(
         failed(target, key, 'no_chat_id', 'no chat id');
         continue;
       }
+      const formatting = formattingFor(target);
+      if (!formatting) {
+        // Never handed to Telegram as it is (§137): only plain, html and markdown_v2 exist.
+        failed(
+          target,
+          key,
+          'formatting_unknown',
+          `"${String(target.formatting)}" is not a Telegram formatting this hub knows (plain, html, markdown_v2)`,
+        );
+        continue;
+      }
+      const parseMode = parseModeOf(formatting);
       let token: string | null;
       try {
         token = messages.telegramToken(scope);
@@ -277,9 +344,26 @@ export async function deliverSend(
         );
         continue;
       }
+      // Plain words are cut exactly as before §137; formatted ones on what Telegram counts,
+      // never inside a tag, an entity or an escape — or refused before anything is sent.
+      let parts: string[];
+      if (formatting === 'plain') {
+        parts = splitMessage(text);
+      } else {
+        const split = splitFormatted(text, formatting);
+        if ('problem' in split) {
+          failed(
+            target,
+            key,
+            'formatting_unsplittable',
+            `Telegram ${formattingName(formatting)} formatting failed: ${split.problem}`,
+          );
+          continue;
+        }
+        parts = split.parts;
+      }
       const ids: string[] = [];
       let refusal: { code: string; reason: string } | null = null;
-      const parts = splitMessage(text);
       for (let part = 0; part < parts.length; part += 1) {
         const before = memory?.seen(key, part) ?? null;
         if (before) {
@@ -292,14 +376,14 @@ export async function deliverSend(
           token,
           chat,
           parts[part]!,
+          TELEGRAM_TIMEOUT_MS,
+          parseMode,
         );
         if (!answer.ok) {
+          const said = formattingRefusal(formatting, answer.reason);
           refusal = {
             code: answer.code,
-            reason:
-              parts.length > 1
-                ? `part ${part + 1} of ${parts.length}: ${answer.reason}`
-                : answer.reason,
+            reason: parts.length > 1 ? `part ${part + 1} of ${parts.length}: ${said}` : said,
           };
           break;
         }
@@ -307,9 +391,17 @@ export async function deliverSend(
         ids.push(answer.messageId);
       }
       if (refusal) {
-        failed(target, key, refusal.code, withoutToken(refusal.reason, token));
+        // The parts that did go keep their ids (a retry sends only the rest); the step is not
+        // "sent" until every part is.
+        failed(target, key, refusal.code, withoutToken(refusal.reason, token), {
+          message_ids: ids,
+          parts_count: parts.length,
+        });
       } else {
         delivered.push({ target: key, ids });
+        outcomes.push(
+          outcome(target, key, { status: 'sent', message_ids: ids, parts_count: parts.length }),
+        );
         tell({
           platform: 'telegram',
           target: key,
@@ -319,6 +411,9 @@ export async function deliverSend(
           message_ids: ids,
           error_code: null,
           error: null,
+          formatting,
+          parse_mode: parseMode,
+          parts_count: parts.length,
         });
       }
       continue;
@@ -327,6 +422,7 @@ export async function deliverSend(
       const before = memory?.seen(key, 0) ?? null;
       if (before) {
         delivered.push({ target: key, ids: [before] });
+        outcomes.push(outcome(target, key, { status: 'sent', message_ids: [before], parts_count: 1 }));
         continue;
       }
       try {
@@ -347,6 +443,14 @@ export async function deliverSend(
         }
         const where = `core_hub:${posted.sessionId}`;
         delivered.push({ target: where, ids: [posted.messageId] });
+        outcomes.push(
+          outcome(target, where, {
+            session_id: posted.sessionId,
+            status: 'sent',
+            message_ids: [posted.messageId],
+            parts_count: 1,
+          }),
+        );
         tell({
           platform: 'core_hub',
           target: where,
@@ -364,7 +468,7 @@ export async function deliverSend(
     }
     failed(target, key, 'platform_unknown', `this hub cannot send to "${target.platform}"`);
   }
-  return { result: resultOf(delivered, failures), notes };
+  return { result: resultOf(delivered, failures, outcomes), notes };
 }
 
 /** What trying one step on its own did (`WorkflowStepTestResult`, §127). */
@@ -998,6 +1102,8 @@ export class WorkflowEngine {
           },
           () => undefined,
           (report) => this.logSend(scope, run, '__on_failure', report),
+          // The hub writes the alert's words (an error may hold `<` or `*`): always plain.
+          true,
         );
       }
     } catch (failure) {

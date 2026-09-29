@@ -177,6 +177,8 @@ export type WorkflowSendTarget = {
   session_id?: string | null;
   title?: string | null;
   agent_id?: string | null;
+  /** `telegram`: `plain` (absent or null), `html` or `markdown_v2` (§137). */
+  formatting?: string | null;
 };
 
 /** A condition step's rules, in the contract's words (`WorkflowRules`). */
