@@ -34,8 +34,10 @@ async function login(page: Page) {
 
 /** Write a task down; it lands in intake, where it is specified before it queues. */
 async function newTask(page: Page, title: string) {
-  await page.getByTestId('new-task-input').fill(title);
   await page.getByTestId('new-task').click();
+  await page.getByTestId('new-task-title').fill(title);
+  await page.getByTestId('new-task-save').click();
+  await expect(page.getByTestId('new-task-dialog')).toBeHidden();
   const card = page.getByTestId('task-card').filter({ hasText: title });
   await expect(card).toHaveAttribute('data-status', 'triage');
   return card;

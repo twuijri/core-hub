@@ -25,8 +25,10 @@ async function login(page: Page) {
 }
 
 async function newTask(page: Page, title: string) {
-  await page.getByTestId('new-task-input').fill(title);
   await page.getByTestId('new-task').click();
+  await page.getByTestId('new-task-title').fill(title);
+  await page.getByTestId('new-task-save').click();
+  await expect(page.getByTestId('new-task-dialog')).toBeHidden();
   const card = page.getByTestId('task-card').filter({ hasText: title });
   await expect(card).toHaveCount(1);
   return card;

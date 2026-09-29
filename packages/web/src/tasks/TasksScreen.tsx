@@ -36,7 +36,15 @@ import {
   verticalListSortingStrategy,
 } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
-import { createContext, useContext, useMemo, useState, type ReactNode } from 'react';
+import {
+  createContext,
+  useContext,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ReactNode,
+} from 'react';
 import { Link } from 'react-router';
 import { describeError } from '../auth/client.js';
 import { exactTime } from '../devices/format.js';
@@ -54,7 +62,6 @@ import {
   Button,
   Checkbox,
   Dialog,
-  Input,
   Menu,
   MenuItem,
   MenuSeparator,
@@ -80,6 +87,7 @@ import {
 import { AssignDialog } from './AssignDialog.js';
 import { describeTaskError } from './errors.js';
 import { HandOverDialog } from './HandOverDialog.js';
+import { NewTaskDialog } from './NewTaskDialog.js';
 import { ProjectDialog } from './ProjectDialog.js';
 import { TaskDialog } from './TaskDialog.js';
 import {
@@ -104,7 +112,6 @@ import {
   useArchive,
   useBoard,
   useBulkUpdateTasks,
-  useCreateTask,
   useDeleteTask,
   useMoveTask,
   useProjects,
@@ -141,6 +148,10 @@ interface Selection {
 }
 const SelectionContext = createContext<Selection | null>(null);
 
+/** The card a person has just made, ringed for a moment so the eye finds where it landed. */
+const FreshContext = createContext<string | null>(null);
+const FRESH_MS = 4_000;
+
 const BULK_PRIORITIES = ['low', 'normal', 'high', 'urgent'] as const;
 
 /** "1 task", never "1 tasks". */
@@ -170,7 +181,6 @@ export function TasksScreen() {
   // only when a person opens it (DECISIONS §93).
   const archivedCount =
     board.data?.columns.find((column) => column.status === ARCHIVED_STATUS)?.count ?? 0;
-  const createTask = useCreateTask();
   const move = useMoveTask();
   const update = useUpdateTask();
   const remove = useDeleteTask();
@@ -187,7 +197,10 @@ export function TasksScreen() {
   const [projectOpen, setProjectOpen] = useState(false);
   const { ask, dialog } = useConfirm();
   const { ask: askText, dialog: textDialog } = usePrompt();
-  const [draft, setDraft] = useState('');
+  /** The New task dialog is open (owner, 2026-09-29: a task is written whole, not named). */
+  const [creating, setCreating] = useState(false);
+  /** The task just made, while it is ringed on the board. */
+  const [fresh, setFresh] = useState<string | null>(null);
   const [intakeOpen, setIntakeOpen] = useState(false);
   const [dragging, setDragging] = useState<TaskStatus | null>(null);
   /** A drop that could mean two things, waiting for the person to say which. */
@@ -195,6 +208,11 @@ export function TasksScreen() {
   /** `null` while the board is not selecting; the ticked cards while it is (§103). */
   const [ticked, setTicked] = useState<Set<string> | null>(null);
   const bulk = useBulkUpdateTasks();
+  useEffect(() => {
+    if (fresh === null) return;
+    const timer = setTimeout(() => setFresh(null), FRESH_MS);
+    return () => clearTimeout(timer);
+  }, [fresh]);
   const selection = useMemo<Selection | null>(
     () =>
       ticked === null
@@ -419,34 +437,17 @@ export function TasksScreen() {
         >
           {t('tasks.bulk.select')}
         </Button>
+        {/* One button, one dialog: a task is written whole there — what, who, when (owner,
+            2026-09-29). It says which profile it is made in whenever there are several. */}
         <span className="ms-auto flex items-center gap-2">
-          <Input
-            inputSize="sm"
-            value={draft}
-            onChange={(event) => setDraft(event.target.value)}
-            onKeyDown={(event) => {
-              if (event.key === 'Enter' && draft.trim()) {
-                createTask.mutate({ title: draft.trim() });
-                setDraft('');
-              }
-            }}
-            placeholder={newTaskLabel}
-            aria-label={newTaskLabel}
-            data-testid="new-task-input"
-            data-profile={homeProfile}
-          />
           <Button
             size="sm"
             icon={<IconPlus size={14} />}
-            disabled={draft.trim() === ''}
-            loading={createTask.isPending}
-            onClick={() => {
-              createTask.mutate({ title: draft.trim() });
-              setDraft('');
-            }}
+            onClick={() => setCreating(true)}
             data-testid="new-task"
+            data-profile={homeProfile}
           >
-            {t('tasks.add')}
+            {newTaskLabel}
           </Button>
         </span>
       </header>
@@ -503,80 +504,72 @@ export function TasksScreen() {
       )}
       {bulk.isError && <Notice tone="danger">{describeTaskError(bulk.error, t)}</Notice>}
       {board.isError && <Notice tone="danger">{describeError(board.error, t)}</Notice>}
-      {(move.isError ||
-        createTask.isError ||
-        update.isError ||
-        remove.isError ||
-        stop.isError ||
-        unassign.isError) && (
+      {(move.isError || update.isError || remove.isError || stop.isError || unassign.isError) && (
         <Notice tone="danger">
           {describeTaskError(
-            move.error ??
-              createTask.error ??
-              update.error ??
-              remove.error ??
-              stop.error ??
-              unassign.error,
+            move.error ?? update.error ?? remove.error ?? stop.error ?? unassign.error,
             t,
           )}
         </Notice>
       )}
 
-      <SelectionContext.Provider value={selection}>
-        <DndContext
-          sensors={sensors}
-          collisionDetection={closestCorners}
-          onDragStart={(event: DragStartEvent) =>
-            setDragging(byId.get(String(event.active.id))?.status ?? null)
-          }
-          onDragCancel={() => setDragging(null)}
-          onDragEnd={onDragEnd}
-        >
-          <div className="task-board" data-testid="task-board">
-            {/* Intake: a task arrives here and is specified before it joins the queue, so
+      <FreshContext.Provider value={fresh}>
+        <SelectionContext.Provider value={selection}>
+          <DndContext
+            sensors={sensors}
+            collisionDetection={closestCorners}
+            onDragStart={(event: DragStartEvent) =>
+              setDragging(byId.get(String(event.active.id))?.status ?? null)
+            }
+            onDragCancel={() => setDragging(null)}
+            onDragEnd={onDragEnd}
+          >
+            <div className="task-board" data-testid="task-board">
+              {/* Intake: a task arrives here and is specified before it joins the queue, so
               nothing is ever dropped in. It is a strip until somebody opens it. */}
-            <aside
-              className="task-intake"
-              data-open={intakeOpen ? 'true' : undefined}
-              data-testid="task-intake"
-              aria-label={t('tasks.status.triage')}
-            >
-              <button
-                type="button"
-                className="task-intake-toggle"
-                aria-expanded={intakeOpen}
-                onClick={() => setIntakeOpen((open) => !open)}
-                data-testid="task-intake-toggle"
+              <aside
+                className="task-intake"
+                data-open={intakeOpen ? 'true' : undefined}
+                data-testid="task-intake"
+                aria-label={t('tasks.status.triage')}
               >
-                <span className="task-strip-title">{t('tasks.status.triage')}</span>
-                <span className="task-strip-count">{grouped.intake.length}</span>
-              </button>
-              {intakeOpen && (
-                <div className="task-column-body">
-                  <p className="task-intake-hint">{t('tasks.intake_hint')}</p>
-                  {grouped.intake.map((task) => (
-                    <TaskCard key={task.id} task={task} actions={actionsFor(task)} />
-                  ))}
-                  {grouped.intake.length === 0 && (
-                    <p className="task-column-empty">{t('tasks.nothing')}</p>
-                  )}
-                </div>
-              )}
-            </aside>
+                <button
+                  type="button"
+                  className="task-intake-toggle"
+                  aria-expanded={intakeOpen}
+                  onClick={() => setIntakeOpen((open) => !open)}
+                  data-testid="task-intake-toggle"
+                >
+                  <span className="task-strip-title">{t('tasks.status.triage')}</span>
+                  <span className="task-strip-count">{grouped.intake.length}</span>
+                </button>
+                {intakeOpen && (
+                  <div className="task-column-body">
+                    <p className="task-intake-hint">{t('tasks.intake_hint')}</p>
+                    {grouped.intake.map((task) => (
+                      <TaskCard key={task.id} task={task} actions={actionsFor(task)} />
+                    ))}
+                    {grouped.intake.length === 0 && (
+                      <p className="task-column-empty">{t('tasks.nothing')}</p>
+                    )}
+                  </div>
+                )}
+              </aside>
 
-            {COLUMNS.map((column) => (
-              <BoardColumn
-                key={column.id}
-                column={column}
-                tasks={grouped.columns.get(column.id) ?? []}
-                dragging={dragging}
-                actionsFor={actionsFor}
-                {...(column.id === 'done' ? { archive: { count: archivedCount, filter } } : {})}
-              />
-            ))}
-          </div>
-        </DndContext>
-      </SelectionContext.Provider>
+              {COLUMNS.map((column) => (
+                <BoardColumn
+                  key={column.id}
+                  column={column}
+                  tasks={grouped.columns.get(column.id) ?? []}
+                  dragging={dragging}
+                  actionsFor={actionsFor}
+                  {...(column.id === 'done' ? { archive: { count: archivedCount, filter } } : {})}
+                />
+              ))}
+            </div>
+          </DndContext>
+        </SelectionContext.Provider>
+      </FreshContext.Provider>
 
       <Dialog
         open={choice !== null}
@@ -613,6 +606,20 @@ export function TasksScreen() {
       <InProfile profile={handing?.profile}>
         <HandOverDialog task={handing} onClose={() => setHanding(null)} />
       </InProfile>
+      {/* Mounted only while open: its agents, projects and model catalogue are read then,
+          not on every visit to the board. */}
+      {creating && (
+        <NewTaskDialog
+          open
+          onClose={() => setCreating(false)}
+          onCreated={(task) => {
+            // Where it landed is shown, not left to be looked for: intake opens for a task
+            // that waits there, and the card is ringed for a moment.
+            if (task.status === INTAKE_STATUS) setIntakeOpen(true);
+            setFresh(task.id);
+          }}
+        />
+      )}
       <ProjectDialog
         open={projectOpen}
         projectId={projectId || null}
@@ -731,6 +738,12 @@ export function TaskCard({ task, actions }: { task: Task; actions: CardActions }
   } = useSortable({ id: task.id });
   const quick = quickActionFor(task.status);
   const selection = useContext(SelectionContext);
+  const fresh = useContext(FreshContext) === task.id;
+  const cardRef = useRef<HTMLLIElement | null>(null);
+  // Just made: brought into view, so a card that landed below the fold is still seen.
+  useEffect(() => {
+    if (fresh) cardRef.current?.scrollIntoView?.({ block: 'nearest', behavior: 'smooth' });
+  }, [fresh]);
   const dod = task.definition_of_done ?? [];
   // The column groups several statuses, so the card is where the stage is readable: a
   // frame drawn for the stage (board.ts, `cardFrame`) and the word beside it, so neither
@@ -761,9 +774,13 @@ export function TaskCard({ task, actions }: { task: Task; actions: CardActions }
 
   return (
     <li
-      ref={setNodeRef}
+      ref={(node) => {
+        setNodeRef(node);
+        cardRef.current = node;
+      }}
       style={{ transform: CSS.Transform.toString(transform), transition }}
       className={`task-card status-${task.status} ${isDragging ? 'sortable-dragging' : ''}`}
+      data-fresh={fresh ? 'true' : undefined}
       data-testid="task-card"
       data-task-id={task.id}
       data-status={task.status}

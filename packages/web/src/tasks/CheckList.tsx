@@ -4,6 +4,9 @@
  *
  * The ticks are the reviewer's, so the boxes can be ticked only while the task is in review;
  * outside it they show what was ticked last. A new run clears them (the hub does that).
+ *
+ * The New task dialog writes the same lists — and its subtasks — before there is anything to
+ * tick, so there it is drawn without the boxes (`ticks={false}`).
  */
 import { useState } from 'react';
 import { useI18n } from '../i18n/context.js';
@@ -20,12 +23,15 @@ export function CheckListEditor({
   items,
   onChange,
   reviewing,
+  ticks = true,
 }: {
-  kind: 'dod' | 'constraints';
+  kind: 'dod' | 'constraints' | 'subtasks';
   items: CheckItem[];
   onChange(next: CheckItem[]): void;
   /** The task is in review: the reviewer may tick. */
   reviewing: boolean;
+  /** Draw the reviewer's boxes and their count; off while the task is being written. */
+  ticks?: boolean;
 }) {
   const { t } = useI18n();
   const [draft, setDraft] = useState('');
@@ -44,7 +50,7 @@ export function CheckListEditor({
     >
       <div className="flex items-center gap-2">
         <h3 className="text-sm font-medium">{t(`tasks.${kind}.title`)}</h3>
-        {items.length > 0 && (
+        {ticks && items.length > 0 && (
           <span className="text-xs text-muted" data-testid={`task-${kind}-count`}>
             {t('tasks.dod.ticked', { done: ticked, total: items.length })}
           </span>
@@ -62,16 +68,20 @@ export function CheckListEditor({
               data-testid={`task-${kind}-line`}
               data-checked={item.checked ? 'true' : undefined}
             >
-              <Checkbox
-                checked={item.checked}
-                disabled={!reviewing}
-                onChange={(next) =>
-                  onChange(items.map((one, at) => (at === index ? { ...one, checked: next } : one)))
-                }
-                label={t('tasks.dod.tick', { text: item.text })}
-                labelHidden
-                testId={`task-${kind}-tick`}
-              />
+              {ticks && (
+                <Checkbox
+                  checked={item.checked}
+                  disabled={!reviewing}
+                  onChange={(next) =>
+                    onChange(
+                      items.map((one, at) => (at === index ? { ...one, checked: next } : one)),
+                    )
+                  }
+                  label={t('tasks.dod.tick', { text: item.text })}
+                  labelHidden
+                  testId={`task-${kind}-tick`}
+                />
+              )}
               <Input
                 inputSize="sm"
                 dir="auto"

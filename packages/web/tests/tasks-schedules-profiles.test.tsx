@@ -341,9 +341,12 @@ describe('the Tasks board shows every profile, with no profile filter', () => {
     const user = userEvent.setup();
     const { seen, fetchImpl } = fakeHub(tasks);
     mount(<TasksScreen />, fetchImpl);
-    const input = await screen.findByTestId('new-task-input');
-    await waitFor(() => expect(input).toHaveAttribute('placeholder', 'New task in Default'));
-    await user.type(input, 'Write the brief{Enter}');
+    const button = await screen.findByTestId('new-task');
+    await waitFor(() => expect(button).toHaveTextContent('New task in Default'));
+    await user.click(button);
+    const dialog = await screen.findByTestId('new-task-dialog');
+    expect(dialog).toHaveTextContent('New task in Default');
+    await user.type(within(dialog).getByTestId('new-task-title'), 'Write the brief{Enter}');
     await waitFor(() =>
       expect(seen.some((c) => c.path === '/tasks' && c.method === 'POST')).toBe(true),
     );

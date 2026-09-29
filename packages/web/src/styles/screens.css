@@ -439,6 +439,20 @@
   border-radius: var(--ch-radius-sm);
   background: var(--ch-color-surface);
 }
+/* The card a person just made: ringed for a moment so the eye finds where it landed. An
+   outline, so the card's own frame (its stage) and its size stay as they are. */
+.task-card[data-fresh='true'] {
+  outline: 2px solid var(--ch-color-accent);
+  outline-offset: 2px;
+  background: var(--ch-color-accent-soft);
+}
+/* The New task dialog: its short fields two by two where there is room, one per row on a phone. */
+.new-task-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(14rem, 100%), 1fr));
+  gap: var(--ch-space-3);
+  align-items: start;
+}
 /* The stage a card is in, readable from across the board without opening anything (the
    owner's board decision of 2026-09-17, rebuilt here). A frame around the whole card, each
    one drawn differently — turning, solid, dashed — so the stage is never told by colour

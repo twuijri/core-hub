@@ -224,9 +224,12 @@ test.describe('archiving stops the work', () => {
 
     // A task that works until it is stopped, started from the board.
     await page.getByRole('link', { name: 'المهام' }).click();
-    await page.getByTestId('new-task-input').fill('اعمل حتى أوقفك على الفهرس');
+    // A new task is written in its dialog; it lands in intake, which opens to show it.
     await page.getByTestId('new-task').click();
-    await page.getByTestId('task-intake-toggle').click();
+    await page.getByTestId('new-task-title').fill('اعمل حتى أوقفك على الفهرس');
+    await page.getByTestId('new-task-save').click();
+    await expect(page.getByTestId('new-task-dialog')).toBeHidden();
+    await expect(page.getByTestId('task-intake')).toHaveAttribute('data-open', 'true');
     const card = page.getByTestId('task-card').filter({ hasText: 'اعمل حتى أوقفك على الفهرس' });
     await card.getByTestId('task-more').click();
     await page.getByRole('menuitem', { name: 'إسناد إلى وكيل…' }).click();
