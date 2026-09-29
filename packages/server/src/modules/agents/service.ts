@@ -66,6 +66,9 @@ import {
 
 const NOT_APPLICABLE: RuntimeState = { state: 'not_applicable', url: null, error: null };
 
+/** Reconciling one catalog entry at boot longer than this is logged with its name. */
+const SLOW_RECONCILE_MS = 500;
+
 /** Who asked for an install; only the id and the role matter here. */
 export interface Actor {
   userId: string;
@@ -192,6 +195,7 @@ export class AgentsService implements UpdatePolicyStore {
     // can see that the kind is declared (ADR 0002).
     this.adapterRowId('harness', ownerId);
     for (const entry of this.catalog) {
+      const began = performance.now();
       try {
         const row = this.seedEntry(entry, ownerId);
         const outcome = await this.reconcile(entry, row);
@@ -203,6 +207,12 @@ export class AgentsService implements UpdatePolicyStore {
           { agent: entry.id, err: error },
           'agents: could not reconcile a catalog entry',
         );
+      }
+      // A probe runs the agent's CLI (`hermes --version`, a managed agent's health check): a
+      // slow one is named, since the hub waits for it while it mounts.
+      const ms = Math.round(performance.now() - began);
+      if (ms >= SLOW_RECONCILE_MS) {
+        this.options.log.warn({ agent: entry.id, ms }, 'agents: reconciling an agent took long');
       }
     }
     if (report.interrupted.length > 0) {
