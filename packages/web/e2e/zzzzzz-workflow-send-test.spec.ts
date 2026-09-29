@@ -11,6 +11,7 @@
  * into the step.
  */
 import { expect, test, type Page } from '@playwright/test';
+import { addStep, closeDialog, openStep } from './workflow-canvas.js';
 
 const PASSWORD = 'e2e-owner-password';
 const CHAT = '-1003938641118';
@@ -56,17 +57,18 @@ test('34b. Send test message always ends in a visible result, and the last run f
   const editor = page.getByTestId('workflow-editor');
   const canvas = page.getByTestId('workflow-canvas');
   await page.getByTestId('workflow-name').fill('test');
-  await page.getByTestId('workflow-add-agent').click();
+  await addStep(page, 'agent');
   await page.getByTestId('workflow-step-agent').click();
   await page.getByRole('option', { name: /Direct|مباشر/ }).click();
   await page.getByTestId('workflow-step-prompt').fill('راجع قائمة الإصدار وقل ما فيها');
-  await page.getByTestId('workflow-add-send').click();
+  await addStep(page, 'send');
   // Nothing to send to yet: the button is off and says why.
   await expect(page.getByTestId('workflow-send-test')).toBeDisabled();
   await expect(page.getByTestId('workflow-send-blocked')).toContainText('اختر أولًا أين تُرسل');
   await page.getByTestId('workflow-step-text').fill('{{steps.agent_1.output}}');
   await page.getByTestId('workflow-send-telegram').click();
   await page.getByTestId('workflow-send-chat').fill(`‎${CHAT}`);
+  await closeDialog(page);
   const port = canvas
     .locator('[data-node-id="agent_1"]')
     .first()
@@ -93,7 +95,7 @@ test('34b. Send test message always ends in a visible result, and the last run f
   // Opened again, as the tester did.
   await page.reload();
   await page.getByTestId('workflow-modes').getByRole('tab', { name: 'تحرير' }).click();
-  await canvas.locator('[data-node-id="notify_1"]').first().click();
+  await openStep(page, 'notify_1');
   await expect(page.getByTestId('workflow-send-sample')).toBeVisible();
   const send = page.getByTestId('workflow-send-test');
   await expect(send).toBeDisabled();

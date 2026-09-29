@@ -11,8 +11,15 @@
  * rule saving applies); its findings are marked on the steps and connections they name. A
  * run shows each step's state, what it produced, the connections it went along, and the two
  * answers on a step that waits for a person — the same `respondApproval` as everywhere.
+ *
+ * Laid out like n8n (owner, 2026-09-29, after testers got lost): the canvas takes the page,
+ * the workflow's triggers are nodes at its start, a "+" adds the next step from a searchable
+ * list, and a step, a connection or a trigger opens in its own dialog. Save sits by the name
+ * with an "unsaved" mark, Ctrl/Cmd+S saves, and leaving with unsaved work asks first
+ * (`LeaveGuard.tsx`).
  */
 import { useEffect, useMemo, useReducer, useRef, useState } from 'react';
+import { useLocation } from 'react-router';
 import { useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '../../auth/context.js';
 import { describeError, fieldErrorsOf } from '../../auth/client.js';
@@ -23,6 +30,7 @@ import {
   Badge,
   Button,
   Card,
+  Dialog,
   Field,
   Input,
   Notice,
@@ -32,44 +40,79 @@ import {
   Tabs,
   type BadgeTone,
 } from '../../ui/index.js';
-import { IconArrowStart, IconGauge, IconPlus } from '../../ui/icons.js';
+import {
+  IconArrowStart,
+  IconGauge,
+  IconPlay,
+  IconPlus,
+  IconSave,
+  IconSettings,
+  IconTrigger,
+} from '../../ui/icons.js';
 import { RunLimitsDialog, WorkflowLimitsForm, type Limits } from '../WorkflowLimits.js';
 import { ApprovalGate } from '../ScheduleRuns.js';
-import { WorkflowCanvas, type CanvasIssues } from './WorkflowCanvas.js';
-import { IssueList, StepPanel, StepRunPanel } from './StepPanel.js';
-import { WorkflowTriggers } from './WorkflowTriggers.js';
+import { WorkflowCanvas, type AddFrom, type CanvasIssues } from './WorkflowCanvas.js';
+import { IssueList, StepRunPanel } from './StepPanel.js';
+import { newTriggerBody } from './WorkflowTriggers.js';
 import { FailureAlertForm } from './SendForm.js';
 import { PanelBoundary } from './PanelBoundary.js';
+import { NodeDialog } from './NodeDialog.js';
+import { NodePicker, type Picked } from './NodePicker.js';
+import { DEFAULT_SCHEDULE, TriggerDialog, scheduleWhen } from './TriggerDialog.js';
+import { useLeaveGuard } from './LeaveGuard.js';
 import {
-  NODE_KINDS,
+  MANUAL_TRIGGER_ID,
+  firstStepPlace,
+  triggerPlaces,
+  type CanvasTrigger,
+} from './trigger-nodes.js';
+import {
   emptyDraft,
   fromWorkflow,
+  hasUnsaved,
   initialState,
   issuesByTarget,
   latestSteps,
   nextNodeId,
+  nextPendingId,
   nodeStates,
   placeRefusedFields,
   reducer,
   takenEdges,
   type Draft,
+  type PendingTrigger,
+  type Position,
   type Selection,
   type Validation,
   type WorkflowIssue,
 } from './model.js';
 import {
+  createTrigger,
+  createWorkflowSchedule,
   useProfileAgents,
   useProfileModels,
+  useTriggerWrites,
   useWorkflow,
   useWorkflowRun,
   useWorkflowRuns,
+  useWorkflowScheduleWrites,
+  useWorkflowSchedules,
+  useWorkflowTriggers,
   useWorkflowWrites,
   validateDraft,
+  workflowScheduleBody,
+  type TriggerPreset,
   type WorkflowRunRow,
 } from './queries.js';
 import { intlLocale } from '../../i18n/index.js';
 
 const CHECK_DELAY_MS = 350;
+
+/**
+ * Work left without saving — by the browser's Back button, which cannot be held — kept for
+ * this tab's life and offered back when the same workflow is opened again.
+ */
+const leftBehind = new Map<string, { draft: Draft; pending: PendingTrigger[] }>();
 
 /** Why a check or a save was refused: the general sentence, and each field put in its place. */
 interface Refusal {
@@ -105,6 +148,14 @@ const RUN_TONE: Record<string, BadgeTone> = {
   cancelled: 'neutral',
 };
 
+/** What is open over the canvas: a step, a connection or a trigger. */
+type Opened = { type: 'node' | 'edge' | 'trigger'; id: string } | null;
+
+/** The list a step or a trigger is added from, and where the new one goes. */
+type Picking = { mode: 'step' | 'trigger'; from: AddFrom | null; at?: Position } | null;
+
+const WEBHOOK_PRESETS = new Set<string>(['clickup', 'github', 'generic_hmac', 'token']);
+
 export default function WorkflowEditor({
   workflowId,
   profile,
@@ -129,6 +180,7 @@ export default function WorkflowEditor({
 }) {
   const { t, language } = useI18n();
   const { client } = useAuth();
+  const location = useLocation();
   const queryClient = useQueryClient();
   const many = useManyProfiles();
   const workflow = useWorkflow(profile, workflowId);
@@ -136,6 +188,10 @@ export default function WorkflowEditor({
   const agents = useProfileAgents(profile);
   const models = useProfileModels(profile);
   const writes = useWorkflowWrites();
+  const webhooks = useWorkflowTriggers(profile, workflowId);
+  const schedules = useWorkflowSchedules(profile, workflowId);
+  const triggerWrites = useTriggerWrites(profile, workflowId ?? '');
+  const scheduleWrites = useWorkflowScheduleWrites(profile);
   const [state, dispatch] = useReducer(reducer, undefined, () => initialState(emptyDraft()));
   const [validation, setValidation] = useState<Validation | null>(null);
   const [checking, setChecking] = useState(false);
@@ -143,7 +199,15 @@ export default function WorkflowEditor({
   const [input, setInput] = useState('');
   const [message, setMessage] = useState<string | null>(null);
   const [runLimitsOpen, setRunLimitsOpen] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [opened, setOpened] = useState<Opened>(null);
+  const [picking, setPicking] = useState<Picking>(null);
+  const [manualShown, setManualShown] = useState(false);
+  const [triggerError, setTriggerError] = useState<string | null>(null);
   const loadedFor = useRef<string | null>(null);
+  const nameField = useRef<HTMLInputElement>(null);
+  const stashKey = `${profile}:${workflowId ?? 'new'}`;
+  const [restorable, setRestorable] = useState(() => leftBehind.get(stashKey) ?? null);
 
   // The saved drawing, once, when it arrives — never over what someone is drawing.
   useEffect(() => {
@@ -228,26 +292,106 @@ export default function WorkflowEditor({
   const saving = writes.create.isPending || writes.update.isPending;
   const nameMissing = draft.name.trim() === '';
   const blocked = problems.length > 0;
+  const unsaved = hasUnsaved(state);
+  const saveBlocked = nameMissing
+    ? t('workflows.editor.name_required')
+    : blocked
+      ? t('workflows.editor.save_blocked')
+      : null;
 
-  /** Save what is drawn; the id it is saved under. */
+  // Keep what is left behind when the editor goes away with unsaved work (the browser's Back).
+  const latest = useRef({ state, leaving: false });
+  latest.current.state = state;
+  useEffect(() => {
+    const key = stashKey;
+    return () => {
+      const { state: last, leaving } = latest.current;
+      if (!leaving && hasUnsaved(last)) {
+        leftBehind.set(key, { draft: last.draft, pending: last.pending });
+      }
+    };
+  }, [stashKey]);
+
+  /** Save what is drawn, then the triggers that waited for it; the id it is saved under. */
   const save = async (): Promise<string | null> => {
     setMessage(null);
+    setTriggerError(null);
     if (nameMissing || blocked) return null;
+    let id = workflowId;
     if (workflowId) {
-      await writes.update.mutateAsync({ profile, id: workflowId, draft });
+      if (state.dirty) await writes.update.mutateAsync({ profile, id: workflowId, draft });
       dispatch({ type: 'saved' });
-      return workflowId;
+    } else {
+      const created = await writes.create.mutateAsync({ profile, draft });
+      loadedFor.current = created.id;
+      dispatch({ type: 'saved' });
+      id = created.id;
     }
-    const created = await writes.create.mutateAsync({ profile, draft });
-    loadedFor.current = created.id;
-    dispatch({ type: 'saved' });
-    onSaved(created.id);
-    return created.id;
+    if (id && state.pending.length > 0) {
+      const made: string[] = [];
+      for (const each of state.pending) {
+        try {
+          if (each.kind === 'webhook') {
+            const preset = each.preset as TriggerPreset;
+            await createTrigger(
+              client,
+              profile,
+              id,
+              newTriggerBody(preset, t(`workflows.triggers.presets.${preset}`)),
+            );
+          } else {
+            await createWorkflowSchedule(
+              client,
+              profile,
+              workflowScheduleBody(draft.name, id, each.schedule),
+            );
+          }
+          made.push(each.id);
+        } catch (error) {
+          setTriggerError(describeError(error, t));
+        }
+      }
+      dispatch({ type: 'pending_remove', ids: made });
+      void queryClient.invalidateQueries({ queryKey: ['schedules'] });
+    }
+    leftBehind.delete(stashKey);
+    setRestorable(null);
+    if (!workflowId && id) onSaved(id);
+    return id;
   };
+  const saveRef = useRef(save);
+  saveRef.current = save;
+
+  // Ctrl+S / Cmd+S saves, wherever the focus is in the editor (and never the browser's page).
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent) => {
+      if (!(event.ctrlKey || event.metaKey) || event.altKey || event.key.toLowerCase() !== 's')
+        return;
+      event.preventDefault();
+      if (latest.current.state.draft.name.trim() === '') {
+        nameField.current?.focus();
+        return;
+      }
+      void saveRef.current().catch(() => undefined);
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, []);
+
+  const leaveGuard = useLeaveGuard({
+    unsaved,
+    here: `${location.pathname}${location.search}`,
+    onSave: async () => (await save().catch(() => null)) !== null,
+    saveBlocked,
+    onLeave: () => {
+      latest.current.leaving = true;
+      leftBehind.delete(stashKey);
+    },
+  });
 
   const runFrom = async (startNodeIds: string[] | null, limits?: Limits) => {
     setMessage(null);
-    const id = workflowId && !state.dirty ? workflowId : await save().catch(() => null);
+    const id = workflowId && !unsaved ? workflowId : await save().catch(() => null);
     if (!id) return;
     const started = await writes.run.mutateAsync({
       profile,
@@ -257,33 +401,172 @@ export default function WorkflowEditor({
       ...(limits ? { limits } : {}),
     });
     setRunLimitsOpen(false);
+    setOpened(null);
     setMessage(t('workflows.started', { name: draft.name }));
     onShowRun(started.workflow_run_id, id);
   };
 
+  // ------------------------------------------------------------ triggers on the canvas
+
+  const when = (at: string | null) =>
+    at
+      ? new Intl.DateTimeFormat(intlLocale(language), {
+          dateStyle: 'medium',
+          timeStyle: 'short',
+        }).format(Date.parse(at))
+      : '';
+
+  const webhookRows = webhooks.data ?? [];
+  const scheduleRows = schedules.data ?? [];
+  const showManual = draft.nodes.length > 0 || manualShown;
+  const triggers: CanvasTrigger[] = useMemo(() => {
+    const list: CanvasTrigger[] = [];
+    if (showManual) {
+      list.push({
+        id: MANUAL_TRIGGER_ID,
+        kind: 'manual',
+        title: t('workflows.nodes.trigger_kinds.manual'),
+        detail: input.trim() ? `{{input}} = ${input.trim()}` : t('workflows.nodes.manual_detail'),
+        pending: false,
+        enabled: true,
+      });
+    }
+    for (const row of webhookRows) {
+      list.push({
+        id: row.id,
+        kind: 'webhook',
+        title: row.name,
+        detail: row.events.length
+          ? `${t(`workflows.triggers.presets.${row.preset}`)} · ${row.events.join(', ')}`
+          : t(`workflows.triggers.presets.${row.preset}`),
+        pending: false,
+        enabled: row.enabled,
+      });
+    }
+    for (const row of scheduleRows) {
+      list.push({
+        id: `schedule:${row.id}`,
+        kind: 'schedule',
+        title: row.name,
+        detail: scheduleWhen(row.trigger, t, (at) => when(at)),
+        detailLtr: row.trigger.kind === 'cron',
+        pending: false,
+        enabled: row.enabled,
+      });
+    }
+    for (const each of state.pending) {
+      list.push({
+        id: each.id,
+        kind: each.kind,
+        title:
+          each.kind === 'webhook'
+            ? t(`workflows.triggers.presets.${each.preset}`)
+            : t('workflows.nodes.trigger_kinds.schedule'),
+        detail: each.kind === 'schedule' ? each.schedule.value : '',
+        detailLtr: each.kind === 'schedule' && each.schedule.mode === 'cron',
+        pending: true,
+        enabled: true,
+      });
+    }
+    return list;
+    // `when` and `t` follow the language, which re-renders anyway.
+  }, [showManual, input, webhookRows, scheduleRows, state.pending, language]);
+
+  const openStep = (id: string) => {
+    dispatch({ type: 'select', selection: { type: 'node', id } });
+    setOpened({ type: 'node', id });
+  };
+
+  /** Add what was picked: a step where it was asked for, or a trigger. */
+  const onPick = (picked: Picked) => {
+    const from = picking?.from ?? null;
+    const at = picking?.at;
+    setPicking(null);
+    if (picked.group === 'step') {
+      const kind = picked.kind === 'send' ? 'notify' : picked.kind;
+      const id = nextNodeId(kind, draft.nodes);
+      const triggerIndex =
+        from?.type === 'trigger' ? triggers.findIndex((each) => each.id === from.id) : -1;
+      const position =
+        at ??
+        (from?.type === 'trigger'
+          ? firstStepPlace(draft, triggerPlaces(draft, triggers.length)[triggerIndex] ?? null)
+          : undefined);
+      dispatch({
+        type: 'add',
+        kind,
+        title: picked.kind === 'send' ? t('workflows.send.title') : t(`workflows.kinds.${kind}`),
+        agentId: agents.data?.[0]?.id ?? null,
+        ...(position ? { position } : {}),
+        ...(from?.type === 'node' ? { after: { from: from.id, route: from.route } } : {}),
+        // A notice that sends (§124): kept as a `notify` node, so older apps load it.
+        ...(picked.kind === 'send' ? { patch: { send: { targets: [] } } } : {}),
+      });
+      setOpened({ type: 'node', id });
+      return;
+    }
+    setTriggerError(null);
+    if (picked.kind === 'manual') {
+      setManualShown(true);
+      setOpened({ type: 'trigger', id: MANUAL_TRIGGER_ID });
+      return;
+    }
+    if (!workflowId) {
+      // Not saved yet: the trigger is made right after the first save.
+      const id = nextPendingId(state.pending);
+      const trigger: PendingTrigger =
+        picked.kind === 'schedule'
+          ? { id, kind: 'schedule', schedule: DEFAULT_SCHEDULE }
+          : { id, kind: 'webhook', preset: picked.kind };
+      dispatch({ type: 'pending_add', trigger });
+      setOpened({ type: 'trigger', id });
+      return;
+    }
+    if (WEBHOOK_PRESETS.has(picked.kind)) {
+      const preset = picked.kind as TriggerPreset;
+      triggerWrites.create.mutate(
+        newTriggerBody(preset, t(`workflows.triggers.presets.${preset}`)),
+        {
+          onSuccess: (made) => setOpened({ type: 'trigger', id: made.id }),
+          onError: (error) => setTriggerError(describeError(error, t)),
+        },
+      );
+      return;
+    }
+    scheduleWrites.create.mutate(
+      workflowScheduleBody(draft.name || t('workflows.untitled'), workflowId, DEFAULT_SCHEDULE),
+      {
+        onSuccess: (made) => setOpened({ type: 'trigger', id: `schedule:${made.id}` }),
+        onError: (error) => setTriggerError(describeError(error, t)),
+      },
+    );
+  };
+
   const runError = writes.run.error ?? saveError;
-  const selectedNode =
-    state.selected?.type === 'node'
-      ? (draft.nodes.find((node) => node.id === state.selected!.id) ?? null)
-      : null;
-  const selectedEdge =
-    state.selected?.type === 'edge'
-      ? (draft.edges.find((edge) => edge.id === state.selected!.id) ?? null)
-      : null;
-  const selectedIssues: WorkflowIssue[] = selectedNode
-    ? (found.nodes.get(selectedNode.id) ?? [])
-    : selectedEdge
-      ? (found.edges.get(selectedEdge.id) ?? [])
+  const openedNode =
+    opened?.type === 'node' ? (draft.nodes.find((node) => node.id === opened.id) ?? null) : null;
+  const openedEdge =
+    opened?.type === 'edge' ? (draft.edges.find((edge) => edge.id === opened.id) ?? null) : null;
+  const openedTrigger =
+    opened?.type === 'trigger' ? (triggers.find((each) => each.id === opened.id) ?? null) : null;
+  const openedIssues: WorkflowIssue[] = openedNode
+    ? (found.nodes.get(openedNode.id) ?? [])
+    : openedEdge
+      ? (found.edges.get(openedEdge.id) ?? [])
       : [];
-  const pick = (issue: WorkflowIssue) =>
-    dispatch({
-      type: 'select',
-      selection: issue.node_id
-        ? { type: 'node', id: issue.node_id }
-        : issue.edge_id
-          ? { type: 'edge', id: issue.edge_id }
-          : null,
-    });
+  const lastRunId = runs.data?.[0]?.id ?? null;
+  const lastRun = useWorkflowRun(profile, openedNode ? lastRunId : null);
+  const pick = (issue: WorkflowIssue) => {
+    const selection: Selection = issue.node_id
+      ? { type: 'node', id: issue.node_id }
+      : issue.edge_id
+        ? { type: 'edge', id: issue.edge_id }
+        : null;
+    dispatch({ type: 'select', selection });
+    if (selection) setOpened(selection);
+  };
+  const runDisabledReason =
+    saveBlocked ?? (draft.nodes.length === 0 ? t('workflows.nodes.no_steps') : null);
 
   if (workflowId && workflow.isPending) return <Skeleton height="30rem" radius="md" />;
   if (workflowId && workflow.isError) {
@@ -296,27 +579,20 @@ export default function WorkflowEditor({
   }
 
   const mode = runId ? 'runs' : 'edit';
-  const when = (at: string | null) =>
-    at
-      ? new Intl.DateTimeFormat(intlLocale(language), {
-          dateStyle: 'medium',
-          timeStyle: 'short',
-        }).format(Date.parse(at))
-      : '';
 
   return (
     <div
       className="flex flex-col gap-3"
       data-testid="workflow-editor"
       data-workflow-id={workflowId ?? 'new'}
+      data-unsaved={unsaved ? 'true' : 'false'}
     >
       <Card>
         <div className="flex flex-col gap-3">
           <div className="flex flex-wrap items-center gap-2">
-            <BackButton onBack={onBack} />
+            <BackButton onBack={() => leaveGuard.guard(onBack)} />
             {many && <ProfileBadge profile={profile} testId="workflow-profile" />}
             <span className="ms-auto flex items-center gap-2 text-xs" aria-live="polite">
-              {state.dirty && <Badge tone="warning">{t('workflows.editor.unsaved')}</Badge>}
               <CheckStatus checking={checking} validation={validation} error={checkError} />
             </span>
           </div>
@@ -334,6 +610,7 @@ export default function WorkflowEditor({
               {(props) => (
                 <Input
                   {...props}
+                  ref={nameField}
                   value={draft.name}
                   onChange={(event) => dispatch({ type: 'rename', name: event.target.value })}
                   placeholder={t('workflows.untitled')}
@@ -342,59 +619,61 @@ export default function WorkflowEditor({
                 />
               )}
             </Field>
-            <Button
-              variant="primary"
-              loading={saving}
-              disabled={nameMissing || blocked || (!state.dirty && !!workflowId)}
-              tooltip={
-                nameMissing
-                  ? t('workflows.editor.name_required')
-                  : blocked
-                    ? t('workflows.editor.save_blocked')
-                    : undefined
-              }
-              onClick={() => void save().catch(() => undefined)}
-              data-testid="workflow-save"
-            >
-              {t('common.save')}
-            </Button>
-          </div>
-          <div className="flex flex-wrap items-end gap-2">
-            <Field
-              label={t('workflows.editor.run_input')}
-              hint={t('workflows.editor.run_input_hint', { input: '{{input}}' })}
-              className="min-w-60 flex-1"
-            >
-              {(props) => (
-                <Input
-                  {...props}
-                  value={input}
-                  onChange={(event) => setInput(event.target.value)}
-                  dir="auto"
-                  data-testid="workflow-run-input"
-                />
-              )}
-            </Field>
-            <Button
-              variant="secondary"
-              loading={writes.run.isPending}
-              disabled={nameMissing || blocked || draft.nodes.length === 0}
-              tooltip={state.dirty || !workflowId ? t('workflows.editor.save_first') : undefined}
-              onClick={() => void runFrom(null).catch(() => undefined)}
-              data-testid="workflow-run"
-            >
-              {t('workflows.run')}
-            </Button>
-            <Button
-              variant="secondary"
-              iconOnly
-              icon={<IconGauge size={16} />}
-              aria-label={t('schedules.limits.run_with')}
-              tooltip={t('schedules.limits.run_with')}
-              disabled={nameMissing || blocked || draft.nodes.length === 0}
-              onClick={() => setRunLimitsOpen(true)}
-              data-testid="workflow-run-with-limits"
-            />
+            <span className="flex flex-wrap items-center gap-2">
+              {unsaved ? (
+                <Badge tone="warning" dot testId="workflow-unsaved">
+                  {t('workflows.editor.unsaved')}
+                </Badge>
+              ) : workflowId ? (
+                <Badge tone="success" testId="workflow-all-saved">
+                  {t('workflows.nodes.all_saved')}
+                </Badge>
+              ) : null}
+              <Button
+                variant="primary"
+                icon={<IconSave size={16} />}
+                loading={saving}
+                disabled={saveBlocked !== null || (!unsaved && !!workflowId)}
+                tooltip={saveBlocked ?? t('workflows.nodes.save_shortcut')}
+                onClick={() => void save().catch(() => undefined)}
+                data-testid="workflow-save"
+              >
+                {t('common.save')}
+              </Button>
+              <Button
+                variant="secondary"
+                icon={<IconPlay size={16} />}
+                loading={writes.run.isPending}
+                disabled={runDisabledReason !== null}
+                tooltip={
+                  runDisabledReason ??
+                  (unsaved || !workflowId ? t('workflows.editor.save_first') : undefined)
+                }
+                onClick={() => void runFrom(null).catch(() => undefined)}
+                data-testid="workflow-run"
+              >
+                {t('workflows.run')}
+              </Button>
+              <Button
+                variant="secondary"
+                iconOnly
+                icon={<IconGauge size={16} />}
+                aria-label={t('schedules.limits.run_with')}
+                tooltip={t('schedules.limits.run_with')}
+                disabled={runDisabledReason !== null}
+                onClick={() => setRunLimitsOpen(true)}
+                data-testid="workflow-run-with-limits"
+              />
+              <Button
+                variant="ghost"
+                iconOnly
+                icon={<IconSettings size={16} />}
+                aria-label={t('workflows.nodes.settings')}
+                tooltip={t('workflows.nodes.settings')}
+                onClick={() => setSettingsOpen(true)}
+                data-testid="workflow-settings-open"
+              />
+            </span>
           </div>
           {runLimitsOpen && (
             <RunLimitsDialog
@@ -405,6 +684,40 @@ export default function WorkflowEditor({
               onRun={(limits) => void runFrom(null, limits).catch(() => undefined)}
             />
           )}
+          {restorable && (
+            <Notice tone="warning" testId="workflow-restore">
+              <span className="flex flex-wrap items-center gap-2">
+                {t('workflows.leave.left_behind')}
+                <Button
+                  size="sm"
+                  variant="secondary"
+                  onClick={() => {
+                    dispatch({
+                      type: 'restore',
+                      draft: restorable.draft,
+                      pending: restorable.pending,
+                    });
+                    leftBehind.delete(stashKey);
+                    setRestorable(null);
+                  }}
+                  data-testid="workflow-restore-yes"
+                >
+                  {t('workflows.leave.restore')}
+                </Button>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  onClick={() => {
+                    leftBehind.delete(stashKey);
+                    setRestorable(null);
+                  }}
+                  data-testid="workflow-restore-no"
+                >
+                  {t('workflows.leave.discard')}
+                </Button>
+              </span>
+            </Notice>
+          )}
           {writes.run.error ? (
             <Notice tone="danger">{describeError(writes.run.error, t)}</Notice>
           ) : saveRefusal ? (
@@ -414,6 +727,11 @@ export default function WorkflowEditor({
                 : generalMessage(saveRefusal)}
             </Notice>
           ) : null}
+          {triggerError && (
+            <Notice tone="danger" testId="workflow-trigger-error">
+              {triggerError}
+            </Notice>
+          )}
           {message && !runError && <Notice tone="success">{message}</Notice>}
         </div>
       </Card>
@@ -431,112 +749,134 @@ export default function WorkflowEditor({
         <TabPanel value="edit">
           {mode === 'edit' && (
             <div className="flex flex-col gap-3">
-              <div
-                className="flex flex-wrap items-center gap-2"
-                role="toolbar"
-                aria-label={t('workflows.editor.palette')}
-                data-testid="workflow-palette"
-              >
-                <span className="text-xs font-medium text-muted">
-                  {t('workflows.editor.palette')}
-                </span>
-                {NODE_KINDS.map((kind) => (
-                  <Button
-                    key={kind}
-                    size="sm"
-                    variant="secondary"
-                    icon={<IconPlus size={14} />}
-                    tooltip={t(`workflows.kind_hints.${kind}`)}
-                    onClick={() =>
-                      dispatch({
-                        type: 'add',
-                        kind,
-                        title: t(`workflows.kinds.${kind}`),
-                        agentId: agents.data?.[0]?.id ?? null,
-                      })
-                    }
-                    data-testid={`workflow-add-${kind}`}
-                  >
-                    {t(`workflows.kinds.${kind}`)}
-                  </Button>
-                ))}
-                <Button
-                  size="sm"
-                  variant="secondary"
-                  icon={<IconPlus size={14} />}
-                  tooltip={t('workflows.send.hint')}
-                  onClick={() => {
-                    // A notice that sends (§124): kept as a `notify` node, so older apps load it.
-                    const id = nextNodeId('notify', draft.nodes);
-                    dispatch({ type: 'add', kind: 'notify', title: t('workflows.send.title') });
-                    dispatch({ type: 'update', id, patch: { send: { targets: [] } } });
-                  }}
-                  data-testid="workflow-add-send"
-                >
-                  {t('workflows.send.title')}
-                </Button>
-              </div>
-              <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_20rem]">
-                <PanelBoundary testId="workflow-canvas-failed">
-                  <WorkflowCanvas
-                    draft={draft}
-                    selected={state.selected}
-                    dispatch={dispatch}
-                    readOnly={false}
-                    issues={canvasIssues}
-                    run={null}
-                  />
-                </PanelBoundary>
-                <Card testId="workflow-side">
-                  {/* An error in a step's form closes that form only; another step opens it again. */}
-                  <PanelBoundary resetKey={selectedNode?.id ?? selectedEdge?.id ?? null}>
-                    <StepPanel
-                      draft={draft}
-                      node={selectedNode}
-                      edge={selectedEdge}
-                      dispatch={dispatch}
-                      agents={agents.data ?? []}
-                      models={models.data ?? []}
-                      issues={selectedIssues}
-                      problems={problems}
-                      onRunFrom={(id) => void runFrom([id]).catch(() => undefined)}
-                      runFromBusy={writes.run.isPending}
-                      profile={profile}
-                      workflowId={workflowId}
-                      lastRunId={runs.data?.[0]?.id ?? null}
-                      settings={
-                        <section
-                          className="flex flex-col gap-2 border-t border-line pt-3"
-                          data-testid="workflow-settings"
-                        >
-                          <h3 className="text-sm font-medium">{t('schedules.limits.title')}</h3>
-                          {workflowId ? (
-                            <WorkflowLimitsForm workflowId={workflowId} profile={profile} />
-                          ) : (
-                            <p className="text-xs text-muted">{t('schedules.limits.save_first')}</p>
-                          )}
-                          <FailureAlertForm
-                            alert={draft.on_failure ?? null}
-                            profile={profile}
-                            onChange={(alert) => dispatch({ type: 'alert', alert })}
-                          />
-                          <WorkflowTriggers
-                            workflowId={workflowId}
-                            profile={profile}
-                            onShowRun={(id) => onShowRun(id)}
-                          />
-                        </section>
-                      }
-                    />
-                  </PanelBoundary>
-                </Card>
-              </div>
+              <PanelBoundary testId="workflow-canvas-failed">
+                <WorkflowCanvas
+                  draft={draft}
+                  selected={state.selected}
+                  dispatch={dispatch}
+                  readOnly={false}
+                  issues={canvasIssues}
+                  run={null}
+                  height="calc(100dvh - 20rem)"
+                  triggers={triggers}
+                  onOpenNode={openStep}
+                  onOpenEdge={(id) => setOpened({ type: 'edge', id })}
+                  onOpenTrigger={(id) => setOpened({ type: 'trigger', id })}
+                  onAddStep={(from, at) =>
+                    setPicking({ mode: 'step', from, ...(at ? { at } : {}) })
+                  }
+                  onAddTrigger={() => setPicking({ mode: 'trigger', from: null })}
+                  toolbar={
+                    <>
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        icon={<IconTrigger size={14} />}
+                        loading={triggerWrites.create.isPending || scheduleWrites.create.isPending}
+                        onClick={() => setPicking({ mode: 'trigger', from: null })}
+                        data-testid="workflow-add-trigger"
+                      >
+                        {t('workflows.nodes.add_trigger')}
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="secondary"
+                        icon={<IconPlus size={14} />}
+                        onClick={() => setPicking({ mode: 'step', from: null })}
+                        data-testid="workflow-add-step"
+                      >
+                        {t('workflows.nodes.add_step')}
+                      </Button>
+                    </>
+                  }
+                />
+              </PanelBoundary>
               <IssueList
                 issues={[...problems, ...(shown?.warnings ?? [])]}
                 problems={problems}
                 t={t}
                 onPick={pick}
               />
+              <NodePicker
+                open={picking !== null}
+                mode={picking?.mode ?? 'step'}
+                manualShown={showManual}
+                onClose={() => setPicking(null)}
+                onPick={onPick}
+              />
+              {/* An error in a step's form closes that form only; another step opens it again. */}
+              <PanelBoundary resetKey={opened?.id ?? null}>
+                <NodeDialog
+                  draft={draft}
+                  node={openedNode}
+                  edge={openedEdge}
+                  onClose={() => setOpened(null)}
+                  dispatch={dispatch}
+                  agents={agents.data ?? []}
+                  models={models.data ?? []}
+                  issues={openedIssues}
+                  problems={problems}
+                  onRunFrom={(id) => void runFrom([id]).catch(() => undefined)}
+                  runFromBusy={writes.run.isPending}
+                  profile={profile}
+                  workflowId={workflowId}
+                  lastRun={lastRun.data ?? null}
+                  runInput={input}
+                />
+              </PanelBoundary>
+              <TriggerDialog
+                trigger={openedTrigger}
+                onClose={() => setOpened(null)}
+                profile={profile}
+                workflowId={workflowId}
+                workflowName={draft.name}
+                webhook={webhookRows.find((row) => row.id === openedTrigger?.id) ?? null}
+                schedule={
+                  scheduleRows.find((row) => `schedule:${row.id}` === openedTrigger?.id) ?? null
+                }
+                pending={state.pending.find((each) => each.id === openedTrigger?.id) ?? null}
+                onPendingChange={(trigger) => dispatch({ type: 'pending_update', trigger })}
+                onPendingRemove={(id) => {
+                  dispatch({ type: 'pending_remove', ids: [id] });
+                  setOpened(null);
+                }}
+                runInput={input}
+                onRunInput={setInput}
+                onRun={() => void runFrom(null).catch(() => undefined)}
+                runBusy={writes.run.isPending}
+                runDisabledReason={runDisabledReason}
+                onHideManual={
+                  draft.nodes.length === 0
+                    ? () => {
+                        setManualShown(false);
+                        setOpened(null);
+                      }
+                    : null
+                }
+                onShowRun={(id) => onShowRun(id)}
+              />
+              <Dialog
+                open={settingsOpen}
+                onOpenChange={setSettingsOpen}
+                title={t('workflows.nodes.settings')}
+                size="md"
+                closeLabel={t('ui.close')}
+                testId="workflow-settings-dialog"
+              >
+                <section className="flex flex-col gap-3" data-testid="workflow-settings">
+                  <h3 className="text-sm font-medium">{t('schedules.limits.title')}</h3>
+                  {workflowId ? (
+                    <WorkflowLimitsForm workflowId={workflowId} profile={profile} />
+                  ) : (
+                    <p className="text-xs text-muted">{t('schedules.limits.save_first')}</p>
+                  )}
+                  <FailureAlertForm
+                    alert={draft.on_failure ?? null}
+                    profile={profile}
+                    onChange={(alert) => dispatch({ type: 'alert', alert })}
+                  />
+                </section>
+              </Dialog>
             </div>
           )}
         </TabPanel>
@@ -557,6 +897,7 @@ export default function WorkflowEditor({
           )}
         </TabPanel>
       </Tabs>
+      {leaveGuard.dialog}
     </div>
   );
 }
