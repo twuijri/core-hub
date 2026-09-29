@@ -314,30 +314,52 @@ export function useUpdateProject() {
   });
 }
 
+/** What the New task dialog sends (contract `TaskCreate`); `title` alone is a valid task. */
+export interface NewTaskBody {
+  title: string;
+  description?: string | null;
+  status?: 'triage' | 'todo' | 'ready';
+  priority?: 'low' | 'normal' | 'high' | 'urgent';
+  tags?: string[];
+  project_id?: string | null;
+  assignee_agent_id?: string | null;
+  auto_start?: boolean;
+  due_at?: string | null;
+  subtasks?: { title: string }[];
+  definition_of_done?: CheckItem[];
+  constraints?: CheckItem[];
+}
+
 /**
  * A new task is made in the profile the person is in — the top selector — and nowhere else
  * (ADR 0016): the board shows every profile, but only one control decides where things are
  * made.
+ *
+ * `key` is the contract's `Idempotency-Key`, one per dialog, as the phones send it: pressing
+ * Save again after a failure names the same task.
  */
 export function useCreateTask() {
   const { client, homeProfile } = useAuth();
   const refresh = useInvalidateBoard();
   return useMutation({
-    mutationFn: async (body: { title: string; status?: 'triage' | 'todo' | 'ready' }) =>
+    mutationFn: async ({ key, ...body }: NewTaskBody & { key?: string }) =>
       (
         await client.request('post', '/tasks', {
-          ...inWorkspace(homeProfile),
+          headers: {
+            'X-Hub-Profile': homeProfile,
+            ...(key ? { 'Idempotency-Key': key } : {}),
+          },
           // `auto_start` and `status` carry defaults in the contract and are required on
           // the wire, so the client sends them rather than relying on the server's.
-          // No `project_id`: the hub puts it in the workspace's own project, so writing
-          // something down never starts with inventing a container for it.
+          // No `project_id` unless one was chosen: the hub puts it in the workspace's own
+          // project, so writing something down never starts with inventing a container.
           body: {
-            auto_start: false,
+            ...body,
+            auto_start: body.auto_start ?? false,
             status: body.status ?? 'triage',
-            title: body.title,
           },
         })
-      ).data,
+      ).data as unknown as Task,
     onSuccess: refresh,
   });
 }
@@ -465,11 +487,18 @@ export function useAssignTask() {
       agent_id: string;
       start: boolean;
       instructions: string | null;
+      /** The run's model (`<provider>/<model>`, the catalogue's `key`); `null`: the agent's own. */
+      model?: string | null;
     }) =>
       (
         await client.request('post', '/tasks/{task_id}/assign', {
           params: { task_id: id },
-          body: { ...body, model: null, provider: null, ...(handTo ? { profile: handTo } : {}) },
+          body: {
+            ...body,
+            model: body.model ?? null,
+            provider: null,
+            ...(handTo ? { profile: handTo } : {}),
+          },
           ...inWorkspace(workspace),
         })
       ).data as unknown as TaskAssigned,

@@ -70,6 +70,7 @@ export function CodeEditor({
   readOnly = false,
   onSave,
   testId,
+  placeholder,
 }: {
   value: string;
   onChange?(value: string): void;
@@ -78,6 +79,8 @@ export function CodeEditor({
   /** The textarea's accessible name. */
   label: string;
   readOnly?: boolean;
+  /** Shown while the file is empty, so an empty editor still reads as a place to write. */
+  placeholder?: string;
   /** Ctrl/⌘+S. */
   onSave?(): void;
   testId?: string;
@@ -134,6 +137,7 @@ export function CodeEditor({
         autoComplete="off"
         autoCorrect="off"
         wrap="off"
+        placeholder={placeholder}
         dir={dir}
         data-testid={testId ? `${testId}-input` : undefined}
       />

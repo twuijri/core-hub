@@ -1390,6 +1390,46 @@
       "comment_title": "One comment on {count} tasks",
       "refused": "Not changed: {count} (Hermes refused, or they are gone). Changed: {done}.",
       "tick": "Select “{title}”"
+    },
+    "new": {
+      "name": "Title",
+      "name_required": "Write a title for the task.",
+      "description": "Description",
+      "description_hint": "The details and instructions the agent works from. Markdown works here.",
+      "who": "Who does it",
+      "agent": "Give it to",
+      "agent_none": "Nobody for now",
+      "model": "Model",
+      "model_default": "The agent's default",
+      "model_hint": "Used when it starts now. A task that starts later runs on the agent's default model.",
+      "hermes_note": "Hermes keeps this card on its own board and runs it from there, with its own model. Leave it in Triage to specify it first.",
+      "details": "Details",
+      "due": "Due",
+      "due_past": "That moment has already passed.",
+      "due_invalid": "That is not a date.",
+      "tags": "Tags",
+      "tags_hint": "Separate them with commas.",
+      "project": "Project",
+      "project_own": "The profile's own list",
+      "when": "When",
+      "start_now": "Start now",
+      "start_now_hint": "The agent starts at once, in the task's own conversation.",
+      "start_needs_agent": "Give it to an agent to start it now.",
+      "start_later": "Not yet",
+      "start_later_hint": "It waits on the board until someone starts it.",
+      "status": "Where it waits",
+      "status_hint": "Triage is for a task still being specified; Ready is next in line.",
+      "create": "Create",
+      "start_again": "Start again",
+      "close": "Close",
+      "not_started": "The task was created, but it did not start. Start again, or close and start it from its card."
+    },
+    "subtasks": {
+      "title": "Subtasks",
+      "hint": "Smaller steps inside the task. The agent is given them with the task.",
+      "line": "Subtask {number}",
+      "placeholder": "e.g. Draft the outline",
+      "add": "Add a subtask"
     }
   },
   "schedules": {
@@ -3874,7 +3914,8 @@
     "invalid_json": "This is not valid JSON, so nothing was written: {message}",
     "symlink_outside": "This file is a link to somewhere outside the agent's folder and the home, so Core Hub will not open it.",
     "not_text": "This file is not UTF-8 text, so it cannot be edited here.",
-    "too_large": "The file is larger than 1 MiB, the most this page edits."
+    "too_large": "The file is larger than 1 MiB, the most this page edits.",
+    "empty_placeholder": "The file is empty. Write its settings here; the file is made when you save."
   },
   "channel_accounts": {
     "title": "Messaging accounts",

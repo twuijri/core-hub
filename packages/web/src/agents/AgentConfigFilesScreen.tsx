@@ -152,17 +152,20 @@ function FileEditor({ agentId, listed }: { agentId: string | undefined; listed: 
         {dirty && <Badge tone="accent">{t('config_files.unsaved')}</Badge>}
       </div>
       <p className="text-xs text-muted">{t(`config_files.about_${listed.key}`)}</p>
-      <CodeEditor
-        value={content}
-        onChange={(next) => {
-          setSaved(false);
-          setDraft(next);
-        }}
-        fileName={name}
-        label={labelOf(listed, t)}
-        onSave={onSave}
-        testId="config-file-editor"
-      />
+      <div className="files-editor-frame">
+        <CodeEditor
+          value={content}
+          onChange={(next) => {
+            setSaved(false);
+            setDraft(next);
+          }}
+          fileName={name}
+          label={labelOf(listed, t)}
+          onSave={onSave}
+          testId="config-file-editor"
+          placeholder={t('config_files.empty_placeholder')}
+        />
+      </div>
       {save.isError && (
         <div data-testid="config-file-error">
           <Notice tone="danger">

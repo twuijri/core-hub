@@ -55,11 +55,15 @@ async function enter(page: Page, name: string) {
 }
 
 async function newTask(page: Page, slug: string, title: string) {
-  const input = page.getByTestId('new-task-input');
+  const button = page.getByTestId('new-task');
   // Where it is made is said on the screen: the top profile, nothing else.
-  await expect(input).toHaveAttribute('data-profile', slug);
-  await input.fill(title);
-  await page.getByTestId('new-task').click();
+  await expect(button).toHaveAttribute('data-profile', slug);
+  await button.click();
+  const dialog = page.getByTestId('new-task-dialog');
+  await expect(dialog.getByTestId('new-task-form')).toHaveAttribute('data-profile', slug);
+  await dialog.getByTestId('new-task-title').fill(title);
+  await dialog.getByTestId('new-task-save').click();
+  await expect(dialog).toBeHidden();
 }
 
 async function newSchedule(page: Page, slug: string, name: string) {
@@ -88,7 +92,8 @@ test('26. the Tasks board and the Schedules page hold every profile, each item b
   await newTask(page, 'default', `مهمة الافتراضي ${word}`);
   await enter(page, 'Designer');
   await newTask(page, 'designer', `مهمة المصمم ${word}`);
-  await page.getByTestId('task-intake-toggle').click();
+  // Intake opened on its own to show the new card.
+  await expect(page.getByTestId('task-intake')).toHaveAttribute('data-open', 'true');
 
   // Both on the one board, whichever profile the top says, each with its badge; no filter.
   const inDefault = page.getByTestId('task-card').filter({ hasText: `مهمة الافتراضي ${word}` });

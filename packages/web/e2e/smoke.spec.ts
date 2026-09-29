@@ -512,9 +512,12 @@ test.describe('web smoke journeys', () => {
     );
 
     // A new task lands in intake, which is where a task is specified before it queues.
-    await page.getByTestId('new-task-input').fill('اكتب خطة الإطلاق');
+    // A new task is written in its dialog; it lands in intake, which opens to show it.
     await page.getByTestId('new-task').click();
-    await page.getByTestId('task-intake-toggle').click();
+    await page.getByTestId('new-task-title').fill('اكتب خطة الإطلاق');
+    await page.getByTestId('new-task-save').click();
+    await expect(page.getByTestId('new-task-dialog')).toBeHidden();
+    await expect(page.getByTestId('task-intake')).toHaveAttribute('data-open', 'true');
     // Hermes's finished card (journey 17) sits in Done; this journey drives its own card.
     const card = page.getByTestId('task-card').filter({ hasText: 'اكتب خطة الإطلاق' });
     await expect(page.locator('[data-testid="task-intake"] [data-testid="task-card"]')).toHaveCount(
@@ -1228,9 +1231,12 @@ test.describe('web smoke journeys', () => {
   }) => {
     await login(page);
     await page.getByRole('link', { name: 'المهام' }).click();
-    await page.getByTestId('new-task-input').fill('جهّز ملاحظات الإصدار');
+    // A new task is written in its dialog; it lands in intake, which opens to show it.
     await page.getByTestId('new-task').click();
-    await page.getByTestId('task-intake-toggle').click();
+    await page.getByTestId('new-task-title').fill('جهّز ملاحظات الإصدار');
+    await page.getByTestId('new-task-save').click();
+    await expect(page.getByTestId('new-task-dialog')).toBeHidden();
+    await expect(page.getByTestId('task-intake')).toHaveAttribute('data-open', 'true');
     const card = page.getByTestId('task-card').filter({ hasText: 'جهّز ملاحظات الإصدار' });
     await expect(card).toHaveAttribute('data-status', 'triage');
 

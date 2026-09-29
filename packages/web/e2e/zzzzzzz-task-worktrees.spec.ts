@@ -42,9 +42,12 @@ test('a started task works in its own git worktree, shown in its details and rem
   await expect(settings).toBeHidden();
 
   // A task, assigned and started.
-  await page.getByTestId('new-task-input').fill('Release notes');
+  // A new task is written in its dialog; it lands in intake, which opens to show it.
   await page.getByTestId('new-task').click();
-  await page.getByTestId('task-intake-toggle').click();
+  await page.getByTestId('new-task-title').fill('Release notes');
+  await page.getByTestId('new-task-save').click();
+  await expect(page.getByTestId('new-task-dialog')).toBeHidden();
+  await expect(page.getByTestId('task-intake')).toHaveAttribute('data-open', 'true');
   const card = page.getByTestId('task-card').filter({ hasText: 'Release notes' });
   await card.getByTestId('task-more').click();
   await page.getByRole('menuitem', { name: 'إسناد إلى وكيل…' }).click();

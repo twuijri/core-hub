@@ -235,6 +235,11 @@ describe("a coding agent's config files", () => {
 
     const editor = (await screen.findByTestId('config-file-editor-input')) as HTMLTextAreaElement;
     expect(editor.value).toBe('# notes\n');
+    // The editor sits in a visible frame and says where to write when the file is empty.
+    expect(screen.getByTestId('config-file-editor').parentElement?.className).toContain(
+      'files-editor-frame',
+    );
+    expect(editor.placeholder).toContain('The file is empty');
     expect(screen.getByTestId('config-file-path').textContent).toBe('~/.claude/CLAUDE.md');
     const save = screen.getByTestId('config-file-save') as HTMLButtonElement;
     expect(save.disabled).toBe(true);
