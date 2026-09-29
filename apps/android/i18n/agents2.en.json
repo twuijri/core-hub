@@ -399,5 +399,14 @@
   "agents2_wh_copy_url": "Copy address",
   "agents2_wh_copy_secret": "Copy secret",
   "agents2_mcp_row_open": "Open",
-  "agents2_mcp_row_folded": "Folded"
+  "agents2_mcp_row_folded": "Folded",
+  "agents2_mcp_tool_count": "%1$s tools",
+  "agents2_mcp_tool_count_filtered": "%1$s of %2$s tools",
+  "agents2_mcp_test_failed_short": "Test failed",
+  "agents2_mcp_tools_stale": "This server's settings changed after the last test, so the list may be out of date. Test it again.",
+  "agents2_mcp_access_read": "Reads",
+  "agents2_mcp_access_write": "Changes",
+  "agents2_mcp_access_unknown": "Unclear",
+  "agents2_mcp_tool_off": "Off for the agent",
+  "agents2_mcp_tools_pick_on_web": "Choose which tools the agent may use on the web, on this server's MCP page."
 }

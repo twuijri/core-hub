@@ -181,6 +181,38 @@ export interface McpServer {
   updated_at: string;
   /** A remote server's OAuth sign-in in this profile (DECISIONS §122); absent on older hubs. */
   oauth?: McpOAuthState;
+  /**
+   * The last test the hub kept for this server in this profile (DECISIONS §134): `null` when
+   * never tested, absent on hubs that keep none (the page then tests on demand as before).
+   */
+  last_test?: McpLastTest | null;
+  /** Which tools Hermes gives the agent (DECISIONS §134); absent on older hubs. */
+  tool_filter?: McpToolFilter;
+}
+
+/** Hermes's `tools.include` / `tools.exclude` of a server; both null — every tool. */
+export interface McpToolFilter {
+  include: string[] | null;
+  exclude: string[] | null;
+}
+
+export type McpToolAccess = 'read' | 'write' | 'unknown';
+
+export interface McpTestedTool {
+  name: string;
+  description: string | null;
+  access: McpToolAccess;
+  access_source: 'annotation' | 'name';
+}
+
+export interface McpLastTest {
+  ok: boolean;
+  tools: McpTestedTool[];
+  tool_count: number;
+  error: string | null;
+  tested_at: string;
+  duration_ms: number;
+  stale: boolean;
 }
 
 /** Whether a remote server is signed in by OAuth in the selected profile. Never a token. */
@@ -256,6 +288,7 @@ export function useUpdateMcpServer(agentId: string | undefined) {
       name: string;
       enabled?: boolean;
       config?: Record<string, unknown>;
+      tool_filter?: McpToolFilter;
     }) =>
       (
         await client.request('patch', '/agents/{agent_id}/mcp-servers/{server_name}', {
@@ -263,6 +296,7 @@ export function useUpdateMcpServer(agentId: string | undefined) {
           body: {
             ...(input.enabled === undefined ? {} : { enabled: input.enabled }),
             ...(input.config === undefined ? {} : { config: input.config }),
+            ...(input.tool_filter === undefined ? {} : { tool_filter: input.tool_filter }),
           } as never,
         })
       ).data,
@@ -925,7 +959,8 @@ export interface McpTestResult {
 }
 
 export function useTestMcpServer(agentId: string | undefined) {
-  const { client } = useAuth();
+  const { client, profile } = useAuth();
+  const queryClient = useQueryClient();
   return useMutation({
     mutationFn: async (name: string) =>
       (
@@ -933,6 +968,10 @@ export function useTestMcpServer(agentId: string | undefined) {
           params: { agent_id: agentId ?? '', server_name: name },
         })
       ).data as unknown as McpTestResult,
+    // The hub keeps the answer as the server's last test (DECISIONS §134): the test is done once
+    // the list carries it, so the row never shows the new answer beside the old list.
+    onSuccess: () =>
+      queryClient.invalidateQueries({ queryKey: mcpKeys.list(profile, agentId ?? '') }),
   });
 }
 

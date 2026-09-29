@@ -179,8 +179,11 @@ import {
   getMcpServer,
   listMcpServers,
   putMcpServer,
+  setMcpToolFilter,
   type McpServer,
+  type McpToolFilter,
 } from './mcp.js';
+import { McpTestStore, readOnlyHints, viewOfTest } from './mcp-last-test.js';
 import {
   SkillError,
   categoryDescription,
@@ -468,6 +471,8 @@ interface AgentsContext {
   hermesCli(): HermesCli | null;
   /** Hermes's `mcp login`, or `null` where the hub does not run Hermes (DECISIONS §122). */
   mcpLogin(): McpLoginSpawner | null;
+  /** The last test of each MCP server, per profile home (DECISIONS §134). */
+  mcpTests: McpTestStore;
   /** Hermes's own Python, or `null` where the hub does not supervise Hermes. */
   hermesPython(): HermesPython | null;
   pairingPollMs: number;
@@ -852,6 +857,7 @@ function contextOf(app: FastifyInstance): AgentsContext {
       if (mode !== 'managed' || !home || !command) return null;
       return mcpLoginSpawner({ command, env: () => runtime.cliEnv() });
     },
+    mcpTests: new McpTestStore(hub.config.dataDir),
     hermesPython: () => {
       if (own.hermesPython) return own.hermesPython;
       const { mode, home } = runtime.status();
@@ -1661,19 +1667,42 @@ export const agentsModule = defineModule({
      * remote server also says whether it is signed in by OAuth in this profile, read from the
      * metadata of Hermes's token file, never its values (`mcp-oauth.ts`, DECISIONS §122).
      */
-    const toMcpServer = (server: McpServer, home: string): Record<string, unknown> => ({
-      name: server.name,
-      transport: server.transport,
-      enabled: server.enabled,
-      connected: false,
-      tools: [],
-      error: null,
-      config: server.config,
-      updated_at: new Date().toISOString(),
-      ...(server.transport === 'stdio'
-        ? {}
-        : { oauth: oauthStateOf(home, server.name, server.oauth) }),
-    });
+    const toMcpServer = (server: McpServer, home: string): Record<string, unknown> => {
+      // The last test the hub kept, and whether the server changed since (DECISIONS §134).
+      const kept = contextOf(app).mcpTests.get(home, server.name);
+      return {
+        name: server.name,
+        transport: server.transport,
+        enabled: server.enabled,
+        connected: false,
+        tools: [],
+        error: null,
+        config: server.config,
+        updated_at: new Date().toISOString(),
+        ...(server.transport === 'stdio'
+          ? {}
+          : { oauth: oauthStateOf(home, server.name, server.oauth) }),
+        last_test: kept
+          ? viewOfTest(kept, server.fingerprint, readOnlyHints(home, server.name))
+          : null,
+        tool_filter: server.toolFilter,
+      };
+    };
+
+    /** Keep what Hermes said about `name` in this profile, on the settings it was said about. */
+    const rememberTest = (
+      home: string,
+      name: string,
+      result: Parameters<McpTestStore['put']>[2],
+    ): void => {
+      try {
+        const server = getMcpServer(home, name);
+        if (server) contextOf(app).mcpTests.put(home, name, result, server.fingerprint);
+      } catch (error) {
+        // Not kept is not lost: the answer still goes back to whoever asked.
+        app.log.warn({ err: error, server: name }, 'agents: could not keep an MCP test result');
+      }
+    };
 
     defineRoute(app, deps, {
       operationId: 'agents.listMcpServers',
@@ -1722,17 +1751,29 @@ export const agentsModule = defineModule({
       handler: (request, { params, body }) => {
         const home = skillHome(request, params.agent_id as string);
         const name = params.server_name as string;
-        const patch = body as { enabled?: boolean; config?: Record<string, unknown> };
+        const patch = body as {
+          enabled?: boolean;
+          config?: Record<string, unknown>;
+          tool_filter?: McpToolFilter;
+        };
         refuseManaged(name);
         try {
           if (!getMcpServer(home, name)) throw notFound({ resource: 'mcp_server', id: name });
-          return toMcpServer(
-            putMcpServer(home, name, {
-              ...(patch.enabled === undefined ? {} : { enabled: patch.enabled }),
-              ...(patch.config === undefined ? {} : { config: patch.config }),
-            }),
-            home,
-          );
+          let written =
+            patch.enabled === undefined && patch.config === undefined
+              ? null
+              : putMcpServer(home, name, {
+                  ...(patch.enabled === undefined ? {} : { enabled: patch.enabled }),
+                  ...(patch.config === undefined ? {} : { config: patch.config }),
+                });
+          // Which tools Hermes gives the agent, after the config it belongs to (§134).
+          if (patch.tool_filter !== undefined) {
+            written = setMcpToolFilter(home, name, {
+              include: patch.tool_filter.include ?? null,
+              exclude: patch.tool_filter.exclude ?? null,
+            });
+          }
+          return toMcpServer(written ?? getMcpServer(home, name)!, home);
         } catch (error) {
           return mcpFault(error);
         }
@@ -1749,6 +1790,7 @@ export const agentsModule = defineModule({
         } catch (error) {
           return mcpFault(error);
         }
+        contextOf(request.server).mcpTests.forget(home, params.server_name as string);
         return null;
       },
     });
@@ -1766,12 +1808,14 @@ export const agentsModule = defineModule({
           return mcpFault(error);
         }
         if (!server) throw notFound({ resource: 'mcp_server', id: name });
-        return testMcpServer(hermesApiOf(request, agentId), {
+        const result = await testMcpServer(hermesApiOf(request, agentId), {
           profile,
           name,
           config: server.config,
           language: request.language,
         });
+        rememberTest(home, name, result);
+        return result;
       },
     });
 
@@ -1780,6 +1824,7 @@ export const agentsModule = defineModule({
       loginSpawner: (server) => contextOf(server).mcpLogin(),
       hermesApi: (server) => contextOf(server).hermesApi(),
       toMcpServer,
+      rememberTest,
       refuseManaged,
       mcpFault,
       apiBase: serverBasePath(document),

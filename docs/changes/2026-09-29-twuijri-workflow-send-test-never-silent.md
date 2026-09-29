@@ -34,7 +34,7 @@
 
 ## القرار والموافقات
 
-(DECISIONS §134، مقترح — للمالك أن يؤكد)
+(DECISIONS §135، مقترح — للمالك أن يؤكد)
 
 - **الويب لا يصمت** (`SendForm.tsx`، `queries.ts`): أثناء العمل «تُرسَل الرسالة التجريبية…»؛ النجاح
   يعرض الحالة و«أُرسلت إلى» الوجهة و«معرّف الرسالة» (كل منهما في عنصر LTR مستقل فيُنسخ بلا علامات)؛
@@ -67,7 +67,7 @@
 
 - الخادم: `packages/server/src/modules/schedules/{send.ts,workflow-engine.ts,index.ts}`؛
   الاختبارات `workflow-send.test.ts`.
-- العقد: `packages/contracts/openapi.yaml`؛ `docs/contracts/DECISIONS.md` §134.
+- العقد: `packages/contracts/openapi.yaml`؛ `docs/contracts/DECISIONS.md` §135.
 - الويب: `schedules/workflows/{SendForm.tsx,queries.ts,StepPanel.tsx,WorkflowEditor.tsx,PanelBoundary.tsx}`،
   `screens/WorkflowsScreen.tsx`، `i18n/{ar,en}.json`؛ الاختبارات `tests/workflow-editor.test.tsx`،
   `tests/workflow-panel-boundary.test.tsx` (جديد)، `e2e/zzzzzz-workflow-send-test.spec.ts` (جديد).

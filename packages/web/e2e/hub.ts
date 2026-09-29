@@ -1039,6 +1039,18 @@ const scriptedHermesApi: HermesApiCall = async <T>(
         })
       : answer({ ok: false, error: 'OAuth authentication required — no token found.', tools: [] });
   }
+  if (mcp && mcp[1] === 'picker') {
+    // A server whose tools read and write, for the tool picker (DECISIONS §134).
+    return answer({
+      ok: true,
+      tools: [
+        { name: 'get_issue', description: 'Read one issue.' },
+        { name: 'list_repos', description: 'List the repositories.' },
+        { name: 'create_issue', description: 'Open an issue.' },
+        { name: 'delete_repo', description: 'Delete a repository.' },
+      ],
+    });
+  }
   if (mcp) {
     return mcp[1] === 'broken'
       ? answer({
