@@ -137,6 +137,7 @@ describe('workflow editor: the drawing', () => {
           approval_required: false,
           rules: null,
           send: null,
+          conversation: null,
           position: state.draft.nodes[0]!.position,
         },
         {
@@ -152,6 +153,7 @@ describe('workflow editor: the drawing', () => {
           approval_required: false,
           rules: null,
           send: null,
+          conversation: null,
           position: state.draft.nodes[1]!.position,
         },
       ],

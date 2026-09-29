@@ -28,6 +28,8 @@ import {
 } from '../../ui/index.js';
 import { Combobox } from '../../ui/Combobox.js';
 import { SendForm } from './SendForm.js';
+import { ConversationForm } from './ConversationForm.js';
+import { chatHref } from '../../chat/anchor.js';
 import { StepTest } from './StepTest.js';
 import { chatModels } from '../../models/queries.js';
 import { modelOption } from '../../models/useModelPicker.js';
@@ -207,7 +209,17 @@ export function StepPanel({
       </p>
 
       {node.kind === 'agent' && (
-        <AgentForm draft={draft} node={node} update={update} agents={agents} models={models} />
+        <>
+          <AgentForm draft={draft} node={node} update={update} agents={agents} models={models} />
+          {/* A new conversation every run, or the same one (§136). */}
+          <ConversationForm
+            key={node.id}
+            node={node}
+            profile={profile ?? 'default'}
+            agents={agents}
+            update={update}
+          />
+        </>
       )}
       {node.kind === 'condition' && <ConditionForm draft={draft} node={node} update={update} />}
       {node.kind === 'delay' && <DelayForm node={node} update={update} />}
@@ -925,9 +937,12 @@ export function StepRunPanel({
   gate,
   onRerunFrom,
   rerunBusy,
+  profile = null,
 }: {
   node: WfNode | null;
   step: RunStep | null;
+  /** The workflow's profile, where the step's conversation opens (§136). */
+  profile?: string | null;
   state: NodeRunState | null;
   /** The approval gate of a step waiting for a person. */
   gate: ReactNode;
@@ -954,6 +969,16 @@ export function StepRunPanel({
         )}
       </div>
       {!step && <p className="text-xs text-muted">{t('workflows.editor.step_not_reached')}</p>}
+      {step?.session_id && (
+        // Where the agent talked, opened at its reply (§136).
+        <a
+          className="self-start text-xs text-accent underline-offset-2 hover:underline"
+          href={chatHref(step.session_id, step.message_id ?? null, undefined, profile)}
+          data-testid="workflow-step-conversation"
+        >
+          {t('workflows.conversation.open')}
+        </a>
+      )}
       {gate}
       {step?.error && (
         <Notice tone="danger">

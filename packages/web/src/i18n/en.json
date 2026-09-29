@@ -1789,7 +1789,10 @@
       "send_no_target": "This step sends nowhere: choose Telegram or a conversation.",
       "send_platform_unknown": "Target {detail} names a platform this hub cannot send to.",
       "send_chat_missing": "Target {detail} has no Telegram chat id.",
-      "send_conversation_missing": "Target {detail} names no conversation."
+      "send_conversation_missing": "Target {detail} names no conversation.",
+      "conversation_mode_unknown": "This step’s conversation mode is not one this hub knows.",
+      "conversation_id_missing": "Choose the conversation this step talks in, or paste its id.",
+      "conversation_id_invalid": "This step’s conversation id is not a conversation id."
     },
     "triggers": {
       "title": "Triggers",
@@ -1879,6 +1882,39 @@
         "no_chat": "Type the Telegram chat id first.",
         "no_conversation": "Choose the conversation first.",
         "no_text": "Write the message first."
+      }
+    },
+    "conversation": {
+      "label": "Conversation",
+      "mode_new": "A new conversation for each run",
+      "mode_new_hint": "Each run opens its own conversation (as before).",
+      "mode_reuse": "The same conversation every run",
+      "mode_reuse_hint": "Each run sends its prompt into one existing conversation, so its history stays in one place.",
+      "pick": "Choose the conversation",
+      "pick_placeholder": "Search this profile’s conversations",
+      "count": "{count} conversations",
+      "none": "No conversations in this profile yet.",
+      "last_active": "Last active {when}",
+      "paste_id": "Paste a conversation id instead",
+      "use_list": "Choose from the list instead",
+      "id": "Conversation id",
+      "id_hint": "The id of a conversation in this profile, or a variable such as {{trigger.body.conversation}} filled when the step runs.",
+      "template_note": "This id is a variable: it is filled when the step runs, so it cannot be tested now.",
+      "not_an_id": "This is not a conversation id. Paste the whole id, or choose from the list.",
+      "none_yet": "Choose a conversation, or paste its id.",
+      "test": "Test conversation",
+      "open": "Open conversation",
+      "create_if_missing": "Create if missing",
+      "create_on_hint": "If the conversation no longer exists, a run makes a new one with this step’s agent and the title below, and the step then uses it (the inbox says so).",
+      "create_off_hint": "If the conversation is missing, deleted or not in this profile, the step fails and says why. No new conversation is made.",
+      "new_title": "Title of a new conversation",
+      "agent_hint": "The conversation keeps its own agent: the step’s agent must be the same one, or leave the agent empty to use the conversation’s. Runs that reach it at the same time take turns.",
+      "status": {
+        "ready": "“{title}” is ready. Its agent is {agent}, and it is free now.",
+        "busy": "“{title}” exists, but a turn is going on in it. A run would wait for it to end (up to 10 minutes).",
+        "not_found": "No such conversation in this profile. It was deleted, never made, or belongs to another profile.",
+        "not_allowed": "“{title}” is a room seat’s or another person’s assistant. A workflow cannot talk in it.",
+        "agent_mismatch": "“{title}” belongs to {agent}, not this step’s agent. Pick the same agent, or leave the step’s agent empty."
       }
     },
     "alert": {

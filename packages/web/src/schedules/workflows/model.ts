@@ -36,7 +36,43 @@ export interface WfNode {
   rules: Rules | null;
   /** A notice that sends its words to Telegram and/or a conversation (§124); `null`: the inbox. */
   send: Send | null;
+  /**
+   * An agent step's conversation (§136): `null` or absent, a new one every run; `reuse`, the
+   * one `session_id` names. Optional so drawings made before it need nothing.
+   */
+  conversation?: Conversation | null;
   position: Position;
+}
+
+/** Which conversation an agent step talks in (`WorkflowAgentConversation`, §136). */
+export interface Conversation {
+  /** `new` or `reuse`; a mode this client does not know is kept as it is. */
+  mode: string;
+  /** `reuse`: the conversation's id, or a template filled when the step runs. */
+  session_id?: string | null;
+  /** `reuse`: make it when it does not exist (off: the step fails instead). */
+  create_if_missing?: boolean;
+  /** The title of a conversation made for the step (a template). */
+  title?: string | null;
+}
+
+/** Whether the step talks in one existing conversation (§136). */
+export function reusesConversation(node: Pick<WfNode, 'kind' | 'conversation'>): boolean {
+  return node.kind === 'agent' && node.conversation?.mode === 'reuse';
+}
+
+/** A saved conversation field, kept as the hub has it; `null` when there is none. */
+export function conversationOf(value: unknown): Conversation | null {
+  if (!value || typeof value !== 'object') return null;
+  const raw = value as Record<string, unknown>;
+  if (typeof raw.mode !== 'string') return null;
+  return {
+    ...raw,
+    mode: raw.mode,
+    session_id: typeof raw.session_id === 'string' ? raw.session_id : null,
+    create_if_missing: raw.create_if_missing === true,
+    title: typeof raw.title === 'string' ? raw.title : null,
+  };
 }
 
 /** One place a "Send message" step's words go (`WorkflowSendTarget`). */
@@ -182,6 +218,7 @@ export function newNode(
     approval_required: false,
     rules: null,
     send: null,
+    conversation: null,
     position,
   };
 }
@@ -339,6 +376,7 @@ export function fromWorkflow(workflow: WorkflowLike): Draft {
       approval_required: raw.approval_required === true,
       rules: raw.kind === 'condition' ? rulesOf(raw.rules) : null,
       send: raw.kind === 'notify' ? sendOf(raw.send) : null,
+      conversation: raw.kind === 'agent' ? conversationOf(raw.conversation) : null,
       position: {
         x: Number(raw.position?.x ?? 0) || 0,
         y: Number(raw.position?.y ?? 0) || 0,
@@ -401,6 +439,8 @@ export function toWrite(draft: Draft) {
         node.kind === 'notify' && node.send
           ? { targets: node.send.targets.map((target) => ({ ...target })) }
           : null,
+      // An agent step's conversation (§136); `null` is a new one every run.
+      conversation: node.kind === 'agent' && node.conversation ? { ...node.conversation } : null,
       position: { x: node.position.x, y: node.position.y },
     })),
     edges: draft.edges.map((edge) => ({ ...edge })),
@@ -523,6 +563,9 @@ export interface RunStep {
   attempt: number;
   status: string;
   approval_id: string | null;
+  /** Where an agent step talked, and its reply (§136); absent from an older hub. */
+  session_id?: string | null;
+  message_id?: string | null;
   output?: string | null;
   route?: 'success' | 'failure' | null;
   error: string | null;

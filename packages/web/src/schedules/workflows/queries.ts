@@ -416,6 +416,38 @@ export interface ConversationRow {
   id: string;
   title: string | null;
   agent_id: string;
+  /** When someone last wrote in it; shown next to the title in the picker (§136). */
+  last_message_at?: string | null;
+  updated_at?: string | null;
+  source?: string;
+}
+
+/** "Test conversation" (§136): how the conversation stands for the step, from the hub. */
+export interface ConversationCheck {
+  status: 'ready' | 'busy' | 'not_found' | 'not_allowed' | 'agent_mismatch' | (string & {});
+  session_id: string;
+  title: string | null;
+  agent_id: string | null;
+  active_run_id: string | null;
+  last_message_at?: string | null;
+  reason: string | null;
+}
+
+/**
+ * Whether an agent step may talk in a conversation (§136): the rules the run applies,
+ * nothing sent. The profile is the workflow's.
+ */
+export function useConversationCheck(profile: string) {
+  const { client } = useAuth();
+  return useMutation({
+    mutationFn: async ({ sessionId, agentId }: { sessionId: string; agentId: string | null }) =>
+      (
+        await client.request('post', '/workflows/conversation-check', {
+          body: { session_id: sessionId, agent_id: agentId } as never,
+          ...inProfile(profile),
+        })
+      ).data as unknown as ConversationCheck,
+  });
 }
 
 export function useProfileConversations(profile: string, enabled: boolean) {

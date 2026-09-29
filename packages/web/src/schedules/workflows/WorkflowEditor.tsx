@@ -792,6 +792,7 @@ function RunView({
           <StepRunPanel
             node={node}
             step={step}
+            profile={profile}
             state={node ? (states.get(node.id) ?? null) : null}
             gate={node ? gateFor(node.id, false) : null}
             onRerunFrom={

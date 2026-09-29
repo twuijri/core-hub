@@ -56,6 +56,11 @@ export interface ComboboxProps {
   recent?: readonly string[];
   disabled?: boolean;
   testId?: string;
+  /**
+   * What the rows are, for the count and the empty list: message keys taking `{count}` and
+   * nothing. Models when not given (the picker was made for them).
+   */
+  nouns?: { count: string; none: string };
 }
 
 const ROW = 46;
@@ -73,6 +78,7 @@ export function Combobox({
   recent = [],
   disabled = false,
   testId,
+  nouns = { count: 'combobox.count', none: 'combobox.none' },
 }: ComboboxProps) {
   const { t } = useI18n();
   const [open, setOpen] = useState(false);
@@ -239,7 +245,7 @@ export function Combobox({
     if (rows.length === 0) {
       return (
         <p className="ch-combo-state" data-testid="combobox-empty" role="status">
-          {query.trim() === '' ? t('combobox.none') : t('combobox.no_match', { query })}
+          {query.trim() === '' ? t(nouns.none) : t('combobox.no_match', { query })}
         </p>
       );
     }
@@ -343,7 +349,7 @@ export function Combobox({
       {body()}
       {status === 'ready' && rows.length > 0 && (
         <p className="ch-combo-count" role="status">
-          {t('combobox.count', {
+          {t(nouns.count, {
             count: options.filter((o) =>
               rows.some((r) => r.kind === 'option' && r.option.value === o.value),
             ).length,
