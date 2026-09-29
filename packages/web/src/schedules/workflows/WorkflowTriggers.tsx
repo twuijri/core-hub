@@ -419,7 +419,7 @@ function Deliveries({
       {rows.length === 0 ? (
         <p className="text-xs text-muted">{t('workflows.triggers.no_deliveries')}</p>
       ) : (
-        <ul className="flex flex-col gap-1">
+        <ul className="flex min-w-0 flex-col gap-1">
           {rows.map((row) => (
             <DeliveryLine key={row.id} row={row} when={when} onShowRun={onShowRun} />
           ))}
@@ -441,7 +441,7 @@ function DeliveryLine({
   const { t } = useI18n();
   return (
     <li
-      className="flex flex-col gap-0.5 rounded-md bg-sunken px-2 py-1 text-xs"
+      className="flex min-w-0 flex-col gap-0.5 overflow-hidden rounded-md bg-sunken px-2 py-1 text-xs"
       data-testid="workflow-trigger-delivery"
       data-status={row.status}
       data-filtered={String(row.filtered)}
@@ -455,13 +455,19 @@ function DeliveryLine({
         <span className="text-muted">{when(row.received_at)}</span>
       </span>
       {(row.event || row.task_id) && (
-        <span dir="ltr" className="font-mono">
+        // Ids from the sender (ClickUp's history items, a task id) are long and unbroken: they
+        // wrap anywhere rather than run out of the panel.
+        <span dir="ltr" className="font-mono break-all">
           {[row.event, row.task_id && `task ${row.task_id}`, row.event_id && `#${row.event_id}`]
             .filter(Boolean)
             .join(' · ')}
         </span>
       )}
-      {row.error && <span dir="auto">{row.error}</span>}
+      {row.error && (
+        <span dir="auto" className="[overflow-wrap:anywhere]">
+          {row.error}
+        </span>
+      )}
       {row.workflow_run_id && (
         <button
           type="button"
