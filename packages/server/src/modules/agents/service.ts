@@ -1485,7 +1485,10 @@ export class AgentsService implements UpdatePolicyStore {
         .set({
           installState: health.ok ? 'installed' : 'failed',
           source: 'managed',
-          executablePath: `${this.options.installer.binDirFor(entry.id)}/${entry.binary}`,
+          // The program actually there: an install from before a rename runs the old one (§139).
+          executablePath:
+            this.options.installer.executablePath?.(entry) ??
+            `${this.options.installer.binDirFor(entry.id)}/${entry.binary}`,
           // A bridge that prints no version (`claude-code-acp`) keeps the one its install read.
           version: health.version ?? now.version,
           detectedAt: at,

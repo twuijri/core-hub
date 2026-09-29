@@ -24,6 +24,7 @@ import { kimiCode } from './kimi-code.js';
 import { opencode } from './opencode.js';
 import { pi } from './pi.js';
 import { qwenCode } from './qwen-code.js';
+import { NEVER_PASSED } from '../adapters/child-env.js';
 import { DOWNLOAD_PLATFORMS, type CatalogEntry } from './types.js';
 
 export * from './types.js';
@@ -140,6 +141,23 @@ export function assertCatalogIsWellFormed(catalog: readonly CatalogEntry[] = CAT
         throw new Error(`catalog: builtin "${entry.id}" needs an Arabic name (TEAM-RULES §4)`);
       }
     }
+    // §139: a host variable an entry names is a name or a `PREFIX_*`, and never one of the
+    // hub's own — the allow-list would refuse it anyway, but a catalog that asks for it is wrong.
+    for (const name of entry.hostEnv ?? []) {
+      if (!/^[A-Za-z_][A-Za-z0-9_]*\*?$/.test(name)) {
+        throw new Error(`catalog: "${entry.id}" names a host variable "${name}" it cannot`);
+      }
+      if (NEVER_PASSED.some((never) => overlaps(name, never))) {
+        throw new Error(`catalog: "${entry.id}" asks for the hub's own variable "${name}"`);
+      }
+    }
+    if (entry.install.kind === 'npm') {
+      for (const legacy of entry.install.legacy ?? []) {
+        if (legacy.package === entry.install.package || !legacy.binary) {
+          throw new Error(`catalog: "${entry.id}" names "${legacy.package}" as its own old name`);
+        }
+      }
+    }
     // ADR 0010: an agent's credential line is the only place a variable is renamed, so a
     // typo here would silently start the agent without a key it was supposed to inherit.
     for (const [family, variable] of Object.entries(entry.credentials)) {
@@ -154,6 +172,16 @@ export function assertCatalogIsWellFormed(catalog: readonly CatalogEntry[] = CAT
       }
     }
   }
+}
+
+/** Whether two variable patterns (`NAME` or `PREFIX_*`) can match the same name. */
+function overlaps(a: string, b: string): boolean {
+  const stem = (value: string) => (value.endsWith('*') ? value.slice(0, -1) : value);
+  if (a.endsWith('*') && b.endsWith('*'))
+    return stem(a).startsWith(stem(b)) || stem(b).startsWith(stem(a));
+  if (a.endsWith('*')) return b.startsWith(stem(a));
+  if (b.endsWith('*')) return a.startsWith(stem(b));
+  return a === b;
 }
 
 /**

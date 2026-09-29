@@ -132,6 +132,7 @@ import { SkillImportError, installPack, planImport, type UploadedFile } from './
 import { createNpmInstaller, managedBinDirs, type AgentInstaller } from './installer.js';
 import { AgentSignIns, type SpawnSignIn } from './agent-sign-in.js';
 import { agentEnvironment } from './adapters/acp.js';
+import { hostEnvNames } from './adapters/child-env.js';
 import type { AgentDirectoryPort, AgentInfo, AgentModelsPort, AgentRunnerPort } from './ports.js';
 import { AgentRunner } from './runner.js';
 import { ConfigFileError, ConfigFileStore } from './config-files.js';
@@ -2120,7 +2121,12 @@ export const agentsModule = defineModule({
           });
         }
         const ctx = contextOf(request.server);
-        const env = agentEnvironment(ctx.agentInherited, { executablePath: row.executablePath });
+        // Only the agent's own variables, as when it runs (§139).
+        const env = agentEnvironment(
+          ctx.agentInherited,
+          { executablePath: row.executablePath },
+          hostEnvNames(entry),
+        );
         const started = await ctx.signIns.start(
           agentId,
           [row.executablePath, ...entry.signIn.args],

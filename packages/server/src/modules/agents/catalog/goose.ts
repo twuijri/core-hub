@@ -10,6 +10,7 @@
 // HTTP and session list/close. A session starts only once `GOOSE_PROVIDER` and `GOOSE_MODEL`
 // are set — in its `config.yaml`, which the agent's Config files page edits
 // (`../config-files.ts`) — and it reads the provider's key from the standard variable.
+import { PROVIDER_HOST_ENV } from './provider-env.js';
 import type { CatalogEntry } from './types.js';
 
 const release = 'https://github.com/aaif-goose/goose/releases/download/v1.52.0';
@@ -65,6 +66,8 @@ export const goose: CatalogEntry = {
     deepseek: 'DEEPSEEK_API_KEY',
     xai: 'XAI_API_KEY',
   },
+  // Goose's own settings (`GOOSE_PROVIDER`, `GOOSE_MODEL` …) and every provider it can use.
+  hostEnv: ['GOOSE_*', ...PROVIDER_HOST_ENV],
   health: { kind: 'command', args: ['--version'] },
   capabilities: ['streaming', 'tools', 'approvals', 'mcp', 'resume', 'config_files'],
   sections: ['mcp', 'settings'],

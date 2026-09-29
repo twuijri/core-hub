@@ -111,6 +111,14 @@ const SOURCES: Readonly<Record<string, AgentSources>> = {
   },
 };
 
+/**
+ * The variables beyond its catalog keys that give an agent a way in — each must reach the agent
+ * when it runs (the allow-list, DECISIONS §139, is tested against this).
+ */
+export function credentialVariables(slug: string): readonly string[] {
+  return Object.hasOwn(SOURCES, slug) ? SOURCES[slug]!.env : [];
+}
+
 const MAX_READ = 1024 * 1024;
 
 function mentions(file: string, pattern: RegExp): boolean {

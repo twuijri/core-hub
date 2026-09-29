@@ -31,7 +31,8 @@ import path from 'node:path';
 import { createInterface } from 'node:readline';
 import { redactSecrets } from '../../../lib/redact-text.js';
 import type { AgentCapability } from '../schema.js';
-import { entriesFor, type CatalogEntry } from '../catalog/index.js';
+import { binaryNames, entriesFor, type CatalogEntry } from '../catalog/index.js';
+import { hostEnvNames, pickHostEnv } from './child-env.js';
 import { EventQueue } from './event-queue.js';
 import {
   SubagentSignals,
@@ -504,16 +505,19 @@ export interface AcpAdapterOptions {
 }
 
 /**
- * What an ACP child starts with: the hub's environment, the agent's own variables, and its
- * own directory first on `PATH`. An adapter that drives a second CLI (Pi's `pi-acp` runs
- * `pi`) then finds the one installed beside it (`catalog/pi.ts`) rather than whatever
- * else the host has on its PATH.
+ * What an ACP child starts with: of the hub's environment only the base every program needs and
+ * the variables its catalog entry names (`names`, from `hostEnvNames`; DECISIONS §139), then
+ * what the hub hands it (`target.env`: the profile's shared keys under the names the agent reads,
+ * its own settings), and its own directory first on `PATH`. An adapter that drives a second CLI
+ * (Pi's `pi-acp` runs `pi`) then finds the one installed beside it (`catalog/pi.ts`) rather than
+ * whatever else the host has on its PATH.
  */
 export function agentEnvironment(
   inherited: NodeJS.ProcessEnv,
   target: Pick<AgentTarget, 'executablePath' | 'env'>,
+  names: readonly string[] = [],
 ): NodeJS.ProcessEnv {
-  const env: NodeJS.ProcessEnv = { ...inherited, ...(target.env ?? {}) };
+  const env: NodeJS.ProcessEnv = { ...pickHostEnv(inherited, names), ...(target.env ?? {}) };
   if (target.executablePath && path.isAbsolute(target.executablePath)) {
     const own = path.dirname(target.executablePath);
     const rest = (env.PATH ?? '').split(path.delimiter).filter((dir) => dir && dir !== own);
@@ -527,6 +531,18 @@ export function createAcpAdapter(options: AcpAdapterOptions): AgentAdapter {
   const catalog = options.catalog ?? entriesFor('acp');
   const clientName = options.clientName ?? derived.serviceName;
   const clientVersion = options.clientVersion ?? ACP_ADAPTER_VERSION;
+  const entryOf = (slug: string) => catalog.find((candidate) => candidate.id === slug);
+  /** A version flag is asked with only the agent's own variables, as a session is (§139). */
+  const versionEnv = (entry: CatalogEntry | undefined) =>
+    host.inherited ? { env: pickHostEnv(host.inherited, hostEnvNames(entry)) } : {};
+  /** The entry's protocol binary on PATH: its own name, then a renamed package's (§139). */
+  const findBinary = (entry: CatalogEntry): { name: string; path: string } | null => {
+    for (const name of binaryNames(entry)) {
+      const found = whichSync(name, host);
+      if (found) return { name, path: found };
+    }
+    return null;
+  };
 
   const openTransport = async (target: AgentTarget): Promise<AcpTransport> => {
     if (options.connect) return options.connect(target);
@@ -535,7 +551,7 @@ export function createAcpAdapter(options: AcpAdapterOptions): AgentAdapter {
     if (!command) throw new Error(`agent ${target.slug} has no command`);
     const child = spawn(target.executablePath ?? command, args, {
       stdio: ['pipe', 'pipe', 'pipe'],
-      env: agentEnvironment(host.inherited ?? {}, target),
+      env: agentEnvironment(host.inherited ?? {}, target, hostEnvNames(entryOf(target.slug))),
       ...(target.cwd ? { cwd: target.cwd } : {}),
     }) as ChildProcessWithoutNullStreams;
     return childProcessTransport(child);
@@ -554,18 +570,19 @@ export function createAcpAdapter(options: AcpAdapterOptions): AgentAdapter {
     async discover(): Promise<DiscoveredAgent[]> {
       const found: DiscoveredAgent[] = [];
       for (const entry of catalog) {
-        const executablePath = whichSync(entry.binary, host);
-        if (!executablePath) continue;
+        const binary = findBinary(entry);
+        if (!binary) continue;
+        const executablePath = binary.path;
         // A bridge with no version flag is not asked (`HealthCheck` `installed`).
         const probe =
           entry.health.kind === 'installed'
             ? { ok: true, stdout: '', stderr: '' }
-            : await runCommand([executablePath, ...entry.versionArgs]);
+            : await runCommand([executablePath, ...entry.versionArgs], versionEnv(entry));
         found.push({
           slug: entry.id,
           name: entry.name,
           vendor: entry.vendor,
-          command: [entry.binary, ...entry.protocolArgs],
+          command: [binary.name, ...entry.protocolArgs],
           executablePath,
           version: parseVersion(`${probe.stdout}${probe.stderr}`),
           capabilities: entry.capabilities,
@@ -576,8 +593,12 @@ export function createAcpAdapter(options: AcpAdapterOptions): AgentAdapter {
     },
 
     async probe(target: AgentTarget): Promise<AgentProbe> {
+      const entry = entryOf(target.slug);
       const binary = target.executablePath ?? target.command[0] ?? target.slug;
-      const executablePath = whichSync(binary, host);
+      // A row that names the entry's new program while an install from before a rename (§139)
+      // has only the old one still finds the old one.
+      const executablePath =
+        whichSync(binary, host) ?? (entry ? findBinary(entry)?.path : null) ?? null;
       if (!executablePath) {
         return {
           installed: false,
@@ -588,13 +609,15 @@ export function createAcpAdapter(options: AcpAdapterOptions): AgentAdapter {
           error: null,
         };
       }
-      const entry = catalog.find((candidate) => candidate.id === target.slug);
       // A bridge with no version flag is not asked; one that refuses the flag is still
       // installed — only a program that cannot start is an error (`HealthCheck`).
       const result =
         entry?.health.kind === 'installed'
           ? { ok: true, stdout: '', stderr: '', error: null, unstartable: false }
-          : await runCommand([executablePath, ...(entry?.versionArgs ?? ['--version'])]);
+          : await runCommand(
+              [executablePath, ...(entry?.versionArgs ?? ['--version'])],
+              versionEnv(entry),
+            );
       return {
         installed: true,
         source: 'user_cli',
