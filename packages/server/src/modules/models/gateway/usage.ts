@@ -48,12 +48,10 @@ export function readUsage(usage: unknown): Partial<CallUsage> | null {
   set('inputTokens', u.prompt_tokens);
   set('outputTokens', u.completion_tokens);
   const promptDetails = (u.prompt_tokens_details ?? u.input_tokens_details) as
-    | Record<string, unknown>
-    | undefined;
+    Record<string, unknown> | undefined;
   if (promptDetails) set('cacheReadTokens', promptDetails.cached_tokens);
   const outputDetails = (u.completion_tokens_details ?? u.output_tokens_details) as
-    | Record<string, unknown>
-    | undefined;
+    Record<string, unknown> | undefined;
   if (outputDetails) set('reasoningTokens', outputDetails.reasoning_tokens);
   return Object.keys(out).length > 0 ? out : null;
 }

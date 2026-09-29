@@ -33,11 +33,22 @@ export function devCliproxyPath(
   arch: string = process.arch,
 ): string {
   const name = platform === 'win32' ? 'cli-proxy-api.exe' : 'cli-proxy-api';
-  return path.join(home, '.cache', 'corehub', 'cliproxy', CLIPROXY_VERSION, `${platform}-${arch}`, name);
+  return path.join(
+    home,
+    '.cache',
+    'corehub',
+    'cliproxy',
+    CLIPROXY_VERSION,
+    `${platform}-${arch}`,
+    name,
+  );
 }
 
 /** The executable to run, or null when this hub has none. */
-export function locateCliproxy(options: { configured: string | null; home?: string }): string | null {
+export function locateCliproxy(options: {
+  configured: string | null;
+  home?: string;
+}): string | null {
   const candidates = [
     options.configured,
     IMAGE_CLIPROXY_PATH,

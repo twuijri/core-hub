@@ -153,14 +153,22 @@ async function fakeChatProvider(): Promise<{ server: Server; url: string; seen: 
           {
             role: 'assistant',
             tool_calls: [
-              { index: 0, id: 'call_1', type: 'function', function: { name: reply.name, arguments: '' } },
+              {
+                index: 0,
+                id: 'call_1',
+                type: 'function',
+                function: { name: reply.name, arguments: '' },
+              },
             ],
           },
           null,
         );
         // Arguments in pieces, as providers stream them.
         for (let at = 0; at < args.length; at += 16) {
-          chunk({ tool_calls: [{ index: 0, function: { arguments: args.slice(at, at + 16) } }] }, null);
+          chunk(
+            { tool_calls: [{ index: 0, function: { arguments: args.slice(at, at + 16) } }] },
+            null,
+          );
         }
         chunk({}, 'tool_calls');
       }
@@ -187,6 +195,7 @@ describe.skipIf(!enabled)('the model gateway, for real (COREHUB_REAL_GATEWAY=1)'
   let gateway: ModelGateway;
   let logged = '';
   const late: AgentGatewayUsage[] = [];
+  const stateDir = mkdtempSync(path.join(tmpdir(), 'corehub-gateway-state-'));
 
   beforeAll(async () => {
     if (!existsSync(binary)) {
@@ -232,7 +241,7 @@ describe.skipIf(!enabled)('the model gateway, for real (COREHUB_REAL_GATEWAY=1)'
     gateway = new ModelGateway({
       cliproxy: new CliproxySupervisor({
         binary,
-        stateDir: mkdtempSync(path.join(tmpdir(), 'corehub-gateway-state-')),
+        stateDir,
         log: log as never,
         env: { PATH: process.env.PATH ?? '', HOME: tmpdir() },
       }),
@@ -245,6 +254,7 @@ describe.skipIf(!enabled)('the model gateway, for real (COREHUB_REAL_GATEWAY=1)'
   afterAll(async () => {
     await gateway?.close();
     provider?.server.close();
+    rmSync(stateDir, { recursive: true, force: true });
     if (!process.env.COREHUB_REAL_ACP_DATA) rmSync(dataDir, { recursive: true, force: true });
   });
 
@@ -268,13 +278,23 @@ describe.skipIf(!enabled)('the model gateway, for real (COREHUB_REAL_GATEWAY=1)'
     grant.revoke();
     const revoked = await call({ authorization: `Bearer ${grant.token}` });
     expect(revoked.status).toBe(401);
-    expect(await revoked.json()).toMatchObject({ type: 'error', error: { type: 'authentication_error' } });
+    expect(await revoked.json()).toMatchObject({
+      type: 'error',
+      error: { type: 'authentication_error' },
+    });
   });
 
   async function runAgent(
     id: 'claude-code' | 'codex',
     prompt: string,
-  ): Promise<{ said: string; events: AgentEvent[]; reports: AgentGatewayUsage[]; env: NodeJS.ProcessEnv; home: string; token: string }> {
+  ): Promise<{
+    said: string;
+    events: AgentEvent[];
+    reports: AgentGatewayUsage[];
+    env: NodeJS.ProcessEnv;
+    home: string;
+    token: string;
+  }> {
     const entry = entryOf(id);
     const installer = createNpmInstaller({
       dataDir,
@@ -363,7 +383,10 @@ describe.skipIf(!enabled)('the model gateway, for real (COREHUB_REAL_GATEWAY=1)'
       grant.revoke();
     }
     const said = events
-      .filter((event): event is Extract<AgentEvent, { type: 'message.delta' }> => event.type === 'message.delta')
+      .filter(
+        (event): event is Extract<AgentEvent, { type: 'message.delta' }> =>
+          event.type === 'message.delta',
+      )
       .map((event) => event.text)
       .join('');
     return { said, events, reports, env, home, token: grant.token };
@@ -377,10 +400,6 @@ describe.skipIf(!enabled)('the model gateway, for real (COREHUB_REAL_GATEWAY=1)'
         'claude-code',
         `Create the file ${PROOF_FILE} in the working directory with the Write tool.`,
       );
-      if (process.env.COREHUB_REAL_GATEWAY_DEBUG) {
-        console.log(JSON.stringify({ said: result.said, events: result.events, seen: provider.seen.slice(before).map((c) => ({ ...c, body: JSON.stringify(c.body).slice(0, 1500) })) }, null, 1).slice(0, 20000));
-        console.log(logged.slice(-6000));
-      }
       // The tool ran: the file is there, with what the provider asked for.
       const proof = path.join(result.home, PROOF_FILE);
       expect(existsSync(proof)).toBe(true);
@@ -389,13 +408,20 @@ describe.skipIf(!enabled)('the model gateway, for real (COREHUB_REAL_GATEWAY=1)'
       expect(result.said).toContain('The proof file is written.');
       // The provider saw Anthropic Messages translated to Chat, the tool's result included.
       const calls = provider.seen.slice(before);
-      expect(calls.some((call) => ((call.body.messages ?? []) as { role: string }[]).some((m) => m.role === 'tool'))).toBe(true);
+      expect(
+        calls.some((call) =>
+          ((call.body.messages ?? []) as { role: string }[]).some((m) => m.role === 'tool'),
+        ),
+      ).toBe(true);
       for (const call of calls) {
         expect(call.authorization).toBe(`Bearer ${PROVIDER_KEY}`);
         expect(call.body.model).toBe(MODEL);
       }
       expect(result.reports.length).toBeGreaterThan(0);
-      expect(result.reports.at(-1)).toMatchObject({ modelLabel: 'Fake Coder', providerId: PROVIDER_ID });
+      expect(result.reports.at(-1)).toMatchObject({
+        modelLabel: 'Fake Coder',
+        providerId: PROVIDER_ID,
+      });
       expect(result.reports.at(-1)!.inputTokens).toBeGreaterThanOrEqual(1200);
       expect(result.reports.at(-1)!.costSource).toBe('estimated');
       checkIsolation(result);

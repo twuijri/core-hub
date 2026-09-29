@@ -146,7 +146,10 @@ export class CliproxySupervisor {
     }
   }
 
-  private async launch(upstreams: readonly GatewayUpstream[], fingerprint: string): Promise<Instance> {
+  private async launch(
+    upstreams: readonly GatewayUpstream[],
+    fingerprint: string,
+  ): Promise<Instance> {
     const dir = this.options.stateDir;
     mkdirSync(dir, { recursive: true, mode: 0o700 });
     chmodSync(dir, 0o700);
@@ -156,11 +159,9 @@ export class CliproxySupervisor {
     this.generation += 1;
     const configPath = path.join(dir, `cliproxy-${this.generation}.yaml`);
     // Created 0600 before a byte of it is written: the provider keys are never readable by others.
-    writeFileSync(
-      configPath,
-      cliproxyConfig({ port, internalKey: this.key, authDir, upstreams }),
-      { mode: 0o600 },
-    );
+    writeFileSync(configPath, cliproxyConfig({ port, internalKey: this.key, authDir, upstreams }), {
+      mode: 0o600,
+    });
     chmodSync(configPath, 0o600);
     if (this.state !== 'running') this.setState('starting', this.lastError);
     const child = spawn(this.options.binary!, ['-config', configPath, '-local-model'], {

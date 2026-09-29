@@ -79,7 +79,11 @@ function unpack(archive, file, into) {
  * Downloads the pinned release for `platform` into `dest` and returns the executable's path.
  * Refuses a file whose SHA-256 is not the pinned one.
  */
-export async function fetchCliproxy({ platform = currentPlatform(), dest, log = console.log } = {}) {
+export async function fetchCliproxy({
+  platform = currentPlatform(),
+  dest,
+  log = console.log,
+} = {}) {
   const asset = assetOf(platform);
   const into = path.resolve(dest ?? defaultDest(platform));
   const executable = path.join(into, binaryName(platform));
@@ -109,7 +113,8 @@ export async function fetchCliproxy({ platform = currentPlatform(), dest, log = 
     mkdirSync(unpacked);
     unpack(archive, asset.file, unpacked);
     const found = path.join(unpacked, binaryName(platform));
-    if (!existsSync(found)) throw new Error(`cliproxy: ${asset.file} holds no ${binaryName(platform)}`);
+    if (!existsSync(found))
+      throw new Error(`cliproxy: ${asset.file} holds no ${binaryName(platform)}`);
     rmSync(into, { recursive: true, force: true });
     mkdirSync(into, { recursive: true });
     copyFileSync(found, executable);

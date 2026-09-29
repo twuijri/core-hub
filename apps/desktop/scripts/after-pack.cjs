@@ -31,4 +31,16 @@ exports.default = async function afterPack(context) {
     }
     if (kept === 0) throw new Error(`after-pack: ${pkg} has no prebuilt binary for ${keep}`);
   }
+
+  // CLIProxyAPI (MIT), the model gateway's translator (ADR 0029): this platform's pinned release,
+  // refused unless its SHA-256 is the pin's, with its licence beside it. The embedded hub is
+  // pointed at it (`src/main/index.ts`). About 20–23 MB compressed per installer.
+  const { pathToFileURL } = require('node:url');
+  const fetcher = path.resolve(__dirname, '../../../scripts/cliproxy/fetch.mjs');
+  const { fetchCliproxy } = await import(pathToFileURL(fetcher).href);
+  await fetchCliproxy({
+    platform: keep,
+    dest: path.join(resources, 'cliproxy'),
+    log: (line) => console.log(`after-pack: ${line}`),
+  });
 };

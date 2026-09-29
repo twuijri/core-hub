@@ -2962,7 +2962,10 @@ export class ModelsService {
     if (row.authKind === 'oauth') return null;
     const entry = this.entryOf(row);
     if (entry?.signIn) return null;
-    if (row.authKind === 'api_key' && !this.options.secrets.has(row.workspace, row.apiKeySecretId)) {
+    if (
+      row.authKind === 'api_key' &&
+      !this.options.secrets.has(row.workspace, row.apiKeySecretId)
+    ) {
       return null;
     }
     const base = (row.baseUrl ?? entry?.baseUrl ?? '').trim().replace(/\/+$/, '');
@@ -3053,7 +3056,11 @@ export class ModelsService {
   }
 
   /** The row and model a turn's choice runs on through the gateway, or why it cannot. */
-  gatewayTarget(workspace: string, providerId: string, model: string): GatewayTarget | { refusal: string } {
+  gatewayTarget(
+    workspace: string,
+    providerId: string,
+    model: string,
+  ): GatewayTarget | { refusal: string } {
     const provider = this.effectiveFor(workspace, providerId);
     if (!provider || provider.archivedAt) {
       return { refusal: 'the chosen model belongs to a provider this profile does not have' };

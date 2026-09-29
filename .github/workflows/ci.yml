@@ -198,24 +198,52 @@ jobs:
           files=$(find src tests -name '*.real.test.ts' | sort)
           pnpm exec vitest run --project unit --maxWorkers=2 $files
 
+  # The model gateway (ADR 0029) with the real pieces: CLIProxyAPI's pinned release (SHA-256
+  # checked), the hub's gateway, and the real ACP bridges of Claude Code and Codex from npm, against
+  # a local provider that speaks only OpenAI Chat Completions — Claude Code's tool call round-trips
+  # through the Anthropic → Chat translation, Codex answers through the Responses path, and no key
+  # reaches an agent. No provider account, no secret. Required through `gate`.
+  model-gateway-real:
+    name: Model gateway with the real CLIProxyAPI, Claude Code and Codex
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - name: Enable pnpm
+        run: corepack enable
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: CLIProxyAPI (pinned, SHA-256 checked)
+        run: pnpm cliproxy:fetch
+      - run: pnpm --filter @corehub/contracts build
+      - name: The real gateway suite
+        env:
+          COREHUB_REAL_GATEWAY: '1'
+          COREHUB_REAL_ACP_DATA: ${{ runner.temp }}/acp-data
+        run: pnpm --filter @corehub/server exec vitest run --project unit --maxWorkers=1 src/modules/agents/model-gateway.real.test.ts
+
   gate:
     name: Lint, typecheck, contracts, tests, build
-    needs: [checks, server-tests, i18n-space, hermes-real]
+    needs: [checks, server-tests, i18n-space, hermes-real, model-gateway-real]
     # Always runs, so a failed or cancelled job above fails this required check instead of
     # skipping it (a skipped required check would count as passed).
     if: always()
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      - name: Every check, every server test shard and both real-Hermes targets passed
+      - name: Every check, every server test shard, both real-Hermes targets and the real gateway passed
         env:
           CHECKS: ${{ needs.checks.result }}
           SERVER_TESTS: ${{ needs.server-tests.result }}
           I18N_SPACE: ${{ needs.i18n-space.result }}
           HERMES_REAL: ${{ needs.hermes-real.result }}
+          GATEWAY_REAL: ${{ needs.model-gateway-real.result }}
         run: |
-          echo "checks: $CHECKS, server-tests: $SERVER_TESTS, i18n-space: $I18N_SPACE, hermes-real: $HERMES_REAL"
-          test "$CHECKS" = success && test "$SERVER_TESTS" = success && test "$I18N_SPACE" = success && test "$HERMES_REAL" = success
+          echo "checks: $CHECKS, server-tests: $SERVER_TESTS, i18n-space: $I18N_SPACE, hermes-real: $HERMES_REAL, model-gateway-real: $GATEWAY_REAL"
+          test "$CHECKS" = success && test "$SERVER_TESTS" = success && test "$I18N_SPACE" = success && test "$HERMES_REAL" = success && test "$GATEWAY_REAL" = success
 
   web-e2e:
     name: Web smoke journeys (Playwright against the real hub)

@@ -629,6 +629,7 @@ describe('agent runner: a live session whose process went away between turns', (
       selectionFor: () => ({ model: null, provider: null, providerId: null }),
       fallbacksFor: () => [],
       providerSlugOf: () => null,
+      modelSourceFor: () => null,
       targetFor: (_row: unknown, _workspace: unknown, input: { sessionRef: string | null }) => ({
         sessionRef: input.sessionRef,
       }),
@@ -711,6 +712,7 @@ describe('agent runner: a picture an agent tool saved outside the run (decision 
       selectionFor: () => ({ model: null, provider: null, providerId: null }),
       fallbacksFor: () => [],
       providerSlugOf: () => null,
+      modelSourceFor: () => null,
       targetFor: () => ({ sessionRef: null }),
     };
     const runner = new AgentRunner({
@@ -791,6 +793,7 @@ describe('agent runner: files the agent leaves for the person (reply files, 2026
       selectionFor: () => ({ model: null, provider: null, providerId: null }),
       fallbacksFor: () => [],
       providerSlugOf: () => null,
+      modelSourceFor: () => null,
       targetFor: () => ({ sessionRef: null }),
     };
     return new AgentRunner({
@@ -926,6 +929,7 @@ describe('agent runner: naming a conversation offers the model no tools (decisio
       selectionFor: () => selection,
       fallbacksFor: () => [],
       providerSlugOf: () => null,
+      modelSourceFor: () => null,
       targetFor: (_row: unknown, _workspace: unknown, input: { sessionRef: string | null }) => ({
         slug: 'hermes',
         workspace: 'w',

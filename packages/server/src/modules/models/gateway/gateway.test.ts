@@ -10,13 +10,28 @@ import { fileURLToPath } from 'node:url';
 import pino from 'pino';
 import { parse } from 'yaml';
 import { afterEach, describe, expect, it } from 'vitest';
+
+/** CLIProxyAPI's file, as far as these tests read it. */
+interface CliproxyYaml {
+  server: Record<string, unknown>;
+  management: Record<string, unknown>;
+  access: { 'api-keys': string[] };
+  routing: Record<string, unknown>;
+  plugins: { enabled: boolean };
+  oauth: Record<string, string>;
+  'api-keys': Record<string, { keys: unknown; models: unknown[]; [field: string]: unknown }[]>;
+}
 import { CliproxySupervisor } from './cliproxy.js';
 import { NO_KEY, cliproxyConfig, upstreamPrefix, type GatewayUpstream } from './cliproxy-config.js';
 import { ModelGateway, isLoopback, type GatewaySource } from './gateway.js';
 import type { GatewayTurnUsage } from './tokens.js';
 import { UsageTap, readUsage } from './usage.js';
 
-const FAKE = path.join(path.dirname(fileURLToPath(import.meta.url)), 'testing', 'fake-cliproxy.mjs');
+const FAKE = path.join(
+  path.dirname(fileURLToPath(import.meta.url)),
+  'testing',
+  'fake-cliproxy.mjs',
+);
 const log = pino({ level: 'silent' });
 const PROVIDER = '01KPROVIDERAAAAAAAAAAAAAAA';
 const OTHER = '01KPROVIDERBBBBBBBBBBBBBBB';
@@ -48,7 +63,9 @@ interface Harness {
 
 const open: Harness[] = [];
 
-function harness(options: { binary?: string | null; enabled?: boolean; env?: NodeJS.ProcessEnv } = {}): Harness {
+function harness(
+  options: { binary?: string | null; enabled?: boolean; env?: NodeJS.ProcessEnv } = {},
+): Harness {
   const stateDir = mkdtempSync(path.join(tmpdir(), 'corehub-gw-test-'));
   const late: Harness['late'] = [];
   const upstreams = [upstream()];
@@ -99,7 +116,12 @@ async function grantOf(h: Harness, alive = () => true) {
   });
 }
 
-const post = (url: string, token: string | null, body: unknown, headers: Record<string, string> = {}) =>
+const post = (
+  url: string,
+  token: string | null,
+  body: unknown,
+  headers: Record<string, string> = {},
+) =>
   fetch(url, {
     method: 'POST',
     headers: {
@@ -118,14 +140,27 @@ describe('CLIProxyAPI configuration', () => {
       authDir: '/data/gateway/cliproxy-auth',
       upstreams: [
         upstream(),
-        upstream({ providerId: OTHER, kind: 'claude', baseUrl: 'https://api.anthropic.com', apiKey: null }),
+        upstream({
+          providerId: OTHER,
+          kind: 'claude',
+          baseUrl: 'https://api.anthropic.com',
+          apiKey: null,
+        }),
         upstream({ providerId: '01KEMPTY', models: [] }),
       ],
     });
-    const config = parse(text) as Record<string, any>;
-    expect(config.server).toMatchObject({ host: '127.0.0.1', port: 4321, discovery: { enabled: false } });
+    const config = parse(text) as CliproxyYaml;
+    expect(config.server).toMatchObject({
+      host: '127.0.0.1',
+      port: 4321,
+      discovery: { enabled: false },
+    });
     // The management API is off (an empty key), and so is everything else a person could reach.
-    expect(config.management).toMatchObject({ 'secret-key': '', 'allow-remote': false, 'disable-control-panel': true });
+    expect(config.management).toMatchObject({
+      'secret-key': '',
+      'allow-remote': false,
+      'disable-control-panel': true,
+    });
     expect(config.access['api-keys']).toEqual(['internal']);
     expect(config.routing['force-model-prefix']).toBe(true);
     expect(config.plugins.enabled).toBe(false);
@@ -138,7 +173,11 @@ describe('CLIProxyAPI configuration', () => {
       'base-url': 'https://provider.example/v1',
       keys: [{ 'api-key': KEY }],
     });
-    expect(compat[0].models).toContainEqual({ name: 'coder', alias: 'coder', 'max-context-length': 128_000 });
+    expect(compat[0].models).toContainEqual({
+      name: 'coder',
+      alias: 'coder',
+      'max-context-length': 128_000,
+    });
     // A provider that needs no key still gets a stand-in; a provider with no models is left out.
     expect(config['api-keys'].claude[0].keys).toEqual([{ 'api-key': NO_KEY }]);
     expect(JSON.stringify(config)).not.toContain('01KEMPTY'.toLowerCase());
@@ -173,29 +212,43 @@ describe('the gateway', () => {
     const url = `${grant.anthropicBaseUrl}/v1/messages`;
     const none = await post(url, null, { model: 'corehub-main' });
     expect(none.status).toBe(401);
-    expect(await none.json()).toMatchObject({ type: 'error', error: { type: 'authentication_error' } });
-    const forged = await post(`${grant.openaiBaseUrl}/responses`, 'chgw_forged', { model: 'corehub-main' });
+    expect(await none.json()).toMatchObject({
+      type: 'error',
+      error: { type: 'authentication_error' },
+    });
+    const forged = await post(`${grant.openaiBaseUrl}/responses`, 'chgw_forged', {
+      model: 'corehub-main',
+    });
     expect(forged.status).toBe(401);
     expect(await forged.json()).toMatchObject({ error: { type: 'authentication_error' } });
     // The process is gone: its token is too.
     alive = false;
     expect((await post(url, grant.token, { model: 'corehub-main' })).status).toBe(401);
     // Claude Code's warm-up probe needs nothing.
-    expect((await fetch(`${grant.anthropicBaseUrl}/api/hello`, { method: 'HEAD' })).status).toBe(200);
+    expect((await fetch(`${grant.anthropicBaseUrl}/api/hello`, { method: 'HEAD' })).status).toBe(
+      200,
+    );
   });
 
   it('refuses a revoked token', async () => {
     const h = harness();
     const grant = await grantOf(h);
     grant.revoke();
-    expect((await post(`${grant.anthropicBaseUrl}/v1/messages`, grant.token, { model: 'x' })).status).toBe(401);
+    expect(
+      (await post(`${grant.anthropicBaseUrl}/v1/messages`, grant.token, { model: 'x' })).status,
+    ).toBe(401);
   });
 
   it('turns the alias into the turn’s model, sends the hub key instead of the token, and streams the answer back', async () => {
     const h = harness();
     const grant = await grantOf(h);
     const reports: GatewayTurnUsage[] = [];
-    grant.setTurn({ runId: 'run-1', providerId: PROVIDER, model: 'coder', report: (u) => reports.push(u) });
+    grant.setTurn({
+      runId: 'run-1',
+      providerId: PROVIDER,
+      model: 'coder',
+      report: (u) => reports.push(u),
+    });
     const answer = await post(
       `${grant.anthropicBaseUrl}/v1/messages?beta=true`,
       null,
@@ -214,22 +267,60 @@ describe('the gateway', () => {
     expect(text).toContain('event: message_stop');
     expect(text).toContain('"text":"hello"');
     // A second call of the same turn adds to the first.
-    await (await post(`${grant.anthropicBaseUrl}/v1/messages`, grant.token, { model: 'corehub-small', stream: true })).text();
+    await (
+      await post(`${grant.anthropicBaseUrl}/v1/messages`, grant.token, {
+        model: 'corehub-small',
+        stream: true,
+      })
+    ).text();
     expect(reports).toHaveLength(2);
-    expect(reports[0]).toMatchObject({ modelLabel: 'Label coder', providerId: PROVIDER, inputTokens: 11, outputTokens: 4, cacheReadTokens: 5, costMicroUsd: 22, costSource: 'estimated' });
-    expect(reports[1]).toMatchObject({ inputTokens: 22, outputTokens: 8, cacheReadTokens: 10, costMicroUsd: 44 });
+    expect(reports[0]).toMatchObject({
+      modelLabel: 'Label coder',
+      providerId: PROVIDER,
+      inputTokens: 11,
+      outputTokens: 4,
+      cacheReadTokens: 5,
+      costMicroUsd: 22,
+      costSource: 'estimated',
+    });
+    expect(reports[1]).toMatchObject({
+      inputTokens: 22,
+      outputTokens: 8,
+      cacheReadTokens: 10,
+      costMicroUsd: 44,
+    });
   });
 
   it('reads the usage of the Responses and Chat Completions wires', async () => {
     const h = harness();
     const grant = await grantOf(h);
     const reports: GatewayTurnUsage[] = [];
-    grant.setTurn({ runId: 'run-2', providerId: PROVIDER, model: 'vendor/slashed', report: (u) => reports.push(u) });
-    const responses = await post(`${grant.openaiBaseUrl}/responses`, grant.token, { model: 'corehub-main', stream: true });
-    expect(responses.headers.get('x-fake-model')).toBe(`${upstreamPrefix(PROVIDER)}/vendor/slashed`);
+    grant.setTurn({
+      runId: 'run-2',
+      providerId: PROVIDER,
+      model: 'vendor/slashed',
+      report: (u) => reports.push(u),
+    });
+    const responses = await post(`${grant.openaiBaseUrl}/responses`, grant.token, {
+      model: 'corehub-main',
+      stream: true,
+    });
+    expect(responses.headers.get('x-fake-model')).toBe(
+      `${upstreamPrefix(PROVIDER)}/vendor/slashed`,
+    );
     await responses.text();
-    expect(reports.at(-1)).toMatchObject({ inputTokens: 20, outputTokens: 6, cacheReadTokens: 2, reasoningTokens: 1 });
-    await (await post(`${grant.openaiBaseUrl}/chat/completions`, grant.token, { model: 'gpt-anything', stream: true })).text();
+    expect(reports.at(-1)).toMatchObject({
+      inputTokens: 20,
+      outputTokens: 6,
+      cacheReadTokens: 2,
+      reasoningTokens: 1,
+    });
+    await (
+      await post(`${grant.openaiBaseUrl}/chat/completions`, grant.token, {
+        model: 'gpt-anything',
+        stream: true,
+      })
+    ).text();
     expect(reports.at(-1)).toMatchObject({ inputTokens: 50, outputTokens: 14 });
   });
 
@@ -237,18 +328,26 @@ describe('the gateway', () => {
     const h = harness();
     const grant = await grantOf(h);
     // No turn yet, and no model named: nothing to run on.
-    const nothing = await post(`${grant.anthropicBaseUrl}/v1/messages`, grant.token, { model: 'corehub-main' });
+    const nothing = await post(`${grant.anthropicBaseUrl}/v1/messages`, grant.token, {
+      model: 'corehub-main',
+    });
     expect(nothing.status).toBe(400);
     expect((await nothing.json()).error.message).toMatch(/no model is chosen/);
-    const keyed = await post(`${grant.anthropicBaseUrl}/v1/messages`, grant.token, { model: 'example/coder' });
+    const keyed = await post(`${grant.anthropicBaseUrl}/v1/messages`, grant.token, {
+      model: 'example/coder',
+    });
     expect(keyed.status).toBe(200);
     expect(keyed.headers.get('x-fake-model')).toBe(`${upstreamPrefix(PROVIDER)}/coder`);
     grant.setTurn({ runId: 'run-3', providerId: PROVIDER, model: 'refused', report: () => {} });
-    const refused = await post(`${grant.openaiBaseUrl}/chat/completions`, grant.token, { model: 'corehub-main' });
+    const refused = await post(`${grant.openaiBaseUrl}/chat/completions`, grant.token, {
+      model: 'corehub-main',
+    });
     expect(refused.status).toBe(400);
     expect(await refused.json()).toMatchObject({ error: { message: 'refused on purpose' } });
     grant.setTurn({ runId: 'run-3', providerId: OTHER, model: 'coder', report: () => {} });
-    const missing = await post(`${grant.openaiBaseUrl}/chat/completions`, grant.token, { model: 'corehub-main' });
+    const missing = await post(`${grant.openaiBaseUrl}/chat/completions`, grant.token, {
+      model: 'corehub-main',
+    });
     expect(missing.status).toBe(400);
     expect((await missing.json()).error.message).toMatch(/not available to coding agents/);
   });
@@ -257,11 +356,20 @@ describe('the gateway', () => {
     const h = harness();
     const grant = await grantOf(h);
     const reports: GatewayTurnUsage[] = [];
-    grant.setTurn({ runId: 'run-4', providerId: PROVIDER, model: 'broken', report: (u) => reports.push(u) });
-    const answer = await post(`${grant.anthropicBaseUrl}/v1/messages`, grant.token, { model: 'corehub-main' });
+    grant.setTurn({
+      runId: 'run-4',
+      providerId: PROVIDER,
+      model: 'broken',
+      report: (u) => reports.push(u),
+    });
+    const answer = await post(`${grant.anthropicBaseUrl}/v1/messages`, grant.token, {
+      model: 'corehub-main',
+    });
     expect(answer.status).toBe(429);
     expect(answer.headers.get('retry-after')).toBe('7');
-    expect(await answer.json()).toMatchObject({ error: { type: 'rate_limit_error', message: 'slow down' } });
+    expect(await answer.json()).toMatchObject({
+      error: { type: 'rate_limit_error', message: 'slow down' },
+    });
     expect(reports).toEqual([]);
   });
 
@@ -271,19 +379,42 @@ describe('the gateway', () => {
     grant.setTurn({ runId: 'run-5', providerId: PROVIDER, model: 'coder', report: () => {} });
     grant.setTurn(null);
     // Between turns the agent still runs on the last turn's model (a background title).
-    await (await post(`${grant.openaiBaseUrl}/responses`, grant.token, { model: 'corehub-small', stream: true })).text();
+    await (
+      await post(`${grant.openaiBaseUrl}/responses`, grant.token, {
+        model: 'corehub-small',
+        stream: true,
+      })
+    ).text();
     expect(h.late).toEqual([
-      { runId: 'run-5', usage: expect.objectContaining({ inputTokens: 20, outputTokens: 6, modelLabel: 'Label coder' }) },
+      {
+        runId: 'run-5',
+        usage: expect.objectContaining({
+          inputTokens: 20,
+          outputTokens: 6,
+          modelLabel: 'Label coder',
+        }),
+      },
     ]);
   });
 
   it('lists the aliases and the profile’s models in each wire', async () => {
     const h = harness();
     const grant = await grantOf(h);
-    const anthropic = await fetch(`${grant.anthropicBaseUrl}/v1/models`, { headers: { 'x-api-key': grant.token } });
-    expect((await anthropic.json()).data.map((m: { id: string }) => m.id)).toEqual(['corehub-main', 'corehub-small', 'example/coder']);
-    const openai = await fetch(`${grant.openaiBaseUrl}/models`, { headers: { authorization: `Bearer ${grant.token}` } });
-    expect(await openai.json()).toMatchObject({ object: 'list', data: [{ id: 'corehub-main' }, { id: 'corehub-small' }, { id: 'example/coder' }] });
+    const anthropic = await fetch(`${grant.anthropicBaseUrl}/v1/models`, {
+      headers: { 'x-api-key': grant.token },
+    });
+    expect((await anthropic.json()).data.map((m: { id: string }) => m.id)).toEqual([
+      'corehub-main',
+      'corehub-small',
+      'example/coder',
+    ]);
+    const openai = await fetch(`${grant.openaiBaseUrl}/models`, {
+      headers: { authorization: `Bearer ${grant.token}` },
+    });
+    expect(await openai.json()).toMatchObject({
+      object: 'list',
+      data: [{ id: 'corehub-main' }, { id: 'corehub-small' }, { id: 'example/coder' }],
+    });
   });
 
   it('starts a new CLIProxyAPI when the providers change, and stops the old one', async () => {
@@ -296,7 +427,10 @@ describe('the gateway', () => {
     await grantOf(h);
     const second = h.cliproxy.status().port;
     expect(second).not.toBe(first);
-    expect((await post(`${grant.anthropicBaseUrl}/v1/messages`, grant.token, { model: 'corehub-main' })).status).toBe(200);
+    expect(
+      (await post(`${grant.anthropicBaseUrl}/v1/messages`, grant.token, { model: 'corehub-main' }))
+        .status,
+    ).toBe(200);
     await new Promise((resolve) => setTimeout(resolve, 300));
     await expect(fetch(`http://127.0.0.1:${first}/v1/models`)).rejects.toThrow();
   });
@@ -307,7 +441,9 @@ describe('the gateway', () => {
     grant.setTurn({ runId: 'run-7', providerId: PROVIDER, model: 'coder', report: () => {} });
     await new Promise((resolve) => setTimeout(resolve, 700));
     expect(h.cliproxy.status().state).toBe('error');
-    const answer = await post(`${grant.anthropicBaseUrl}/v1/messages`, grant.token, { model: 'corehub-main' });
+    const answer = await post(`${grant.anthropicBaseUrl}/v1/messages`, grant.token, {
+      model: 'corehub-main',
+    });
     expect(answer.status).toBe(200);
     expect(h.cliproxy.status().state).toBe('running');
   });
@@ -315,8 +451,17 @@ describe('the gateway', () => {
 
 describe('usage and addresses', () => {
   it('reads each wire’s usage, streamed or whole', () => {
-    expect(readUsage({ prompt_tokens: 3, completion_tokens: 2, prompt_tokens_details: { cached_tokens: 1 } })).toEqual({ inputTokens: 3, outputTokens: 2, cacheReadTokens: 1 });
-    expect(readUsage({ input_tokens: 9, cache_creation_input_tokens: 4 })).toEqual({ inputTokens: 9, cacheWriteTokens: 4 });
+    expect(
+      readUsage({
+        prompt_tokens: 3,
+        completion_tokens: 2,
+        prompt_tokens_details: { cached_tokens: 1 },
+      }),
+    ).toEqual({ inputTokens: 3, outputTokens: 2, cacheReadTokens: 1 });
+    expect(readUsage({ input_tokens: 9, cache_creation_input_tokens: 4 })).toEqual({
+      inputTokens: 9,
+      cacheWriteTokens: 4,
+    });
     expect(readUsage(null)).toBeNull();
     const whole = new UsageTap('application/json');
     whole.push('{"usage":{"input_tokens":7,');

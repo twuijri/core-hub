@@ -230,6 +230,7 @@ describe('hub tools: the runner opens a lease for the life of a run', () => {
       selectionFor: () => ({ model: null, provider: null, providerId: null }),
       fallbacksFor: () => [],
       providerSlugOf: () => null,
+      modelSourceFor: () => null,
       targetFor: () => ({}),
     };
     const leases = new RunLeases();

@@ -322,6 +322,7 @@ describe('update policy: a run asked for during an update waits for it', () => {
       selectionFor: () => ({ model: null, provider: null, providerId: null }),
       fallbacksFor: () => [],
       providerSlugOf: () => null,
+      modelSourceFor: () => null,
       targetFor: () => ({ sessionRef: null }),
     };
     const runner = new AgentRunner({
@@ -349,6 +350,7 @@ describe('update policy: a run asked for during an update waits for it', () => {
       selectionFor: () => ({ model: null, provider: null, providerId: null }),
       fallbacksFor: () => [],
       providerSlugOf: () => null,
+      modelSourceFor: () => null,
       targetFor: () => ({ sessionRef: null }),
     };
     const runner = new AgentRunner({

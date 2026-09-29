@@ -1111,7 +1111,9 @@ export class AgentsService implements UpdatePolicyStore {
     const settings = this.settingsRow(workspaceId, row.id);
     const cwd = run.cwd ?? settings?.workingDir ?? null;
     const selection = this.selectionFor(row, workspaceId, run);
-    const onGateway = run.gateway ? this.gatewayEnvironment(row, workspaceId, settings, selection, run.gateway) : null;
+    const onGateway = run.gateway
+      ? this.gatewayEnvironment(row, workspaceId, settings, selection, run.gateway)
+      : null;
     const env = onGateway?.env ?? this.environmentFor(row, workspaceId, settings);
     return {
       ...this.targetOf(row),
@@ -1273,7 +1275,7 @@ export class AgentsService implements UpdatePolicyStore {
     if (chosen === 'agent') return 'agent';
     if (!selection.providerId || !selection.model) return 'agent';
     if (chosen === 'hub') return 'hub';
-    let serves = false;
+    let serves: boolean;
     try {
       serves = gateway.serves(workspaceId, selection.providerId);
     } catch {
@@ -1323,10 +1325,14 @@ export class AgentsService implements UpdatePolicyStore {
     if (port) {
       try {
         // No `declared` families: the profile's keys are exactly what the agent must not get.
-        own = port.environmentFor(workspaceId, {}, {
-          ...(settings?.env ? { settingsEnv: settings.env } : {}),
-          ...(settings?.secretRefs ? { secretRefs: settings.secretRefs } : {}),
-        });
+        own = port.environmentFor(
+          workspaceId,
+          {},
+          {
+            ...(settings?.env ? { settingsEnv: settings.env } : {}),
+            ...(settings?.secretRefs ? { secretRefs: settings.secretRefs } : {}),
+          },
+        );
       } catch (error) {
         this.options.log.warn(
           { agent: row.slug, err: error },
@@ -1334,11 +1340,12 @@ export class AgentsService implements UpdatePolicyStore {
         );
       }
     }
-    let contextWindow: number | null = null;
+    let contextWindow: number | null;
     try {
       contextWindow =
         selection.providerId && selection.model
-          ? (port?.gateway?.contextWindow(workspaceId, selection.providerId, selection.model) ?? null)
+          ? (port?.gateway?.contextWindow(workspaceId, selection.providerId, selection.model) ??
+            null)
           : null;
     } catch {
       contextWindow = null;
@@ -1365,7 +1372,10 @@ export class AgentsService implements UpdatePolicyStore {
     const hostEnv = this.options.credentialProbe?.env ?? {};
     for (const name of ['NO_PROXY', 'no_proxy']) {
       const current = env[name] ?? hostEnv[name] ?? '';
-      const listed = current.split(',').map((part) => part.trim()).filter(Boolean);
+      const listed = current
+        .split(',')
+        .map((part) => part.trim())
+        .filter(Boolean);
       env[name] = [...listed, ...loopback.filter((host) => !listed.includes(host))].join(',');
     }
     return { env, remove };
@@ -1447,7 +1457,10 @@ export class AgentsService implements UpdatePolicyStore {
     try {
       return this.modelSourceFor(row, workspaceId, this.selectionFor(row, workspaceId, {}));
     } catch (error) {
-      this.options.log.warn({ agent: row.slug, err: error }, 'agents: could not read the model source');
+      this.options.log.warn(
+        { agent: row.slug, err: error },
+        'agents: could not read the model source',
+      );
       return null;
     }
   }

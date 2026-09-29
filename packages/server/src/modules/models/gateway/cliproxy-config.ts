@@ -78,9 +78,7 @@ export function cliproxyConfig(input: CliproxyConfigInput): string {
       })),
     });
   }
-  const apiKeys = Object.fromEntries(
-    Object.entries(groups).filter(([, list]) => list.length > 0),
-  );
+  const apiKeys = Object.fromEntries(Object.entries(groups).filter(([, list]) => list.length > 0));
   const document = {
     'config-version': 8,
     server: {

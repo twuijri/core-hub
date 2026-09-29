@@ -140,11 +140,7 @@ export { providerAdapter } from './adapters/index.js';
 export { CliproxySupervisor } from './gateway/cliproxy.js';
 export { cliproxyConfig, upstreamModel, upstreamPrefix } from './gateway/cliproxy-config.js';
 export type { GatewayUpstream } from './gateway/cliproxy-config.js';
-export {
-  GATEWAY_MAIN_MODEL,
-  GATEWAY_SMALL_MODEL,
-  ModelGateway,
-} from './gateway/gateway.js';
+export { GATEWAY_MAIN_MODEL, GATEWAY_SMALL_MODEL, ModelGateway } from './gateway/gateway.js';
 export type { GatewayGrant, GatewaySource, GatewayTarget } from './gateway/gateway.js';
 export { CLIPROXY_VERSION, devCliproxyPath, locateCliproxy } from './gateway/locate.js';
 
@@ -201,7 +197,11 @@ export function modelGatewayFor(app: FastifyInstance): ModelGateway {
   }
   const own = overrides.get(hub.io) ?? {};
   // A config built by hand (older tests) has no gateway section: off.
-  const settings = hub.config.modelGateway ?? { enabled: false, cliproxyBin: null, defaultSource: 'auto' as const };
+  const settings = hub.config.modelGateway ?? {
+    enabled: false,
+    cliproxyBin: null,
+    defaultSource: 'auto' as const,
+  };
   const binary =
     own.cliproxyBin !== undefined
       ? own.cliproxyBin

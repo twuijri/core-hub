@@ -16,7 +16,13 @@
  * reaches the hub's port, never this one — and a request that is not from 127.0.0.1 / ::1 is
  * refused all the same. Nothing is served without a live session token.
  */
-import { createServer, request as httpRequest, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
+import {
+  createServer,
+  request as httpRequest,
+  type IncomingMessage,
+  type Server,
+  type ServerResponse,
+} from 'node:http';
 import type { AddressInfo } from 'node:net';
 import type { FastifyBaseLogger } from 'fastify';
 import type { GatewayUpstream } from './cliproxy-config.js';
@@ -72,11 +78,7 @@ export interface GatewaySource {
   /** A `"<provider slug>/<model>"` catalogue key, resolved in a profile. */
   resolveKey(workspace: string, key: string): { providerId: string; model: string } | null;
   /** The row and model a profile runs `model` of `providerId` on, or why it cannot. */
-  target(
-    workspace: string,
-    providerId: string,
-    model: string,
-  ): GatewayTarget | { refusal: string };
+  target(workspace: string, providerId: string, model: string): GatewayTarget | { refusal: string };
   /** The catalogue keys a profile's coding agents can run, for `/v1/models`. */
   modelKeys(workspace: string): string[];
   /** A call that ended after its turn did: added to that run's ledger row. */
@@ -154,7 +156,8 @@ export class ModelGateway {
    * (and, on first use, CLIProxyAPI) so the agent's first call finds both.
    */
   async open(input: GatewayGrantInput): Promise<GatewayGrant> {
-    if (!this.available()) throw new ModelGatewayUnavailable('the model gateway is off on this hub');
+    if (!this.available())
+      throw new ModelGatewayUnavailable('the model gateway is off on this hub');
     const port = await this.listen();
     // Started now rather than on the agent's first call: a missing or broken translator is said
     // when the conversation opens, not in the middle of its first answer.
@@ -220,7 +223,8 @@ export class ModelGateway {
     }
     if (
       request.method === 'GET' &&
-      (url.pathname === '/gateway/anthropic/v1/models' || url.pathname === '/gateway/openai/v1/models')
+      (url.pathname === '/gateway/anthropic/v1/models' ||
+        url.pathname === '/gateway/openai/v1/models')
     ) {
       this.models(response, wire, grant);
       return;
@@ -228,15 +232,28 @@ export class ModelGateway {
     const route = ROUTES[url.pathname];
     if (!route || request.method !== 'POST') {
       request.resume();
-      fail(response, wire, 404, 'not_found_error', `the model gateway has no ${request.method} ${url.pathname}`);
+      fail(
+        response,
+        wire,
+        404,
+        'not_found_error',
+        `the model gateway has no ${request.method} ${url.pathname}`,
+      );
       return;
     }
     let body: Record<string, unknown>;
     try {
       body = JSON.parse((await readBody(request)).toString('utf8')) as Record<string, unknown>;
-      if (!body || typeof body !== 'object' || Array.isArray(body)) throw new Error('not an object');
+      if (!body || typeof body !== 'object' || Array.isArray(body))
+        throw new Error('not an object');
     } catch (error) {
-      fail(response, route.wire, 400, 'invalid_request_error', `the request body is not JSON: ${String(error instanceof Error ? error.message : error)}`);
+      fail(
+        response,
+        route.wire,
+        400,
+        'invalid_request_error',
+        `the request body is not JSON: ${String(error instanceof Error ? error.message : error)}`,
+      );
       return;
     }
     const resolved = this.resolveModel(grant, typeof body.model === 'string' ? body.model : '');
@@ -256,7 +273,16 @@ export class ModelGateway {
       return;
     }
     body.model = upstreamModel(resolved.target.providerId, resolved.target.model);
-    await this.forward(request, response, route, url.search, body, grant, resolved.target, upstreams);
+    await this.forward(
+      request,
+      response,
+      route,
+      url.search,
+      body,
+      grant,
+      resolved.target,
+      upstreams,
+    );
   }
 
   private resolveModel(
@@ -291,7 +317,12 @@ export class ModelGateway {
     if (wire === 'anthropic') {
       response.end(
         JSON.stringify({
-          data: ids.map((id) => ({ type: 'model', id, display_name: id, created_at: '1970-01-01T00:00:00Z' })),
+          data: ids.map((id) => ({
+            type: 'model',
+            id,
+            display_name: id,
+            created_at: '1970-01-01T00:00:00Z',
+          })),
           has_more: false,
           first_id: ids[0] ?? null,
           last_id: ids.at(-1) ?? null,
@@ -321,7 +352,10 @@ export class ModelGateway {
     try {
       lease = await this.options.cliproxy.lease(upstreams);
     } catch (error) {
-      const message = error instanceof CliproxyUnavailable ? error.message : 'the model gateway could not start its translator';
+      const message =
+        error instanceof CliproxyUnavailable
+          ? error.message
+          : 'the model gateway could not start its translator';
       fail(response, route.wire, 503, 'api_error', message);
       return;
     }
@@ -334,7 +368,12 @@ export class ModelGateway {
       port: lease.port,
       method: 'POST',
       path: `${route.upstream}${search}`,
-      headers: { ...forwardHeaders(request.headers), authorization: `Bearer ${lease.key}`, 'content-type': 'application/json', 'content-length': String(payload.length) },
+      headers: {
+        ...forwardHeaders(request.headers),
+        authorization: `Bearer ${lease.key}`,
+        'content-type': 'application/json',
+        'content-length': String(payload.length),
+      },
     });
     let finished = false;
     const finish = () => {
@@ -349,7 +388,13 @@ export class ModelGateway {
     upstream.on('error', (error) => {
       finish();
       if (!response.headersSent) {
-        fail(response, route.wire, 502, 'api_error', `the model gateway's translator did not answer: ${error.message}`);
+        fail(
+          response,
+          route.wire,
+          502,
+          'api_error',
+          `the model gateway's translator did not answer: ${error.message}`,
+        );
       } else response.destroy();
     });
     upstream.on('response', (answer) => {
@@ -415,11 +460,7 @@ export class ModelGateway {
 /** Whether a peer address is this computer's own (IPv4, IPv6, IPv4-mapped IPv6). */
 export function isLoopback(address: string | undefined): boolean {
   if (!address) return false;
-  return (
-    address === '::1' ||
-    address.startsWith('127.') ||
-    address.startsWith('::ffff:127.')
-  );
+  return address === '::1' || address.startsWith('127.') || address.startsWith('::ffff:127.');
 }
 
 /** The token as each wire sends its key: `Authorization: Bearer`, `x-api-key`, `x-goog-api-key`. */
@@ -507,7 +548,13 @@ function readBody(request: IncomingMessage): Promise<Buffer> {
 }
 
 /** An error in the envelope the agent's own wire uses, so it reads the words. */
-function fail(response: ServerResponse, wire: Wire, status: number, type: string, message: string): void {
+function fail(
+  response: ServerResponse,
+  wire: Wire,
+  status: number,
+  type: string,
+  message: string,
+): void {
   if (response.headersSent) {
     response.destroy();
     return;

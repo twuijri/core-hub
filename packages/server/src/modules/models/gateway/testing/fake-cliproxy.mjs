@@ -22,7 +22,9 @@ for (const groups of Object.values(config['api-keys'] ?? {})) {
 const sse = (response, events) => {
   response.writeHead(200, { 'content-type': 'text/event-stream', 'x-fake-served': 'yes' });
   for (const [name, data] of events) {
-    response.write(`${name ? `event: ${name}\n` : ''}data: ${typeof data === 'string' ? data : JSON.stringify(data)}\n\n`);
+    response.write(
+      `${name ? `event: ${name}\n` : ''}data: ${typeof data === 'string' ? data : JSON.stringify(data)}\n\n`,
+    );
   }
   response.end();
 };
@@ -45,7 +47,15 @@ createServer((request, response) => {
     const body = JSON.parse(raw || '{}');
     if (!served.has(body.model)) {
       response.writeHead(400, { 'content-type': 'application/json' });
-      response.end(JSON.stringify({ type: 'error', error: { type: 'invalid_request_error', message: `unknown provider for model ${body.model}` } }));
+      response.end(
+        JSON.stringify({
+          type: 'error',
+          error: {
+            type: 'invalid_request_error',
+            message: `unknown provider for model ${body.model}`,
+          },
+        }),
+      );
       return;
     }
     response.setHeader('x-fake-model', body.model);
@@ -55,21 +65,56 @@ createServer((request, response) => {
     response.setHeader('x-fake-beta', String(request.headers['anthropic-beta'] ?? ''));
     if (body.model.endsWith('/broken')) {
       response.writeHead(429, { 'content-type': 'application/json', 'retry-after': '7' });
-      response.end(JSON.stringify({ type: 'error', error: { type: 'rate_limit_error', message: 'slow down' } }));
+      response.end(
+        JSON.stringify({
+          type: 'error',
+          error: { type: 'rate_limit_error', message: 'slow down' },
+        }),
+      );
       return;
     }
     if (url.pathname === '/v1/messages') {
       if (!body.stream) {
         response.writeHead(200, { 'content-type': 'application/json' });
-        response.end(JSON.stringify({ id: 'm', type: 'message', role: 'assistant', content: [{ type: 'text', text: 'hello' }], usage: { input_tokens: 10, output_tokens: 2 } }));
+        response.end(
+          JSON.stringify({
+            id: 'm',
+            type: 'message',
+            role: 'assistant',
+            content: [{ type: 'text', text: 'hello' }],
+            usage: { input_tokens: 10, output_tokens: 2 },
+          }),
+        );
         return;
       }
       sse(response, [
-        ['message_start', { type: 'message_start', message: { id: 'm', usage: { input_tokens: 3, output_tokens: 0, cache_read_input_tokens: 5 } } }],
-        ['content_block_start', { type: 'content_block_start', index: 0, content_block: { type: 'text', text: '' } }],
-        ['content_block_delta', { type: 'content_block_delta', index: 0, delta: { type: 'text_delta', text: 'hello' } }],
+        [
+          'message_start',
+          {
+            type: 'message_start',
+            message: {
+              id: 'm',
+              usage: { input_tokens: 3, output_tokens: 0, cache_read_input_tokens: 5 },
+            },
+          },
+        ],
+        [
+          'content_block_start',
+          { type: 'content_block_start', index: 0, content_block: { type: 'text', text: '' } },
+        ],
+        [
+          'content_block_delta',
+          { type: 'content_block_delta', index: 0, delta: { type: 'text_delta', text: 'hello' } },
+        ],
         ['content_block_stop', { type: 'content_block_stop', index: 0 }],
-        ['message_delta', { type: 'message_delta', delta: { stop_reason: 'end_turn' }, usage: { input_tokens: 11, output_tokens: 4 } }],
+        [
+          'message_delta',
+          {
+            type: 'message_delta',
+            delta: { stop_reason: 'end_turn' },
+            usage: { input_tokens: 11, output_tokens: 4 },
+          },
+        ],
         ['message_stop', { type: 'message_stop' }],
       ]);
       return;
@@ -83,7 +128,21 @@ createServer((request, response) => {
       sse(response, [
         ['response.created', { type: 'response.created', response: { id: 'r' } }],
         ['response.output_text.delta', { type: 'response.output_text.delta', delta: 'hello' }],
-        ['response.completed', { type: 'response.completed', response: { id: 'r', usage: { input_tokens: 20, output_tokens: 6, input_tokens_details: { cached_tokens: 2 }, output_tokens_details: { reasoning_tokens: 1 } } } }],
+        [
+          'response.completed',
+          {
+            type: 'response.completed',
+            response: {
+              id: 'r',
+              usage: {
+                input_tokens: 20,
+                output_tokens: 6,
+                input_tokens_details: { cached_tokens: 2 },
+                output_tokens_details: { reasoning_tokens: 1 },
+              },
+            },
+          },
+        ],
       ]);
       return;
     }

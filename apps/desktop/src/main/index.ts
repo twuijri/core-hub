@@ -43,6 +43,14 @@ const paths = {
     'app',
     'hub.mjs',
   ),
+  // The model gateway's translator (ADR 0029), put beside the hub by `scripts/after-pack.cjs`.
+  cliproxyBin: app.isPackaged
+    ? path.join(
+        process.resourcesPath,
+        'cliproxy',
+        process.platform === 'win32' ? 'cli-proxy-api.exe' : 'cli-proxy-api',
+      )
+    : null,
   preload: path.join(here, 'preload.cjs'),
   assetsDir: path.join(here, 'assets'),
 };

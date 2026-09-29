@@ -253,14 +253,15 @@ export class AgentRunner implements AgentRunnerPort {
     }
     if (!live) {
       let gateway: AgentGatewayGrant | null = null;
-      let current: LiveSession | undefined;
+      // The process's own session, once it exists: what the token's `alive` asks about.
+      const started: { live?: LiveSession } = {};
       if (source === 'hub') {
         try {
           gateway = await service.openGateway(row, request.workspace, {
             sessionId: request.sessionId,
             userId: request.userId ?? null,
             // The token dies with the process.
-            alive: () => !current || !isClosed(current.session),
+            alive: () => !started.live || !isClosed(started.live.session),
           });
         } catch (error) {
           // The agent still runs, on its own account as before the gateway; the log says why.
@@ -292,7 +293,7 @@ export class AgentRunner implements AgentRunnerPort {
         session.subagents?.watch((signal) => {
           for (const listener of this.subagentListeners) listener(sessionId, signal);
         }) ?? (() => undefined);
-      current = {
+      started.live = {
         session,
         adapterKind: row.adapterKind,
         agentId: row.id,
@@ -303,7 +304,7 @@ export class AgentRunner implements AgentRunnerPort {
         modelSource: source,
         gateway,
       };
-      live = current;
+      live = started.live;
       this.sessions.set(request.sessionId, live);
     }
     return live;

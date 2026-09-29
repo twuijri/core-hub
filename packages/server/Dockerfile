@@ -82,6 +82,24 @@ RUN set -eu; \
     done; \
     cd packages/server && node -e "const p=require('node-pty').spawn('/bin/sh',['-c','echo pty-ok'],{cols:80,rows:24,cwd:'/',env:{PATH:'/usr/bin:/bin'}});let o='';p.onData(d=>o+=d);p.onExit(()=>process.exit(o.includes('pty-ok')?0:1))"
 
+# ---- CLIProxyAPI (MIT), the model gateway's translator (ADR 0029) ---------------------------
+# One pinned release (scripts/cliproxy/pin.json) for the platform the image is built for, refused
+# unless its SHA-256 is the pinned one. The Linux builds are static (no glibc needed). Its licence
+# file stays beside it (LICENSE.CLIProxyAPI); THIRD-PARTY-NOTICES.md names it.
+FROM base AS cliproxy
+ARG TARGETARCH
+COPY scripts/cliproxy /tmp/cliproxy
+RUN set -eu; \
+    arch="${TARGETARCH:-$(dpkg --print-architecture)}"; \
+    case "$arch" in \
+      amd64) platform=linux-x64 ;; \
+      arm64) platform=linux-arm64 ;; \
+      *) echo "no CLIProxyAPI release for $arch" >&2; exit 1 ;; \
+    esac; \
+    node /tmp/cliproxy/fetch.mjs --platform "$platform" --dest /opt/corehub/bin; \
+    /opt/corehub/bin/cli-proxy-api -h 2>&1 | grep -q 'CLIProxyAPI Version: '; \
+    chown -R root:root /opt/corehub && chmod -R go-w /opt/corehub
+
 # ---- Hermes Agent (MIT), pinned to a release tag ------------------------------------------
 # A standalone CPython managed by uv plus a venv, both under /opt/hermes so the runtime stage
 # copies one tree. Hermes refuses to build a wheel ("distributed via the shell installer,
@@ -215,7 +233,11 @@ ENV COREHUB_VERSION=${COREHUB_VERSION} \
     PATH=/opt/hermes/.venv/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin \
     PYTHONDONTWRITEBYTECODE=1 \
     HERMES_DISABLE_LAZY_INSTALLS=1 \
-    HERMES_LAZY_INSTALL_TARGET=/data/hermes-packages
+    HERMES_LAZY_INSTALL_TARGET=/data/hermes-packages \
+    COREHUB_AGENT_MODEL_SOURCE=hub
+# COREHUB_AGENT_MODEL_SOURCE=hub: in the container every coding agent runs on the hub's own
+# providers through its model gateway unless a person switches it to its own account (ADR 0029;
+# the owner, 2026-09-29). A computer's hub (the desktop app) decides per agent instead.
 # HOME is inside the volume (decision §78): the coding agents read their own config files from
 # it (`~/.claude/CLAUDE.md`, `~/.codex/config.toml` …), edited from the web, and an upgrade that
 # replaces the container must not drop them. The hub makes the folder on the first boot of a
@@ -253,6 +275,8 @@ RUN ln -s ../lib/node_modules/npm/bin/npm-cli.js /usr/local/bin/npm \
  && node --version && npm --version
 WORKDIR /app
 COPY --from=hermes /opt/hermes /opt/hermes
+# The model gateway's translator, run by the hub on a loopback port (ADR 0029).
+COPY --from=cliproxy /opt/corehub /opt/corehub
 # The whole prod-deps tree: root node_modules plus whatever per-package node_modules pnpm made.
 COPY --from=prod-deps /app ./
 COPY --from=build /app/packages/contracts/openapi.yaml ./packages/contracts/openapi.yaml

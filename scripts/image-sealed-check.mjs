@@ -129,8 +129,27 @@ try {
   start(first);
   check('the hub answers /api/v1/health', true);
 
-  const writable = run(first, 'find /app /opt/hermes -writable -print 2>/dev/null | head -5');
-  check('nothing under /app or /opt/hermes is writable by the hub', writable === '', writable);
+  const writable = run(
+    first,
+    'find /app /opt/hermes /opt/corehub -writable -print 2>/dev/null | head -5',
+  );
+  check(
+    'nothing under /app, /opt/hermes or /opt/corehub is writable by the hub',
+    writable === '',
+    writable,
+  );
+
+  // The model gateway's translator (ADR 0029): shipped, with its licence, sealed, and it runs.
+  const cliproxy = run(
+    first,
+    'test -f /opt/corehub/bin/LICENSE.CLIProxyAPI && /opt/corehub/bin/cli-proxy-api -h 2>&1 | head -1',
+    { allowFail: true },
+  );
+  check(
+    'CLIProxyAPI runs, with its licence beside it',
+    /CLIProxyAPI Version: /.test(cliproxy ?? ''),
+    cliproxy ?? '',
+  );
 
   const patched = run(first, 'echo x >> /opt/hermes/src/tui_gateway/server.py', {
     allowFail: true,
