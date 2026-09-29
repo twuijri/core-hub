@@ -34,7 +34,7 @@ exports.default = async function afterPack(context) {
 
   // CLIProxyAPI (MIT), the model gateway's translator (ADR 0029): this platform's pinned release,
   // refused unless its SHA-256 is the pin's, with its licence beside it. The embedded hub is
-  // pointed at it (`src/main/index.ts`). About 20–23 MB compressed per installer.
+  // pointed at it (`src/main/index.ts`). 16–24 MB per installer (measured, ADR 0029).
   const { pathToFileURL } = require('node:url');
   const fetcher = path.resolve(__dirname, '../../../scripts/cliproxy/fetch.mjs');
   const { fetchCliproxy } = await import(pathToFileURL(fetcher).href);

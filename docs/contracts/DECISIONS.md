@@ -4816,7 +4816,8 @@ does them, proposed here — owner to confirm:
   `accumulate`, which adds instead of replacing).
 - **CLIProxyAPI** 8.0.4, pinned per platform by SHA-256 (`scripts/cliproxy/pin.json`, the Linux builds
   are the static `no-plugin` ones); in the image at `/opt/corehub/bin/cli-proxy-api` (+22.6 MB
-  compressed), in each desktop installer at `resources/cliproxy/` (+14–23 MB), for a developer from
+  compressed), in each desktop installer at `resources/cliproxy/` (+16–24 MB measured: `.exe` +15.9, `.deb` +17.6, `.dmg` +20.9, `.AppImage` +22.7,
+  `.msix` +23.7), for a developer from
   `pnpm cliproxy:fetch`; `COREHUB_CLIPROXY_BIN` names another, `COREHUB_MODEL_GATEWAY=off` switches the
   whole gateway off. Started the first time an agent needs it, run with `-local-model` (no remote model
   catalogue), restarted with a backoff (1, 2, 5, 10, 30 s), its lines in the hub's log under `cliproxy`
@@ -4832,7 +4833,7 @@ does them, proposed here — owner to confirm:
   provider.
 
 Rejected: an agent pointed at CLIProxyAPI directly (static shared keys, no profile, turn or ledger); a
-download of CLIProxyAPI on first use in the desktop app (a runtime download-and-run path for 14–23 MB
+download of CLIProxyAPI on first use in the desktop app (a runtime download-and-run path for 16–24 MB
 the owner's size budget allows); lending Hermes-held subscriptions (the owner); restarting CLIProxyAPI
 in place on a provider change (it would cut other agents' streams); counting a call's usage into the
 ledger directly while its turn is live (the run's own totals would double it).

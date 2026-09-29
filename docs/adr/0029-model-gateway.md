@@ -83,7 +83,7 @@ One pin (`scripts/cliproxy/pin.json`: version, one file and SHA-256 per platform
 (`scripts/cliproxy/fetch.mjs`) that refuses a file whose hash differs. The image downloads the Linux
 build of its platform in its own stage into `/opt/corehub/bin` (root's, read-only to the hub). The
 desktop installers carry their platform's build in `resources/cliproxy/` (after-pack) — rather than a
-download on first use, because it is 14–23 MB per installer, works offline, and adds no code that
+download on first use, because it adds 16–24 MB per installer (measured), works offline, and adds no code that
 downloads and runs a program at runtime. A developer runs `pnpm cliproxy:fetch`. The hub supervises it
 like Hermes's gateway: lines in its log under `cliproxy`, restarted with a backoff, stopped with the
 hub. A change of providers starts a new process with the new file and stops the old one after its last
@@ -94,7 +94,9 @@ request (CLIProxyAPI 8.0.4 does not reliably reload its file), so no stream is c
   Completions, a tool call included — and Codex likewise through the Responses path. Anthropic does not
   support Claude Code on non-Claude models; features that call Anthropic directly (WebSearch's server
   tool, fast mode) do not work there.
-- The image grows by ~22.6 MB compressed (68.3 MB on disk); each installer by ~14–23 MB.
+- The image grows by ~22.6 MB compressed (68.3 MB on disk); each installer by 16–24 MB (measured in
+  CI against v1.1.5: `.exe` +15.9, `.deb` +17.6, `.dmg` +20.9, `.AppImage` +22.7, `.msix` +23.7 MB),
+  which leaves them at 118–179 MB.
 - CLIProxyAPI is third-party code the hub runs. It is pinned, hash-checked, loopback-only and fed only
   what the hub writes; moving the pin is a reviewed change with the real-agent test in CI.
 - Gemini CLI (Gemini wire), Grok Build and Pi are not wired yet (phases 2–3).
