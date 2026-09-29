@@ -108,7 +108,23 @@ pnpm contract:test   → Test Files 20 passed (20), Tests 428 passed (428)
 pnpm i18n:check      → web: 3429 keys, ar/en in parity … OK
 ```
 
-CI: يُحدَّث بعد الدفع.
+CI على PR ‏#223 (رأس `b267553f`، بعد دمج أدوات MCP في الدفعة) — كل الفحوص ناجحة:
+
+```text
+Lint, typecheck, contracts, client tests, build | success
+Lint, typecheck, contracts, tests, build | success
+Server unit tests (shard 1/3, 2/3, 3/3) | success
+Web smoke journeys (Playwright against the real hub) | success
+Real Hermes suites (floor) | success
+Real Hermes suites (pinned) | success
+Docker image builds and answers /health | success
+Desktop app smoke (Electron under Xvfb against the real hub) | success
+Android build, unit tests, lint | success
+Build and test on the iOS simulator | success
+db:generate + db:migrate (SQLite and PostgreSQL) | success
+Translations fit their labels (measured widths) | success
+PR adds or updates a change record | success
+```
 
 ## المخاطر والرجوع
 
