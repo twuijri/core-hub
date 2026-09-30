@@ -4972,7 +4972,8 @@ already the `Error` envelope's). Proposed here — owner to confirm:
 ## 143. Subscription sign-ins through the bundled CLIProxyAPI; Hermes on the hub's models
 
 ADR 0030 (the owner's decision of 2026-09-30, after the research of PR #230). Additive only. What
-follows is proposed here — owner to confirm:
+follows was confirmed by the owner on 2026-10-01 («اعتمد»), including the full CLIProxyAPI provider
+list and "check now" on the vendors' undocumented usage addresses; §144 replaced its Hermes choice:
 
 - **Who moves.** Every provider connected by signing in to an account is signed in to by the
   CLIProxyAPI the hub bundles (8.0.4): ChatGPT (`codex`), Claude (`claude`), xAI (`xai`), Kimi
@@ -5180,7 +5181,7 @@ Status: the owner's choices on preview.38, 2026-09-30.
   Hermes and Core Hub's own agent". Serving them to coding agents through the gateway would need
   the hub to borrow Hermes's short-lived tokens into CLIProxyAPI per call (CLIProxyAPI takes a key
   only from its file, and a new file restarts it) and to translate Nous's Chat Completions for
-  every agent's wire; that is not done here. So under §144 a coding agent pointed at one of them
+  every agent's wire; that is not done here (the owner, 2026-10-01: Hermes-only in 1.1.6, a gateway design later). So under §144 a coding agent pointed at one of them
   fails, saying the gateway cannot serve that provider; Hermes uses them on its own route in the
   hub's Hermes home, and the hub's own agent borrows them per turn (§118).
 - **The provider dropdown is our `Select`**, the one the composer's approval picker uses: a large

@@ -265,3 +265,6 @@ $ PLAYWRIGHT_CHANNEL=chrome playwright test --workers=1 e2e/zzzzzzzzzzzzzzzz-sub
 القائمة الواحدة بالشعارات على iOS وAndroid (متابعة)؛ خدمة دخول MiniMax وNous عبر البوابة إن أرادها المالك (تصميم منفصل)؛
 تجربة حية بحساب حقيقي (ChatGPT بالرمز على الخادم)؛ ثم تقاعد مسارات Hermes المستعارة حسب خطة الإزالة، وطلب client ID خاص
 بـCore Hub لبرنامج «Sign in with ChatGPT».
+
+## إصدار 1.1.6 (2026-10-01)
+رُفع الإصدار إلى 1.1.6 (`node scripts/version-check.mjs --write`: 10 مواضع). اعتمد المالك §143 كاملة (قائمة CLIProxyAPI و«افحص الآن») وبقاء MiniMax وNous مع Hermes فقط في 1.1.6؛ سُجّلا في DECISIONS. الدمج والإصدار بيد المالك بعد تجربته الحية.
