@@ -22,6 +22,8 @@ export const kimiCode: CatalogEntry = {
   // offered. The API-key route stays the Config files page: a provider block with its
   // `api_key` in `config.toml`.
   credentials: {},
+  // Kimi Code's own settings and Moonshot's.
+  hostEnv: ['KIMI_*', 'MOONSHOT_*'],
   health: { kind: 'command', args: ['--version'] },
   capabilities: ['streaming', 'tools', 'approvals', 'mcp', 'resume', 'config_files'],
   sections: ['mcp', 'settings'],

@@ -19,6 +19,8 @@ export const qwenCode: CatalogEntry = {
     anthropic: 'ANTHROPIC_API_KEY',
     google: 'GEMINI_API_KEY',
   },
+  // Qwen Code's own settings and the providers it speaks to.
+  hostEnv: ['QWEN_*', 'OPENAI_*', 'ANTHROPIC_*', 'GEMINI_*', 'GOOGLE_*', 'DASHSCOPE_*'],
   health: { kind: 'command', args: ['--version'] },
   capabilities: ['streaming', 'tools', 'approvals', 'mcp', 'resume', 'config_files'],
   sections: ['mcp', 'settings'],

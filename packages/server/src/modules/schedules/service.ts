@@ -1466,12 +1466,38 @@ export function keepRules(nodes: WorkflowNode[], saved: WorkflowNode[]): Workflo
     if (node.kind === 'notify' && !has(node, 'send') && old.send) {
       return { ...node, send: old.send };
     }
+    // A Telegram target's formatting (§137), for an app that knows `send` but not the field
+    // (it rebuilds the target from the chat id): the saved target in the same place keeps it.
+    if (node.kind === 'notify' && hasSend(node.send) && hasSend(old.send)) {
+      return { ...node, send: keepFormatting(node.send, old.send) };
+    }
     // An agent step's conversation (§136), for an app that does not know the field.
     if (node.kind === 'agent' && !has(node, 'conversation') && old.conversation) {
       return { ...node, conversation: old.conversation };
     }
     return node;
   });
+}
+
+/**
+ * Each Telegram target sent without a `formatting` key takes the formatting of the saved
+ * Telegram target in the same place (the first with the first, …), so an older phone that edits
+ * the chat id does not turn an HTML step back into plain text. `null` is plain, said on purpose.
+ */
+export function keepFormatting(send: WorkflowSend, saved: WorkflowSend): WorkflowSend {
+  const before = saved.targets.filter((target) => target.platform === 'telegram');
+  let index = 0;
+  return {
+    ...send,
+    targets: send.targets.map((target) => {
+      if (target.platform !== 'telegram') return target;
+      const old = before[index];
+      index += 1;
+      if (Object.prototype.hasOwnProperty.call(target, 'formatting')) return target;
+      if (!old || old.formatting === undefined || old.formatting === null) return target;
+      return { ...target, formatting: old.formatting };
+    }),
+  };
 }
 
 export function definitionOf(input: Record<string, unknown>): WorkflowDefinition {

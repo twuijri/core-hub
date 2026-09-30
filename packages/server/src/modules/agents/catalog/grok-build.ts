@@ -54,6 +54,8 @@ export const grokBuild: CatalogEntry = {
     },
   },
   credentials: { xai: 'XAI_API_KEY' },
+  // Grok Build's own settings and xAI's.
+  hostEnv: ['XAI_*', 'GROK_*'],
   health: { kind: 'command', args: ['--version'] },
   capabilities: ['streaming', 'tools', 'approvals', 'mcp', 'resume'],
   sections: ['mcp', 'settings'],

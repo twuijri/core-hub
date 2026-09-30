@@ -11,7 +11,8 @@
  * person, so the tools refuse there; the recent calls show that too, with the hub's reason.
  *
  * **Test asks Hermes**, exactly as on a server row: Hermes connects to the block the hub wrote
- * and lists the tools it was offered.
+ * and lists the tools it was offered — on Hermes's page only. On a coding agent's page the card
+ * is the same profile's settings (the agent is handed the server in `session/new`), and says so.
  *
  * **It folds** (owner, 2026-09-28): the header — title and the switch — is what shows; a press
  * on the title opens the groups, the test and the recent calls. Closed by default, open when the
@@ -34,7 +35,16 @@ import {
 } from './skills.js';
 import { intlLocale } from '../i18n/index.js';
 
-export function HubToolsCard({ agentId }: { agentId: string | undefined }) {
+export function HubToolsCard({
+  agentId,
+  hermes = true,
+  agentName = '',
+}: {
+  agentId: string | undefined;
+  /** Test asks Hermes; on a coding agent's page the card says the settings are shared. */
+  hermes?: boolean;
+  agentName?: string;
+}) {
   const { t } = useI18n();
   const settings = useHubTools(agentId);
   const update = useUpdateHubTools(agentId);
@@ -111,6 +121,11 @@ export function HubToolsCard({ agentId }: { agentId: string | undefined }) {
               {t('hub_tools.acts_as')}
             </p>
           )}
+          {data && !hermes && (
+            <p className="text-sm text-muted" data-testid="hub-tools-shared">
+              {t('hub_tools.shared_note', { name: agentName, product })}
+            </p>
+          )}
 
           {data && (
             <ul className="flex flex-col gap-2" data-testid="hub-tools-groups">
@@ -126,7 +141,7 @@ export function HubToolsCard({ agentId }: { agentId: string | undefined }) {
             </ul>
           )}
 
-          {data && (
+          {data && hermes && (
             <div className="flex flex-wrap items-center gap-2">
               <Button
                 size="sm"

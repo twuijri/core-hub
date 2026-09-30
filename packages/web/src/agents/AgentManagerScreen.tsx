@@ -175,6 +175,13 @@ function AgentCard({ agent, jobs }: { agent: Agent; jobs: Record<string, Job> })
           </Badge>
         }
       />
+      {/* Installed, but nothing to answer with: said, so it does not look ready. Its own line,
+          not a second badge in the header, which has no room for it on a phone. */}
+      {agent.credentials === 'missing' && (
+        <Notice tone="warning" testId="agent-needs-setup">
+          {t('agents.needs_setup')}
+        </Notice>
+      )}
       {agent.limited && <Notice tone="warning">{t('agents.limited')}</Notice>}
       {/* Errors carry paths and commands with no spaces to break at: they wrap anywhere
           rather than run past the card's edge. */}

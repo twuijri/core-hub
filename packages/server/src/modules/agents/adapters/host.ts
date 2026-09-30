@@ -53,6 +53,12 @@ export interface CommandResult {
   stdout: string;
   stderr: string;
   error: string | null;
+  /**
+   * The program could not be started at all — no such file, no execute bit, or (exit 126/127)
+   * a launcher that could not find its interpreter — as opposed to one that ran and said no.
+   * Absent from results made elsewhere (tests), which read as started.
+   */
+  unstartable?: boolean;
 }
 
 /** The most a command's stdout or stderr is kept (bytes); past it the command is stopped. */
@@ -91,7 +97,13 @@ export async function runCommand(
         ...(options.cwd ? { cwd: options.cwd } : {}),
       });
     } catch (error) {
-      resolve({ ok: false, stdout: '', stderr: '', error: (error as Error).message });
+      resolve({
+        ok: false,
+        stdout: '',
+        stderr: '',
+        error: (error as Error).message,
+        unstartable: true,
+      });
       return;
     }
     const stop = (reason: string) => {
@@ -123,7 +135,9 @@ export async function runCommand(
       stderr += String(chunk);
       if (stderr.length > MAX_COMMAND_OUTPUT) stop(`${argv.join(' ')} printed too much`);
     });
-    child.once('error', (error) => finish({ ok: false, stdout, stderr, error: error.message }));
+    child.once('error', (error) =>
+      finish({ ok: false, stdout, stderr, error: error.message, unstartable: true }),
+    );
     child.once('close', (code, signal) => {
       if (stopped) return finish({ ok: false, stdout, stderr, error: stopped });
       if (code === 0) return finish({ ok: true, stdout, stderr, error: null });
@@ -132,6 +146,8 @@ export async function runCommand(
         stdout,
         stderr,
         error: `Command failed: ${argv.join(' ')} (${signal ? `stopped by ${signal}` : `exit code ${code ?? '?'}`})`,
+        // The shell's "cannot execute" and "not found": `#!/usr/bin/env node` without a node.
+        unstartable: code === 126 || code === 127,
       });
     });
   });

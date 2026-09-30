@@ -6002,6 +6002,13 @@ paths:
         `platforms` that do not include the hub's own system (`linux`, `macos`, `windows`) is
         left out — Hermes never loads it here — and `enabled` is off for a skill in the
         profile's `skills.disabled` list.
+
+        Claude Code (contract decision §139): the same operations act on its own skills folder,
+        `~/.claude/skills` (`$CLAUDE_CONFIG_DIR/skills`), one set for every profile. Nothing of
+        Hermes's applies there: no `library`, no bundled skills, no `platforms` filter, and a
+        skill switched off has its `SKILL.md` renamed `SKILL.md.off` (Claude Code only loads
+        `SKILL.md`). Any other agent that is not Hermes answers `409 state_invalid`,
+        `skills_are_hermes_only`; the skill library operations stay Hermes's.
       x-rt-events: []
       responses:
         '200':
@@ -21988,6 +21995,28 @@ components:
               description: True for the process harness — the UI marks the agent "limited".
             subagents:
               $ref: '#/components/schemas/SubagentSupport'
+            credentials:
+              type: string
+              description: >-
+                `ready` or `missing` (a string, not an enum: a client reads any other value as
+                "not known"). Whether an installed coding agent has a key or a sign-in to answer with (added
+                2026-09-29, DECISIONS §138): `missing` when none of the variables it reads is
+                handed to it or set, and no sign-in or provider setting of its own is in its folder
+                (Goose: no `GOOSE_PROVIDER` in its config) — the card then says it needs a provider
+                or a sign-in. Absent where the hub cannot know (Hermes, the hub's own agent, an
+                agent not installed, an agent whose sign-in the hub does not recognise) and from
+                older hubs.
+            agent_default_model:
+              type: string
+              description: >-
+                The model an installed coding agent's own settings name as its default (added
+                2026-09-29, DECISIONS §138) — Claude Code's `settings.json` `model`, Codex's
+                top-level `config.toml` `model`, Gemini CLI's and Qwen Code's `settings.json`
+                `model.name`, Goose's `GOOSE_MODEL`, OpenCode's `opencode.json` `model`. A coding
+                agent runs on the model its own settings choose, so this is the default a
+                conversation with it gets; the model picker shows it. Absent when its settings
+                name none (the vendor's default, which the hub cannot know), for Hermes and the
+                hub's own agent (their default is `default_model`), and from older hubs.
     AgentPatch:
       type: object
       properties:
@@ -26277,6 +26306,18 @@ components:
             - $ref: '#/components/schemas/Ulid'
             - type: 'null'
           description: "`core_hub`: the conversation's agent, to make it again if it was deleted."
+        formatting:
+          type: [string, 'null']
+          maxLength: 20
+          description: >-
+            `telegram`: how Telegram reads the words (DECISIONS §137) — `plain` (sent with no
+            `parse_mode`, the words as they are), `html` (`parse_mode: HTML`, Telegram's tags only)
+            or `markdown_v2` (`parse_mode: MarkdownV2`). Absent or `null` is `plain`, as every
+            step saved before it. A plain string so a later value never breaks an older app; any
+            other value is refused when the workflow is saved or tested
+            (`send_formatting_unknown`). A target saved without the field keeps the saved
+            Telegram target's formatting in the same place, so an app that does not know it
+            does not turn a formatted step plain.
     WorkflowSendTest:
       type: object
       description: >-
@@ -26360,6 +26401,61 @@ components:
               reason:
                 type: string
                 description: The platform's own words when it gave any (Telegram's `description`).
+        formatting:
+          type: [string, 'null']
+          description: >-
+            The (first) Telegram target's formatting (`plain`, `html`, `markdown_v2`; DECISIONS
+            §137); `null` when the send has no Telegram target. Absent from older hubs.
+        parse_mode:
+          type: [string, 'null']
+          description: >-
+            The `parse_mode` sent to that target: `HTML`, `MarkdownV2`, or `null` for plain (the
+            request carried no `parse_mode` at all).
+        chat_id:
+          type: [string, 'null']
+          description: That Telegram target's chat, as sent.
+        parts_count:
+          type: [integer, 'null']
+          description: >-
+            How many messages the words were split into for that target (a formatted one is
+            split on what Telegram counts, each part valid on its own).
+        targets:
+          type: array
+          description: What each target did, in order.
+          items:
+            $ref: '#/components/schemas/WorkflowSendTargetResult'
+    WorkflowSendTargetResult:
+      type: object
+      description: >-
+        One target of a send (DECISIONS §137): where, with which Telegram formatting, in how
+        many parts, the platform's ids for the parts it took, and why not. `status` is a plain
+        string (`sent`, `failed`). A target that failed part way keeps the ids of the parts that
+        went (a retry sends only the rest); the send is not `sent` until every part is.
+      required: [target, platform, status, message_ids]
+      properties:
+        target:
+          type: string
+        platform:
+          type: string
+        chat_id:
+          type: [string, 'null']
+        session_id:
+          type: [string, 'null']
+        formatting:
+          type: [string, 'null']
+          description: '`plain`, `html` or `markdown_v2` for Telegram; `null` for a conversation.'
+        parse_mode:
+          type: [string, 'null']
+        status:
+          type: string
+        message_ids:
+          type: array
+          items:
+            type: string
+        parts_count:
+          type: integer
+        reason:
+          type: [string, 'null']
     WorkflowRules:
       type: object
       description: >-

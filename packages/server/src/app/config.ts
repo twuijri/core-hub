@@ -277,12 +277,27 @@ export type DatabaseConfig = { kind: 'sqlite'; file: string } | { kind: 'postgre
 export interface HostEnv {
   path: string | undefined;
   pathExt: string | undefined;
-  /** What a child process inherits. Never logged; never sent to a client. */
+  /**
+   * What a child process may inherit: the host's environment **less the hub's own settings**
+   * (`ENV_KEYS` and their old names — the database URL, the first-owner password, push keys).
+   * Hermes and npm get this; a coding agent gets only an allow-list of it
+   * (`agents/adapters/child-env.ts`, DECISIONS §139). Never logged; never sent to a client.
+   */
   inherited: NodeJS.ProcessEnv;
 }
 
+/** The hub's own variables, which no program it starts is given. */
+const HUB_OWN_ENV: ReadonlySet<string> = new Set<string>([
+  ...ENV_KEYS,
+  ...Object.values(LEGACY_ENV_KEYS),
+]);
+
 export function readHostEnv(env: NodeJS.ProcessEnv = process.env): HostEnv {
-  return { path: env.PATH, pathExt: env.PATHEXT, inherited: env };
+  const inherited: NodeJS.ProcessEnv = {};
+  for (const [name, value] of Object.entries(env)) {
+    if (!HUB_OWN_ENV.has(name)) inherited[name] = value;
+  }
+  return { path: env.PATH, pathExt: env.PATHEXT, inherited };
 }
 
 export interface HubConfig {

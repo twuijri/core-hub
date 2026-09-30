@@ -13,7 +13,7 @@ import { useAgentSettings, useSaveAgentSetting } from '../hub/queries.js';
 import { useI18n } from '../i18n/context.js';
 import { chatModels, useCatalogue } from '../models/queries.js';
 import { modelOption } from '../models/useModelPicker.js';
-import type { SettingsSection } from '../types.js';
+import type { Agent, SettingsSection } from '../types.js';
 import type { ComboboxOption } from '../ui/Combobox.js';
 import type { SelectOption } from '../ui/Select.js';
 
@@ -87,6 +87,33 @@ export function findApprovalMode(
  * The chat models this workspace can run, as the searchable picker shows them: the alias
  * reads, the id identifies and is searched too, and the provider becomes the group.
  */
+/**
+ * What the model picker says when no model is chosen (owner, 2026-09-29): which model that
+ * default is. Hermes and the hub's own agent run on the profile's default the hub hands them
+ * (`default_model`), named by the catalogue's label when it has one; a coding agent runs on the
+ * model its own settings name (`agent_default_model`), and when they name none only the agent
+ * knows — "Agent's own default". `null` keeps the plain "Default model".
+ */
+export function defaultModelLabel(
+  agent: Pick<Agent, 'kind' | 'default_model' | 'agent_default_model'> | undefined,
+  models: readonly ComboboxOption[],
+  t: (key: string, values?: Record<string, string | number>) => string,
+): string | null {
+  if (!agent) return null;
+  if (agent.kind === 'acp') {
+    const own = agent.agent_default_model;
+    return own
+      ? t('composer.model_default_named', { model: own })
+      : t('composer.model_agent_default');
+  }
+  const ref = agent.default_model;
+  if (!ref?.model) return null;
+  const option = models.find(
+    (candidate) => candidate.value === ref.model || candidate.value.endsWith(`/${ref.model}`),
+  );
+  return t('composer.model_default_named', { model: option?.label ?? ref.model });
+}
+
 export function useComposerModels(): ComboboxOption[] {
   const catalogue = useCatalogue();
   return useMemo(

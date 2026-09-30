@@ -132,9 +132,11 @@ import { SkillImportError, installPack, planImport, type UploadedFile } from './
 import { createNpmInstaller, managedBinDirs, type AgentInstaller } from './installer.js';
 import { AgentSignIns, type SpawnSignIn } from './agent-sign-in.js';
 import { agentEnvironment } from './adapters/acp.js';
+import { hostEnvNames } from './adapters/child-env.js';
 import type { AgentDirectoryPort, AgentInfo, AgentModelsPort, AgentRunnerPort } from './ports.js';
 import { AgentRunner } from './runner.js';
 import { ConfigFileError, ConfigFileStore } from './config-files.js';
+import { CodingAgentMcpStore, managesCodingAgentMcp } from './coding-agent-mcp.js';
 import { subagentSupport } from './serialize.js';
 import {
   AgentUpdateChecker,
@@ -194,6 +196,7 @@ import {
   putSkill,
   setSkillEnabled,
   type Skill,
+  type SkillFolderOptions,
 } from './skills.js';
 import {
   LIBRARY_CATEGORY,
@@ -484,6 +487,8 @@ interface AgentsContext {
   channelProbe: ProbeOptions;
   /** The coding agents' own config files, one set for the hub (decision §78). */
   configFiles: ConfigFileStore;
+  /** The coding agents' own MCP servers, one set for the hub like their config files. */
+  codingMcp: CodingAgentMcpStore;
   /** Agents signing in to their own vendor account (catalog `signIn`). */
   signIns: AgentSignIns;
   /** The environment a coding agent's process inherits, before its own variables. */
@@ -752,6 +757,11 @@ function contextOf(app: FastifyInstance): AgentsContext {
     ...(own.bootHealthTimeoutMs !== undefined
       ? { bootHealthTimeoutMs: own.bootHealthTimeoutMs }
       : {}),
+    // The same home and environment as the Config files page (`config-files.ts`).
+    credentialProbe: {
+      env: hub.config.hostEnv.inherited ?? {},
+      ...(own.agentHome ? { home: own.agentHome } : {}),
+    },
     models: () => modelsPorts.get(hub.io) ?? null,
     // A workspace is a Hermes profile (ADR 0014): its slug, or `default` for the hub's
     // default workspace whatever it is called. An archived or unknown one has none.
@@ -882,6 +892,11 @@ function contextOf(app: FastifyInstance): AgentsContext {
     telegramFetch: own.telegramFetch ?? fetch,
     channelProbe: own.channelProbe ?? {},
     configFiles: new ConfigFileStore({
+      env: hub.config.hostEnv.inherited ?? {},
+      ...(own.agentHome ? { home: own.agentHome } : {}),
+      dataDir: hub.config.dataDir,
+    }),
+    codingMcp: new CodingAgentMcpStore({
       env: hub.config.hostEnv.inherited ?? {},
       ...(own.agentHome ? { home: own.agentHome } : {}),
       dataDir: hub.config.dataDir,
@@ -1286,6 +1301,26 @@ export const agentsModule = defineModule({
     const skillHome = (request: FastifyRequest, agentId: string): string =>
       toolHome(request, agentId).home;
 
+    /**
+     * Where an agent's skills are, for the Skills page (DECISIONS §139): Hermes's profile home, or
+     * Claude Code's own folder (`$CLAUDE_CONFIG_DIR` or `~/.claude`), whose `skills/` holds the
+     * same `SKILL.md` folders — one set for every profile, as its Config files and MCP pages are.
+     * Any other agent is still `skills_are_hermes_only`.
+     */
+    const PLAIN_SKILLS: ReadonlySet<string> = new Set(['claude-code']);
+    const skillPlace = (
+      request: FastifyRequest,
+      agentId: string,
+    ): { home: string; options: SkillFolderOptions } => {
+      const context = contextOf(request.server);
+      const row = context.service.get(scopeOf(request), agentId, request.language);
+      if (row.kind !== 'hermes' && PLAIN_SKILLS.has(row.slug)) {
+        const home = context.configFiles.agentFolder(row.slug);
+        if (home) return { home, options: { agent: 'plain' } };
+      }
+      return { home: toolHome(request, agentId).home, options: { agent: 'hermes' } };
+    };
+
     /** The agent's name as the hub shows it to the person asking. */
     const agentNameOf = (request: FastifyRequest, agentId: string): string =>
       contextOf(request.server).service.get(scopeOf(request), agentId, request.language).name;
@@ -1490,15 +1525,18 @@ export const agentsModule = defineModule({
       operationId: 'agents.listSkills',
       handler: (request, { params }) => {
         const agentId = params.agent_id as string;
-        const home = skillHome(request, agentId);
+        const { home, options } = skillPlace(request, agentId);
+        const pinned = contextOf(request.server).service.pinnedSkills(scopeOf(request), agentId);
+        if (options.agent === 'plain') {
+          // Core Hub's library is Hermes's (§71): another agent's folder lists without it.
+          return {
+            categories: categorise(home, listSkills(home, process.platform, options), pinned),
+            home: skillsDir(home),
+          };
+        }
         const library = libraryStatus(home);
         return {
-          categories: categorise(
-            home,
-            listSkills(home),
-            contextOf(request.server).service.pinnedSkills(scopeOf(request), agentId),
-            library,
-          ),
+          categories: categorise(home, listSkills(home), pinned, library),
           library: toLibrary(library),
           // Which folder this is. A Hermes somebody else started with a different home
           // would otherwise read as "no skills", and a path on screen is the difference
@@ -1513,13 +1551,13 @@ export const agentsModule = defineModule({
       handler: (request, { params }) => {
         const agentId = params.agent_id as string;
         const key = params.skill_key as string;
-        const home = skillHome(request, agentId);
-        const skill = getSkill(home, key);
+        const { home, options } = skillPlace(request, agentId);
+        const skill = getSkill(home, key, options);
         if (!skill) throw notFound({ resource: 'skill', id: key });
         return toSkill(
           skill,
           contextOf(request.server).service.pinnedSkills(scopeOf(request), agentId),
-          libraryStatus(home),
+          options.agent === 'plain' ? undefined : libraryStatus(home),
         );
       },
     });
@@ -1529,7 +1567,7 @@ export const agentsModule = defineModule({
       handler: (request, { params, body }) => {
         const agentId = params.agent_id as string;
         const key = params.skill_key as string;
-        const home = skillHome(request, agentId);
+        const { home, options } = skillPlace(request, agentId);
         try {
           const written = putSkill(home, key, {
             content: String((body as { content: string }).content),
@@ -1537,7 +1575,7 @@ export const agentsModule = defineModule({
           return toSkill(
             written,
             contextOf(request.server).service.pinnedSkills(scopeOf(request), agentId),
-            libraryStatus(home),
+            options.agent === 'plain' ? undefined : libraryStatus(home),
           );
         } catch (error) {
           return skillFault(error);
@@ -1550,14 +1588,16 @@ export const agentsModule = defineModule({
       handler: (request, { params, body }) => {
         const agentId = params.agent_id as string;
         const key = params.skill_key as string;
-        const home = skillHome(request, agentId);
+        const { home, options } = skillPlace(request, agentId);
         const patch = body as { enabled?: boolean; pinned?: boolean };
         const service = contextOf(request.server).service;
         const scope = scopeOf(request);
         try {
-          let skill = getSkill(home, key);
+          let skill = getSkill(home, key, options);
           if (!skill) throw notFound({ resource: 'skill', id: key });
-          if (patch.enabled !== undefined) skill = setSkillEnabled(home, key, patch.enabled);
+          if (patch.enabled !== undefined) {
+            skill = setSkillEnabled(home, key, patch.enabled, options);
+          }
           let pinned = service.pinnedSkills(scope, agentId);
           if (patch.pinned !== undefined) {
             pinned = service.setPinnedSkills(
@@ -1566,7 +1606,11 @@ export const agentsModule = defineModule({
               patch.pinned ? [...pinned, key] : pinned.filter((entry) => entry !== key),
             );
           }
-          return toSkill(skill, pinned, libraryStatus(home));
+          return toSkill(
+            skill,
+            pinned,
+            options.agent === 'plain' ? undefined : libraryStatus(home),
+          );
         } catch (error) {
           return skillFault(error);
         }
@@ -1576,7 +1620,7 @@ export const agentsModule = defineModule({
     defineRoute(app, deps, {
       operationId: 'agents.deleteSkill',
       handler: (request, { params }) => {
-        const home = skillHome(request, params.agent_id as string);
+        const { home } = skillPlace(request, params.agent_id as string);
         try {
           deleteSkill(home, params.skill_key as string);
         } catch (error) {
@@ -1633,7 +1677,7 @@ export const agentsModule = defineModule({
       status: 201,
       handler: (request, { params, body }) => {
         const agentId = params.agent_id as string;
-        const { home } = toolHome(request, agentId);
+        const { home, options } = skillPlace(request, agentId);
         const scope = scopeOf(request);
         const ids = [...new Set((body as { attachment_ids: string[] }).attachment_ids)];
         const port = attachmentsFactory?.(request.server);
@@ -1655,7 +1699,7 @@ export const agentsModule = defineModule({
           const pinned = contextOf(request.server).service.pinnedSkills(scope, agentId);
           return {
             items: keys
-              .map((key) => getSkill(home, key))
+              .map((key) => getSkill(home, key, options))
               .filter((skill): skill is Skill => skill !== null)
               .map((skill) => toSkill({ ...skill, content: null }, pinned)),
           };
@@ -1695,6 +1739,10 @@ export const agentsModule = defineModule({
     const mcpFault = (error: unknown): never => {
       if (error instanceof McpError) {
         if (error.reason === 'mcp_not_found') throw notFound({ resource: 'mcp_server' });
+        // The file is the agent's and it is writing it, or the hub does not edit that agent's.
+        if (error.reason === 'config_busy' || error.reason === 'mcp_not_managed') {
+          throw new HubError('state_invalid', { details: { reason: error.reason } });
+        }
         throw new HubError('bad_request', { details: { reason: error.reason } });
       }
       throw error;
@@ -1742,9 +1790,52 @@ export const agentsModule = defineModule({
       }
     };
 
+    /**
+     * A coding agent's MCP page edits the agent's own file (`coding-agent-mcp.ts`): its slug,
+     * or `null` for Hermes (whose servers are its profile's `config.yaml`). A coding agent whose
+     * file the hub does not edit yet is `409`, `mcp_not_managed`; the page then points to its
+     * Config files, and the Core Hub tools card still works.
+     */
+    const codingMcpSlug = (request: FastifyRequest, agentId: string): string | null => {
+      const row = contextOf(request.server).service.get(
+        scopeOf(request),
+        agentId,
+        request.language,
+      );
+      if (row.kind === 'hermes') return null;
+      if (row.kind !== 'acp' || !managesCodingAgentMcp(row.slug)) {
+        throw new HubError('state_invalid', {
+          details: { agent_id: agentId, reason: 'mcp_not_managed' },
+        });
+      }
+      return row.slug;
+    };
+
+    /** The contract's `McpServer` for a coding agent: no test, sign-in or tool filter here. */
+    const toCodingMcpServer = (server: McpServer): Record<string, unknown> => ({
+      name: server.name,
+      transport: server.transport,
+      enabled: server.enabled,
+      connected: false,
+      tools: [],
+      error: null,
+      config: server.config,
+      updated_at: new Date().toISOString(),
+    });
+
     defineRoute(app, deps, {
       operationId: 'agents.listMcpServers',
       handler: (request, { params }) => {
+        const coding = codingMcpSlug(request, params.agent_id as string);
+        if (coding) {
+          try {
+            return {
+              items: contextOf(request.server).codingMcp.list(coding).map(toCodingMcpServer),
+            };
+          } catch (error) {
+            return mcpFault(error);
+          }
+        }
         const home = skillHome(request, params.agent_id as string);
         try {
           return { items: listMcpServers(home).map((server) => toMcpServer(server, home)) };
@@ -1757,7 +1848,6 @@ export const agentsModule = defineModule({
     defineRoute(app, deps, {
       operationId: 'agents.createMcpServer',
       handler: (request, { params, body }) => {
-        const home = skillHome(request, params.agent_id as string);
         const input = body as {
           name: string;
           transport: string;
@@ -1765,6 +1855,28 @@ export const agentsModule = defineModule({
           config: Record<string, unknown>;
         };
         refuseManaged(input.name);
+        const coding = codingMcpSlug(request, params.agent_id as string);
+        if (coding) {
+          const store = contextOf(request.server).codingMcp;
+          try {
+            if (store.get(coding, input.name)) {
+              throw new HubError('conflict', {
+                details: { reason: 'mcp_name_taken', name: input.name },
+              });
+            }
+            return toCodingMcpServer(
+              store.put(
+                coding,
+                input.name,
+                { config: input.config, enabled: input.enabled ?? true },
+                input.transport as McpServer['transport'],
+              ),
+            );
+          } catch (error) {
+            return mcpFault(error);
+          }
+        }
+        const home = skillHome(request, params.agent_id as string);
         try {
           if (getMcpServer(home, input.name)) {
             throw new HubError('conflict', {
@@ -1787,7 +1899,6 @@ export const agentsModule = defineModule({
     defineRoute(app, deps, {
       operationId: 'agents.updateMcpServer',
       handler: (request, { params, body }) => {
-        const home = skillHome(request, params.agent_id as string);
         const name = params.server_name as string;
         const patch = body as {
           enabled?: boolean;
@@ -1795,6 +1906,32 @@ export const agentsModule = defineModule({
           tool_filter?: McpToolFilter;
         };
         refuseManaged(name);
+        const coding = codingMcpSlug(request, params.agent_id as string);
+        if (coding) {
+          // Which tools the agent may use is Hermes's own filter (§134); a coding agent has none.
+          if (patch.tool_filter !== undefined) {
+            throw new HubError('state_invalid', {
+              details: { reason: 'tool_filter_is_hermes_only' },
+            });
+          }
+          const store = contextOf(request.server).codingMcp;
+          try {
+            const current = store.get(coding, name);
+            if (!current) throw notFound({ resource: 'mcp_server', id: name });
+            if (patch.enabled === undefined && patch.config === undefined) {
+              return toCodingMcpServer(current);
+            }
+            return toCodingMcpServer(
+              store.put(coding, name, {
+                ...(patch.enabled === undefined ? {} : { enabled: patch.enabled }),
+                ...(patch.config === undefined ? {} : { config: patch.config }),
+              }),
+            );
+          } catch (error) {
+            return mcpFault(error);
+          }
+        }
+        const home = skillHome(request, params.agent_id as string);
         try {
           if (!getMcpServer(home, name)) throw notFound({ resource: 'mcp_server', id: name });
           let written =
@@ -1822,6 +1959,15 @@ export const agentsModule = defineModule({
       operationId: 'agents.deleteMcpServer',
       handler: (request, { params }) => {
         refuseManaged(params.server_name as string);
+        const coding = codingMcpSlug(request, params.agent_id as string);
+        if (coding) {
+          try {
+            contextOf(request.server).codingMcp.delete(coding, params.server_name as string);
+          } catch (error) {
+            return mcpFault(error);
+          }
+          return null;
+        }
         const home = skillHome(request, params.agent_id as string);
         try {
           deleteMcpServer(home, params.server_name as string);
@@ -2005,7 +2151,12 @@ export const agentsModule = defineModule({
           });
         }
         const ctx = contextOf(request.server);
-        const env = agentEnvironment(ctx.agentInherited, { executablePath: row.executablePath });
+        // Only the agent's own variables, as when it runs (§139).
+        const env = agentEnvironment(
+          ctx.agentInherited,
+          { executablePath: row.executablePath },
+          hostEnvNames(entry),
+        );
         const started = await ctx.signIns.start(
           agentId,
           [row.executablePath, ...entry.signIn.args],
@@ -2042,13 +2193,15 @@ export const agentsModule = defineModule({
       service: (server) => contextOf(server).hubTools,
       scopeOf,
       actorOf,
-      assertHermes: (request, agentId) => {
+      assertHubToolsAgent: (request, agentId) => {
         const row = contextOf(request.server).service.get(
           scopeOf(request),
           agentId,
           request.language,
         );
-        if (row.kind !== 'hermes') {
+        // The settings are the profile's: Hermes reads them from its config, and a coding agent
+        // over ACP is handed the same server when its conversation starts (decision §67).
+        if (row.kind !== 'hermes' && row.kind !== 'acp') {
           throw new HubError('state_invalid', {
             details: { agent_id: agentId, reason: 'skills_are_hermes_only' },
           });

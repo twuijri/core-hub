@@ -60,10 +60,10 @@ next:
    is split into several Telegram messages on line and paragraph boundaries. **Send test
    message** sends the words now, to check the bot and the chat.
 
-With nothing selected, the side panel also has **When a run fails**: tell me in the inbox,
+The workflow's settings (the gear by its name) have **When a run fails**: tell me in the inbox,
 and/or send the workflow's name and the error to Telegram or a conversation.
 
-**Test this step** (in each step's panel) tries the step on its own with a sample input and a
+**Test this step** (in each step's dialog — click the step) tries the step on its own with a sample input and a
 sample event (a ClickUp-shaped event is filled in): a condition says yes or no, a prompt or a
 message shows its words with the sample filled in, and an agent step runs a real turn only when
 you tick *Run the agent for real*. Nothing is saved and no run is made.
@@ -73,7 +73,7 @@ Save the workflow.
 ## 3. Connect ClickUp
 
 Follow [Start a workflow from ClickUp events](clickup-webhook-trigger.md): add a **ClickUp**
-trigger in the side panel, register the webhook with its address through ClickUp's API
+trigger from **Add trigger** on the canvas, register the webhook with its address through ClickUp's API
 (`POST https://api.clickup.com/api/v2/team/<team_id>/webhook` with the address and the
 events), paste the `secret` ClickUp answers into the trigger, and **Send test event**.
 

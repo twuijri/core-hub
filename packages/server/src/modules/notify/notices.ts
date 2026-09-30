@@ -28,7 +28,7 @@ export type Locale = 'ar' | 'en';
 
 /** The events a module can announce. One per sentence below — nothing else is accepted. */
 export type NoticeEvent =
-  | { kind: 'run_completed'; agent: string; session: string }
+  | { kind: 'run_completed'; agent: string; session: string; reply?: string | null }
   | { kind: 'run_failed'; agent: string; session: string; reason: string | null }
   | { kind: 'approval_requested'; agent: string; session: string; what: string }
   /**
@@ -53,9 +53,16 @@ export function sentenceFor(event: NoticeEvent, locale: Locale): Sentence {
   switch (event.kind) {
     case 'run_completed':
       return {
-        title: ar ? `أنهى ${event.agent} الرد` : `${event.agent} finished`,
+        // With the start of the reply (owner, 2026-09-29): the chat's name moves up to the title
+        // and the body is what the agent said, so a phone's notice is worth reading as it is.
+        // Private push (relay) still replaces both with a generic line.
+        title: event.reply
+          ? `${event.agent} · ${event.session || (ar ? 'رد جديد' : 'New reply')}`
+          : ar
+            ? `أنهى ${event.agent} الرد`
+            : `${event.agent} finished`,
         // A session that has not named itself yet has no subtitle worth a blank line.
-        body: event.session || null,
+        body: (event.reply && plainPreview(event.reply)) || event.session || null,
       };
     case 'run_failed':
       return {
@@ -373,4 +380,15 @@ export function deliver(
       .catch(() => undefined);
   }
   return id;
+}
+
+/** A reply's start as a notice line: Markdown marks (bold, code, headings, quotes) dropped. */
+export function plainPreview(text: string): string | null {
+  const plain = text
+    .replace(/\*\*|__|`+/g, '')
+    .replace(/(^|\s)#{1,6}\s+/g, '$1')
+    .replace(/(^|\s)>\s+/g, '$1')
+    .replace(/\s+/g, ' ')
+    .trim();
+  return plain.length > 0 ? plain : null;
 }

@@ -198,6 +198,140 @@ export function useTriggerWrites(profile: string, workflowId: string) {
   };
 }
 
+/** A schedule whose target is this workflow — one of its triggers on the canvas. */
+export interface WorkflowScheduleRow {
+  id: string;
+  profile: string;
+  name: string;
+  enabled: boolean;
+  next_run_at: string | null;
+  trigger: {
+    kind: 'cron' | 'interval' | 'once';
+    expression: string | null;
+    every_minutes: number | null;
+    run_at: string | null;
+    timezone: string;
+  };
+}
+
+/** The schedules that run this workflow (`schedules.list` narrowed by `workflow_id`). */
+export function useWorkflowSchedules(profile: string, workflowId: string | null) {
+  const { client, session } = useAuth();
+  return useQuery({
+    queryKey: ['schedules', 'workflow-schedules', profile, workflowId ?? ''] as const,
+    queryFn: async () => {
+      const { data } = await client.request('get', '/schedules', {
+        query: { profile, workflow_id: workflowId!, limit: 50 } as never,
+      });
+      const items = (data as unknown as { items?: WorkflowScheduleRow[] } | null)?.items;
+      return Array.isArray(items) ? items : [];
+    },
+    enabled: !!session && !!workflowId,
+  });
+}
+
+/** A `ScheduleWrite` that runs a workflow at the time a schedule trigger node says. */
+export function workflowScheduleBody(
+  name: string,
+  workflowId: string,
+  schedule: { mode: 'cron' | 'interval' | 'once'; value: string },
+  zone: string = Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC',
+) {
+  const value = schedule.value.trim();
+  return {
+    name: name.trim().slice(0, 120) || 'Workflow',
+    trigger: {
+      kind: schedule.mode,
+      expression: schedule.mode === 'cron' ? value : null,
+      every_minutes:
+        schedule.mode === 'interval' ? Math.max(1, Math.round(Number(value)) || 1) : null,
+      run_at:
+        schedule.mode === 'once' && value && !Number.isNaN(Date.parse(value))
+          ? new Date(value).toISOString()
+          : null,
+      timezone: zone,
+    },
+    target: {
+      kind: 'workflow',
+      agent_id: null,
+      prompt: null,
+      model: null,
+      provider: null,
+      skills: [],
+      workflow_id: workflowId,
+      input: null,
+    },
+  };
+}
+
+/** Make, switch and delete the schedules that run a workflow, in the workflow's profile. */
+export function useWorkflowScheduleWrites(profile: string) {
+  const { client } = useAuth();
+  const queryClient = useQueryClient();
+  const refresh = () => void queryClient.invalidateQueries({ queryKey: ['schedules'] });
+  return {
+    create: useMutation({
+      mutationFn: async (body: ReturnType<typeof workflowScheduleBody>) =>
+        (
+          await client.request('post', '/schedules', {
+            body: body as never,
+            ...inProfile(profile),
+          })
+        ).data as unknown as WorkflowScheduleRow,
+      onSuccess: refresh,
+    }),
+    update: useMutation({
+      mutationFn: async ({ id, patch }: { id: string; patch: Record<string, unknown> }) =>
+        (
+          await client.request('patch', '/schedules/{schedule_id}', {
+            params: { schedule_id: id },
+            body: patch as never,
+            ...inProfile(profile),
+          })
+        ).data as unknown as WorkflowScheduleRow,
+      onSuccess: refresh,
+    }),
+    remove: useMutation({
+      mutationFn: async (id: string) => {
+        await client.request('delete', '/schedules/{schedule_id}', {
+          params: { schedule_id: id },
+          ...inProfile(profile),
+        });
+        return id;
+      },
+      onSuccess: refresh,
+    }),
+  };
+}
+
+/** A webhook trigger for a workflow saved just now (the ones added before its first save). */
+export async function createTrigger(
+  client: ReturnType<typeof useAuth>['client'],
+  profile: string,
+  workflowId: string,
+  body: { preset: TriggerPreset; name?: string; events?: string[] },
+): Promise<WorkflowTriggerRow> {
+  const { data } = await client.request('post', '/workflows/{workflow_id}/triggers', {
+    params: { workflow_id: workflowId },
+    body: body as never,
+    ...inProfile(profile),
+  });
+  return data as unknown as WorkflowTriggerRow;
+}
+
+/** A schedule for a workflow saved just now. */
+export async function createWorkflowSchedule(
+  client: ReturnType<typeof useAuth>['client'],
+  profile: string,
+  body: ReturnType<typeof workflowScheduleBody>,
+): Promise<WorkflowScheduleRow> {
+  const { data } = await client.request('post', '/schedules', {
+    body: body as never,
+    ...inProfile(profile),
+  });
+  return data as unknown as WorkflowScheduleRow;
+}
+
 export function useWorkflows() {
   const { client, session } = useAuth();
   return useQuery({

@@ -12,6 +12,7 @@
 import { mkdirSync } from 'node:fs';
 import path from 'node:path';
 import { expect, test, type Page } from '@playwright/test';
+import { addStep, closeDialog, openStep, runByHand } from './workflow-canvas.js';
 
 const PASSWORD = 'e2e-owner-password';
 const NOWHERE = '01J8QK3ZR2W7M5N4P6T8V9X0ZZ';
@@ -40,8 +41,7 @@ async function inDefault(page: Page) {
 }
 
 async function runOnce(page: Page, input: string) {
-  await page.getByTestId('workflow-run-input').fill(input);
-  await page.getByTestId('workflow-run').click();
+  await runByHand(page, input);
   const run = page.getByTestId('workflow-run-view');
   await expect(
     run.locator('[data-testid="workflow-node"][data-node-id="agent_1"]'),
@@ -66,7 +66,7 @@ test('43. an agent step talks in the same conversation every run', async ({ page
   await page.getByTestId('workflow-new').click();
   const editor = page.getByTestId('workflow-editor');
   await page.getByTestId('workflow-name').fill('متابعة في محادثة واحدة');
-  await page.getByTestId('workflow-add-agent').click();
+  await addStep(page, 'agent');
   await page.getByTestId('workflow-step-agent').click();
   await page.getByRole('option').nth(1).click();
   await page.getByTestId('workflow-step-prompt').fill('تابع المحادثة: {{input}}');
@@ -91,6 +91,7 @@ test('43. an agent step talks in the same conversation every run', async ({ page
   await expect(page.getByTestId('workflow-check')).toHaveAttribute('data-valid', 'true');
   await shot(page, 'workflow-conversation-ar-light');
 
+  await closeDialog(page);
   await page.getByTestId('workflow-save').click();
   await expect(editor).not.toHaveAttribute('data-workflow-id', 'new');
 
@@ -131,12 +132,13 @@ test('43. an agent step talks in the same conversation every run', async ({ page
     .filter({ hasText: 'متابعة في محادثة واحدة' })
     .getByRole('button', { name: 'تحرير' })
     .click();
-  await page.getByTestId('workflow-node').first().click();
+  await openStep(page, 'agent_1');
   await page.getByTestId('workflow-conversation-manual').click();
   await page.getByTestId('workflow-conversation-id').fill(NOWHERE);
   await expect(result).toHaveAttribute('data-status', 'not_found');
   await expect(result).toContainText('لا توجد محادثة');
   await expect(page.getByTestId('workflow-check')).toHaveAttribute('data-valid', 'true');
+  await closeDialog(page);
   await page.getByTestId('workflow-save').click();
   await expect(page.getByTestId('workflow-save')).toBeDisabled();
   run = await runOnce(page, 'الثالثة');

@@ -198,6 +198,33 @@ final class WorkflowEditorTests: XCTestCase {
         XCTAssertEqual(WorkflowEditRules.failureLines(result), ["whatsapp:+9665: unknown platform"])
     }
 
+    func testTelegramFormattingIsReadChosenKeptWithTheChatIDAndSurvivesALoadAndSave() throws {
+        // A step saved before §137: no field, read as plain, and written without one.
+        let old = WorkflowSend(targets: [WorkflowEditRules.telegramTarget(chatID: "-1001")])
+        XCTAssertEqual(WorkflowEditRules.formatting(of: WorkflowEditRules.target(old, "telegram")), "plain")
+        XCTAssertNil(try json(old.targets[0])["formatting"], "absent stays absent: the hub keeps what was saved")
+
+        var send = WorkflowEditRules.withFormatting(old, "html")
+        XCTAssertEqual(WorkflowEditRules.target(send, "telegram")?.formatting, "html")
+        // Editing the chat id keeps the formatting.
+        let html = WorkflowEditRules.target(send, "telegram")
+        send = WorkflowEditRules.setTarget(send, platform: "telegram",
+                                           WorkflowEditRules.telegramTarget(chatID: " -1002 ", formatting: html?.formatting))
+        XCTAssertEqual(WorkflowEditRules.target(send, "telegram")?.chatId, "-1002")
+        XCTAssertEqual(WorkflowEditRules.target(send, "telegram")?.formatting, "html")
+        // Only the three values.
+        XCTAssertEqual(WorkflowEditRules.formatting(of: WorkflowSendTarget(platform: "telegram", formatting: "Markdown")), "plain")
+        XCTAssertEqual(WorkflowEditRules.target(WorkflowEditRules.withFormatting(send, "bogus"), "telegram")?.formatting, "plain")
+        XCTAssertEqual(WorkflowEditRules.target(WorkflowEditRules.withFormatting(send, "markdown_v2"), "telegram")?.formatting, "markdown_v2")
+        let none = WorkflowSend(targets: [WorkflowEditRules.conversationTarget(nil)])
+        XCTAssertEqual(WorkflowEditRules.withFormatting(none, "html"), none)
+
+        // A workflow from the hub keeps the field through this app's load and save.
+        let raw = #"{"targets":[{"platform":"telegram","chat_id":"-1001","formatting":"html"}]}"#
+        let loaded = try JSONDecoder().decode(WorkflowSend.self, from: Data(raw.utf8))
+        XCTAssertEqual(try json(loaded.targets[0])["formatting"] as? String, "html")
+    }
+
     func testTheSendMessageEntryAddsANotifyStepWithNoTargetYet() throws {
         var draft = empty()
         draft.name = "Report"

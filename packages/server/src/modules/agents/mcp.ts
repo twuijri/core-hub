@@ -24,7 +24,7 @@ import { parseDocument, type Document } from 'yaml';
 
 export const CONFIG_FILE = 'config.yaml';
 const BLOCK = 'mcp_servers';
-const NAME = /^[A-Za-z0-9._-]{1,60}$/;
+export const NAME = /^[A-Za-z0-9._-]{1,60}$/;
 
 /** Written once, read as the fact that there is one. */
 export const STORED = '[stored]';
@@ -143,7 +143,7 @@ function transportOf(config: Record<string, unknown>): Transport {
 const isBlock = (value: unknown): value is Record<string, unknown> =>
   !!value && typeof value === 'object' && !Array.isArray(value);
 
-function mask(config: Record<string, unknown>): Record<string, unknown> {
+export function mask(config: Record<string, unknown>): Record<string, unknown> {
   const out: Record<string, unknown> = {};
   for (const [key, value] of Object.entries(config)) {
     if (key === 'env' && isBlock(value)) {
@@ -178,7 +178,7 @@ function raw(value: unknown): boolean {
  * into the file and break the server the next time Hermes started — the exact failure a
  * masked field invites.
  */
-function unmask(
+export function unmask(
   next: Record<string, unknown>,
   previous: Record<string, unknown>,
 ): Record<string, unknown> {

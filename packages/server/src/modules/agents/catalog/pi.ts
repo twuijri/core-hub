@@ -8,6 +8,7 @@
 //
 // Verified 2026-09-25: `pi-acp` 0.0.34 answers ACP `initialize` (loadSession, images,
 // session list); it does not wire MCP servers through to Pi, so the entry claims no `mcp`.
+import { PROVIDER_HOST_ENV } from './provider-env.js';
 import type { CatalogEntry } from './types.js';
 
 export const pi: CatalogEntry = {
@@ -36,6 +37,8 @@ export const pi: CatalogEntry = {
     deepseek: 'DEEPSEEK_API_KEY',
     xai: 'XAI_API_KEY',
   },
+  // Pi's own folder and settings, and every provider it can use.
+  hostEnv: ['PI_*', ...PROVIDER_HOST_ENV],
   health: { kind: 'command', args: ['--version'], binary: 'pi' },
   // Pi runs its tools without asking (its design), so no `approvals`.
   capabilities: ['streaming', 'tools', 'resume', 'config_files'],

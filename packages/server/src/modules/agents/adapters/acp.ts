@@ -29,8 +29,10 @@ import { PRODUCT, derived } from '@corehub/contracts';
 import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process';
 import path from 'node:path';
 import { createInterface } from 'node:readline';
+import { redactSecrets } from '../../../lib/redact-text.js';
 import type { AgentCapability } from '../schema.js';
-import { entriesFor, type CatalogEntry } from '../catalog/index.js';
+import { binaryNames, entriesFor, type CatalogEntry } from '../catalog/index.js';
+import { hostEnvNames, pickHostEnv } from './child-env.js';
 import { EventQueue } from './event-queue.js';
 import {
   SubagentSignals,
@@ -68,6 +70,11 @@ interface JsonRpcMessage {
 }
 
 export interface AcpTransport {
+  /**
+   * The last lines the agent wrote to its stderr, if the transport keeps them: what explains a
+   * bare "Internal error" (`describeAcpError`).
+   */
+  recentStderr?(): string;
   /** Write one JSON-RPC message (the transport adds the newline). */
   write(message: JsonRpcMessage): void;
   /** Called for every message the agent sends. */
@@ -102,10 +109,13 @@ export function childProcessTransport(child: ChildProcessWithoutNullStreams): Ac
     const reason =
       code === 0
         ? null
-        : `agent exited (${signal ?? `code ${code ?? '?'}`})${stderr ? `: ${stderr.trim()}` : ''}`;
+        : `agent exited (${signal ?? `code ${code ?? '?'}`})${
+            stderr ? `: ${redactSecrets(stderr.trim().slice(-ERROR_DETAIL_CHARS))}` : ''
+          }`;
     for (const handler of closeHandlers) handler(reason);
   });
   return {
+    recentStderr: () => stderr,
     write(message) {
       if (child.stdin.writable) child.stdin.write(`${JSON.stringify(message)}\n`);
     },
@@ -254,8 +264,11 @@ export class AcpSession implements AgentSession {
       const pending = this.pending.get(Number(message.id));
       if (!pending) return;
       this.pending.delete(Number(message.id));
-      if (message.error) pending.reject(new Error(message.error.message));
-      else pending.resolve(message.result ?? {});
+      if (message.error) {
+        pending.reject(
+          new Error(describeAcpError(message.error, this.transport.recentStderr?.() ?? '')),
+        );
+      } else pending.resolve(message.result ?? {});
       return;
     }
     if (!message.method) return;
@@ -492,16 +505,19 @@ export interface AcpAdapterOptions {
 }
 
 /**
- * What an ACP child starts with: the hub's environment, the agent's own variables, and its
- * own directory first on `PATH`. An adapter that drives a second CLI (Pi's `pi-acp` runs
- * `pi`) then finds the one installed beside it (`catalog/pi.ts`) rather than whatever
- * else the host has on its PATH.
+ * What an ACP child starts with: of the hub's environment only the base every program needs and
+ * the variables its catalog entry names (`names`, from `hostEnvNames`; DECISIONS §139), then
+ * what the hub hands it (`target.env`: the profile's shared keys under the names the agent reads,
+ * its own settings), and its own directory first on `PATH`. An adapter that drives a second CLI
+ * (Pi's `pi-acp` runs `pi`) then finds the one installed beside it (`catalog/pi.ts`) rather than
+ * whatever else the host has on its PATH.
  */
 export function agentEnvironment(
   inherited: NodeJS.ProcessEnv,
   target: Pick<AgentTarget, 'executablePath' | 'env'>,
+  names: readonly string[] = [],
 ): NodeJS.ProcessEnv {
-  const env: NodeJS.ProcessEnv = { ...inherited, ...(target.env ?? {}) };
+  const env: NodeJS.ProcessEnv = { ...pickHostEnv(inherited, names), ...(target.env ?? {}) };
   if (target.executablePath && path.isAbsolute(target.executablePath)) {
     const own = path.dirname(target.executablePath);
     const rest = (env.PATH ?? '').split(path.delimiter).filter((dir) => dir && dir !== own);
@@ -515,6 +531,18 @@ export function createAcpAdapter(options: AcpAdapterOptions): AgentAdapter {
   const catalog = options.catalog ?? entriesFor('acp');
   const clientName = options.clientName ?? derived.serviceName;
   const clientVersion = options.clientVersion ?? ACP_ADAPTER_VERSION;
+  const entryOf = (slug: string) => catalog.find((candidate) => candidate.id === slug);
+  /** A version flag is asked with only the agent's own variables, as a session is (§139). */
+  const versionEnv = (entry: CatalogEntry | undefined) =>
+    host.inherited ? { env: pickHostEnv(host.inherited, hostEnvNames(entry)) } : {};
+  /** The entry's protocol binary on PATH: its own name, then a renamed package's (§139). */
+  const findBinary = (entry: CatalogEntry): { name: string; path: string } | null => {
+    for (const name of binaryNames(entry)) {
+      const found = whichSync(name, host);
+      if (found) return { name, path: found };
+    }
+    return null;
+  };
 
   const openTransport = async (target: AgentTarget): Promise<AcpTransport> => {
     if (options.connect) return options.connect(target);
@@ -523,7 +551,7 @@ export function createAcpAdapter(options: AcpAdapterOptions): AgentAdapter {
     if (!command) throw new Error(`agent ${target.slug} has no command`);
     const child = spawn(target.executablePath ?? command, args, {
       stdio: ['pipe', 'pipe', 'pipe'],
-      env: agentEnvironment(host.inherited ?? {}, target),
+      env: agentEnvironment(host.inherited ?? {}, target, hostEnvNames(entryOf(target.slug))),
       ...(target.cwd ? { cwd: target.cwd } : {}),
     }) as ChildProcessWithoutNullStreams;
     return childProcessTransport(child);
@@ -542,14 +570,19 @@ export function createAcpAdapter(options: AcpAdapterOptions): AgentAdapter {
     async discover(): Promise<DiscoveredAgent[]> {
       const found: DiscoveredAgent[] = [];
       for (const entry of catalog) {
-        const executablePath = whichSync(entry.binary, host);
-        if (!executablePath) continue;
-        const probe = await runCommand([executablePath, ...entry.versionArgs]);
+        const binary = findBinary(entry);
+        if (!binary) continue;
+        const executablePath = binary.path;
+        // A bridge with no version flag is not asked (`HealthCheck` `installed`).
+        const probe =
+          entry.health.kind === 'installed'
+            ? { ok: true, stdout: '', stderr: '' }
+            : await runCommand([executablePath, ...entry.versionArgs], versionEnv(entry));
         found.push({
           slug: entry.id,
           name: entry.name,
           vendor: entry.vendor,
-          command: [entry.binary, ...entry.protocolArgs],
+          command: [binary.name, ...entry.protocolArgs],
           executablePath,
           version: parseVersion(`${probe.stdout}${probe.stderr}`),
           capabilities: entry.capabilities,
@@ -560,8 +593,12 @@ export function createAcpAdapter(options: AcpAdapterOptions): AgentAdapter {
     },
 
     async probe(target: AgentTarget): Promise<AgentProbe> {
+      const entry = entryOf(target.slug);
       const binary = target.executablePath ?? target.command[0] ?? target.slug;
-      const executablePath = whichSync(binary, host);
+      // A row that names the entry's new program while an install from before a rename (§139)
+      // has only the old one still finds the old one.
+      const executablePath =
+        whichSync(binary, host) ?? (entry ? findBinary(entry)?.path : null) ?? null;
       if (!executablePath) {
         return {
           installed: false,
@@ -572,8 +609,15 @@ export function createAcpAdapter(options: AcpAdapterOptions): AgentAdapter {
           error: null,
         };
       }
-      const entry = catalog.find((candidate) => candidate.id === target.slug);
-      const result = await runCommand([executablePath, ...(entry?.versionArgs ?? ['--version'])]);
+      // A bridge with no version flag is not asked; one that refuses the flag is still
+      // installed — only a program that cannot start is an error (`HealthCheck`).
+      const result =
+        entry?.health.kind === 'installed'
+          ? { ok: true, stdout: '', stderr: '', error: null, unstartable: false }
+          : await runCommand(
+              [executablePath, ...(entry?.versionArgs ?? ['--version'])],
+              versionEnv(entry),
+            );
       return {
         installed: true,
         source: 'user_cli',
@@ -582,7 +626,7 @@ export function createAcpAdapter(options: AcpAdapterOptions): AgentAdapter {
         // An ACP agent is a process the hub starts per session: there is no long-lived
         // runtime to report, which is exactly what `not_applicable` means.
         runtime: { state: 'not_applicable', url: null, error: null },
-        error: result.ok ? null : result.error,
+        error: result.ok || !result.unstartable ? null : result.error,
       };
     },
 
@@ -633,6 +677,55 @@ export function createAcpAdapter(options: AcpAdapterOptions): AgentAdapter {
       return session;
     },
   };
+}
+
+/** The most of an agent's own explanation kept with a failed run. */
+const ERROR_DETAIL_CHARS = 600;
+const STDERR_TAIL_LINES = 6;
+
+/** A JSON-RPC error's `data`, as words: its `details` / `message` / `error`, or itself. */
+function detailOf(data: unknown): string {
+  if (data === undefined || data === null) return '';
+  if (typeof data === 'string') return data.trim();
+  if (typeof data === 'object') {
+    const record = data as Record<string, unknown>;
+    for (const key of ['details', 'message', 'error', 'reason']) {
+      const value = record[key];
+      if (typeof value === 'string' && value.trim()) return value.trim();
+    }
+  }
+  try {
+    return JSON.stringify(data);
+  } catch {
+    return '';
+  }
+}
+
+/**
+ * What an agent's JSON-RPC error says, in full (owner, 2026-09-29: a chat with Goose ended in a
+ * bare "Internal error"). The error's own message, then what its `data` adds; when that is all
+ * the agent said and it is only "Internal error", the last lines of its stderr, which is where
+ * a bridge writes the real reason. Credentials are masked, and the whole is bounded.
+ */
+export function describeAcpError(
+  error: { code?: number; message?: string; data?: unknown },
+  stderr = '',
+): string {
+  const base = (error.message ?? '').trim() || `agent error ${String(error.code ?? '')}`.trim();
+  const detail = detailOf(error.data);
+  let text = detail && !base.includes(detail) ? `${base}: ${detail}` : base;
+  const generic = !detail && /^internal error\.?$/i.test(base);
+  if (generic) {
+    const tail = stderr
+      .split('\n')
+      .map((line) => line.trim())
+      .filter(Boolean)
+      .slice(-STDERR_TAIL_LINES)
+      .join(' · ');
+    if (tail) text = `${base} — ${tail}`;
+  }
+  const safe = redactSecrets(text);
+  return safe.length > ERROR_DETAIL_CHARS ? `${safe.slice(0, ERROR_DETAIL_CHARS - 1)}…` : safe;
 }
 
 /**

@@ -131,6 +131,10 @@ export function serializeAgent(
     name?: string;
     /** `agents.upgrade` runs this agent's own updater (`AgentInstall.self_update`). */
     selfUpdate?: boolean;
+    /** A key or sign-in to answer with, where the hub can know (`agent-credentials.ts`). */
+    credentials?: 'ready' | 'missing' | null;
+    /** The model a coding agent's own settings name as its default (`agent-own-model.ts`). */
+    ownModel?: string | null;
   },
 ): ContractAgent {
   const enabled = options.settings?.enabled ?? true;
@@ -197,6 +201,8 @@ export function serializeAgent(
     default_model: options.defaultModel ?? null,
     limited: row.limited,
     subagents: subagentSupport(row),
+    ...(options.credentials ? { credentials: options.credentials } : {}),
+    ...(options.ownModel ? { agent_default_model: options.ownModel } : {}),
   };
 }
 

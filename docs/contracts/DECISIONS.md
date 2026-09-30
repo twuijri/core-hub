@@ -4585,3 +4585,181 @@ the prompt in the session's own run queue at once (two runs would write two prom
 reply, and a run that gave up would leave an unanswered prompt behind); letting a step switch a
 conversation's agent (a conversation has one agent in every client); telling another profile's
 conversation apart from a missing one (it would confirm that it exists).
+
+## 137. A "Send message" step chooses how Telegram reads its words: plain, HTML or MarkdownV2
+
+Owner's request (2026-09-29): a Send message step (§124) sent no `parse_mode`, so `**` or `<b>`
+arrived as written. Generic for every hub. The details below are proposed — owner to confirm.
+Additive contract change only.
+
+**Per step, per Telegram target.** `WorkflowSendTarget.formatting` (optional, nullable) is a plain
+string — `plain`, `html` or `markdown_v2` — like §124's `platform`, so a later value never meets an
+older app's enum. Absent or `null` is `plain`: every step saved before this reads and sends exactly as
+before, and nothing is rewritten. Any other value (`HTML`, `Markdown`, `''`…) is refused when the
+workflow is saved or tested (`send_formatting_unknown`); a stored value is never handed to Telegram
+as it is. It is a property of the step, not of the bot or the profile. A conversation target
+ignores it (the conversation renders its own Markdown). A failure alert (§127) is always sent
+plain: the hub writes its words, and an error may hold `<` or `*`.
+
+**What Telegram receives.** `plain`: no `parse_mode` field at all, the words as they are. `html`:
+`parse_mode: "HTML"` — Telegram's own tags only (b/strong, i/em, u/ins, s/strike/del, code, pre,
+`a href`, tg-spoiler / `span class="tg-spoiler"`, blockquote; Bot API "HTML style"), nothing is
+sanitized or escaped by the hub. `markdown_v2`: `parse_mode: "MarkdownV2"`, never the legacy
+`Markdown`. The formatting applies to the words after their variables are filled (`render`), so a
+variable's value is part of the markup: a value with `<`, `&` or an unescaped `.` can make Telegram
+refuse it (escaping a variable's value is a follow-up).
+
+**A refusal is said, never hidden.** When Telegram cannot parse the markup (`Bad Request: can't
+parse entities: …`) the target fails with `Telegram HTML formatting failed: can't parse entities: …`
+(or `MarkdownV2`) — the mode and Telegram's own words; the hub never resends it plain and never says
+`sent`: `message_id` only for what Telegram took. Other refusals stay Telegram's words.
+
+**Long messages.** Plain words are split exactly as before (§124). A formatted one is measured on
+what Telegram counts — the text after its entities are parsed (tags, markers and escapes count
+nothing; `&lt;` counts one) — against 4000 (Telegram's 4096 with a margin), and cut on a paragraph,
+then a line, then a word, else between two characters; never inside a tag, an entity (`&amp;`), an
+escape (`\.`), a custom emoji or a date. The spans open at a cut are closed at the end of the part and
+opened again at the start of the next (`<b>`, `<a href="…">`, `<pre><code class="language-x">`; in
+MarkdownV2 `*`, `_`, `__`, `~`, `||`, a code block with its language, a link's `](url)`, a quote
+line's `>`, an expandable quote's `||` / `**>`; an empty bold `**` keeps a closing `_` from reading
+as `__`), so each part is valid on its own. A text that fits is sent whole and untouched (Telegram
+judges it); a longer one whose markup cannot be walked is refused before any part is sent. Each part
+is remembered as before (`workflow_sent_parts`, same run/node/target/part key), so a retry or a
+rerun sends only the parts that did not go.
+
+**Output and log.** `WorkflowSendResult` gains `formatting`, `parse_mode` (`null` for plain),
+`chat_id` and `parts_count` of the (first) Telegram target, and `targets` — `WorkflowSendTargetResult`
+per target (`target`, `platform`, `chat_id`, `session_id`, `formatting`, `parse_mode`, `status`,
+`message_ids`, `parts_count`, `reason`); a target that failed part way keeps the ids of the parts
+that went. The `workflow send` / `workflow send test` log lines add `formatting`, `parse_mode` and
+`parts_count`; the token is still cut out of every reason (§135).
+
+**Keeping it.** An app that knows `send` but not `formatting` rebuilds the Telegram target from the
+chat id and saves it without the field; `updateWorkflow` gives each such Telegram target the
+formatting of the saved Telegram target in the same place (the first with the first), so an older
+phone does not turn an HTML step plain. `null` sent on purpose is plain.
+
+**Clients.** The web's Send message form has "Telegram formatting" (Plain text / HTML / MarkdownV2)
+under the chat id; the preview says "Telegram formatting: HTML" and shows the words formatted — parsed
+by the web into Telegram's tags only (no HTML is injected), with a note when the markup looks broken;
+"Send test message" sends with the chosen formatting. iOS and Android show the formatting on the
+step, can change it, and keep it when the chat id is edited.
+
+Rejected: a per-bot or per-profile setting (the owner asked per step); falling back to plain when
+Telegram refuses the markup (it would send words the person did not mean, and say success);
+Telegram's legacy `Markdown` (no nesting, no underline/spoiler/quote); an enum in the contract
+(older generated clients cannot decode a value added later).
+
+## 138. A coding agent's MCP page edits its own file; an agent is installed without `--version`; a failed agent says why
+
+The owner's hub (2026-09-29, image from `main` after #226): Claude Code's MCP page answered "That
+is not allowed in the current state." in its server list and its "Core Hub tools" card although
+the agent was Available; installing Codex ended in "Error" with codex-acp's own "unexpected argument
+'--version'"; a chat with Goose (installed, no provider set) ended in a bare "Internal error" and
+Claude Code in "Authentication required", both cards looking ready; the model picker said "Default
+model" without saying which. Proposed here — owner to confirm:
+
+- **The MCP operations serve the coding agents the catalog offers the page to.** For Hermes nothing
+  changes. For Claude Code they edit the `mcpServers` of its global config `~/.claude.json`
+  (`$CLAUDE_CONFIG_DIR/.claude.json`; a legacy `.config.json` wins when present) — the user-scope
+  servers the CLI reads on every session its ACP bridge starts (`settingSources: user, project,
+  local` at `@zed-industries/claude-code-acp` 0.16.2). Claude Code rewrites that file itself, under
+  a lock folder `<file>.lock` (stale after 10 s); the hub takes the same lock, reads the file again
+  inside it, changes `mcpServers` only and renames a new file over it, keeping its mode. For Gemini
+  CLI and Qwen Code they edit `mcpServers` in `settings.json`; a file with comments is read but
+  never rewritten (`400`, `config_has_comments`). None of these files has a per-server "off", so a
+  server switched off is taken out of the agent's file and kept in
+  `<DATA_DIR>/agent-mcp/<agent>.json` (0600) until it is switched on. Credentials read as
+  `[stored]` as for Hermes. One set for every profile, as on the Config files page (§78). A coding
+  agent's `McpServer` carries no `last_test`, `oauth` or `tool_filter` (Hermes's), and a
+  `tool_filter` write is `409 tool_filter_is_hermes_only`. Codex, Goose, OpenCode, Kimi, Grok and Pi
+  answer `409 state_invalid`, `mcp_not_managed`, and the page says their servers are in their
+  settings file (Config files); `config_busy` when Claude Code holds its lock past 3 s.
+- **The Core Hub tools card is the profile's, on every agent's page.** `agents.getHubTools` /
+  `updateHubTools` answer for any agent over ACP (the agent is handed the server in `session/new`,
+  §67); the card says the settings are shared and keeps Test (which asks Hermes) to Hermes's page.
+- **Installed is decided by the files, not by `--version`.** A catalog `HealthCheck` may be
+  `installed`: nothing is run, the protocol binary must be in the agent's `bin` and executable
+  (Claude Code, Codex). An npm agent's version is its package's `package.json` under its prefix. A
+  `command` check that runs and says no (any exit code) or reaches its deadline leaves the agent
+  installed; only a program that cannot start (spawn error, exit 126/127, not executable) fails.
+- **A failed agent says why.** An ACP error carries what its `data` adds; a bare "Internal error"
+  the last lines of the bridge's stderr; credentials masked, 600 characters at most. The web's
+  failure notice names the agent's known cases with one action where the hub has one — Goose → its
+  Config files, Claude Code / Codex / Gemini CLI / Qwen / OpenCode / Pi → Settings → Models, Kimi and
+  Grok → their own sign-in — with the agent's words underneath.
+- **`Agent.credentials`** (optional string, `ready` | `missing`): for an installed Claude Code,
+  Codex, Gemini CLI, Qwen Code or Goose, whether a key it reads is handed or set, or its own sign-in
+  or provider setting is in its folder (Goose: `GOOSE_PROVIDER`). The card says "Needs a provider or
+  sign-in". A string, not an enum (§137's reason).
+- **`Agent.agent_default_model`** (optional string): the model a coding agent's own settings name
+  (Claude Code `model`, Codex top-level `model`, Gemini/Qwen `model.name`, Goose `GOOSE_MODEL`,
+  OpenCode `model`); the picker says "Default · <model>", or "Agent's own default" when none is
+  named; Hermes and the hub's own agent say "Default · <default_model>".
+
+Rejected: an MCP list kept by the hub and handed in `session/new` (a second list beside the one the
+agent already reads, and invisible to the agent run by hand); an ACP `initialize` handshake as the
+health check (a process per agent at every boot, and a sign-in some agents want first); a new
+`ErrorCode` for "sign-in needed" (older generated clients cannot decode it); the phones in this
+change (they still say "Default model" and show no badge — a follow-up).
+
+## 139. A coding agent gets an allow-list of the hub's environment; the renamed ACP bridges; Claude Code's skills
+
+Phase 0 of the model gateway (research in PR #228, `docs/research/model-gateway-2026-09.md`,
+approved by the owner on 2026-09-29). Proposed here — owner to confirm:
+
+- **A coding agent the hub starts gets an allow-list of the hub's environment, never all of it.**
+  Until now an ACP agent inherited the hub's whole `process.env` — the database URL, the first-owner
+  password, push keys, anything an operator put in the container reached every third-party CLI and
+  the package scripts it ran. Now it gets: a base every program needs (`PATH`, `HOME`, `USER`,
+  `LOGNAME`, `SHELL`, `TMPDIR`, `XDG_*`, `LANG`, `LANGUAGE`, `LC_*`, `TZ`, `TERM`, `COLORTERM`, the
+  proxy variables in both cases, `SSL_CERT_FILE`, `SSL_CERT_DIR`, `NODE_EXTRA_CA_CERTS`,
+  `REQUESTS_CA_BUNDLE`, `CURL_CA_BUNDLE`, npm's cache and registry, the desktop session's
+  `DISPLAY`, `WAYLAND_DISPLAY`, `XAUTHORITY`, `DBUS_SESSION_BUS_ADDRESS`, `SSH_AUTH_SOCK`, and what
+  a Windows program cannot start without); the variables its catalog entry maps its keys to
+  (`credentials`); and the ones the entry documents the agent reading (`hostEnv`: Claude Code
+  `ANTHROPIC_*`, `CLAUDE_*`, its Bedrock/Vertex routes; Codex `OPENAI_*`, `CODEX_*` and codex-acp's
+  own switches; Gemini `GEMINI_*`, `GOOGLE_*`; Qwen `QWEN_*` and its providers; Kimi `KIMI_*`,
+  `MOONSHOT_*`; Grok `XAI_*`, `GROK_*`; Goose `GOOSE_*`, OpenCode `OPENCODE_*` and Pi `PI_*` with
+  every provider's variables). `COREHUB_*`, `MAJLIS_*`, `HUB_*`, `DATABASE_*`, `TELEGRAM_*`,
+  `DATA_DIR` and `PORT` are never passed, whatever an entry names, and the catalog refuses an entry
+  that asks for them. `NODE_OPTIONS` is not passed. What the hub itself hands the agent (the
+  profile's shared keys, its settings `env`) is added on top, as before. The same list serves the
+  agent's sign-in and its `--version` checks. A person who set a key or setting for an agent in the
+  host's environment keeps it: every variable the agent reads is on its list (a test starts each
+  catalog agent as a fake program and checks both sides).
+- **No program the hub starts is given the hub's own settings.** `HostEnv.inherited` is the host's
+  environment less the hub's configuration keys (`ENV_KEYS` and their old names). Hermes, npm and
+  the other helpers get this — Hermes keeps everything else it reads (its channels' tokens,
+  provider keys, `HERMES_*`, a skill script's `COREHUB_IMAGE_*`), so nothing of it breaks.
+- **Claude Code and Codex move to the renamed ACP bridges.** `@zed-industries/claude-code-acp`
+  0.16.2 and `@zed-industries/codex-acp` 0.16.0 are deprecated on npm; the pins are now
+  `@agentclientprotocol/claude-agent-acp` 0.84.0 (program `claude-agent-acp`) and
+  `@agentclientprotocol/codex-acp` 2.0.0 (program `codex-acp`; it installs `@openai/codex` beside
+  it). An npm entry may name `legacy` packages with their program. An install of the old package
+  keeps working with no action: the hub finds its program under the old name, runs it, and reads
+  its version from its own `package.json`, so the card offers the update (0.16.2 → 0.84.0). Taking
+  the update (or auto-update) installs the new package into `<DATA_DIR>/agents/.<id>.next`, runs
+  its `--version` (a Node too old for it fails here), swaps the folders and runs the health check;
+  anything that fails leaves the old install exactly as it was. npm cannot install the new package
+  over the old one in place (both own `bin/codex-acp`: EEXIST), which is why the swap. A dot folder
+  under `agents/` is never put on `PATH`. Checked with the real packages (`acp-bridges.real.test.ts`):
+  the old bridge installed, updated by the hub's installer, and the new one driven by the hub's ACP
+  adapter through `initialize`, `session/new` and a turn against a local fake Anthropic / OpenAI
+  Responses endpoint named only in the environment — the key the hub handed reached it. codex-acp
+  (0.16 and 2.0 alike) still asks for a sign-in at `session/new` when it is only handed a key
+  unless `DEFAULT_AUTH_REQUEST` says to use it; that is unchanged here and left to the gateway work.
+- **Claude Code's Skills page manages `~/.claude/skills`** (`$CLAUDE_CONFIG_DIR/skills`) instead of
+  answering `409 skills_are_hermes_only`: the skill operations (list, read, write, switch, pin,
+  delete, import) act on that folder, one set for every profile, as its Config files and MCP pages
+  do. Nothing of Hermes's applies there: no `library` in the list, no bundled skills, no `platforms`
+  filter, and off is `SKILL.md` renamed `SKILL.md.off` — never a `config.yaml` written into
+  Claude Code's folder. Every other agent that is not Hermes still answers `skills_are_hermes_only`;
+  the library operations stay Hermes's.
+
+Rejected: a deny-list for coding agents (whatever an operator adds tomorrow would leak again);
+passing `GITHUB_TOKEN`/`GH_TOKEN` through (a secret; a person who wants it gives it in the agent's
+settings `env`); removing the old bridge in place before installing the new one (a failed install
+would leave no agent); a shared `~/.agents/skills` page now (the survey's next step, not tonight's);
+calling ACP `authenticate` for Codex (it writes the key into Codex's own `auth.json`; the gateway
+work decides how the hub signs agents in).

@@ -19,6 +19,12 @@
  *
  * Queries are synchronous: the SQLite driver is (`lib/db.ts`).
  */
+import {
+  credentialState,
+  type CredentialProbeOptions,
+  type CredentialState,
+} from './agent-credentials.js';
+import { agentOwnModel } from './agent-own-model.js';
 import { and, eq, inArray, isNull } from 'drizzle-orm';
 import type { FastifyBaseLogger } from 'fastify';
 import type { ModuleDb } from '../../lib/db.js';
@@ -113,6 +119,11 @@ export interface AgentsServiceOptions {
   now?: () => Date;
   /** How long each installed agent's health check may take at boot (10 s; tests shorten it). */
   bootHealthTimeoutMs?: number;
+  /**
+   * Where an installed coding agent's own sign-in is looked for (`agent-credentials.ts`): the
+   * environment the hub hands its agents and their home. Absent: no card says either way.
+   */
+  credentialProbe?: CredentialProbeOptions;
   /**
    * Where `check-update` and the periodic check ask for a newer version
    * (`update-policy.ts`). Absent: the hub knows only the catalog's pins.
@@ -1279,7 +1290,40 @@ export class AgentsService implements UpdatePolicyStore {
       defaultModel: this.defaultModelOf(row, scope.id),
       name: this.displayName(row, language),
       selfUpdate: this.selfUpdates(row),
+      credentials: this.credentialsOf(row, scope.id, settings),
+      ownModel:
+        this.options.credentialProbe &&
+        row.adapterKind === 'acp' &&
+        row.installState === 'installed'
+          ? agentOwnModel(row.slug, this.options.credentialProbe)
+          : null,
     });
+  }
+
+  /**
+   * Whether an installed coding agent has a key or a sign-in to answer with (`ready` /
+   * `missing`), where the hub can know; `null` elsewhere (`agent-credentials.ts`).
+   */
+  private credentialsOf(
+    row: AgentRow,
+    workspaceId: string,
+    settings: AgentSettingsRow | undefined,
+  ): CredentialState | null {
+    const probe = this.options.credentialProbe;
+    if (!probe || row.adapterKind !== 'acp' || row.installState !== 'installed') return null;
+    const entry = this.catalog.find((candidate) => candidate.id === row.slug);
+    if (!entry) return null;
+    try {
+      return credentialState(
+        row.slug,
+        Object.values(entry.credentials),
+        this.environmentFor(row, workspaceId, settings),
+        probe,
+      );
+    } catch (error) {
+      this.options.log.warn({ agent: row.slug, err: error }, 'agents: could not read credentials');
+      return null;
+    }
   }
 
   /**
@@ -1441,7 +1485,10 @@ export class AgentsService implements UpdatePolicyStore {
         .set({
           installState: health.ok ? 'installed' : 'failed',
           source: 'managed',
-          executablePath: `${this.options.installer.binDirFor(entry.id)}/${entry.binary}`,
+          // The program actually there: an install from before a rename runs the old one (§139).
+          executablePath:
+            this.options.installer.executablePath?.(entry) ??
+            `${this.options.installer.binDirFor(entry.id)}/${entry.binary}`,
           // A bridge that prints no version (`claude-code-acp`) keeps the one its install read.
           version: health.version ?? now.version,
           detectedAt: at,

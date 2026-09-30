@@ -82,6 +82,8 @@ export interface SendTarget {
   session_id?: string | null;
   title?: string | null;
   agent_id?: string | null;
+  /** Telegram (§137): `plain` (absent or null), `html` or `markdown_v2`. */
+  formatting?: string | null;
 }
 
 export interface Send {
@@ -131,6 +133,23 @@ export interface EditorState {
   selected: Selection;
   /** Changed since it was loaded or saved. */
   dirty: boolean;
+  /**
+   * Triggers added to a workflow that is not saved yet: made on the hub right after the
+   * workflow itself is saved (a trigger belongs to a saved workflow). Empty once saved.
+   */
+  pending: PendingTrigger[];
+}
+
+/** A trigger that waits for the workflow's first save (see `EditorState.pending`). */
+export type PendingTrigger =
+  | { id: string; kind: 'webhook'; preset: string }
+  | { id: string; kind: 'schedule'; schedule: ScheduleDraft };
+
+/** A schedule a trigger node makes (`ScheduleTrigger`, in the words of the form). */
+export interface ScheduleDraft {
+  mode: 'cron' | 'interval' | 'once';
+  /** The cron expression, the minutes between runs, or the local date and time. */
+  value: string;
 }
 
 /** The size a node is drawn at, in canvas units; edges meet its sides. */
@@ -147,7 +166,17 @@ export type Action =
   | { type: 'rename'; name: string }
   | { type: 'describe'; description: string | null }
   | { type: 'alert'; alert: FailureAlert | null }
-  | { type: 'add'; kind: NodeKind; title: string; position?: Position; agentId?: string | null }
+  | {
+      type: 'add';
+      kind: NodeKind;
+      title: string;
+      position?: Position;
+      agentId?: string | null;
+      /** Put it after this step and connect them on this route (the "+" of a step). */
+      after?: { from: string; route: Route };
+      /** Fields set on the new step (a "Send message" step's empty targets). */
+      patch?: Partial<Omit<WfNode, 'id' | 'kind'>>;
+    }
   | { type: 'move'; id: string; position: Position }
   | { type: 'nudge'; id: string; dx: number; dy: number }
   | { type: 'update'; id: string; patch: Partial<Omit<WfNode, 'id' | 'kind'>> }
@@ -157,14 +186,33 @@ export type Action =
   | { type: 'remove_edge'; id: string }
   | { type: 'remove_selected' }
   | { type: 'select'; selection: Selection }
-  | { type: 'saved' };
+  | { type: 'saved' }
+  | { type: 'pending_add'; trigger: PendingTrigger }
+  | { type: 'pending_update'; trigger: PendingTrigger }
+  | { type: 'pending_remove'; ids: readonly string[] }
+  /** Unsaved work someone left without saving, taken back (`WorkflowEditor.tsx`). */
+  | { type: 'restore'; draft: Draft; pending: PendingTrigger[] };
 
 export function emptyDraft(name = ''): Draft {
   return { name, description: null, working_dir: null, nodes: [], edges: [] };
 }
 
 export function initialState(draft: Draft = emptyDraft()): EditorState {
-  return { draft, selected: null, dirty: false };
+  return { draft, selected: null, dirty: false, pending: [] };
+}
+
+/** Whether anything would be lost by leaving: a changed drawing or a trigger not made yet. */
+export function hasUnsaved(state: Pick<EditorState, 'dirty' | 'pending'>): boolean {
+  return state.dirty || state.pending.length > 0;
+}
+
+/** A fresh id for a trigger that waits for the first save. */
+export function nextPendingId(pending: readonly PendingTrigger[]): string {
+  const taken = new Set(pending.map((each) => each.id));
+  for (let n = 1; ; n += 1) {
+    const id = `pending-${n}`;
+    if (!taken.has(id)) return id;
+  }
 }
 
 const ID_PATTERN = /^[A-Za-z0-9_-]{1,40}$/;
@@ -249,13 +297,27 @@ const round = (value: number) => Math.round(value);
 export function reducer(state: EditorState, action: Action): EditorState {
   const { draft } = state;
   const change = (next: Draft, selected: Selection = state.selected): EditorState => ({
+    ...state,
     draft: next,
     selected,
     dirty: true,
   });
   switch (action.type) {
     case 'load':
-      return { draft: action.draft, selected: null, dirty: false };
+      return { ...state, draft: action.draft, selected: null, dirty: false };
+    case 'restore':
+      return { draft: action.draft, pending: action.pending, selected: null, dirty: true };
+    case 'pending_add':
+      return { ...state, pending: [...state.pending, action.trigger] };
+    case 'pending_update':
+      return {
+        ...state,
+        pending: state.pending.map((each) =>
+          each.id === action.trigger.id ? action.trigger : each,
+        ),
+      };
+    case 'pending_remove':
+      return { ...state, pending: state.pending.filter((each) => !action.ids.includes(each.id)) };
     case 'saved':
       return { ...state, dirty: false };
     case 'rename':
@@ -268,10 +330,27 @@ export function reducer(state: EditorState, action: Action): EditorState {
       return { ...state, selected: action.selection };
     case 'add': {
       const id = nextNodeId(action.kind, draft.nodes);
-      const after = state.selected?.type === 'node' ? state.selected.id : null;
+      const linked =
+        action.after && draft.nodes.some((node) => node.id === action.after!.from)
+          ? action.after
+          : null;
+      const after = linked
+        ? linked.from
+        : state.selected?.type === 'node'
+          ? state.selected.id
+          : null;
       const position = action.position ?? placeFor(draft, after);
-      const node = newNode(action.kind, id, action.title, position, action.agentId ?? null);
-      return change({ ...draft, nodes: [...draft.nodes, node] }, { type: 'node', id });
+      const node = {
+        ...newNode(action.kind, id, action.title, position, action.agentId ?? null),
+        ...action.patch,
+      };
+      const edges = linked
+        ? [
+            ...draft.edges,
+            { id: nextEdgeId(draft.edges), from: linked.from, to: id, route: linked.route },
+          ]
+        : draft.edges;
+      return change({ ...draft, nodes: [...draft.nodes, node], edges }, { type: 'node', id });
     }
     case 'move':
     case 'nudge': {

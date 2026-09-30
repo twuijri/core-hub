@@ -30,6 +30,14 @@ export type InstallRecipe =
        * `pi`). They share the agent's directory, so removing the agent removes them too.
        */
       companions?: readonly { package: string; version: string }[];
+      /**
+       * The package this agent was installed from before, when its vendor renamed it (the ACP
+       * bridges, DECISIONS §139), with the program it put in `bin`. An install of it keeps
+       * working and reports its own version, so its card offers the update; taking the update
+       * installs `package` in a fresh folder and swaps the folders only once the new one works —
+       * a failed update leaves the old install as it was.
+       */
+      legacy?: readonly { package: string; binary: string }[];
     }
   | {
       /**
@@ -88,10 +96,26 @@ export interface AgentSignInRecipe {
   args: string[];
 }
 
-/** How the hub decides whether an installed agent actually works. */
+/**
+ * How the hub decides whether an installed agent actually works, and reads its version.
+ *
+ * An npm install's version is always its package's `package.json` (what npm installed), never
+ * only what a program prints. Many ACP bridges have no `--version` at all: `codex-acp` exits 2
+ * ("unexpected argument '--version'"), `claude-code-acp` ignores it and serves ACP on stdin. So
+ * a `command` check that runs and says no — any exit code, a deadline — does not make an
+ * installed agent an error; only a program that cannot start (missing, not executable, exit
+ * 126/127: its interpreter is gone) does.
+ */
 export type HealthCheck =
   | {
-      /** Run the binary with these arguments and expect exit 0. */
+      /**
+       * Nothing is run: the protocol binary is in the agent's own `bin` directory and
+       * executable, and the version is its npm package's. For a bridge with no version flag.
+       */
+      kind: 'installed';
+    }
+  | {
+      /** Run the binary with these arguments; a version it prints is read, if any. */
       kind: 'command';
       args: string[];
       /**
@@ -147,6 +171,13 @@ export interface CatalogEntry {
    * handed every key in the workspace because it happens to be installed.
    */
   credentials: Record<string, string>;
+  /**
+   * The host's variables this agent documents and reads besides its keys — its folders
+   * (`CLAUDE_CONFIG_DIR`, `CODEX_HOME`), its own settings (`GOOSE_*`) — exact names or a prefix
+   * ending in `*`. A spawned agent gets only these, its `credentials` names and a small base
+   * (`adapters/child-env.ts`, DECISIONS §139); the hub's own variables never, whatever is named.
+   */
+  hostEnv?: readonly string[];
   /** Hermes only: the gateway the adapter talks to. */
   defaultEndpoint?: string;
   capabilities: AgentCapability[];
@@ -189,6 +220,25 @@ export function pinnedPackages(entry: CatalogEntry): { package: string; version:
     { package: entry.install.package, version: entry.install.version },
     ...(entry.install.companions ?? []).map((companion) => ({ ...companion })),
   ];
+}
+
+/** The packages this entry was installed from before a rename; none for most. */
+export function legacyPackages(
+  entry: CatalogEntry,
+): readonly { package: string; binary: string }[] {
+  return entry.install.kind === 'npm' ? (entry.install.legacy ?? []) : [];
+}
+
+/**
+ * Every program name the entry's protocol binary has had: its own first, then the ones a
+ * renamed package put in `bin` — so an install from before the rename is still found and run.
+ */
+export function binaryNames(entry: CatalogEntry): string[] {
+  const names = [entry.binary];
+  for (const legacy of legacyPackages(entry)) {
+    if (!names.includes(legacy.binary)) names.push(legacy.binary);
+  }
+  return names;
 }
 
 /** True when the hub is allowed to install and remove this entry. */

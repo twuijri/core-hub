@@ -1,4 +1,5 @@
 // OpenCode over ACP (`opencode acp`).
+import { PROVIDER_HOST_ENV } from './provider-env.js';
 import type { CatalogEntry } from './types.js';
 
 export const opencode: CatalogEntry = {
@@ -23,6 +24,8 @@ export const opencode: CatalogEntry = {
     deepseek: 'DEEPSEEK_API_KEY',
     xai: 'XAI_API_KEY',
   },
+  // OpenCode's own settings and every provider it can use.
+  hostEnv: ['OPENCODE_*', ...PROVIDER_HOST_ENV],
   health: { kind: 'command', args: ['--version'] },
   capabilities: ['streaming', 'tools', 'approvals', 'mcp'],
   sections: ['mcp', 'settings'],

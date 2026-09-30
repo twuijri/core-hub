@@ -39,6 +39,7 @@ import {
 } from '../../server/src/modules/schedules/index.js';
 import { createHermesJobs } from '../../server/src/modules/schedules/hermes-jobs.js';
 import { FakeHermesApi } from '../../server/src/modules/schedules/testing/fake-hermes-api.js';
+import { fakeTelegram } from '../../server/src/modules/schedules/testing/fake-telegram.js';
 import { fakeHermesPlugins } from '../../server/src/modules/agents/testing/fake-hermes-plugins.js';
 import { fakeMcpLogin } from '../../server/src/modules/agents/testing/fake-mcp-login.js';
 import { agentsServiceFor } from '../../server/src/modules/agents/index.js';
@@ -1484,19 +1485,9 @@ const sessions = createSessionsModule({
 // bot token is a made-up one and Telegram's Bot API is answered here. Chat `-100404` is one
 // Telegram does not know; every other chat takes the message. The conversation target is the
 // real `sessions` wiring of the composition root.
-const telegramSent: Array<{ chat_id: string; text: string; message_id: number }> = [];
-const fakeTelegram: typeof fetch = async (_input, init) => {
-  const body = JSON.parse(String(init?.body ?? '{}')) as { chat_id: string; text: string };
-  if (body.chat_id === '-100404') {
-    return Response.json(
-      { ok: false, error_code: 400, description: 'Bad Request: chat not found' },
-      { status: 400 },
-    );
-  }
-  const messageId = 9000 + telegramSent.length;
-  telegramSent.push({ chat_id: body.chat_id, text: body.text, message_id: messageId });
-  return Response.json({ ok: true, result: { message_id: messageId } });
-};
+// The fake parses `parse_mode` HTML / MarkdownV2 as Telegram does and refuses bad markup (§137).
+const telegram = fakeTelegram();
+const telegramSent = telegram.sent;
 const composedPorts = registerWorkflowPorts(null);
 registerWorkflowPorts((hub) => {
   const real = composedPorts?.(hub) ?? { agentTurn: null, notice: null };
@@ -1507,7 +1498,7 @@ registerWorkflowPorts((hub) => {
           ...real.messages,
           telegramToken: () => '123456:E2EFAKETOKENabcdefghijklmnopqrstuvwxyz',
           telegramApi: 'http://telegram.e2e',
-          fetch: fakeTelegram,
+          fetch: telegram.fetch,
         }
       : null,
   };

@@ -14,6 +14,8 @@ export const geminiCli: CatalogEntry = {
   // The Gemini CLI wants `GEMINI_API_KEY`; Hermes prefers `GOOGLE_API_KEY` for the same
   // account, which is exactly the rename this one line exists for.
   credentials: { google: 'GEMINI_API_KEY' },
+  // Gemini CLI's own settings and Google's (key, project, Vertex, a gateway's base URL).
+  hostEnv: ['GEMINI_*', 'GOOGLE_*', 'NO_BROWSER'],
   health: { kind: 'command', args: ['--version'] },
   capabilities: ['streaming', 'tools', 'approvals', 'mcp', 'resume', 'config_files'],
   sections: ['mcp', 'settings'],

@@ -105,6 +105,8 @@ const AGENTS = [
       auto_update: false,
       auto_update_supported: true,
     },
+    // Installed with no key or sign-in to answer with (2026-09-29).
+    credentials: 'missing',
   } as Partial<Agent>),
   // Already updated past the pin.
   agent(PI, 'Pi', {
@@ -275,6 +277,11 @@ describe('the Agents page says when a version is newer than the tested one', () 
     );
     expect(within(card('kimi-code')).queryByTestId('agent-update-available')).toBeNull();
     expect(within(card('kimi-code')).queryByTestId('agent-newer-than-tested')).toBeNull();
+    // An installed agent with nothing to answer with does not look ready.
+    expect(within(card('qwen-code')).getByTestId('agent-needs-setup').textContent).toBe(
+      'Needs a provider or sign-in',
+    );
+    expect(within(card('pi')).queryByTestId('agent-needs-setup')).toBeNull();
   });
 
   it("on a person's own Hermes: newer than tested, may not be supported, and an update to take", async () => {

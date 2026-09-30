@@ -8,6 +8,7 @@
  * the run it belongs to, the node, the target and the part (`workflow_sent_parts`).
  */
 import type { WorkflowSend, WorkflowSendTarget } from './schema.js';
+import { formattingOf } from './telegram-format.js';
 
 /** Telegram's limit for one message's text, in UTF-16 code units (what `String#length` counts). */
 export const TELEGRAM_MAX_CHARS = 4096;
@@ -67,7 +68,10 @@ export function sendProblems(send: WorkflowSend): Array<{ code: string; index: n
   const targets = Array.isArray(send.targets) ? send.targets : [];
   if (targets.length === 0) out.push({ code: 'send_no_target', index: null });
   targets.forEach((target, index) => {
-    if (!(SEND_PLATFORMS as readonly string[]).includes(target.platform)) {
+    // Telegram formatting (§137): plain, html or markdown_v2 — nothing else ever reaches Telegram.
+    if (formattingOf(target.formatting) === null) {
+      out.push({ code: 'send_formatting_unknown', index });
+    } else if (!(SEND_PLATFORMS as readonly string[]).includes(target.platform)) {
       out.push({ code: 'send_platform_unknown', index });
     } else if (target.platform === 'telegram' && !chatIdOf(target.chat_id)) {
       out.push({ code: 'send_chat_missing', index });
@@ -116,7 +120,8 @@ function reachFailure(error: unknown): { said: string; timeout: boolean } {
 
 /**
  * One `sendMessage` through the Bot API. The token goes in the path, as Telegram asks; it is
- * never written to a log or a reason. A refusal is Telegram's own `description`.
+ * never written to a log or a reason. A refusal is Telegram's own `description`. `parseMode`
+ * (§137) is written only when there is one: a plain message carries no `parse_mode` field.
  */
 export async function telegramSend(
   fetchImpl: typeof fetch,
@@ -125,13 +130,19 @@ export async function telegramSend(
   chatId: string,
   text: string,
   timeoutMs: number = TELEGRAM_TIMEOUT_MS,
+  parseMode: 'HTML' | 'MarkdownV2' | null = null,
 ): Promise<TelegramAnswer> {
   let response: Response;
   try {
     response = await fetchImpl(`${apiBase.replace(/\/$/, '')}/bot${token}/sendMessage`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ chat_id: chatId, text, disable_web_page_preview: true }),
+      body: JSON.stringify({
+        chat_id: chatId,
+        text,
+        ...(parseMode ? { parse_mode: parseMode } : {}),
+        disable_web_page_preview: true,
+      }),
       signal: AbortSignal.timeout(timeoutMs),
     });
   } catch (error) {
@@ -166,6 +177,25 @@ export async function telegramSend(
   };
 }
 
+/**
+ * What one target of a send did (`WorkflowSendTargetResult`, §137): where, with which Telegram
+ * formatting, how many parts the words were sent in, the platform's ids, and why not.
+ */
+export interface SendTargetResult {
+  target: string;
+  platform: string;
+  chat_id: string | null;
+  session_id: string | null;
+  /** `plain`, `html` or `markdown_v2` for Telegram; `null` for a conversation. */
+  formatting: string | null;
+  /** The `parse_mode` sent: `HTML`, `MarkdownV2`, or `null` (plain: no field at all). */
+  parse_mode: string | null;
+  status: 'sent' | 'failed';
+  message_ids: string[];
+  parts_count: number;
+  reason: string | null;
+}
+
 /** What a send did — the step's `output` and `WorkflowSendResult`. */
 export interface SendResult {
   status: 'sent' | 'partial' | 'failed';
@@ -173,13 +203,21 @@ export interface SendResult {
   message_ids: string[];
   delivered_to: string[];
   failures: Array<{ target: string; reason: string }>;
+  /** The (first) Telegram target's formatting, `parse_mode`, chat and parts (§137); null without one. */
+  formatting: string | null;
+  parse_mode: string | null;
+  chat_id: string | null;
+  parts_count: number | null;
+  targets: SendTargetResult[];
 }
 
 export function resultOf(
   delivered: Array<{ target: string; ids: string[] }>,
   failures: Array<{ target: string; reason: string }>,
+  targets: SendTargetResult[] = [],
 ): SendResult {
   const ids = delivered.flatMap((each) => each.ids);
+  const telegram = targets.find((each) => each.platform === 'telegram') ?? null;
   return {
     status:
       failures.length === 0 && delivered.length > 0
@@ -191,5 +229,10 @@ export function resultOf(
     message_ids: ids,
     delivered_to: delivered.map((each) => each.target),
     failures,
+    formatting: telegram?.formatting ?? null,
+    parse_mode: telegram?.parse_mode ?? null,
+    chat_id: telegram?.chat_id ?? null,
+    parts_count: telegram ? telegram.parts_count : null,
+    targets,
   };
 }

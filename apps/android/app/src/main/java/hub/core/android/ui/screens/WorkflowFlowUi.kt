@@ -211,7 +211,15 @@ internal fun RulesForm(node: WorkflowNode, draft: WorkflowDraft, rules: Workflow
 
 /** Telegram and/or a conversation of this hub, as a `WorkflowSend`'s targets; targets of other platforms stay. */
 @Composable
-internal fun SendTargetsForm(send: WorkflowSend, profile: String, ops: WorkflowFlowOps, tag: String, onChange: (WorkflowSend) -> Unit) {
+internal fun SendTargetsForm(
+    send: WorkflowSend,
+    profile: String,
+    ops: WorkflowFlowOps,
+    tag: String,
+    /** Offer Telegram formatting (§137): a step's words; a failure alert is always plain. */
+    formatting: Boolean = false,
+    onChange: (WorkflowSend) -> Unit,
+) {
     val t = LocalTokens.current
     val telegram = WorkflowFlowRules.target(send, "telegram")
     val conversation = WorkflowFlowRules.target(send, "core_hub")
@@ -221,15 +229,16 @@ internal fun SendTargetsForm(send: WorkflowSend, profile: String, ops: WorkflowF
         if (conversation != null && conversations == null) ops.conversations(profile).onSuccess { conversations = it }
     }
     CheckRow(stringResource(R.string.wft_send_telegram), telegram != null, "$tag.telegram") { on ->
-        onChange(WorkflowFlowRules.setTarget(send, "telegram", if (on) WorkflowFlowRules.telegram(chat) else null))
+        onChange(WorkflowFlowRules.setTarget(send, "telegram", if (on) WorkflowFlowRules.telegram(chat, if (formatting) "plain" else null) else null))
     }
     if (telegram != null) {
         HubTextField(
-            chat, { v -> chat = v; onChange(WorkflowFlowRules.setTarget(send, "telegram", WorkflowFlowRules.telegram(v))) },
+            chat, { v -> chat = v; onChange(WorkflowFlowRules.setTarget(send, "telegram", WorkflowFlowRules.telegram(v, telegram.formatting))) },
             Modifier.fillMaxWidth(), placeholder = "-1001234567890", label = stringResource(R.string.wft_send_chat_id), mono = true,
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Text), size = ControlSize.Md, fieldTag = "$tag.chat",
         )
         Text(stringResource(R.string.wft_send_telegram_hint), fontSize = FontTokens.sizeXs.sp, color = t.textMuted)
+        if (formatting) FormattingPicker(send, WorkflowFlowRules.formattingOf(telegram), tag, onChange)
     }
     CheckRow(stringResource(R.string.wft_send_conversation), conversation != null, "$tag.conversation") { on ->
         onChange(WorkflowFlowRules.setTarget(send, "core_hub", if (on) WorkflowFlowRules.conversation(null) else null))
@@ -255,6 +264,45 @@ internal fun SendTargetsForm(send: WorkflowSend, profile: String, ops: WorkflowF
         }
         Text(stringResource(R.string.wft_send_conversation_hint), fontSize = FontTokens.sizeXs.sp, color = t.textMuted)
     }
+}
+
+/** How Telegram reads the words (§137): plain text, HTML or MarkdownV2, with what each means. */
+@Composable
+private fun FormattingPicker(send: WorkflowSend, current: String, tag: String, onChange: (WorkflowSend) -> Unit) {
+    val t = LocalTokens.current
+    var open by remember { mutableStateOf(false) }
+    val name = @Composable { value: String ->
+        when (value) {
+            "html" -> stringResource(R.string.wft_send_formatting_html)
+            "markdown_v2" -> stringResource(R.string.wft_send_formatting_markdown_v2)
+            else -> stringResource(R.string.wft_send_formatting_plain)
+        }
+    }
+    Text(stringResource(R.string.wft_send_formatting), fontSize = FontTokens.sizeSm.sp, fontWeight = FontWeight.Medium)
+    Box {
+        HubButton(
+            name(current), { open = true }, kind = ButtonKind.Secondary, size = ControlSize.Md, icon = Lucide.Type,
+            modifier = Modifier.testTag("$tag.formatting"),
+        )
+        HubMenu(open, { open = false }) {
+            WorkflowFlowRules.FORMATTINGS.forEach { value ->
+                MenuItem(
+                    name(value), { open = false; onChange(WorkflowFlowRules.withFormatting(send, value)) },
+                    checked = value == current, modifier = Modifier.testTag("$tag.formatting.$value"),
+                )
+            }
+        }
+    }
+    Text(
+        stringResource(
+            when (current) {
+                "html" -> R.string.wft_send_formatting_html_hint
+                "markdown_v2" -> R.string.wft_send_formatting_markdown_v2_hint
+                else -> R.string.wft_send_formatting_plain_hint
+            },
+        ),
+        fontSize = FontTokens.sizeXs.sp, color = t.textMuted,
+    )
 }
 
 @Composable
@@ -284,7 +332,7 @@ internal fun SendStepForm(node: WorkflowNode, profile: String, ops: WorkflowFlow
     val missing = WorkflowFlowRules.missingIn(node.input, values)
     Column(Modifier.testTag("workflow.editor.step.${node.id}.send"), verticalArrangement = Arrangement.spacedBy(4.dp)) {
         Text(stringResource(R.string.wft_send_targets), fontSize = FontTokens.sizeSm.sp, fontWeight = FontWeight.Medium)
-        SendTargetsForm(send, profile, ops, "workflow.editor.step.${node.id}.send") { next -> onNode(node.copy(send = next)) }
+        SendTargetsForm(send, profile, ops, "workflow.editor.step.${node.id}.send", formatting = true) { next -> onNode(node.copy(send = next)) }
         if (variables.isNotEmpty()) {
             Text(stringResource(R.string.wft_send_sample_title), fontSize = FontTokens.sizeSm.sp, fontWeight = FontWeight.Medium)
             Text(stringResource(R.string.wft_send_sample_hint), fontSize = FontTokens.sizeXs.sp, color = t.textMuted)
