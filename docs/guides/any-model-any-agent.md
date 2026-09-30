@@ -3,7 +3,7 @@
 Add a provider once in **Settings → Models**, and every coding agent in Core Hub can run on its
 models — Claude Code on a DeepSeek or Qwen model from OpenRouter, Codex on Groq, OpenCode on your
 own LM Studio — picked per conversation in the model picker, like Hermes. This is the hub's **model
-gateway** (ADR 0029, DECISIONS §140).
+gateway** (ADR 0029, DECISIONS §140–141).
 
 ## How it works, in one paragraph
 
@@ -11,8 +11,8 @@ When the hub starts a coding agent for a conversation, it gives it the address o
 this computer and a session token — never a provider key. The agent asks for "Core Hub's model"; the
 gateway answers with the model you picked for that message, from the provider you added, and
 CLIProxyAPI (an open-source translator the hub carries and runs itself, MIT) converts between the
-agent's wire and the provider's: Claude Code speaks Anthropic Messages, Codex OpenAI Responses, and
-most providers OpenAI Chat Completions — tools and streaming included. The provider keys stay in the
+agent's wire and the provider's: Claude Code speaks Anthropic Messages, Codex OpenAI Responses, Gemini
+CLI the Gemini API, and most providers OpenAI Chat Completions — tools and streaming included. The provider keys stay in the
 hub. What each conversation used shows in its run, with an estimated cost when the model has prices.
 
 ## Which agents
@@ -21,8 +21,9 @@ hub. What each conversation used shows in its run, with an estimated cost when t
 |---|---|
 | Claude Code | yes (tested with the real agent, tool calls included) |
 | Codex CLI | yes (tested with the real agent) |
-| Goose, OpenCode, Qwen Code, Kimi Code | yes (tested with the real agents: a text turn each) |
-| Gemini CLI, Grok Build, Pi | not yet — they use their own account (later phases) |
+| Gemini CLI | yes (tested with the real agent, tool calls included; version 0.60.0 or newer) |
+| Goose, OpenCode, Qwen Code, Kimi Code | yes (tested with the real agents, tool calls included) |
+| Grok Build, Pi | yes (tested with the real agents, tool calls included; the hub keeps one entry in their own settings file, below) |
 | Hermes, Core Hub (Direct) | they already run on every provider you add |
 
 ## Choosing, per agent
@@ -39,9 +40,32 @@ Open the agent → **Settings** → **Models** → **Model source**:
 The agent's card says which one it uses ("Models: Core Hub's providers" / "Models: the agent's own
 account"). A change applies from the next message.
 
-When the agent is on the hub's models, its model picker lists every model the gateway can serve,
-and "Default · …" is the profile's default model. If there is no model to give it at all (no model
+When the agent is on the hub's models, its model picker — on the web and in the phone apps — lists
+every model the gateway can serve, and "Default · …" is the profile's default model. A model whose
+provider says it cannot call tools is left out (a coding agent works through tools), and a model
+whose context window is smaller than the agent needs says "small context" (64K for Claude Code,
+Codex, Gemini CLI and Grok Build; 32K for Goose, OpenCode, Qwen Code and Kimi Code; 16K for Pi). If there is no model to give it at all (no model
 picked and no default set), the agent uses its own account.
+
+## What the hub writes in an agent's own settings
+
+Most agents take the gateway from variables alone. Three need one entry in their own files, which
+the hub writes and keeps up to date — only that entry; everything else in the file stays as you
+wrote it, and no key is ever written (the entry names the variable the session token is in):
+
+- **Grok Build**: a `[model.corehub-gateway]` table between two `# >>> Core Hub model gateway` /
+  `# <<< Core Hub model gateway` lines at the end of `~/.grok/config.toml`. Core Hub picks it with a
+  variable; your own default model stays yours.
+- **Pi**: a `corehub-gateway` provider in `~/.pi/agent/models.json`; the conversation is switched to
+  it without changing Pi's saved default.
+- **Gemini CLI**, only when you signed in to it with Google or Vertex: it runs in a home of Core
+  Hub's own (under the hub's data folder) whose `.gemini` links to every file of yours and holds a
+  copy of your `settings.json` saying "gateway". Your own files are not changed. (Not on Windows:
+  there a signed-in Gemini CLI keeps its own account.)
+
+The entries stay when the agent later runs on its own account; without Core Hub's token they do
+nothing. If the file cannot be read as its format, or already has an entry of that name you wrote,
+the hub leaves it alone and the agent uses its own account; the hub's log says why.
 
 ## What is not shared
 

@@ -99,7 +99,9 @@ request (CLIProxyAPI 8.0.4 does not reliably reload its file), so no stream is c
   which leaves them at 118–179 MB.
 - CLIProxyAPI is third-party code the hub runs. It is pinned, hash-checked, loopback-only and fed only
   what the hub writes; moving the pin is a reviewed change with the real-agent test in CI.
-- Gemini CLI (Gemini wire), Grok Build and Pi are not wired yet (phases 2–3).
+- Gemini CLI (the Gemini wire in the hub's gateway), Grok Build and Pi (one hub-kept entry in their
+  own settings files) are wired in phase 2 (DECISIONS §141), and every wired agent's tool calls are
+  proven through the gateway with the real binaries.
 
 ## Alternatives
 - **Our own translator only** (the research's first recommendation): weeks, and the hardest parts

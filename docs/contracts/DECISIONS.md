@@ -4837,3 +4837,83 @@ download of CLIProxyAPI on first use in the desktop app (a runtime download-and-
 the owner's size budget allows); lending Hermes-held subscriptions (the owner); restarting CLIProxyAPI
 in place on a provider change (it would cut other agents' streams); counting a call's usage into the
 ledger directly while its turn is live (the run's own totals would double it).
+
+## 141. The model gateway, phase 2: Gemini CLI, Grok Build and Pi; tool calls for every agent; phones; picker quality
+
+ADR 0029, phase 2 (stacked on §140). The owner's priority: Gemini CLI on any connected model. What
+follows is proposed here — owner to confirm:
+
+- **The Gemini wire in the hub's gateway.** `POST /gateway/google/v1beta/models/<model>:generateContent`,
+  `:streamGenerateContent` (with `?alt=sse`) and `:countTokens`, and `GET /gateway/google/v1beta/models`
+  (and one model), on the same loopback listener as §140 and, like it, not `/api/v1`. The model is in
+  the path, so the path is what is resolved and rewritten — `corehub-main`, `corehub-small` and any
+  id the hub does not know (Gemini CLI's router and utility calls name flash-lite models) become the
+  turn's model, a catalogue key its own — to CLIProxyAPI's `/v1beta/models/h<row>/<model>:<method>`.
+  CLIProxyAPI 8.0.4 serves those three methods and translates Gemini in to OpenAI Chat, Anthropic or
+  Gemini out, tools included (checked against its source, `translator/openai/gemini`, and for real).
+  The token is read from `x-goog-api-key` (what `@google/genai` sends) or `?key=`, which is taken
+  out of the query before anything is forwarded. Usage is read from `usageMetadata` (output =
+  candidates + thoughts), streamed or whole, a stream without `alt=sse` being one JSON array. Errors
+  come back in the Gemini envelope (`{error: {code, message, status}}`).
+- **A model id with a colon** (Ollama's `qwen3:8b`) is served to CLIProxyAPI under an alias with `__`
+  for the colon: its Gemini route splits `models/<model>:<method>` on the colon. The group's `name`
+  keeps the real id, so the provider gets the id it listed (checked).
+- **Gemini CLI** (0.60.0): `GOOGLE_GEMINI_BASE_URL=<gateway>/gateway/google` (loopback may be
+  http), `GEMINI_API_KEY=<token>`, `GEMINI_MODEL=corehub-main`; taken out: `GOOGLE_API_KEY`, the
+  Vertex, Code Assist and Cloud variables, `GOOGLE_GENAI_API_VERSION`, `GEMINI_API_KEY_AUTH_MECHANISM`.
+  With no sign-in type chosen, or an API key, that is all. A person who chose a Google or Vertex
+  sign-in has it win over the variables (its ACP `newSession` reads `security.auth.selectedType`
+  first), and only the system settings rank above theirs — which it reads only from a root-owned
+  folder (checked: a hub-owned file is skipped as "not owned by root"). So such a Gemini CLI runs in a
+  home of the hub's own (`GEMINI_CLI_HOME=<DATA_DIR>/gateway/agents/gemini-cli/home`) whose `.gemini`
+  links every entry of the person's own (sessions, memory, extensions, credentials — the same files)
+  and holds a copy of their `settings.json` with `selectedType: "gateway"`; nothing of theirs is
+  changed. Not on Windows (links): there it keeps its own account. The ACP `authenticate` call was
+  not used: it writes the type into the person's settings and clears their Google credentials. Its
+  flag stays `--experimental-acp` (0.60.0 and 0.62 take it; a Gemini CLI found on the computer may be
+  older than `--acp`). A Gemini CLI older than 0.60.0 (no `gateway` type) keeps its own account.
+- **Grok Build** (1.0.41) takes a model with its own address only from a `[model.<id>]` table of
+  `$GROK_HOME/config.toml`; its `GROK_CONFIG`/`GROK_CONFIG_PATH` overlay does not define models
+  (checked). The hub keeps one table, `[model.corehub-gateway]` (Chat Completions, `base_url` the
+  gateway, `env_key = "COREHUB_GATEWAY_TOKEN"`, `model = "corehub-main"`, `context_window`), between
+  two marker lines at the end of the file, the rest of the file byte for byte, and picks it with
+  `GROK_DEFAULT_MODEL=corehub-gateway` — the person's `[models] default` stays theirs.
+- **Pi** (0.87.1 with pi-acp 0.0.34) takes a provider only from `$PI_CODING_AGENT_DIR/models.json`.
+  The hub keeps one key there, `providers["corehub-gateway"]` (`openai-completions`, `apiKey:
+  "$COREHUB_GATEWAY_TOKEN"`, the two aliases as its models), known as the hub's by its loopback
+  gateway address, every other key as it was; and switches the ACP session to it with
+  `session/set_config_option` (`model` = `corehub-gateway/corehub-main`), which pi-acp turns into Pi's
+  `set_model` without saving a default. A session that refuses it does not start (no other model
+  answers instead). `AgentTarget.sessionConfig` carries it; the ACP adapter now also closes the
+  process when a session cannot be opened.
+- **Written, never a key.** The blocks name the token's variable; the gateway's port is in them (a
+  new one each time the hub starts), so they are rewritten when they differ. They stay when the agent
+  runs on its own account (another conversation may be using them; without the token they serve
+  nothing). Refused — the agent keeps its own account and the log says why — when the file does not
+  parse, is over 1 MiB, is a link out of the home, or already has a table/provider of that name that
+  is the person's.
+- **Tool calls, for real, for every wired agent** (`agents/model-gateway.real.test.ts`, the
+  required `model-gateway-real` job): with the real CLIProxyAPI 8.0.4 and a provider that speaks
+  only Chat Completions, Gemini CLI 0.60.0, Goose 1.52.0, OpenCode 1.18.31, Qwen Code 0.24.5, Kimi
+  Code 2.1.1, Grok Build 1.0.41 and Pi 0.87.1 each write a file with their own tool on the
+  provider's streamed tool call, and the next request carries the result (Claude Code and Codex as
+  in §140). The provider's key reaches the provider only; the person's own settings beside the
+  hub's block come through unchanged.
+- **Contract, additive only.** `Model.agent_tools` (boolean, `false` only when the provider's
+  metadata says the model takes no tools — OpenRouter's `supported_parameters` without `tools`;
+  absent when unknown). Kept in `models.capabilities` as an internal `no_tools` marker, never served
+  as a capability and taken out of profile exports (an older hub would serve it). `Agent.gateway_min_context`
+  (integer, with `model_source`): the smallest context window worth giving the agent through the
+  gateway — Claude Code, Codex, Gemini CLI, Grok Build 64K; Goose, OpenCode, Qwen Code, Kimi Code
+  32K; Pi 16K.
+- **Pickers.** On web, iOS and Android, a coding agent on the hub's models is offered gateway models
+  that can call tools; one whose known context window is under the agent's floor says "small
+  context (under 64K)". A hint, not a refusal.
+- **Phones.** iOS and Android read the chat's agent (`agents.get`) to filter the picker and name the
+  default ("Default · <model>", the web's rule), and the agent card says "Models: Core Hub's
+  providers" / "the agent's own account". `model_source` is changed in the agent's settings form,
+  which both apps render from the server. An older hub, without the fields, leaves both as they were.
+
+Known limits: Grok Build refuses a Chat Completions chunk without `created` (real providers send
+it); CLIProxyAPI's Gemini-in translation appends an empty user message after a tool result, which a
+strict provider might refuse (not seen).
