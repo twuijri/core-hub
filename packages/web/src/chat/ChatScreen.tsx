@@ -54,7 +54,12 @@ import { RunStatus } from './RunStatus.js';
 import { RunFailureNotice, failuresByMessage } from './RunFailureNotice.js';
 import { ModelNamesContext, catalogueNames } from './fallback.js';
 import { SubagentsPanel } from './SubagentsPanel.js';
-import { useCatalogue, useModelDefaults, useRuntimeReport } from '../models/queries.js';
+import {
+  useCatalogue,
+  useModelDefaults,
+  useProviders,
+  useRuntimeReport,
+} from '../models/queries.js';
 import { activeRun, isBusy, textOf } from './transcript.js';
 import { runProgress, turnsOf } from './turns.js';
 import { useRecentModels } from '../models/useModelPicker.js';
@@ -290,7 +295,11 @@ function OpenSessionBody({ sessionId, title: pageTitle, intro }: OpenSessionProp
   const catalogue = useCatalogue();
   const modelDefaults = useModelDefaults();
   // The fallback line names models as people know them, not by their catalogue keys.
-  const modelNames = useMemo(() => catalogueNames(catalogue.data ?? []), [catalogue.data]);
+  const providers = useProviders();
+  const modelNames = useMemo(
+    () => catalogueNames(catalogue.data ?? [], providers.data ?? []),
+    [catalogue.data, providers.data],
+  );
   const models = useComposerModels(
     (agents.data ?? []).find((candidate) => candidate.id === agentId),
   );

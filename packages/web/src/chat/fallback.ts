@@ -3,7 +3,7 @@
  * words the chat and the trajectory show. Pure, so the wording rules are tested on their own.
  */
 import { createContext } from 'react';
-import type { Model, Run, RunFallback } from '../types.js';
+import type { Model, Provider, Run, RunFallback } from '../types.js';
 
 /**
  * A catalogue key (`<provider slug>/<model>`) as people know it — the provider's name and the
@@ -13,12 +13,21 @@ import type { Model, Run, RunFallback } from '../types.js';
 export type ModelNames = (key: string) => string | null;
 export const ModelNamesContext = createContext<ModelNames | null>(null);
 
-/** A `ModelNames` over the profile's catalogue: «<provider> · <model>». */
-export function catalogueNames(catalogue: readonly Model[]): ModelNames {
+/**
+ * A `ModelNames` over the profile's catalogue: «<provider> · <model>», the provider by the name
+ * the person gave it (`Provider.label`) when the providers are at hand, else the catalogue's own.
+ */
+export function catalogueNames(
+  catalogue: readonly Model[],
+  providers: readonly Pick<Provider, 'id' | 'label'>[] = [],
+): ModelNames {
   const byKey = new Map(catalogue.map((model) => [model.key, model]));
+  const labels = new Map(providers.map((provider) => [provider.id, provider.label]));
   return (key) => {
     const model = byKey.get(key);
-    return model ? `${model.provider} · ${model.alias ?? model.model}` : null;
+    if (!model) return null;
+    const provider = labels.get(model.provider_id) || model.provider;
+    return `${provider} · ${model.alias ?? model.model}`;
   };
 }
 
