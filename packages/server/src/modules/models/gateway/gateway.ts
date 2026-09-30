@@ -767,6 +767,9 @@ function forwardHeaders(headers: IncomingMessage['headers']): Record<string, str
         'cookie',
         'forwarded',
         'x-real-ip',
+        // Plain bodies on the loopback hop: an error is read (a spent quota recognised, the hub's
+        // internal names taken out), which a compressed one could not be.
+        'accept-encoding',
       ].includes(lower) ||
       lower.startsWith('x-forwarded-')
     ) {
