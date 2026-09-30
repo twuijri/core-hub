@@ -33,6 +33,7 @@ import {
   GatewayTokens,
   type GatewayGrantInput,
   type GatewayGrantRecord,
+  type GatewayQuotaFailure,
   type GatewayTurn,
   type GatewayTurnUsage,
 } from './tokens.js';
@@ -44,6 +45,8 @@ export const GATEWAY_MAIN_MODEL = 'corehub-main';
 export const GATEWAY_SMALL_MODEL = 'corehub-small';
 
 const MAX_BODY_BYTES = 64 * 1024 * 1024;
+/** An error answer is read whole before it is passed on; one larger than this is not an error body. */
+const MAX_ERROR_BYTES = 1024 * 1024;
 
 type Wire = 'anthropic' | 'openai' | 'google';
 
@@ -79,6 +82,8 @@ export interface GatewayTarget {
   providerId: string;
   model: string;
   modelLabel: string;
+  /** The provider's name as the person gave it, for words people read (never the row's id). */
+  providerLabel?: string;
   price(usage: CallUsage): { costMicroUsd?: number; costSource: 'estimated' | 'unknown' };
 }
 
@@ -294,13 +299,16 @@ export class ModelGateway {
       );
       return;
     }
-    body.model = upstreamModel(resolved.target.providerId, resolved.target.model);
     await this.forward(
       request,
       response,
-      route.wire,
-      `${route.upstream}${url.search}`,
-      body,
+      {
+        wire: route.wire,
+        call: (target) => ({
+          path: `${route.upstream}${url.search}`,
+          body: { ...body, model: upstreamModel(target.providerId, target.model) },
+        }),
+      },
       grant,
       resolved.target,
       upstreams,
@@ -389,13 +397,16 @@ export class ModelGateway {
     const query = new URLSearchParams(url.search);
     query.delete('key');
     const search = query.size > 0 ? `?${query.toString()}` : '';
-    const model = upstreamModel(resolved.target.providerId, resolved.target.model);
     await this.forward(
       request,
       response,
-      'google',
-      `/v1beta/models/${model}:${action[3]}${search}`,
-      body,
+      {
+        wire: 'google',
+        call: (target) => ({
+          path: `/v1beta/models/${upstreamModel(target.providerId, target.model)}:${action[3]}${search}`,
+          body,
+        }),
+      },
       grant,
       resolved.target,
       upstreams,
@@ -417,7 +428,8 @@ export class ModelGateway {
     }
     // An alias — or any id this hub does not know, such as a vendor's default a subagent asks
     // for — is the model the person chose for this turn.
-    const selection = grant.turn ?? grant.selection;
+    // The chain's model the turn moved on to once its own ran out of quota, for the rest of it.
+    const selection = grant.redirect ?? grant.turn ?? grant.selection;
     if (!selection) {
       return {
         refusal:
@@ -463,14 +475,28 @@ export class ModelGateway {
   private async forward(
     request: IncomingMessage,
     response: ServerResponse,
-    wire: Wire,
-    /** CLIProxyAPI's path, query included. */
-    upstreamPath: string,
-    body: Record<string, unknown>,
+    route: {
+      wire: Wire;
+      /** CLIProxyAPI's path (query included) and the body, for the model a call goes to. */
+      call(target: GatewayTarget): { path: string; body: Record<string, unknown> };
+    },
     grant: GatewayGrantRecord,
     target: GatewayTarget,
     upstreams: GatewayUpstream[],
   ): Promise<void> {
+    const { wire } = route;
+    // A model this turn was already told is out of quota is not asked again: the agent's own
+    // retries get the answer at once, or the chain's next model.
+    if (grant.exhausted.has(exhaustedKey(target))) {
+      const failure = this.quotaFailure(target, 'the provider said the quota is spent');
+      const next = this.fallBack(grant, failure, upstreams);
+      if (next) {
+        await this.forward(request, response, route, grant, next, upstreams);
+        return;
+      }
+      answerQuota(response, wire, failure);
+      return;
+    }
     let lease;
     try {
       lease = await this.options.cliproxy.lease(upstreams);
@@ -485,12 +511,13 @@ export class ModelGateway {
     // A call belongs to the turn it started in, even if it ends after the turn.
     const turn = grant.turn;
     const runId = turn?.runId ?? grant.lastRunId;
-    const payload = Buffer.from(JSON.stringify(body));
+    const call = route.call(target);
+    const payload = Buffer.from(JSON.stringify(call.body));
     const upstream = httpRequest({
       host: '127.0.0.1',
       port: lease.port,
       method: 'POST',
-      path: upstreamPath,
+      path: call.path,
       headers: {
         ...forwardHeaders(request.headers),
         authorization: `Bearer ${lease.key}`,
@@ -504,10 +531,11 @@ export class ModelGateway {
       finished = true;
       lease.done();
     };
-    response.on('close', () => {
+    const onClose = () => {
       if (!response.writableFinished) upstream.destroy();
       finish();
-    });
+    };
+    response.on('close', onClose);
     upstream.on('error', (error) => {
       finish();
       if (!response.headersSent) {
@@ -522,10 +550,52 @@ export class ModelGateway {
     });
     upstream.on('response', (answer) => {
       const status = answer.statusCode ?? 502;
+      if (status >= 400) {
+        // An error is read whole before anything is said: a quota is answered in words the
+        // agent will not retry (or the chain takes over), and no answer carries the hub's
+        // internal names for its providers.
+        void readBody(answer, MAX_ERROR_BYTES)
+          .catch(() => Buffer.alloc(0))
+          .then(async (raw) => {
+            finish();
+            response.off('close', onClose);
+            const text = raw.toString('utf8');
+            if (isQuotaExhausted(status, text)) {
+              const failure = this.quotaFailure(target, providerWords(text, target));
+              grant.exhausted.add(exhaustedKey(target));
+              this.options.log.info(
+                { providerId: target.providerId, model: target.model, status },
+                'gateway: the provider says the quota is spent',
+              );
+              const next = this.fallBack(grant, failure, upstreams);
+              if (next) {
+                await this.forward(request, response, route, grant, next, upstreams);
+                return;
+              }
+              // Only the turn's own model ends the turn: a model an agent named itself (a
+              // catalogue key) being out of quota is that call's answer alone.
+              const current =
+                grant.redirect ??
+                (grant.turn
+                  ? { providerId: grant.turn.providerId, model: grant.turn.model }
+                  : null);
+              if (current && exhaustedKey(current) === exhaustedKey(target)) {
+                this.tellExhausted(grant, failure);
+              }
+              answerQuota(response, wire, failure);
+              return;
+            }
+            const headers = answerHeaders(answer.headers);
+            delete headers['content-length'];
+            response.writeHead(status, headers);
+            response.end(scrubInternalNames(text, target));
+          });
+        return;
+      }
       response.writeHead(status, answerHeaders(answer.headers));
-      const tap = status < 400 ? new UsageTap(answer.headers['content-type']) : null;
+      const tap = new UsageTap(answer.headers['content-type']);
       answer.on('data', (chunk: Buffer) => {
-        tap?.push(chunk);
+        tap.push(chunk);
         if (!response.write(chunk)) {
           answer.pause();
           response.once('drain', () => answer.resume());
@@ -534,7 +604,7 @@ export class ModelGateway {
       answer.on('end', () => {
         response.end();
         finish();
-        const used = tap?.result();
+        const used = tap.result();
         if (used && runId) this.account(grant, turn, runId, target, used);
       });
       answer.on('error', () => {
@@ -543,6 +613,63 @@ export class ModelGateway {
       });
     });
     upstream.end(payload);
+  }
+
+  private quotaFailure(target: GatewayTarget, said: string): GatewayQuotaFailure {
+    return {
+      providerId: target.providerId,
+      model: target.model,
+      providerLabel: target.providerLabel ?? 'The provider',
+      modelLabel: target.modelLabel,
+      said,
+    };
+  }
+
+  /**
+   * The next model of the profile's fallback chain this turn can move on to (contract §54: a
+   * rate limit is one of the failures the chain is for), or null. Only a model the gateway can
+   * serve and not already out of quota this turn; the turn keeps it for its remaining calls.
+   */
+  private fallBack(
+    grant: GatewayGrantRecord,
+    failed: GatewayQuotaFailure,
+    upstreams: GatewayUpstream[],
+  ): GatewayTarget | null {
+    const turn = grant.turn;
+    if (!turn?.fallbacks?.length) return null;
+    for (const member of turn.fallbacks) {
+      if (grant.exhausted.has(`${member.providerId}\n${member.model}`)) continue;
+      if (!upstreams.some((upstream) => upstream.providerId === member.providerId)) continue;
+      const target = this.options.source.target(grant.workspace, member.providerId, member.model);
+      if ('refusal' in target) continue;
+      grant.redirect = { providerId: target.providerId, model: target.model };
+      this.options.log.info(
+        { from: failed.model, to: target.model },
+        'gateway: the turn moves on down the fallback chain',
+      );
+      try {
+        turn.fellBack?.({
+          failed,
+          answered: {
+            providerId: target.providerId,
+            model: target.model,
+            modelLabel: target.modelLabel,
+          },
+        });
+      } catch (error) {
+        this.options.log.warn({ err: error }, 'gateway: the turn refused a fallback report');
+      }
+      return target;
+    }
+    return null;
+  }
+
+  private tellExhausted(grant: GatewayGrantRecord, failure: GatewayQuotaFailure): void {
+    try {
+      grant.turn?.exhausted?.(failure);
+    } catch (error) {
+      this.options.log.warn({ err: error }, 'gateway: the turn refused a quota report');
+    }
   }
 
   /** One call's usage into its turn's totals (or, the turn over, straight into the ledger). */
@@ -664,14 +791,14 @@ function answerHeaders(headers: IncomingMessage['headers']): Record<string, stri
   return out;
 }
 
-function readBody(request: IncomingMessage): Promise<Buffer> {
+function readBody(request: IncomingMessage, max = MAX_BODY_BYTES): Promise<Buffer> {
   return new Promise((resolve, reject) => {
     const chunks: Buffer[] = [];
     let size = 0;
     request.on('data', (chunk: Buffer) => {
       size += chunk.length;
-      if (size > MAX_BODY_BYTES) {
-        reject(new Error(`larger than ${MAX_BODY_BYTES} bytes`));
+      if (size > max) {
+        reject(new Error(`larger than ${max} bytes`));
         request.destroy();
         return;
       }
@@ -723,4 +850,103 @@ function googleStatus(status: number, type: string): string {
     default:
       return 'INTERNAL';
   }
+}
+
+function exhaustedKey(target: { providerId: string; model: string }): string {
+  return `${target.providerId}\n${target.model}`;
+}
+
+/**
+ * Whether a provider's error says the model's quota (or credit, or plan's usage) is spent — the
+ * one 429 no retry will get past soon — as opposed to a passing rate limit, which the agent's own
+ * retries are for. CLIProxyAPI's "every credential is cooling down" counts: it only says so after
+ * the provider refused.
+ */
+export function isQuotaExhausted(status: number, text: string): boolean {
+  if (status === 402) return true;
+  if (status !== 429 && status !== 403) return false;
+  return /quota|resource[_ ]?exhausted|insufficient[_ ]?(?:quota|balance|credits?)|exceeded your current|billing|out of credits|credit balance|usage[_ ]limit|model_cooldown|cooling down/i.test(
+    text,
+  );
+}
+
+/** `h<row id>/`: the prefix CLIProxyAPI knows a provider row by (`cliproxy-config.ts`). */
+const INTERNAL_PREFIX = /\bh[0-9a-z]{26}\//g;
+
+/**
+ * An answer's text with the hub's internal names for its providers taken out: the call's own
+ * model named as people know it, any other row's prefix dropped (owner, 2026-09-30: an error
+ * showed `h01m3az…/gemini-3.8-flash-high`).
+ */
+export function scrubInternalNames(
+  text: string,
+  target: Pick<GatewayTarget, 'providerId' | 'model' | 'modelLabel' | 'providerLabel'>,
+): string {
+  const own = upstreamModel(target.providerId, target.model);
+  const named = target.providerLabel
+    ? `${target.providerLabel} / ${target.modelLabel}`
+    : target.modelLabel;
+  return text.split(own).join(named).replace(INTERNAL_PREFIX, '');
+}
+
+/** What the provider said, as one short sentence without the hub's internal names. */
+function providerWords(text: string, target: GatewayTarget): string {
+  let said = text;
+  try {
+    const parsed = JSON.parse(text) as { error?: unknown; message?: unknown };
+    const error = parsed.error;
+    const message =
+      error && typeof error === 'object'
+        ? (error as { message?: unknown }).message
+        : typeof error === 'string'
+          ? error
+          : parsed.message;
+    if (typeof message === 'string' && message.trim()) said = message;
+  } catch {
+    // Not JSON: its text as it came.
+  }
+  said = scrubInternalNames(said, target).replace(/\s+/g, ' ').trim();
+  return said.length > 400 ? `${said.slice(0, 399)}…` : said || 'the quota is spent';
+}
+
+/**
+ * A spent quota, in the envelope of the agent's own wire and in words it will not retry: 429 with
+ * `x-should-retry: false` (Claude Code and the Anthropic and OpenAI SDKs stop there), OpenAI's
+ * `insufficient_quota`, and for Gemini CLI an `ErrorInfo` it counts as a terminal quota error.
+ */
+function answerQuota(response: ServerResponse, wire: Wire, failure: GatewayQuotaFailure): void {
+  if (response.headersSent) {
+    response.destroy();
+    return;
+  }
+  const message = `${failure.providerLabel} ran out of quota for ${failure.modelLabel}: pick another model for this chat in Core Hub. The provider said: ${failure.said}`;
+  const body =
+    wire === 'anthropic'
+      ? { type: 'error', error: { type: 'rate_limit_error', message } }
+      : wire === 'google'
+        ? {
+            error: {
+              code: 429,
+              message,
+              status: 'RESOURCE_EXHAUSTED',
+              details: [
+                {
+                  '@type': 'type.googleapis.com/google.rpc.ErrorInfo',
+                  reason: 'MODEL_CAPACITY_EXHAUSTED',
+                  domain: 'corehub.gateway',
+                  metadata: { provider: failure.providerLabel, model: failure.modelLabel },
+                },
+              ],
+            },
+          }
+        : {
+            error: {
+              message,
+              type: 'insufficient_quota',
+              code: 'insufficient_quota',
+              param: null,
+            },
+          };
+  response.writeHead(429, { 'content-type': 'application/json', 'x-should-retry': 'false' });
+  response.end(JSON.stringify(body));
 }

@@ -23,7 +23,13 @@ interface CliproxyYaml {
 }
 import { CliproxySupervisor } from './cliproxy.js';
 import { NO_KEY, cliproxyConfig, upstreamPrefix, type GatewayUpstream } from './cliproxy-config.js';
-import { ModelGateway, isLoopback, type GatewaySource } from './gateway.js';
+import {
+  ModelGateway,
+  isLoopback,
+  isQuotaExhausted,
+  scrubInternalNames,
+  type GatewaySource,
+} from './gateway.js';
 import type { GatewayTurnUsage } from './tokens.js';
 import { UsageTap, readGeminiUsage, readUsage } from './usage.js';
 
@@ -49,6 +55,7 @@ function upstream(overrides: Partial<GatewayUpstream> = {}): GatewayUpstream {
       { id: 'vendor/slashed', contextWindow: null },
       { id: 'broken', contextWindow: null },
       { id: 'qwen3:8b', contextWindow: null },
+      { id: 'flash-spent', contextWindow: null },
     ],
     ...overrides,
   };
@@ -375,6 +382,138 @@ describe('the gateway', () => {
       error: { type: 'rate_limit_error', message: 'slow down' },
     });
     expect(reports).toEqual([]);
+  });
+
+  describe('a provider whose quota is spent (owner, 2026-09-30)', () => {
+    const calls = async (h: Harness): Promise<Record<string, number>> => {
+      const lease = await h.cliproxy.lease(h.upstreams);
+      try {
+        const answer = await fetch(`http://127.0.0.1:${lease.port}/fake/calls`, {
+          headers: { authorization: `Bearer ${lease.key}` },
+        });
+        return (await answer.json()) as Record<string, number>;
+      } finally {
+        lease.done();
+      }
+    };
+    const spentModel = `${upstreamPrefix(PROVIDER)}/flash-spent`;
+
+    it('answers at once in words no agent retries, names the provider and model people know, and tells the turn', async () => {
+      const h = harness();
+      h.upstreams[0] = upstream();
+      const grant = await grantOf(h);
+      const exhausted: unknown[] = [];
+      grant.setTurn({
+        runId: 'run-q',
+        providerId: PROVIDER,
+        model: 'flash-spent',
+        report: () => {},
+        exhausted: (failure) => exhausted.push(failure),
+      });
+      // Claude Code's wire.
+      const anthropic = await post(`${grant.anthropicBaseUrl}/v1/messages`, grant.token, {
+        model: 'corehub-main',
+      });
+      expect(anthropic.status).toBe(429);
+      expect(anthropic.headers.get('x-should-retry')).toBe('false');
+      const said = (await anthropic.json()) as { error: { type: string; message: string } };
+      expect(said.error.type).toBe('rate_limit_error');
+      expect(said.error.message).toMatch(/^The provider ran out of quota for Label flash-spent/);
+      expect(said.error.message).toContain('Resource has been exhausted');
+      // Never the hub's internal name for the provider row.
+      expect(said.error.message).not.toMatch(/h01k/i);
+      expect(exhausted).toEqual([
+        expect.objectContaining({ providerId: PROVIDER, model: 'flash-spent' }),
+      ]);
+      // The agent's retries are answered by the gateway, not sent to the provider again.
+      const openai = await post(`${grant.openaiBaseUrl}/chat/completions`, grant.token, {
+        model: 'corehub-main',
+      });
+      expect(openai.status).toBe(429);
+      expect(openai.headers.get('x-should-retry')).toBe('false');
+      expect(await openai.json()).toMatchObject({
+        error: { type: 'insufficient_quota', code: 'insufficient_quota' },
+      });
+      const gemini = await fetch(
+        `${grant.googleBaseUrl}/v1beta/models/corehub-main:generateContent`,
+        {
+          method: 'POST',
+          headers: { 'content-type': 'application/json', 'x-goog-api-key': grant.token },
+          body: '{}',
+        },
+      );
+      expect(gemini.status).toBe(429);
+      expect(await gemini.json()).toMatchObject({
+        error: {
+          status: 'RESOURCE_EXHAUSTED',
+          details: [expect.objectContaining({ reason: 'MODEL_CAPACITY_EXHAUSTED' })],
+        },
+      });
+      expect((await calls(h))[spentModel]).toBe(1);
+      // A new turn asks the provider again: the quota may be back.
+      grant.setTurn({
+        runId: 'run-q2',
+        providerId: PROVIDER,
+        model: 'flash-spent',
+        report: () => {},
+      });
+      await post(`${grant.anthropicBaseUrl}/v1/messages`, grant.token, { model: 'corehub-main' });
+      expect((await calls(h))[spentModel]).toBe(2);
+    });
+
+    it('moves the turn down the profile’s fallback chain, and keeps it there', async () => {
+      const h = harness();
+      const grant = await grantOf(h);
+      const moves: unknown[] = [];
+      const exhausted: unknown[] = [];
+      grant.setTurn({
+        runId: 'run-f',
+        providerId: PROVIDER,
+        model: 'flash-spent',
+        report: () => {},
+        fallbacks: [
+          { providerId: PROVIDER, model: 'flash-spent' },
+          { providerId: PROVIDER, model: 'coder' },
+        ],
+        exhausted: (failure) => exhausted.push(failure),
+        fellBack: (move) => moves.push(move),
+      });
+      const answer = await post(`${grant.anthropicBaseUrl}/v1/messages`, grant.token, {
+        model: 'corehub-main',
+      });
+      expect(answer.status).toBe(200);
+      expect(answer.headers.get('x-fake-model')).toBe(`${upstreamPrefix(PROVIDER)}/coder`);
+      expect(moves).toEqual([
+        expect.objectContaining({
+          failed: expect.objectContaining({ model: 'flash-spent' }),
+          answered: expect.objectContaining({ model: 'coder', modelLabel: 'Label coder' }),
+        }),
+      ]);
+      expect(exhausted).toEqual([]);
+      // The rest of the turn stays on the model that answered.
+      const next = await post(`${grant.anthropicBaseUrl}/v1/messages`, grant.token, {
+        model: 'corehub-main',
+      });
+      expect(next.headers.get('x-fake-model')).toBe(`${upstreamPrefix(PROVIDER)}/coder`);
+      expect((await calls(h))[spentModel]).toBe(1);
+    });
+
+    it('takes the hub’s internal names out of any other error it passes on', () => {
+      const text = `unknown model ${upstreamPrefix(PROVIDER)}/coder, nor ${upstreamPrefix(OTHER)}/x`;
+      expect(
+        scrubInternalNames(text, {
+          providerId: PROVIDER,
+          model: 'coder',
+          modelLabel: 'Coder',
+          providerLabel: 'CLI Proxy',
+        }),
+      ).toBe('unknown model CLI Proxy / Coder, nor x');
+      expect(isQuotaExhausted(429, '{"error":{"message":"slow down"}}')).toBe(false);
+      expect(isQuotaExhausted(429, '{"error":{"code":"insufficient_quota"}}')).toBe(true);
+      expect(isQuotaExhausted(402, 'Payment Required')).toBe(true);
+      expect(isQuotaExhausted(403, 'invalid credentials')).toBe(false);
+      expect(isQuotaExhausted(500, 'quota')).toBe(false);
+    });
   });
 
   it('adds a call that ends after its turn straight to that run', async () => {

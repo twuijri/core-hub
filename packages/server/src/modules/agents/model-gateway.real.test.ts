@@ -623,72 +623,135 @@ describe.skipIf(!enabled)('the model gateway, for real (COREHUB_REAL_GATEWAY=1)'
     5 * 60_000,
   );
 
+  /**
+   * An agent run the way the hub runs it: the real `AgentRunner`, the agent's process started by
+   * the ACP adapter on its catalog wiring, and its gateway grant handed to the runner, which names
+   * each turn's model to the gateway.
+   */
+  async function withRunner(
+    id: string,
+    use: (turn: (runId: string, text: string) => Promise<RunnerEvent[]>) => Promise<void>,
+  ): Promise<void> {
+    const { target, adapter, grant, home } = await prepareAgent(id);
+    const service = {
+      loadAgent: () => ({
+        id: `agent-${id}`,
+        slug: id,
+        installState: 'installed',
+        adapterKind: 'acp',
+      }),
+      settled: async () => {},
+      selectionFor: () => ({ model: MODEL, provider: null, providerId: PROVIDER_ID }),
+      fallbacksFor: () => [],
+      providerSlugOf: () => 'fake',
+      modelSourceFor: () => 'hub',
+      openGateway: async () => grant,
+      targetFor: () => target,
+    };
+    const runner = new AgentRunner({
+      service: service as unknown as AgentsService,
+      adapters: { byKind: () => adapter } as unknown as AdapterSet,
+      log: pino({ level: 'silent' }) as never,
+    });
+    const turn = async (runId: string, text: string) => {
+      await runner.start({
+        runId,
+        sessionId: `S-runner-${id}`,
+        workspace: 'w',
+        agentId: `agent-${id}`,
+        agentSessionRef: null,
+        workingDir: home,
+        model: null,
+        provider: null,
+        reasoningEffort: null,
+        userId: 'u1',
+        prompt: [{ type: 'text' as const, text }],
+        files: null,
+        allowedTools: [],
+      });
+      const out: RunnerEvent[] = [];
+      for await (const event of runner.stream(runId)) out.push(event);
+      return out;
+    };
+    try {
+      await use(turn);
+    } finally {
+      exhausted = false;
+      await runner.closeAll();
+      grant.revoke();
+      rmSync(home, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 });
+    }
+  }
+
+  const saidIn = (events: RunnerEvent[]) =>
+    events
+      .filter(
+        (event): event is Extract<RunnerEvent, { type: 'message_delta' }> =>
+          event.type === 'message_delta',
+      )
+      .map((event) => event.text)
+      .join('');
+
   it(
     'after a turn the provider refused, the next turn streams Arabic intact and ends (the runner)',
     async () => {
-      const { target, adapter, grant, home } = await prepareAgent('claude-code');
-      // Claude Code's own retries would only make this slow; the refusal is what matters here.
-      target.env = { ...target.env, CLAUDE_CODE_MAX_RETRIES: '0' };
-      const service = {
-        loadAgent: () => ({
-          id: 'agent-cc',
-          slug: 'claude-code',
-          installState: 'installed',
-          adapterKind: 'acp',
-        }),
-        settled: async () => {},
-        selectionFor: () => ({ model: MODEL, provider: null, providerId: PROVIDER_ID }),
-        fallbacksFor: () => [],
-        providerSlugOf: () => 'fake',
-        modelSourceFor: () => 'agent',
-        targetFor: () => target,
-      };
-      const runner = new AgentRunner({
-        service: service as unknown as AgentsService,
-        adapters: { byKind: () => adapter } as unknown as AdapterSet,
-        log: pino({ level: 'silent' }) as never,
-      });
-      const turn = async (runId: string, text: string) => {
-        await runner.start({
-          runId,
-          sessionId: 'S-runner',
-          workspace: 'w',
-          agentId: 'agent-cc',
-          agentSessionRef: null,
-          workingDir: home,
-          model: null,
-          provider: null,
-          reasoningEffort: null,
-          userId: 'u1',
-          prompt: [{ type: 'text' as const, text }],
-          files: null,
-          allowedTools: [],
-        });
-        const out: RunnerEvent[] = [];
-        for await (const event of runner.stream(runId)) out.push(event);
-        return out;
-      };
-      try {
+      await withRunner('claude-code', async (turn) => {
         exhausted = true;
         const refused = await turn('run-refused', 'Say hello.');
         exhausted = false;
         expect(refused.at(-1)).toMatchObject({ type: 'failed' });
         const answered = await turn('run-arabic', ARABIC_PROMPT);
-        const said = answered
-          .filter(
-            (event): event is Extract<RunnerEvent, { type: 'message_delta' }> =>
-              event.type === 'message_delta',
-          )
-          .map((event) => event.text)
-          .join('');
-        expect(said).toBe(ARABIC_TOKENS.join(''));
+        expect(saidIn(answered)).toBe(ARABIC_TOKENS.join(''));
         expect(answered.at(-1)).toMatchObject({ type: 'completed' });
-      } finally {
+      });
+    },
+    5 * 60_000,
+  );
+
+  // A provider out of quota (owner, 2026-09-30: "Thinking 109 s", then an API error naming the
+  // hub's internal provider id): the gateway answers in words each agent does not retry, so the
+  // turn fails in seconds, as `rate_limited` naming the provider and the model people know.
+  const onlyQuota = process.env.COREHUB_REAL_GATEWAY_ONLY?.split(',').filter(Boolean);
+  const quotaAgents = [
+    'claude-code',
+    'codex',
+    'gemini-cli',
+    'goose',
+    'opencode',
+    'qwen-code',
+    'kimi-code',
+    'grok-build',
+    'pi',
+  ].filter((id) => !onlyQuota || onlyQuota.includes(id));
+  it.each(quotaAgents)(
+    '%s fails within seconds, and plainly, when the provider’s quota is spent, and the chat goes on',
+    async (id) => {
+      if (id !== 'claude-code' && process.env.COREHUB_REAL_GATEWAY_ALL !== '1') return;
+      await withRunner(id, async (turn) => {
+        const before = provider.seen.length;
+        exhausted = true;
+        const started = Date.now();
+        const events = await turn(`run-quota-${id}`, 'Say hello.');
+        const took = Date.now() - started;
         exhausted = false;
-        await runner.closeAll();
-        grant.revoke();
-        rmSync(home, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 });
-      }
+        expect(events.at(-1)).toMatchObject({
+          type: 'failed',
+          code: 'rate_limited',
+          message:
+            'The provider ran out of quota for Fake Coder. Pick another model for this chat.',
+          details: { reason: 'quota_exhausted', model: 'Fake Coder', model_id: MODEL },
+        });
+        // No retries with backoff against a spent quota: one call reached the provider, at most
+        // a side call (a title) too, and the turn was over in seconds, not minutes.
+        expect(provider.seen.length - before).toBeLessThanOrEqual(2);
+        expect(took, `took ${took} ms`).toBeLessThan(30_000);
+        expect(JSON.stringify(events)).not.toMatch(/h01kgateway/i);
+        // The quota back (or another model picked), the same conversation answers again — an
+        // agent the hub had to stop included.
+        const next = await turn(`run-after-${id}`, 'Say pong.');
+        expect(next.at(-1)).toMatchObject({ type: 'completed' });
+        expect(saidIn(next)).toContain('pong from the fake provider');
+      });
     },
     5 * 60_000,
   );

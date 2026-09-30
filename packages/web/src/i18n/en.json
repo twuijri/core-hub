@@ -344,6 +344,8 @@
     },
     "no_key": "The provider rejected the stored key, so the agent could not reach it.",
     "no_key_action": "Open Settings → Models",
+    "quota_exhausted": "{provider} ran out of quota for {model}. Pick another model for this chat.",
+    "quota_pick_model": "Choose another model",
     "you": "You",
     "queued": "Queued",
     "seconds": "{seconds}s",

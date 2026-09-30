@@ -36,7 +36,15 @@ function fakeGrant(n: number): FakeGrant {
   return grant;
 }
 
-function setup(options: { source: () => 'hub' | 'agent' | null; failGateway?: boolean }) {
+function setup(options: {
+  source: () => 'hub' | 'agent' | null;
+  failGateway?: boolean;
+  /** The turn as the agent plays it; absent, two model calls and the end. */
+  play?: (
+    turn: AgentGatewayTurn | null | undefined,
+    finish: () => void,
+  ) => Promise<{ stopReason: string }>;
+}) {
   const grants: FakeGrant[] = [];
   const targets: { gateway: AgentGatewayGrant | null | undefined }[] = [];
   const closed: string[] = [];
@@ -53,6 +61,7 @@ function setup(options: { source: () => 'hub' | 'agent' | null; failGateway?: bo
         async send() {
           // The agent calls its model twice during the turn; the gateway reports each time.
           const turn = grant?.turns.at(-1);
+          if (options.play) return options.play(turn, () => finish?.());
           turn?.report({
             modelLabel: 'Coder',
             providerId: 'p1',
@@ -101,8 +110,9 @@ function setup(options: { source: () => 'hub' | 'agent' | null; failGateway?: bo
     }),
     settled: async () => {},
     selectionFor: () => ({ model: 'coder', provider: null, providerId: 'p1' }),
-    fallbacksFor: () => [],
-    providerSlugOf: () => 'example',
+    fallbacksFor: () => [{ providerId: 'p2', provider: null, slug: 'backup', model: 'spare' }],
+    providerSlugOf: (_workspace: string, selection: { providerId: string | null }) =>
+      selection.providerId === 'p2' ? 'backup' : 'example',
     modelSourceFor: () => options.source(),
     openGateway: async () => {
       if (options.failGateway) throw new Error('no CLIProxyAPI');
@@ -208,5 +218,72 @@ describe('agent runner: the model gateway (ADR 0029)', () => {
     await h.turn('r1');
     expect(h.grants).toEqual([]);
     expect(h.targets[0]!.gateway).toBeNull();
+  });
+
+  it('fails a turn whose provider ran out of quota as that, naming the provider and model', async () => {
+    const h = setup({
+      source: () => 'hub',
+      play: async (turn) => {
+        expect(turn?.fallbacks).toEqual([{ providerId: 'p2', model: 'spare' }]);
+        turn?.exhausted?.({
+          providerId: 'p1',
+          model: 'coder',
+          providerLabel: 'CLI Proxy',
+          modelLabel: 'Gemini 3.8 Flash High',
+          said: 'Resource has been exhausted (e.g. check quota).',
+        });
+        throw new Error('Internal error: API Error: 429 {"type":"error"}');
+      },
+    });
+    const events = await h.turn('r1');
+    expect(events.at(-1)).toEqual({
+      type: 'failed',
+      code: 'rate_limited',
+      message:
+        'CLI Proxy ran out of quota for Gemini 3.8 Flash High. Pick another model for this chat.',
+      details: {
+        reason: 'quota_exhausted',
+        provider: 'CLI Proxy',
+        model: 'Gemini 3.8 Flash High',
+        provider_id: 'p1',
+        model_id: 'coder',
+      },
+    });
+    await h.runner.closeAll();
+  });
+
+  it('says so when the gateway moved the turn down the fallback chain', async () => {
+    const h = setup({
+      source: () => 'hub',
+      play: async (turn, finish) => {
+        turn?.fellBack?.({
+          failed: {
+            providerId: 'p1',
+            model: 'coder',
+            providerLabel: 'CLI Proxy',
+            modelLabel: 'Coder',
+            said: 'quota',
+          },
+          answered: { providerId: 'p2', model: 'spare', modelLabel: 'Spare' },
+        });
+        finish();
+        return { stopReason: 'end_turn' };
+      },
+    });
+    const events = await h.turn('r1');
+    expect(events.find((event) => event.type === 'model_fallback')).toEqual({
+      type: 'model_fallback',
+      failed: [
+        {
+          model: 'coder',
+          provider: 'example',
+          code: 'rate_limited',
+          error: 'CLI Proxy ran out of quota for Coder. Pick another model for this chat.',
+        },
+      ],
+      answered: { model: 'spare', provider: 'backup' },
+    });
+    expect(events.at(-1)).toMatchObject({ type: 'completed' });
+    await h.runner.closeAll();
   });
 });

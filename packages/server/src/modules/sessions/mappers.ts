@@ -227,7 +227,12 @@ export function toRun(view: RunView, profile: string): Record<string, unknown> {
     reasoning_effort: row.reasoningEffort ?? null,
     interrupted: row.interruptRequestedAt !== null,
     error: code
-      ? { error: view.errorMessage ?? row.errorMessage ?? code, code: wireErrorCode(code) }
+      ? {
+          error: view.errorMessage ?? row.errorMessage ?? code,
+          code: wireErrorCode(code),
+          // Code-specific (docs/contracts/README.md §4): a spent quota names its provider and model.
+          ...(row.timing?.failure?.details ? { details: { ...row.timing.failure.details } } : {}),
+        }
       : null,
     usage: wireUsage(view.usage),
     fallback: row.timing?.fallback?.failed.length

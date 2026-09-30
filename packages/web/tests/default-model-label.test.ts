@@ -30,6 +30,30 @@ describe('the default model, named', () => {
     expect(defaultModelLabel(agent({ kind: 'hermes', default_model: null }), MODELS, t)).toBeNull();
   });
 
+  it("a coding agent on the hub's models whose row names no default: the profile's, coding first", () => {
+    const defaults = {
+      default: { provider_id: 'p', model: 'x-1' },
+      auxiliary: {
+        tasks: [],
+        assignments: { coding: { provider_id: 'p', model: 'google/gemini-2.5-pro' } },
+      },
+    };
+    const onHub = agent({ kind: 'acp', model_source: 'hub', default_model: null });
+    expect(defaultModelLabel(onHub, MODELS, t, defaults)).toBe('Default · Gemini 2.5 Pro');
+    expect(
+      defaultModelLabel(onHub, MODELS, t, {
+        ...defaults,
+        auxiliary: { tasks: [], assignments: {} },
+      }),
+    ).toBe('Default · x-1');
+    // Hermes has no coding default: the chat one.
+    expect(
+      defaultModelLabel(agent({ kind: 'hermes', default_model: null }), MODELS, t, defaults),
+    ).toBe('Default · x-1');
+    // Not readable (a member, an older hub): as before.
+    expect(defaultModelLabel(onHub, MODELS, t, null)).toBeNull();
+  });
+
   it("a coding agent: its own settings' model, else only the agent knows", () => {
     expect(
       defaultModelLabel(

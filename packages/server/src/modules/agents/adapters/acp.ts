@@ -144,6 +144,11 @@ export class AcpSession implements AgentSession {
   private readonly transport: AcpTransport;
   private readonly pending = new Map<number, Pending>();
   private readonly queue = new EventQueue();
+  /** The prompt in flight, and which turn asked it: a turn the hub stopped may still be ending. */
+  private inflight: Promise<unknown> | null = null;
+  private turnSeq = 0;
+  /** A new turn is waiting for the stopped one to end: what the agent says meanwhile is not its. */
+  private settling = false;
   private readonly approvals = new Map<string, number | string>();
   private nextId = 1;
   private closed = false;
@@ -307,6 +312,7 @@ export class AcpSession implements AgentSession {
   }
 
   private onUpdate(params: unknown): void {
+    if (this.settling) return;
     const update = (params as { update?: Record<string, unknown> } | undefined)?.update;
     if (!update) return;
     const kind = update.sessionUpdate;
@@ -445,12 +451,37 @@ export class AcpSession implements AgentSession {
   }
 
   async send(prompt: PromptInput): Promise<{ stopReason: string }> {
-    const result = (await this.request(
+    const turn = ++this.turnSeq;
+    if (this.inflight) {
+      // The hub ended the last turn while the agent was still in it (a spent quota the agent
+      // kept retrying: cancelled, `runner.ts`): wait for it to end before asking again, and drop
+      // what it said on its way out — its late `run.completed` would end this turn empty.
+      this.settling = true;
+      await Promise.race([
+        this.inflight.then(
+          () => undefined,
+          () => undefined,
+        ),
+        new Promise((resolve) => setTimeout(resolve, SETTLE_MAX_MS).unref?.()),
+      ]);
+      this.settling = false;
+      this.queue.discardBuffered();
+    }
+    const asked = this.request(
       'session/prompt',
       { sessionId: this.sessionId, prompt: [{ type: 'text', text: prompt.text }] },
       10 * 60_000,
-    )) as { stopReason?: string };
+    );
+    this.inflight = asked;
+    let result: { stopReason?: string };
+    try {
+      result = (await asked) as { stopReason?: string };
+    } finally {
+      if (this.inflight === asked) this.inflight = null;
+    }
     const stopReason = result.stopReason ?? 'completed';
+    // A newer turn has started since: this one's end is not its.
+    if (turn !== this.turnSeq) return { stopReason };
     // An ACP delegation lives inside its turn: one the stream never closed ends with it.
     this.subagentSignals.endAll();
     this.queue.push({ type: 'run.completed', stopReason });
@@ -510,6 +541,9 @@ export type AcpMcpServer =
       args: string[];
       env: Array<{ name: string; value: string }>;
     };
+
+/** The longest a new turn waits for one the hub stopped to end (`AcpSession.send`). */
+const SETTLE_MAX_MS = 15_000;
 
 export interface AcpAdapterOptions {
   host: HostEnvironment;

@@ -5,6 +5,10 @@
 // `x-fake-*` headers so a test can see the model and credential the gateway forwarded.
 //
 //   FAKE_CLIPROXY_EXIT_AFTER_MS  exit (code 3) this long after starting — a crash
+//
+// A model whose id ends in `spent` answers as CLIProxyAPI does once a provider said its quota is
+// spent (429, its own name for the model in the words); `GET /fake/calls` counts the calls each
+// model was sent.
 import { readFileSync } from 'node:fs';
 import { createServer } from 'node:http';
 import { parse } from 'yaml';
@@ -18,6 +22,8 @@ for (const groups of Object.values(config['api-keys'] ?? {})) {
     for (const model of group.models) served.add(`${group.prefix}/${model.alias}`);
   }
 }
+
+const calls = {};
 
 const sse = (response, events) => {
   response.writeHead(200, { 'content-type': 'text/event-stream', 'x-fake-served': 'yes' });
@@ -39,6 +45,11 @@ createServer((request, response) => {
       return;
     }
     const url = new URL(request.url, 'http://x');
+    if (request.method === 'GET' && url.pathname === '/fake/calls') {
+      response.writeHead(200, { 'content-type': 'application/json' });
+      response.end(JSON.stringify(calls));
+      return;
+    }
     if (request.method === 'GET' && url.pathname === '/v1/models') {
       response.writeHead(200, { 'content-type': 'application/json' });
       response.end(JSON.stringify({ object: 'list', data: [...served].map((id) => ({ id })) }));
@@ -70,6 +81,20 @@ createServer((request, response) => {
     response.setHeader('x-fake-x-api-key', String(request.headers['x-api-key'] ?? ''));
     response.setHeader('x-fake-beta', String(request.headers['anthropic-beta'] ?? ''));
     response.setHeader('x-fake-body-model', String(JSON.parse(raw || '{}').model ?? ''));
+    calls[body.model] = (calls[body.model] ?? 0) + 1;
+    if (body.model.endsWith('spent')) {
+      response.writeHead(429, { 'content-type': 'application/json' });
+      response.end(
+        JSON.stringify({
+          type: 'error',
+          error: {
+            type: 'rate_limit_error',
+            message: `All credentials for model ${body.model} are cooling down (last error: {"error":{"code":429,"message":"Resource has been exhausted (e.g. check quota).","status":"RESOURCE_EXHAUSTED"}})`,
+          },
+        }),
+      );
+      return;
+    }
     if (body.model.endsWith('/broken')) {
       response.writeHead(429, { 'content-type': 'application/json', 'retry-after': '7' });
       response.end(

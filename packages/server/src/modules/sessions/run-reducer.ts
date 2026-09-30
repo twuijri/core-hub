@@ -134,7 +134,7 @@ export interface RunState {
   /** The agent is compressing the context inside this run (decision §57). */
   compressing: boolean;
   interruptRequested: boolean;
-  error: { code: string; message: string } | null;
+  error: { code: string; message: string; details?: Record<string, unknown> } | null;
   startedAt: number | null;
   finishedAt: number | null;
   /** Tool names approved for the rest of the session ("always" / "for this session"). */
@@ -582,7 +582,11 @@ export function reduceRun(state: RunState, input: RunInput, ctx: ReduceContext):
         }
 
         case 'failed': {
-          next.error = { code: event.code ?? 'agent_error', message: event.message };
+          next.error = {
+            code: event.code ?? 'agent_error',
+            message: event.message,
+            ...(event.details ? { details: event.details } : {}),
+          };
           finishOpenWork('failed', 'cancelled');
           moveTo(next.interruptRequested ? 'cancelled' : 'failed');
           break;

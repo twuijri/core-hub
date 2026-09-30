@@ -130,6 +130,8 @@ export interface RunTiming {
       error: string | null;
     }>;
   } | null;
+  /** Code-specific details of the run's error (`Run.error.details`), when it had any. */
+  failure?: { details: Record<string, unknown> } | null;
   turns: Array<{
     startedAt: number;
     endedAt: number | null;

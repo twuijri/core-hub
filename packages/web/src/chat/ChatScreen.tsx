@@ -53,7 +53,7 @@ import { QuestionCard } from './QuestionCard.js';
 import { RunStatus } from './RunStatus.js';
 import { RunFailureNotice, failuresByMessage } from './RunFailureNotice.js';
 import { SubagentsPanel } from './SubagentsPanel.js';
-import { useCatalogue, useRuntimeReport } from '../models/queries.js';
+import { useCatalogue, useModelDefaults, useRuntimeReport } from '../models/queries.js';
 import { activeRun, isBusy, textOf } from './transcript.js';
 import { runProgress, turnsOf } from './turns.js';
 import { useRecentModels } from '../models/useModelPicker.js';
@@ -287,11 +287,18 @@ function OpenSessionBody({ sessionId, title: pageTitle, intro }: OpenSessionProp
   const agentId = state.session?.agent_id ?? null;
   const agents = useAgents();
   const catalogue = useCatalogue();
+  const modelDefaults = useModelDefaults();
   const models = useComposerModels(
     (agents.data ?? []).find((candidate) => candidate.id === agentId),
   );
   const { recent, remember } = useRecentModels();
   const approval = useApprovalMode(agentId);
+  // A spent quota's way on: the composer's own model picker, opened as if it were clicked.
+  const openModelPicker = () => {
+    const trigger = document.querySelector<HTMLButtonElement>('[data-testid="composer-model"]');
+    trigger?.scrollIntoView({ block: 'nearest' });
+    trigger?.click();
+  };
 
   const run = activeRun(state);
   // The composer's `/` commands (decision §57): what this conversation's agent takes.
@@ -640,6 +647,7 @@ function OpenSessionBody({ sessionId, title: pageTitle, intro }: OpenSessionProp
                         runtime={runtime.data}
                         agent={(agents.data ?? []).find((agent) => agent.id === agentId)}
                         onDismiss={() => setDismissed((held) => new Set(held).add(entry.runId))}
+                        onPickModel={openModelPicker}
                       />
                     ) : null;
                   }}
@@ -751,6 +759,7 @@ function OpenSessionBody({ sessionId, title: pageTitle, intro }: OpenSessionProp
                   (agents.data ?? []).find((agent) => agent.id === agentId),
                   models,
                   t,
+                  modelDefaults.data,
                 )}
                 onModel={(value) => {
                   remember(value);

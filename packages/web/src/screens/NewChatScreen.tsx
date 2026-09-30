@@ -13,6 +13,7 @@ import { Composer } from '../chat/Composer.js';
 import { putFirstMessage } from '../chat/firstMessage.js';
 import { chatHref } from '../chat/anchor.js';
 import { starterSuggestions } from '../chat/starters.js';
+import { useModelDefaults } from '../models/queries.js';
 import {
   defaultModelLabel,
   useApprovalMode,
@@ -51,6 +52,7 @@ export function NewChatScreen() {
   const [workingDir, setWorkingDir] = useState<string | null>(null);
   const [model, setModel] = useState<string | null>(null);
   const [error, setError] = useState<unknown>(null);
+  const modelDefaults = useModelDefaults();
   const models = useComposerModels((agents.data ?? []).find((agent) => agent.id === agentId));
   const { recent, remember } = useRecentModels();
   const approval = useApprovalMode(agentId);
@@ -144,6 +146,7 @@ export function NewChatScreen() {
             (agents.data ?? []).find((agent) => agent.id === agentId),
             models,
             t,
+            modelDefaults.data,
           )}
           onModel={(value) => {
             remember(value);

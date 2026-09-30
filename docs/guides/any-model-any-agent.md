@@ -97,4 +97,9 @@ the hub leaves it alone and the agent uses its own account; the hub's log says w
 - "… is not available to coding agents through Core Hub" — the model's provider has no key, or it is a
   subscription signed in to through Hermes; pick another model or switch the agent to its own account.
 - "no model is chosen for this conversation" — pick a model, or set a default in Settings → Models.
-- A provider's own error (rate limit, bad key) is shown as the provider said it.
+- "<provider> ran out of quota for <model>. Pick another model for this chat." — the provider said the
+  model's quota (or credit) is spent. The chat says so within seconds instead of retrying for minutes,
+  with a button that opens the model picker. If the profile has a fallback chain (Settings → Models →
+  Defaults), the turn moves on to its next model by itself and the chat shows which one answered.
+- A provider's other errors (a passing rate limit, a bad key) are shown as the provider said them,
+  without the hub's internal names for its providers.

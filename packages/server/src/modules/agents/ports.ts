@@ -135,6 +135,25 @@ export interface AgentGatewayTurn {
   model: string;
   /** The turn's totals so far for one model, after each call through the gateway. */
   report(usage: AgentGatewayUsage): void;
+  /** The profile's fallback chain after the turn's model (§54), for a spent quota. */
+  fallbacks?: readonly { providerId: string; model: string }[];
+  /** The provider says the turn's model is out of quota, and no model of the chain took over. */
+  exhausted?(failure: AgentGatewayQuotaFailure): void;
+  /** The turn moved on down the chain after its model ran out of quota. */
+  fellBack?(move: {
+    failed: AgentGatewayQuotaFailure;
+    answered: { providerId: string; model: string; modelLabel: string };
+  }): void;
+}
+
+/** A provider said a model's quota is spent; the names are the ones people know. */
+export interface AgentGatewayQuotaFailure {
+  providerId: string;
+  model: string;
+  providerLabel: string;
+  modelLabel: string;
+  /** The provider's own words, without the hub's internal names. */
+  said: string;
 }
 
 export interface AgentGatewayUsage {
@@ -371,7 +390,13 @@ export type RunnerEvent =
       answered: { model: string; provider: string | null };
     }
   | { type: 'completed' }
-  | { type: 'failed'; code?: string; message: string };
+  | {
+      type: 'failed';
+      code?: string;
+      message: string;
+      /** Code-specific details for `Run.error.details` (a spent quota: which provider, model). */
+      details?: Record<string, unknown>;
+    };
 
 export type RunnerDecision = 'approve_once' | 'approve_session' | 'approve_always' | 'deny';
 

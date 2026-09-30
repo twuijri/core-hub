@@ -3085,6 +3085,7 @@ export class ModelsService {
       providerId: provider.id,
       model: row.modelKey,
       modelLabel: row.alias ?? row.label,
+      providerLabel: provider.label,
       price: (usage) => costOf(row.pricing, usage),
     };
   }

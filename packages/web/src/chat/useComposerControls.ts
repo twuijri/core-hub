@@ -13,7 +13,7 @@ import { useAgentSettings, useSaveAgentSetting } from '../hub/queries.js';
 import { useI18n } from '../i18n/context.js';
 import { chatModels, useCatalogue } from '../models/queries.js';
 import { modelOption } from '../models/useModelPicker.js';
-import type { Agent, Model, SettingsSection } from '../types.js';
+import type { Agent, Model, ModelDefaults, SettingsSection } from '../types.js';
 import type { ComboboxOption } from '../ui/Combobox.js';
 import type { SelectOption } from '../ui/Select.js';
 
@@ -98,6 +98,12 @@ export function defaultModelLabel(
   agent: Pick<Agent, 'kind' | 'default_model' | 'agent_default_model' | 'model_source'> | undefined,
   models: readonly ComboboxOption[],
   t: (key: string, values?: Record<string, string | number>) => string,
+  /**
+   * The profile's defaults (`models.getDefaults`), for when the agent's row does not name its
+   * default (an older hub, or a moment before it does): a coding agent on the hub's models runs
+   * on the coding default, else the chat default — the same order the hub resolves them in.
+   */
+  defaults?: Pick<ModelDefaults, 'default' | 'auxiliary'> | null,
 ): string | null {
   if (!agent) return null;
   // A coding agent on the hub's models (ADR 0029) runs on the hub's default, as Hermes does.
@@ -107,7 +113,11 @@ export function defaultModelLabel(
       ? t('composer.model_default_named', { model: own })
       : t('composer.model_agent_default');
   }
-  const ref = agent.default_model;
+  const ref =
+    agent.default_model ??
+    (agent.kind === 'acp' ? defaults?.auxiliary?.assignments?.coding : undefined) ??
+    defaults?.default ??
+    null;
   if (!ref?.model) return null;
   const option = models.find(
     (candidate) => candidate.value === ref.model || candidate.value.endsWith(`/${ref.model}`),

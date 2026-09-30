@@ -58,7 +58,7 @@ import type {
   RunnerSubagentSignal,
   RunnerToolKind,
 } from './ports.js';
-import type { AgentGatewayGrant, AgentGatewayUsage } from './ports.js';
+import type { AgentGatewayGrant, AgentGatewayQuotaFailure, AgentGatewayUsage } from './ports.js';
 import type { AgentsService } from './service.js';
 import type { RunLeases } from './hub-tools/leases.js';
 
@@ -113,7 +113,19 @@ interface LiveRun {
   handedOver: string[];
   /** Stops this turn's reading of the session's events (`pump`), once the turn has ended. */
   release?: () => void;
+  /** The gateway said the turn's model is out of quota (ADR 0029): how the run fails, said plainly. */
+  quota?: AgentGatewayQuotaFailure;
+  /** Ends a turn whose agent keeps retrying a spent quota (`QUOTA_GRACE_MS`). */
+  quotaTimer?: NodeJS.Timeout;
 }
+
+/**
+ * How long a turn whose provider said its quota is spent is left to end on its own. Claude Code,
+ * Codex, Gemini CLI and Grok Build stop at once on the gateway's answer; OpenCode and Qwen Code
+ * retry it with a backoff of their own for minutes (measured 2026-09-30), so the hub stops the
+ * turn itself.
+ */
+const QUOTA_GRACE_MS = 8_000;
 
 export interface AgentRunnerDeps {
   service: AgentsService;
@@ -176,12 +188,52 @@ export class AgentRunner implements AgentRunnerPort {
 
     // On the hub's models (ADR 0029) the agent names an alias; the gateway serves this turn's
     // choice, and hands back each call's usage for the run's ledger.
+    const fallbacks = service.fallbacksFor(request.workspace, selection);
     if (live.gateway && selection.providerId && selection.model) {
+      const workspace = request.workspace;
       live.gateway.setTurn({
         runId: run.runId,
         providerId: selection.providerId,
         model: selection.model,
         report: (usage) => this.gatewayUsage(run, usage),
+        // A spent quota moves the turn down the profile's chain, as a Hermes turn does (§54).
+        fallbacks: fallbacks.map((member) => ({
+          providerId: member.providerId,
+          model: member.model,
+        })),
+        exhausted: (failure) => {
+          run.quota = failure;
+          if (run.quotaTimer || run.ended) return;
+          run.quotaTimer = setTimeout(() => {
+            if (run.ended) return;
+            this.deps.log.info(
+              { runId: run.runId, agent: live.agentId },
+              'agents: the provider is out of quota and the agent is still retrying; the turn ends',
+            );
+            void live.session.interrupt().catch(() => undefined);
+            this.push(run, { type: 'failed', code: 'rate_limited', message: 'quota' });
+          }, QUOTA_GRACE_MS);
+          run.quotaTimer.unref?.();
+        },
+        fellBack: (move) => {
+          const slug = (providerId: string, model: string) =>
+            service.providerSlugOf(workspace, { providerId, model, provider: null });
+          this.push(run, {
+            type: 'model_fallback',
+            failed: [
+              {
+                model: move.failed.model,
+                provider: slug(move.failed.providerId, move.failed.model),
+                code: 'rate_limited',
+                error: quotaSentence(move.failed),
+              },
+            ],
+            answered: {
+              model: move.answered.model,
+              provider: slug(move.answered.providerId, move.answered.model),
+            },
+          });
+        },
       });
     }
 
@@ -200,7 +252,7 @@ export class AgentRunner implements AgentRunnerPort {
       modelProvider: selection.provider,
       modelProviderId: selection.providerId,
       modelProviderSlug: service.providerSlugOf(request.workspace, selection),
-      fallbacks: service.fallbacksFor(request.workspace, selection),
+      fallbacks,
       reasoningEffort: request.reasoningEffort,
     };
     void live.session.send(prompt).catch((error: unknown) => {
@@ -721,6 +773,28 @@ export class AgentRunner implements AgentRunnerPort {
 
   private push(run: LiveRun, event: RunnerEvent): void {
     if (run.ended) return;
+    // However the agent put it ("API Error: 429 …", or its own words after giving up), a turn
+    // whose model the provider said is out of quota fails as that: which provider, which model,
+    // and that another model is the way on (owner, 2026-09-30).
+    // An agent that gives up by writing the error as its answer and ending the turn (Goose,
+    // Kimi Code, Pi) did not answer either.
+    if (
+      run.quota &&
+      (event.type === 'completed' || (event.type === 'failed' && event.code !== 'cancelled'))
+    ) {
+      event = {
+        type: 'failed',
+        code: 'rate_limited',
+        message: quotaSentence(run.quota),
+        details: {
+          reason: 'quota_exhausted',
+          provider: run.quota.providerLabel,
+          model: run.quota.modelLabel,
+          provider_id: run.quota.providerId,
+          model_id: run.quota.model,
+        },
+      };
+    }
     if (event.type === 'completed' || event.type === 'failed') {
       // Before the engine hears the end and reads the output folder.
       const dropped = dropDuplicateHandOvers(run.handedOver, run.outputDir);
@@ -740,6 +814,7 @@ export class AgentRunner implements AgentRunnerPort {
   private end(run: LiveRun): void {
     if (run.ended) return;
     run.ended = true;
+    if (run.quotaTimer) clearTimeout(run.quotaTimer);
     run.release?.();
     // A call still streaming after the turn is added to this run's ledger row by the gateway.
     run.live.gateway?.setTurn(null);
@@ -757,6 +832,13 @@ export class AgentRunner implements AgentRunnerPort {
       void run.live.session.close().catch(() => undefined);
     }
   }
+}
+
+/** A spent quota, in English; the sessions module says it in the person's language (`Run.error`). */
+export function quotaSentence(
+  failure: Pick<AgentGatewayQuotaFailure, 'providerLabel' | 'modelLabel'>,
+): string {
+  return `${failure.providerLabel} ran out of quota for ${failure.modelLabel}. Pick another model for this chat.`;
 }
 
 /** The agent has no such command (decision §57): `409 state_invalid`, said plainly. */

@@ -34,6 +34,19 @@ import { textOf } from './transcript.js';
 export interface RunFailure {
   code: string;
   error: string;
+  /** Code-specific details (`Run.error.details`); a spent quota names its provider and model. */
+  details?: Record<string, unknown> | undefined;
+}
+
+/**
+ * A spent quota the hub's model gateway recognised (ADR 0029): which provider and which model,
+ * as people know them. `null` for anything else, or an older hub's run that says only the words.
+ */
+export function quotaOf(failure: RunFailure): { provider: string; model: string } | null {
+  const details = failure.details;
+  if (failure.code !== 'rate_limited' || details?.reason !== 'quota_exhausted') return null;
+  const { provider, model } = details;
+  return typeof provider === 'string' && typeof model === 'string' ? { provider, model } : null;
 }
 
 /** The Defaults tab of the Models screen, by name — no client invents a path. */
@@ -121,8 +134,18 @@ export function failuresByMessage(
     // Not in the transcript held (an older page): nothing is drawn, and nothing elsewhere.
     if (!target) continue;
     const { code, error } = run.error;
-    if (code !== 'provider_not_configured' && reply && textOf(reply).trim() !== '') continue;
-    out.set(target.id, { runId: run.id, failure: { code, error } });
+    const details = (run.error as { details?: Record<string, unknown> }).details;
+    const failure: RunFailure = { code, error, ...(details ? { details } : {}) };
+    // A spent quota is said even under a reply: the agent's own words for it are an API error.
+    if (
+      code !== 'provider_not_configured' &&
+      !quotaOf(failure) &&
+      reply &&
+      textOf(reply).trim() !== ''
+    ) {
+      continue;
+    }
+    out.set(target.id, { runId: run.id, failure });
   }
   return out;
 }
@@ -132,6 +155,7 @@ export function RunFailureNotice({
   runtime,
   agent,
   onDismiss,
+  onPickModel,
 }: {
   failure: RunFailure;
   /** The conversation's agent: a coding agent's known failures get their way out. */
@@ -144,6 +168,8 @@ export function RunFailureNotice({
   runtime?: RuntimeReport | undefined;
   /** Hides it in this view; the failed turn shows it again after a reload. */
   onDismiss?: (() => void) | undefined;
+  /** Opens the conversation's model picker (a spent quota's way on). */
+  onPickModel?: (() => void) | undefined;
 }) {
   const { t } = useI18n();
   const dismiss: ReactNode = onDismiss ? (
@@ -159,6 +185,29 @@ export function RunFailureNotice({
       data-testid="run-failed-dismiss"
     />
   ) : null;
+  const quota = quotaOf(failure);
+  if (quota) {
+    return (
+      <Notice tone="danger" className="run-failure space-y-1" testId="run-failed-quota">
+        {dismiss}
+        <p data-testid="run-failed-reason" dir="auto">
+          {t('chat.quota_exhausted', { provider: quota.provider, model: quota.model })}
+        </p>
+        {onPickModel && (
+          <p>
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={onPickModel}
+              data-testid="run-failed-pick-model"
+            >
+              {t('chat.quota_pick_model')}
+            </Button>
+          </p>
+        )}
+      </Notice>
+    );
+  }
   const help = agentHelp(agent, failure);
   if (help && agent) {
     const actionLabel =

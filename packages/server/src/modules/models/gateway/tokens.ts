@@ -26,6 +26,23 @@ export interface GatewayTurnUsage {
   costSource: 'estimated' | 'unknown';
 }
 
+/** A provider said a model's quota is spent (or every credential for it is cooling down). */
+export interface GatewayQuotaFailure {
+  providerId: string;
+  model: string;
+  /** The provider's name as the person gave it, and the model's: never the hub's internal ids. */
+  providerLabel: string;
+  modelLabel: string;
+  /** The provider's own words, with the hub's internal names taken out. */
+  said: string;
+}
+
+/** The turn moved on to the next model of the profile's fallback chain (contract §54). */
+export interface GatewayFallback {
+  failed: GatewayQuotaFailure;
+  answered: { providerId: string; model: string; modelLabel: string };
+}
+
 /** The turn a token serves right now. */
 export interface GatewayTurn {
   runId: string;
@@ -33,6 +50,15 @@ export interface GatewayTurn {
   model: string;
   /** The turn's totals so far, per model, after each call (cumulative, as adapters report). */
   report(usage: GatewayTurnUsage): void;
+  /**
+   * The profile's fallback chain after the turn's model (contract decision §54): where a turn
+   * whose provider says its quota is spent moves on to. Absent or empty: nowhere.
+   */
+  fallbacks?: readonly { providerId: string; model: string }[];
+  /** The turn's model is out of quota and nothing of the chain could take over. */
+  exhausted?(failure: GatewayQuotaFailure): void;
+  /** The turn moved on down the chain. */
+  fellBack?(move: GatewayFallback): void;
 }
 
 export interface GatewayGrantInput {
@@ -56,6 +82,10 @@ export interface GatewayGrantRecord extends GatewayGrantInput {
   /** Per run, per model: what the turn has used so far. */
   totals: Map<string, GatewayTurnUsage>;
   revoked: boolean;
+  /** This turn's models a provider said are out of quota (`<row>\n<model>`): not asked again. */
+  exhausted: Set<string>;
+  /** The chain's model this turn moved on to, once its own ran out. */
+  redirect: { providerId: string; model: string } | null;
 }
 
 export class GatewayTokens {
@@ -75,6 +105,8 @@ export class GatewayTokens {
       selection: null,
       totals: new Map(),
       revoked: false,
+      exhausted: new Set(),
+      redirect: null,
     };
     this.records.set(token, record);
     return record;
@@ -98,7 +130,15 @@ export class GatewayTokens {
 
   setTurn(record: GatewayGrantRecord, turn: GatewayTurn | null): void {
     if (turn) {
-      if (record.turn?.runId !== turn.runId) record.totals.clear();
+      if (record.turn?.runId !== turn.runId) {
+        record.totals.clear();
+        // A new turn asks again: a quota may have come back, and the person may have picked
+        // another model.
+        if (record.lastRunId !== turn.runId) {
+          record.exhausted.clear();
+          record.redirect = null;
+        }
+      }
       record.lastRunId = turn.runId;
       record.selection = { providerId: turn.providerId, model: turn.model };
     }

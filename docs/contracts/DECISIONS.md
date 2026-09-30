@@ -4919,3 +4919,37 @@ it); CLIProxyAPI's Gemini-in translation appends an empty user message after a t
 strict provider might refuse (not seen); Gemini in to an Anthropic provider round-trips tools
 (checked by hand) but CLIProxyAPI 8.0.4 reports its input tokens as 0, so such a turn's cost is
 counted low.
+
+## 142. The model gateway after its first live test: one reader per turn; a spent quota fails fast and plainly
+
+ADR 0029, after the owner's first live test (2026-09-30). Additive only (`Run.error.details` is
+already the `Error` envelope's). Proposed here — owner to confirm:
+
+- **One reader per turn.** A turn the runner ends itself (the agent refused the prompt) lets go of
+  the session's event stream; an ACP turn drops what the agent said after the last turn ended, and
+  waits (at most 15 s) for a turn the hub stopped before it asks again. Before this, a stale reader
+  took every other event of the next turn: the owner's «هلا! كيف أقدر أساعد؟» arrived as
+  «لا كيفقدرساعد؟», and the turn never ended.
+- **CLIProxyAPI does not cool a provider row down** (`routing.cooldown.disable-cooling`, no retry
+  rounds): each row is one key, so after one 429 it only refused the row for a growing while, in
+  words carrying the row's internal id.
+- **A spent quota** — a provider's 402, or a 429/403 whose words say quota, credit, billing, a
+  usage limit, `RESOURCE_EXHAUSTED`, `insufficient_quota`, or CLIProxyAPI's "cooling down" — is
+  answered by the gateway at once in the agent's own envelope and in words it does not retry: 429
+  with `x-should-retry: false`, `rate_limit_error` (Anthropic), `insufficient_quota` (OpenAI), and
+  for Gemini an `ErrorInfo` `MODEL_CAPACITY_EXHAUSTED` (Gemini CLI's terminal quota error). The
+  message names the provider and the model as people know them. The same turn does not ask that
+  model again; a new turn does. A passing rate limit (a 429 without those words) is still the
+  agent's to retry.
+- **The profile's fallback chain** (§54, which lists a rate limit among its failures) takes over:
+  the gateway moves the turn to the chain's next model it can serve, for the rest of the turn, and
+  the run says so (`model_fallback`, as a Hermes turn does). With nothing left, the run fails.
+- **The run's error:** `code: rate_limited`, `error` the sentence in the request's language
+  ("{provider} ran out of quota for {model}. Pick another model for this chat."), and
+  `details: {reason: "quota_exhausted", provider, model, provider_id, model_id}` — `provider` and
+  `model` being the names people know. An agent that writes the error as its answer (Goose, Kimi
+  Code, Pi) fails the same way; one that keeps retrying (OpenCode, Qwen Code) is stopped after 8 s.
+  Clients: the web says it in the person's language with a button that opens the chat's model
+  picker; an older client shows the sentence and the code as before.
+- **No internal names**: an error the gateway passes on has `h<row id>/…` replaced by the
+  provider's and model's names.
