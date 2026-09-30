@@ -10,12 +10,13 @@
  *   call itself; renew (a refresh against the stand-in); turn off and on; sign out;
  * - ChatGPT's short code, which CLIProxyAPI offers only as `-codex-device-login`: run as a child
  *   process, its code read from what it prints, the account landing in the running process's store;
- * - Claude's link sign-in: CLIProxyAPI's own authorisation link, and the landing address pasted
- *   back, which CLIProxyAPI exchanges at the vendor (the stand-in refuses the code, so it fails
- *   with the vendor's words — the wiring up to the vendor call is what is proven).
+ * - Claude's link sign-in: CLIProxyAPI's own authorisation link (its callback address and state),
+ *   and a pasted-back address from another sign-in refused by CLIProxyAPI. The code exchange itself
+ *   is not driven: CLIProxyAPI makes it with its own TLS client for Anthropic, which takes no proxy.
  *
  * The vendors are never reached: CLIProxyAPI has no setting for their sign-in addresses, so it runs
- * behind a proxy that answers their hosts itself (`testing/vendor-mitm.ts`).
+ * behind a proxy that answers their hosts itself (`testing/vendor-mitm.ts`); its `api-call` takes
+ * no proxy from the environment, so the account under test is given the stand-in as its own.
  *
  * Skipped unless `COREHUB_REAL_GATEWAY=1` (it needs `pnpm cliproxy:fetch` and `openssl`); CI's
  * `model-gateway-real` job runs it.

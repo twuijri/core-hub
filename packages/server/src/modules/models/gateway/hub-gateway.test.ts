@@ -185,7 +185,10 @@ describe('the model gateway in the hub', () => {
 
     // The key sits in CLIProxyAPI's own file, 0600, and nowhere the agent can read.
     const dir = path.join(h.dataDir, 'gateway');
-    const file = readdirSync(dir).find((name) => name.endsWith('.yaml'))!;
+    // The newest process's file (a new hub may have started one at boot, before the provider).
+    const file = readdirSync(dir)
+      .filter((name) => /^cliproxy-\d+\.yaml$/.test(name))
+      .sort((a, b) => Number(/\d+/.exec(b)![0]) - Number(/\d+/.exec(a)![0]))[0]!;
     const config = parse(readFileSync(path.join(dir, file), 'utf8')) as CliproxyYaml;
     expect(config['api-keys'].claude[0]).toMatchObject({
       prefix: upstreamPrefix(anthropic.id),

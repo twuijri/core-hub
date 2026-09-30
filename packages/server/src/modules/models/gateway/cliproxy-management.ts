@@ -193,6 +193,15 @@ export function errorEventOf(value: unknown): ManagementErrorEvent | null {
   };
 }
 
+function parseJson(text: string): unknown {
+  if (!text) return null;
+  try {
+    return JSON.parse(text) as unknown;
+  } catch {
+    return null;
+  }
+}
+
 export class ManagementClient {
   private readonly fetchImpl: typeof fetch;
 
@@ -224,12 +233,7 @@ export class ManagementClient {
       );
     }
     const text = await response.text();
-    let parsed: unknown = null;
-    try {
-      parsed = text ? JSON.parse(text) : null;
-    } catch {
-      parsed = null;
-    }
+    const parsed = parseJson(text);
     if (!response.ok) {
       const said =
         parsed && typeof parsed === 'object'
@@ -290,12 +294,7 @@ export class ManagementClient {
     const text = pasted.trim();
     let body: Record<string, string>;
     if (/^https?:\/\//i.test(text)) {
-      let own = false;
-      try {
-        own = new URL(text).searchParams.has('state');
-      } catch {
-        own = false;
-      }
+      const own = URL.canParse(text) && new URL(text).searchParams.has('state');
       body = own ? { redirect_url: text } : { redirect_url: text, state };
     } else {
       body = { state, code: text };

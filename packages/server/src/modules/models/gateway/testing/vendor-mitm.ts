@@ -6,8 +6,10 @@
  * it does honour is the environment's `HTTPS_PROXY` (its HTTP clients use Go's default transport
  * when its own `proxy-url` is empty) and, on Linux, `SSL_CERT_FILE`. So the test runs it with a
  * proxy of its own that answers `CONNECT` for the vendors' hosts itself, with a certificate from a
- * throwaway authority made for the test (`openssl`), which CLIProxyAPI is told to trust. Nothing
- * reaches the real vendors; a host the stand-in does not know is answered 404.
+ * throwaway authority made for the test (`openssl`), which CLIProxyAPI is told to trust. A host the
+ * stand-in does not know is refused. Two clients of CLIProxyAPI's ignore that proxy — `api-call`
+ * (it takes an account's own `proxy_url` instead) and its TLS client for Anthropic — and the test
+ * keeps both away from the real vendors.
  */
 import { execFileSync } from 'node:child_process';
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';

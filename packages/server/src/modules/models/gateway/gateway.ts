@@ -377,6 +377,14 @@ export class ModelGateway {
     await this.options.cliproxy.stop();
   }
 
+  /** The upstreams, read again when the cached list lacks the row a call is for. */
+  private upstreamsWith(providerId: string): GatewayUpstream[] {
+    const cached = this.upstreams();
+    return cached.some((upstream) => upstream.providerId === providerId)
+      ? cached
+      : this.upstreams(true);
+  }
+
   /** Every upstream, read at most once every few seconds (a turn makes many calls). */
   private upstreams(fresh = false): GatewayUpstream[] {
     const at = Date.now();
@@ -473,7 +481,8 @@ export class ModelGateway {
       fail(response, route.wire, 400, 'invalid_request_error', resolved.refusal);
       return;
     }
-    const upstreams = this.upstreams();
+    // The cached list, unless it does not have the row yet (a provider added a moment ago).
+    const upstreams = this.upstreamsWith(resolved.target.providerId);
     if (!upstreams.some((upstream) => upstream.providerId === resolved.target.providerId)) {
       fail(
         response,
@@ -568,7 +577,8 @@ export class ModelGateway {
       fail(response, 'google', 400, 'INVALID_ARGUMENT', resolved.refusal);
       return;
     }
-    const upstreams = this.upstreams();
+    // The cached list, unless it does not have the row yet (a provider added a moment ago).
+    const upstreams = this.upstreamsWith(resolved.target.providerId);
     if (!upstreams.some((upstream) => upstream.providerId === resolved.target.providerId)) {
       fail(
         response,
