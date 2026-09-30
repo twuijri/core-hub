@@ -11,7 +11,14 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { AuthProvider } from '../src/auth/context.js';
 import { SessionStore } from '../src/auth/store.js';
 import { Transcript } from '../src/chat/MessageView.js';
-import { failedNames, failureReasons, fallbackOf, modelName } from '../src/chat/fallback.js';
+import {
+  ModelNamesContext,
+  catalogueNames,
+  failedNames,
+  failureReasons,
+  fallbackOf,
+  modelName,
+} from '../src/chat/fallback.js';
 import { turnsOf } from '../src/chat/turns.js';
 import { I18nProvider } from '../src/i18n/context.js';
 import type { Language } from '../src/i18n/index.js';
@@ -310,6 +317,38 @@ describe('a turn a fallback model answered', () => {
     );
     // The turn's meta line names the model that answered.
     expect(screen.getByText(/Answered by proxy\/gpt-5\.5/)).toBeInTheDocument();
+  });
+
+  it('names the models as people know them when the chat has its catalogue', () => {
+    const reply = message({
+      id: 'm1',
+      role: 'assistant',
+      run_id: 'r1',
+      content: [{ type: 'text', text: 'answered' }],
+      usage: { input_tokens: 9, output_tokens: 2, cost: null },
+    });
+    const names = catalogueNames([
+      {
+        key: 'proxy/gemini-3.8-flash-high',
+        provider: 'CLI Proxy',
+        model: 'gemini-3.8-flash-high',
+        alias: null,
+      },
+      { key: 'proxy/gpt-5.5', provider: 'CLI Proxy', model: 'gpt-5.5', alias: 'GPT 5.5' },
+    ] as unknown as Model[]);
+    render(
+      <I18nProvider language="en">
+        <PaneProvider>
+          <ModelNamesContext.Provider value={names}>
+            <Transcript turns={turnsOf([reply])} showReasoning runs={{ r1: run() }} />
+          </ModelNamesContext.Provider>
+        </PaneProvider>
+      </I18nProvider>,
+    );
+    expect(screen.getByTestId('fallback-note')).toHaveTextContent(
+      'CLI Proxy · gemini-3.8-flash-high failed, so CLI Proxy · GPT 5.5 answered',
+    );
+    expect(screen.getByText(/Answered by CLI Proxy · GPT 5\.5/)).toBeInTheDocument();
   });
 
   it('says it in Arabic', () => {

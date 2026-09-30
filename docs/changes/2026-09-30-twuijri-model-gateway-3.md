@@ -157,11 +157,61 @@ db:generate + db:migrate (SQLite and PostgreSQL): success
 Android: success · iOS: success · Change record: success
 ```
 
+### الجولة الثانية (preview.36، 2026-09-30 مساءً)
+**ما رآه المالك**: اختار gemini-3.8-flash-high في منتقي محادثة Claude Code، ففشل الدور بسطر «custom-cli-proxy-api/claude-opus-4-6-thinking
+failed, so custom-cli-proxy-api/gemini-3-flash answered» ثم نفاد حصة gemini-3-flash، ولم يختر opus قط، وقال إن لحساب Google رصيدًا.
+
+**السبب الجذري** (تتبعته في الكود وجرّبته):
+- (أ) تغيير المنتقي بين الدورين **يصل**: المشغّل يحسب النموذج من `Run.model` لكل دور ويسمّيه للبوابة (`setTurn`)؛ اختبار حقيقي جديد
+  يبدّل النموذج بين ثلاثة أدوار ويثبت أن كل طلب خدمه المختار.
+- (ب) Claude Code لم يرسل opus في تجاربي (حتى مع `settings.model = opus`)، لكن البوابة كانت تقبل من الوكيل «مفتاح كتالوج» يسمّيه
+  بنفسه (`<مزوّد>/<نموذج>`، قرار §140) — وجسر Claude Code يطابق الأسماء بالتقريب («opus») من قائمة `/v1/models` التي فيها نماذج
+  بروكسي المالك. **أُغلق**: كل طلب من الوكيل يخدمه نموذج الدور، أيًّا كان الاسم الذي يرسله (اختبار حقيقي: `ANTHROPIC_MODEL` يسمّي
+  opus والمخدوم هو المختار).
+- (ج) opus وgemini-3-flash من **سلسلة البدائل** في البروفايل: نفد gemini-3.8-flash-high (429 `RESOURCE_EXHAUSTED`) فانتقل الدور
+  إلى opus ثم gemini-3-flash. والسطر لم يذكر gemini-3.8 لأن كل نقلة كانت تُرسل وحدها فتحل الثانية محل الأولى — صار المشغّل
+  يرسل كل ما تجاوزه الدور بالترتيب. وكان يكتب مفاتيح (`custom-cli-proxy-api/…`) — صار الويب يسمّيها «<المزوّد> · <النموذج>» من
+  الكتالوج في سطر البديل و«أجاب». و«الرصيد موجود» يطابق حدّ الدقيقة عند Google (نفس الكلمات).
+
+**حدّ عابر لا حصة منتهية**: `classifyLimit` يفرّق: 402 أو `insufficient_quota`/billing/payment/credit/usage limit/حصة يومية أو شهرية
+← منتهية فورًا؛ quota/`RESOURCE_EXHAUSTED`/«cooling down» دون ذلك ← عابر: تنتظر البوابة وقت المزوّد (`retry-after(-ms)`،
+`RetryInfo.retryDelay`، «Please retry in»، `reset_seconds`؛ وإلا 20 ث) **مرة واحدة** بحد 30 ث ثم تسأل ثانية في الدور نفسه، ورفض
+ثانٍ أو انتظار أطول ← منتهية. تحقّقت: CLIProxyAPI 8.0.4 يحذف تفاصيل Google و`Retry-After` حين يترجم الخطأ إلى Anthropic/Responses/
+Gemini (يُبقي الرسالة فقط)، فهناك الانتظار 20 ث. لا سطر حيّ «ينتظر المزوّد» في المحادثة بعد (يحتاج حدثًا جديدًا).
+
+**مسار الأحداث بعرض الصفحة**: `.trajectory` بلا `max-inline-size`/`margin-inline` (قرار المالك «هذي الصفحة مهب ممتده من الطرف
+لطرف»، 2026-09-30)، والنصوص الطويلة تلتف كما كانت.
+
+الملفات: `models/gateway/gateway.ts` و`tokens.ts` و`testing/fake-cliproxy.mjs` و`gateway.test.ts`، `agents/runner.ts`
+و`runner-gateway.test.ts` و`model-gateway.real.test.ts`، الويب `chat/fallback.ts` و`MessageView.tsx` و`TrajectoryView.tsx`
+و`ChatScreen.tsx` و`styles/chat.css` و`tests/model-fallback-signin.test.tsx`، DECISIONS §142، الدليل.
+
+```
+$ COREHUB_REAL_GATEWAY=1 COREHUB_REAL_GATEWAY_ALL=1 COREHUB_REAL_ACP_DATA=~/.cache/corehub-agent/acp-data \
+    pnpm exec vitest run --project unit --maxWorkers=1 --reporter=verbose src/modules/agents/model-gateway.real.test.ts -t "quota"
+ ✓ claude-code fails within seconds, … 3631ms   (Anthropic: انتظار افتراضي ثم منتهية)
+ ✓ codex … 376ms · ✓ gemini-cli … 6293ms · ✓ goose … 7180ms · ✓ opencode … 9665ms
+ ✓ qwen-code … 9159ms · ✓ kimi-code … 926ms · ✓ grok-build … 501ms · ✓ pi … 919ms
+      Tests  9 passed | 14 skipped (23)
+$ … model-gateway.real.test.ts src/modules/models/gateway/gateway-stream.real.test.ts   (قبل تصحيح نص الرسالة المتوقَّع)
+ ✓ Claude Code waits out a per-minute limit once and answers in the same turn 3531ms
+ ✓ serves the model picked for each turn, whatever model the agent names itself 622ms
+ ✓ after a turn the provider refused, the next turn streams Arabic intact and ends (the runner) 3848ms
+ ✓ (round-trip التسعة، وتقطيع العربي، وسلسلة المالك)
+$ pnpm exec vitest run --project unit --maxWorkers=2 src/modules/agents/ src/modules/models/gateway/ \
+    src/modules/sessions/run-reducer.test.ts src/modules/sessions/run-quota-error.test.ts src/modules/sessions/direct-fallback.test.ts
+ Test Files  73 passed | 24 skipped (97)
+      Tests  878 passed | 90 skipped (968)
+$ pnpm --filter @corehub/web exec vitest run --maxWorkers=2 <كل اختبار يرسم المحادثة أو مسار الأحداث أو البديل>
+ Test Files  18 passed (18)
+      Tests  158 passed (158)
+```
+
 ## المخاطر والرجوع
 - رمي الأحداث المخزّنة عند بدء دور ACP: لا يقول وكيل ACP شيئًا لدور لم يبدأ بعد؛ الوكلاء الفرعيون على قناتهم الخاصة.
 - بلا تبريد يصل كل طلب إلى المزوّد (كما لو كلّمه الوكيل مباشرة)؛ البوابة هي من يقرر الفشل السريع.
-- تصنيف «الحصة انتهت» بالكلمات: 429 من Google لحدّ الدقيقة يقول أيضًا «Resource has been exhausted» فيُعامل كحصة منتهية
-  (طلب المالك صراحة: فشل سريع). الدور التالي يسأل من جديد.
+- التصنيف بالكلمات: حدّ عابر بلا تفاصيل ينتظر 20 ث مرة ثم يُعدّ منتهيًا؛ حصة يومية تُكتشف بتفاصيل Google على مسار Chat فقط.
+- البوابة لم تعد تقبل نموذجًا يسمّيه الوكيل: `/model` داخل الوكيل لا يغيّر شيئًا على نماذج المركز (المنتقي هو المرجع).
 - إيقاف الوكيل بعد 8 ث يعتمد على `session/cancel` في ACP؛ جُرّب مع OpenCode وQwen Code.
 - **الرجوع**: عكس الالتزامات؛ لا ترحيل (حقل JSON اختياري في `runs.timing`) ولا تغيير في العقد.
 

@@ -55,6 +55,8 @@ export interface GatewayTurn {
    * whose provider says its quota is spent moves on to. Absent or empty: nowhere.
    */
   fallbacks?: readonly { providerId: string; model: string }[];
+  /** The provider is limiting for now: the gateway waits this long once, then asks again. */
+  waiting?(wait: { providerLabel: string; modelLabel: string; seconds: number }): void;
   /** The turn's model is out of quota and nothing of the chain could take over. */
   exhausted?(failure: GatewayQuotaFailure): void;
   /** The turn moved on down the chain. */
@@ -86,6 +88,8 @@ export interface GatewayGrantRecord extends GatewayGrantInput {
   exhausted: Set<string>;
   /** The chain's model this turn moved on to, once its own ran out. */
   redirect: { providerId: string; model: string } | null;
+  /** This turn's models the gateway already waited once for (a passing limit). */
+  waited: Set<string>;
 }
 
 export class GatewayTokens {
@@ -107,6 +111,7 @@ export class GatewayTokens {
       revoked: false,
       exhausted: new Set(),
       redirect: null,
+      waited: new Set(),
     };
     this.records.set(token, record);
     return record;
@@ -136,6 +141,7 @@ export class GatewayTokens {
         // another model.
         if (record.lastRunId !== turn.runId) {
           record.exhausted.clear();
+          record.waited.clear();
           record.redirect = null;
         }
       }

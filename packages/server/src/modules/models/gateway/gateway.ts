@@ -109,6 +109,8 @@ export interface ModelGatewayOptions {
   enabled: boolean;
   /** Tests: the address it listens on (always a loopback one). */
   host?: string;
+  /** Tests: shorter waits for a provider's passing limit (`LIMIT_WAIT`). */
+  limitWait?: { defaultMs: number; maxMs: number };
 }
 
 /** What an agent session is given: where the gateway is, its token, and the turn switch. */
@@ -137,7 +139,11 @@ export class ModelGateway {
   private listening: Promise<number> | null = null;
   private upstreamCache: { at: number; value: GatewayUpstream[] } | null = null;
 
-  constructor(private readonly options: ModelGatewayOptions) {}
+  private readonly limitWait: { defaultMs: number; maxMs: number };
+
+  constructor(private readonly options: ModelGatewayOptions) {
+    this.limitWait = options.limitWait ?? LIMIT_WAIT;
+  }
 
   /** Whether an agent can be pointed here at all: switched on, and CLIProxyAPI is present. */
   available(): boolean {
@@ -413,28 +419,30 @@ export class ModelGateway {
     );
   }
 
+  /**
+   * The model a call runs on: the turn's, always (owner, 2026-09-30). Whatever id the agent
+   * names — `corehub-main`, `corehub-small`, a vendor default a subagent asks for, or a model it
+   * picked by itself from the list `/v1/models` gives it (Claude Code's bridge matches "opus" in
+   * it) — the person chose the model in the hub's picker, and that is the one served. Once the
+   * turn's model ran out of quota, the chain's model it moved on to (`redirect`).
+   */
   private resolveModel(
     grant: GatewayGrantRecord,
     asked: string,
   ): { target: GatewayTarget } | { refusal: string } {
     const { source } = this.options;
-    // A catalogue key the agent was given or typed (`/model openrouter/…`) names its own model.
-    if (asked.includes('/') && !(GATEWAY_MODEL_ALIASES as readonly string[]).includes(asked)) {
-      const key = source.resolveKey(grant.workspace, asked);
-      if (key) {
-        const target = source.target(grant.workspace, key.providerId, key.model);
-        return 'refusal' in target ? target : { target };
-      }
-    }
-    // An alias — or any id this hub does not know, such as a vendor's default a subagent asks
-    // for — is the model the person chose for this turn.
-    // The chain's model the turn moved on to once its own ran out of quota, for the rest of it.
     const selection = grant.redirect ?? grant.turn ?? grant.selection;
     if (!selection) {
       return {
         refusal:
           'no model is chosen for this conversation: pick one in the model picker, or set a default model in Settings → Models',
       };
+    }
+    if (asked && !(GATEWAY_MODEL_ALIASES as readonly string[]).includes(asked)) {
+      this.options.log.debug(
+        { agent: grant.agentSlug, asked },
+        'gateway: the agent named a model of its own; the turn’s model serves it',
+      );
     }
     const target = source.target(grant.workspace, selection.providerId, selection.model);
     return 'refusal' in target ? target : { target };
@@ -560,7 +568,28 @@ export class ModelGateway {
             finish();
             response.off('close', onClose);
             const text = raw.toString('utf8');
-            if (isQuotaExhausted(status, text)) {
+            const verdict = classifyLimit(status, text, answer.headers, this.limitWait);
+            const key = exhaustedKey(target);
+            if (
+              verdict.kind === 'wait' &&
+              verdict.ms <= this.limitWait.maxMs &&
+              !grant.waited.has(key)
+            ) {
+              // A limit that passes (Google says RESOURCE_EXHAUSTED for a per-minute limit as
+              // for a spent quota; owner, 2026-09-30): wait the provider's time once, then ask
+              // again within the same turn. A second refusal is taken as spent.
+              grant.waited.add(key);
+              this.options.log.info(
+                { providerId: target.providerId, model: target.model, waitMs: verdict.ms },
+                'gateway: the provider is limiting for now; waiting once before asking again',
+              );
+              this.tellWaiting(grant, target, verdict.ms);
+              await new Promise((resolve) => setTimeout(resolve, verdict.ms));
+              if (response.destroyed || response.writableEnded) return;
+              await this.forward(request, response, route, grant, target, upstreams);
+              return;
+            }
+            if (verdict.kind !== 'pass') {
               const failure = this.quotaFailure(target, providerWords(text, target));
               grant.exhausted.add(exhaustedKey(target));
               this.options.log.info(
@@ -662,6 +691,18 @@ export class ModelGateway {
       return target;
     }
     return null;
+  }
+
+  private tellWaiting(grant: GatewayGrantRecord, target: GatewayTarget, ms: number): void {
+    try {
+      grant.turn?.waiting?.({
+        providerLabel: target.providerLabel ?? 'The provider',
+        modelLabel: target.modelLabel,
+        seconds: Math.ceil(ms / 1000),
+      });
+    } catch (error) {
+      this.options.log.warn({ err: error }, 'gateway: the turn refused a wait report');
+    }
   }
 
   private tellExhausted(grant: GatewayGrantRecord, failure: GatewayQuotaFailure): void {
@@ -859,18 +900,70 @@ function exhaustedKey(target: { providerId: string; model: string }): string {
   return `${target.providerId}\n${target.model}`;
 }
 
+/** How long to wait for a provider's passing limit: its own word, else this; never longer. */
+const LIMIT_WAIT = { defaultMs: 20_000, maxMs: 30_000 };
+
+/** Words that say a quota is spent for longer than a turn can wait, or money is. */
+const SPENT =
+  /insufficient[_ ]?(?:quota|balance|credits?)|exceeded your current|billing|payment|out of credits|credit balance|usage[_ ]limit|per[_ ]?day|perday|daily|per[_ ]?month|permonth|monthly/i;
 /**
- * Whether a provider's error says the model's quota (or credit, or plan's usage) is spent — the
- * one 429 no retry will get past soon — as opposed to a passing rate limit, which the agent's own
- * retries are for. CLIProxyAPI's "every credential is cooling down" counts: it only says so after
- * the provider refused.
+ * Words that say a quota, spent or passing. A plain rate limit ("slow down", `rate_limit_error`
+ * alone) is not one: the agent's own retries are for it, as before.
  */
-export function isQuotaExhausted(status: number, text: string): boolean {
-  if (status === 402) return true;
-  if (status !== 429 && status !== 403) return false;
-  return /quota|resource[_ ]?exhausted|insufficient[_ ]?(?:quota|balance|credits?)|exceeded your current|billing|out of credits|credit balance|usage[_ ]limit|model_cooldown|cooling down/i.test(
-    text,
-  );
+const LIMITED = /quota|resource[_ ]?exhausted|model_cooldown|cooling down/i;
+
+/**
+ * What a provider's error says of its limits:
+ * - `spent` — the money or a daily/monthly quota is gone (402, `insufficient_quota`, billing,
+ *   credit, a `…PerDay` quota): answered at once, no retry will get past it this turn;
+ * - `wait` — a limit that passes (a per-minute rate or token limit: Google says
+ *   `RESOURCE_EXHAUSTED` for both, owner 2026-09-30), with how long to wait: the provider's
+ *   `retry-after(-ms)`, Google's `RetryInfo.retryDelay`, "Please retry in …", CLIProxyAPI's
+ *   `reset_seconds` — else a default;
+ * - `pass` — anything else, passed on as it came (a plain 429 without those words is the agent's
+ *   to retry, as before).
+ */
+export function classifyLimit(
+  status: number,
+  text: string,
+  headers: IncomingMessage['headers'] = {},
+  wait: { defaultMs: number; maxMs: number } = LIMIT_WAIT,
+): { kind: 'spent' } | { kind: 'wait'; ms: number } | { kind: 'pass' } {
+  if (status === 402) return { kind: 'spent' };
+  if (status !== 429 && status !== 403) return { kind: 'pass' };
+  if (SPENT.test(text)) return { kind: 'spent' };
+  if (!LIMITED.test(text)) return { kind: 'pass' };
+  if (status === 403 && !/quota|resource[_ ]?exhausted/i.test(text)) return { kind: 'pass' };
+  const ms = retryDelayMs(text, headers);
+  return { kind: 'wait', ms: ms ?? wait.defaultMs };
+}
+
+/** How long the provider asks to wait, in milliseconds, or null when it does not say. */
+export function retryDelayMs(
+  text: string,
+  headers: IncomingMessage['headers'] = {},
+): number | null {
+  const header = (name: string) => {
+    const value = headers[name];
+    return typeof value === 'string' ? value : Array.isArray(value) ? value[0] : undefined;
+  };
+  const ms = Number(header('retry-after-ms'));
+  if (Number.isFinite(ms) && ms > 0) return ms;
+  const after = header('retry-after');
+  if (after) {
+    const seconds = Number(after);
+    if (Number.isFinite(seconds) && seconds >= 0) return seconds * 1000;
+    const at = Date.parse(after);
+    if (Number.isFinite(at)) return Math.max(0, at - Date.now());
+  }
+  const unescaped = text.replace(/\\"/g, '"');
+  const delay = /"retryDelay"\s*:\s*"([\d.]+)s"/.exec(unescaped);
+  if (delay) return Number(delay[1]) * 1000;
+  const retryIn = /retry in ([\d.]+)\s*(ms|s)\b/i.exec(text);
+  if (retryIn) return Number(retryIn[1]) * (retryIn[2] === 'ms' ? 1 : 1000);
+  const reset = /"reset_seconds"\s*:\s*(\d+)/.exec(unescaped);
+  if (reset && Number(reset[1]) > 0) return Number(reset[1]) * 1000;
+  return null;
 }
 
 /** `h<row id>/`: the prefix CLIProxyAPI knows a provider row by (`cliproxy-config.ts`). */

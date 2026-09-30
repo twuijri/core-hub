@@ -266,12 +266,23 @@ describe('agent runner: the model gateway (ADR 0029)', () => {
           },
           answered: { providerId: 'p2', model: 'spare', modelLabel: 'Spare' },
         });
+        // The chain's first model ran out too: the next move names both.
+        turn?.fellBack?.({
+          failed: {
+            providerId: 'p2',
+            model: 'spare',
+            providerLabel: 'Backup',
+            modelLabel: 'Spare',
+            said: 'quota',
+          },
+          answered: { providerId: 'p2', model: 'last', modelLabel: 'Last' },
+        });
         finish();
         return { stopReason: 'end_turn' };
       },
     });
     const events = await h.turn('r1');
-    expect(events.find((event) => event.type === 'model_fallback')).toEqual({
+    expect(events.filter((event) => event.type === 'model_fallback').at(-1)).toEqual({
       type: 'model_fallback',
       failed: [
         {
@@ -280,8 +291,14 @@ describe('agent runner: the model gateway (ADR 0029)', () => {
           code: 'rate_limited',
           error: 'CLI Proxy ran out of quota for Coder. Pick another model for this chat.',
         },
+        {
+          model: 'spare',
+          provider: 'backup',
+          code: 'rate_limited',
+          error: 'Backup ran out of quota for Spare. Pick another model for this chat.',
+        },
       ],
-      answered: { model: 'spare', provider: 'backup' },
+      answered: { model: 'last', provider: 'backup' },
     });
     expect(events.at(-1)).toMatchObject({ type: 'completed' });
     await h.runner.closeAll();

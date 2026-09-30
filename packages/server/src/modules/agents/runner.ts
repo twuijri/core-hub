@@ -55,6 +55,7 @@ import type {
   RunnerRunInput,
   RunnerRunRequest,
   RunnerSubagentControl,
+  RunnerFallbackAttempt,
   RunnerSubagentSignal,
   RunnerToolKind,
 } from './ports.js';
@@ -117,6 +118,8 @@ interface LiveRun {
   quota?: AgentGatewayQuotaFailure;
   /** Ends a turn whose agent keeps retrying a spent quota (`QUOTA_GRACE_MS`). */
   quotaTimer?: NodeJS.Timeout;
+  /** The models the gateway moved this turn past, in order (`model_fallback`). */
+  fallenBack?: RunnerFallbackAttempt[];
 }
 
 /**
@@ -218,16 +221,20 @@ export class AgentRunner implements AgentRunnerPort {
         fellBack: (move) => {
           const slug = (providerId: string, model: string) =>
             service.providerSlugOf(workspace, { providerId, model, provider: null });
+          // Every model the turn went past, in order: the chosen one first (a second move
+          // reported alone read as if the turn had started on the chain's first model).
+          run.fallenBack = [
+            ...(run.fallenBack ?? []),
+            {
+              model: move.failed.model,
+              provider: slug(move.failed.providerId, move.failed.model),
+              code: 'rate_limited',
+              error: quotaSentence(move.failed),
+            },
+          ];
           this.push(run, {
             type: 'model_fallback',
-            failed: [
-              {
-                model: move.failed.model,
-                provider: slug(move.failed.providerId, move.failed.model),
-                code: 'rate_limited',
-                error: quotaSentence(move.failed),
-              },
-            ],
+            failed: run.fallenBack.map((attempt) => ({ ...attempt })),
             answered: {
               model: move.answered.model,
               provider: slug(move.answered.providerId, move.answered.model),

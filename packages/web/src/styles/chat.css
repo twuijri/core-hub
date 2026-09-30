@@ -1168,13 +1168,13 @@ button.context-ring {
 .chat-flow[data-view='trajectory'] .chat-pad {
   display: none;
 }
+/* Edge to edge like the transcript (owner, 2026-09-30: «هذي الصفحة مهب ممتده من الطرف لطرف»). */
 .trajectory {
   display: flex;
   flex-direction: column;
   gap: var(--ch-space-3);
   inline-size: 100%;
-  max-inline-size: var(--ch-layout-composer-max);
-  margin-inline: auto;
+  min-inline-size: 0;
   padding-block-end: var(--ch-space-4);
 }
 .trajectory-timeline {

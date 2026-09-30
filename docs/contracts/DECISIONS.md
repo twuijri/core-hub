@@ -4933,17 +4933,32 @@ already the `Error` envelope's). Proposed here — owner to confirm:
 - **CLIProxyAPI does not cool a provider row down** (`routing.cooldown.disable-cooling`, no retry
   rounds): each row is one key, so after one 429 it only refused the row for a growing while, in
   words carrying the row's internal id.
-- **A spent quota** — a provider's 402, or a 429/403 whose words say quota, credit, billing, a
-  usage limit, `RESOURCE_EXHAUSTED`, `insufficient_quota`, or CLIProxyAPI's "cooling down" — is
-  answered by the gateway at once in the agent's own envelope and in words it does not retry: 429
-  with `x-should-retry: false`, `rate_limit_error` (Anthropic), `insufficient_quota` (OpenAI), and
-  for Gemini an `ErrorInfo` `MODEL_CAPACITY_EXHAUSTED` (Gemini CLI's terminal quota error). The
-  message names the provider and the model as people know them. The same turn does not ask that
-  model again; a new turn does. A passing rate limit (a 429 without those words) is still the
-  agent's to retry.
+- **Spent or passing.** Google says `RESOURCE_EXHAUSTED` for a spent quota and for a per-minute
+  rate or token limit alike (the owner's models had credit), so the gateway tells them apart:
+  - **spent** — a 402, or a 429/403 saying `insufficient_quota`, billing, payment, credit, a usage
+    limit, or a daily/monthly quota (`…PerDay…`): answered at once;
+  - **passing** — a 429/403 saying quota, `RESOURCE_EXHAUSTED` or CLIProxyAPI's "cooling down"
+    without those: the gateway waits the provider's own time (`retry-after(-ms)`, Google's
+    `RetryInfo.retryDelay`, "Please retry in …", `reset_seconds`; else 20 s) **once**, at most 30 s,
+    and asks again in the same turn. A second refusal, or a longer wait, counts as spent.
+    CLIProxyAPI 8.0.4 keeps only the message when it translates such an error to the Anthropic,
+    Responses or Gemini wires (checked), so there the wait is the 20 s default;
+  - anything else — a plain rate limit ("slow down") — passes to the agent as before.
+  A spent quota is answered in the agent's own envelope and in words it does not retry: 429 with
+  `x-should-retry: false`, `rate_limit_error` (Anthropic), `insufficient_quota` (OpenAI), and for
+  Gemini an `ErrorInfo` `MODEL_CAPACITY_EXHAUSTED` (Gemini CLI's terminal quota error). The message
+  names the provider and the model as people know them. The same turn does not ask that model
+  again; a new turn does. There is no live "waiting" line in the chat yet (it needs a new event).
+- **Every call is the turn's model.** On the hub's models the gateway serves each call the model
+  picked for the turn (else the agent's default in the profile), whatever id the agent names —
+  `corehub-main`, `corehub-small`, a vendor id, or a catalogue key it picked itself from
+  `/v1/models` (this replaces §140's "a catalogue key names its own model"). The chain applies
+  only after that model failed.
 - **The profile's fallback chain** (§54, which lists a rate limit among its failures) takes over:
   the gateway moves the turn to the chain's next model it can serve, for the rest of the turn, and
-  the run says so (`model_fallback`, as a Hermes turn does). With nothing left, the run fails.
+  the run says so (`model_fallback`, as a Hermes turn does, every model it went past in order —
+  the chosen one first). With nothing left, the run fails. The web names the models in that line
+  and in "Answered by" as «<provider> · <model>» from the catalogue, not by their keys.
 - **The run's error:** `code: rate_limited`, `error` the sentence in the request's language
   ("{provider} ran out of quota for {model}. Pick another model for this chat."), and
   `details: {reason: "quota_exhausted", provider, model, provider_id, model_id}` — `provider` and
