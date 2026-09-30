@@ -4916,4 +4916,6 @@ follows is proposed here — owner to confirm:
 
 Known limits: Grok Build refuses a Chat Completions chunk without `created` (real providers send
 it); CLIProxyAPI's Gemini-in translation appends an empty user message after a tool result, which a
-strict provider might refuse (not seen).
+strict provider might refuse (not seen); Gemini in to an Anthropic provider round-trips tools
+(checked by hand) but CLIProxyAPI 8.0.4 reports its input tokens as 0, so such a turn's cost is
+counted low.

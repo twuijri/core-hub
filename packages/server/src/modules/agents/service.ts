@@ -1389,7 +1389,7 @@ export class AgentsService implements UpdatePolicyStore {
     // The piece of its own configuration no variable can say (Gemini CLI, Grok Build, Pi).
     let sessionConfig: Record<string, string> | undefined;
     if (wiring.config) {
-      const hostEnv = this.options.credentialProbe?.env ?? process.env;
+      const hostEnv = this.options.credentialProbe?.env ?? {};
       const seen = { ...hostEnv, ...own };
       const written = applyGatewayConfig({
         kind: wiring.config,
