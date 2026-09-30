@@ -630,6 +630,7 @@ export const modelsModule = defineModule({
     // The gateway's listener and CLIProxyAPI stop with the hub.
     app.addHook('onClose', async () => {
       if (subscriptionTimer) clearInterval(subscriptionTimer);
+      contexts.get(app.hub.io)?.abandonSignIns();
       await gateways.get(app.hub.io)?.close();
     });
 

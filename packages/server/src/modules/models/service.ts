@@ -1798,6 +1798,17 @@ export class ModelsService {
       moveFrom,
     };
     this.signIns.set(record.id, record);
+    // A sign-in nobody asks about again still ends when its code does: the child process stops
+    // and the translator it held may go.
+    const expiry = setTimeout(
+      () => {
+        if (record.status !== 'pending') return;
+        this.subscriptions.abandon(login);
+        record.status = 'expired';
+      },
+      Math.max(0, record.expiresAt - this.now().getTime()) + 1_000,
+    );
+    expiry.unref?.();
     this.options.audit.record({
       workspace: scope.id,
       ownerId: actor.userId,
@@ -1880,6 +1891,13 @@ export class ModelsService {
     }
     if (!job) this.runPendingMove(record.providerId);
     this.propagate(scope, actor);
+  }
+
+  /** The hub is closing: every gateway sign-in still pending lets its process go. */
+  abandonSignIns(): void {
+    for (const record of this.signIns.values()) {
+      if (record.gateway && record.status === 'pending') this.subscriptions.abandon(record.gateway);
+    }
   }
 
   /** "Move to the gateway" waiting for the new provider's models (DECISIONS §143). */
