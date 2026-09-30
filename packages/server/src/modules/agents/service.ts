@@ -1341,7 +1341,7 @@ export class AgentsService implements UpdatePolicyStore {
     if (!selection.providerId || !selection.model) {
       return `Core Hub did not run ${row.name} on its providers: no model is chosen for this chat, or «${selection.model ?? ''}» is not in this profile's models. Pick one in the model picker.`;
     }
-    let serves = false;
+    let serves: boolean;
     try {
       serves = gateway.serves(workspaceId, selection.providerId);
     } catch {
