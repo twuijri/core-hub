@@ -277,6 +277,44 @@
 }
 
 /* --------------------------------------------------------------------- models */
+/* A subscription's accounts, in its provider's dialog (DECISIONS §143). */
+.provider-account {
+  padding: var(--ch-space-3);
+  border: 1px solid var(--ch-color-border);
+  border-radius: var(--ch-radius-md);
+  background: var(--ch-color-surface);
+}
+.usage-meter {
+  block-size: 0.375rem;
+  overflow: hidden;
+  border-radius: var(--ch-radius-full);
+  background: var(--ch-color-surface-2);
+}
+.usage-meter-bar {
+  block-size: 100%;
+  background: var(--ch-color-accent);
+}
+.usage-meter-bar[data-level='mid'] {
+  background: var(--ch-color-warning-soft-text);
+}
+.usage-meter-bar[data-level='high'] {
+  background: var(--ch-color-danger);
+}
+.account-buckets {
+  display: flex;
+  align-items: flex-end;
+  gap: 2px;
+  block-size: 1.5rem;
+}
+.account-bucket {
+  flex: 1 1 0;
+  min-block-size: 1px;
+  border-radius: 1px;
+  background: var(--ch-color-accent);
+}
+.account-bucket[data-failed='true'] {
+  background: var(--ch-color-danger);
+}
 .provider-facts {
   display: grid;
   grid-template-columns: auto 1fr;

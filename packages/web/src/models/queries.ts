@@ -1,8 +1,14 @@
 // The `models` screen's reads and writes, over the generated client (ADR 0003).
 // Every key carries the workspace slug, so switching the chip refetches (NAVIGATION rule 4).
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { HubApiError } from '@corehub/contracts';
 import { useAuth } from '../auth/context.js';
 import type {
+  HermesModelSource,
+  ProviderAccount,
+  ProviderAccounts,
+  ProviderMove,
+  SubscriptionVendors,
   Model,
   ModelDefaults,
   Provider,
@@ -418,5 +424,167 @@ export function useSpeechModels(providerId: string | null, kind: 'stt' | 'tts') 
     enabled: !!session && !!providerId,
     staleTime: 60_000,
     retry: false,
+  });
+}
+
+// ------------------------------------------ subscriptions through the gateway (§143)
+
+/** A hub older than the operation answers 404: the feature is then not offered at all. */
+export function isUnsupported(error: unknown): boolean {
+  return error instanceof HubApiError && (error.status === 404 || error.status === 501);
+}
+
+/** "Sign in with a subscription": the vendors the hub's gateway signs in to. */
+export function useSubscriptionVendors() {
+  const { client, profile, session } = useAuth();
+  return useQuery({
+    queryKey: ['models', 'subscription-vendors', profile] as const,
+    queryFn: async () =>
+      (await client.request('get', '/models/subscription-vendors')).data as SubscriptionVendors,
+    enabled: !!session,
+    retry: (count, error) => !isUnsupported(error) && count < 2,
+  });
+}
+
+/** How often the provider dialog reads its accounts again while it is open. */
+export const ACCOUNTS_POLL_MS = 15_000;
+
+export function useProviderAccounts(providerId: string, open: boolean) {
+  const { client, profile, session } = useAuth();
+  return useQuery({
+    queryKey: ['models', 'accounts', profile, providerId] as const,
+    queryFn: async () =>
+      (
+        await client.request('get', '/models/providers/{provider_id}/accounts', {
+          params: { provider_id: providerId },
+        })
+      ).data as ProviderAccounts,
+    enabled: !!session && open,
+    refetchInterval: open ? ACCOUNTS_POLL_MS : false,
+    retry: (count, error) => !isUnsupported(error) && count < 1,
+  });
+}
+
+/** After an action on an account: the dialog's list, and the cards' counts. */
+function useAccountsChanged() {
+  const queryClient = useQueryClient();
+  return () => {
+    void queryClient.invalidateQueries({ queryKey: ['models', 'accounts'] });
+    void queryClient.invalidateQueries({ queryKey: ['models', 'providers'] });
+  };
+}
+
+type AccountAction = { providerId: string; accountId: string };
+
+export function useAccountAction(action: 'check' | 'refresh') {
+  const { client } = useAuth();
+  const changed = useAccountsChanged();
+  return useMutation({
+    mutationFn: async ({ providerId, accountId }: AccountAction) =>
+      (
+        await client.request(
+          'post',
+          action === 'check'
+            ? '/models/providers/{provider_id}/accounts/{account_id}/check'
+            : '/models/providers/{provider_id}/accounts/{account_id}/refresh',
+          { params: { provider_id: providerId, account_id: accountId } },
+        )
+      ).data as ProviderAccount,
+    onSuccess: changed,
+  });
+}
+
+export function useSetAccountDisabled() {
+  const { client } = useAuth();
+  const changed = useAccountsChanged();
+  return useMutation({
+    mutationFn: async ({
+      providerId,
+      accountId,
+      disabled,
+    }: AccountAction & { disabled: boolean }) =>
+      (
+        await client.request('patch', '/models/providers/{provider_id}/accounts/{account_id}', {
+          params: { provider_id: providerId, account_id: accountId },
+          body: { disabled },
+        })
+      ).data as ProviderAccount,
+    onSuccess: changed,
+  });
+}
+
+export function useRemoveAccount() {
+  const { client } = useAuth();
+  const changed = useAccountsChanged();
+  return useMutation({
+    mutationFn: async ({ providerId, accountId }: AccountAction) => {
+      await client.request('delete', '/models/providers/{provider_id}/accounts/{account_id}', {
+        params: { provider_id: providerId, account_id: accountId },
+      });
+    },
+    onSuccess: changed,
+  });
+}
+
+/** The address a link sign-in landed on, pasted back. */
+export function useCompleteSignIn() {
+  const { client } = useAuth();
+  return useMutation({
+    mutationFn: async ({
+      providerId,
+      signInId,
+      code,
+    }: {
+      providerId: string;
+      signInId: string;
+      code: string;
+    }) =>
+      (
+        await client.request('post', '/models/providers/{provider_id}/sign-in/{sign_in_id}', {
+          params: { provider_id: providerId, sign_in_id: signInId },
+          body: { code },
+        })
+      ).data as ProviderSignIn,
+  });
+}
+
+/** "Move this sign-in to Core Hub's gateway": the new provider and its sign-in. */
+export function useMoveToGateway() {
+  const { client } = useAuth();
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (providerId: string) =>
+      (
+        await client.request('post', '/models/providers/{provider_id}/move-to-gateway', {
+          params: { provider_id: providerId },
+        })
+      ).data as ProviderMove,
+    onSuccess: () => void queryClient.invalidateQueries({ queryKey: ['models', 'providers'] }),
+  });
+}
+
+/** "Hermes uses Core Hub's models". */
+export function useHermesSource() {
+  const { client, profile, session } = useAuth();
+  return useQuery({
+    queryKey: ['models', 'hermes-source', profile] as const,
+    queryFn: async () =>
+      (await client.request('get', '/models/hermes-source')).data as HermesModelSource,
+    enabled: !!session,
+    retry: (count, error) => !isUnsupported(error) && count < 2,
+  });
+}
+
+export function useSetHermesSource() {
+  const { client } = useAuth();
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (source: 'native' | 'hub') =>
+      (await client.request('put', '/models/hermes-source', { body: { source } }))
+        .data as HermesModelSource,
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['models', 'hermes-source'] });
+      void queryClient.invalidateQueries({ queryKey: ['models', 'runtime'] });
+    },
   });
 }

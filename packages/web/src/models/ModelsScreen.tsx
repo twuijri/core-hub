@@ -60,6 +60,9 @@ import { Notice, Spinner } from '../ui/Notice.js';
 import { AddProviderDialog } from './AddProviderDialog.js';
 import { FallbackList } from './FallbackList.js';
 import { SignInPanel } from './SignInPanel.js';
+import { ProviderAccountsDialog } from './ProviderAccountsDialog.js';
+import { MoveToGatewayDialog } from './MoveToGatewayDialog.js';
+import { HermesSourceCard } from './HermesSourceCard.js';
 import { SpeechCard } from './SpeechCard.js';
 import { RuntimeCard } from './RuntimeChecks.js';
 import { needsLoopbackWarning, suggestedHostUrl } from './loopback.js';
@@ -151,6 +154,8 @@ export function ModelsScreen() {
       {tab === 'general' && configured.length > 0 && runtime.data && (
         <RuntimeCard report={runtime.data} />
       )}
+      {/* "Hermes uses Core Hub's models" (DECISIONS §143): hidden on a hub without it. */}
+      {tab === 'general' && <HermesSourceCard />}
 
       <Segmented
         className="mb-4"
@@ -207,6 +212,7 @@ export function ModelsScreen() {
             profile: new Set(configured.filter((p) => p.scope === 'profile').map((p) => p.slug)),
           }}
           profileName={profileName(profile)}
+          providers={configured}
           onClose={() => setAdding(null)}
         />
       )}
@@ -326,6 +332,10 @@ function ProviderCard({
   const { recent, remember } = useRecentModels();
   const [outcome, setOutcome] = useState<TestResult | null>(null);
   const [panel, setPanel] = useState<'none' | 'edit' | 'models' | 'sign-in'>('none');
+  // A subscription through the gateway opens its dialog (§143): accounts, usage, errors.
+  const [accountsOpen, setAccountsOpen] = useState(false);
+  const [moving, setMoving] = useState(false);
+  const subscription = provider.subscription;
   // Removing a provider takes its key and its catalogue with it, so it asks first.
   const [confirmRemove, setConfirmRemove] = useState(false);
   const stored = provider.api_key !== null;
@@ -338,10 +348,41 @@ function ProviderCard({
   const chat = provider.kind === 'llm';
   const warn = needsLoopbackWarning(provider.base_url ?? '', host);
 
+  // The owner (2026-09-30): clicking a subscription's card opens its dialog. Its buttons, links
+  // and fields keep their own clicks; the title is the same action for the keyboard.
+  const openFromCard = (event: React.MouseEvent) => {
+    if (!subscription) return;
+    const target = event.target as HTMLElement;
+    // A click in one of its dialogs reaches here through React's tree, not the page's.
+    if (!(event.currentTarget as HTMLElement).contains(target)) return;
+    if (target.closest('button, a, input, select, textarea, label, [role="combobox"]')) return;
+    setAccountsOpen(true);
+  };
+
   return (
-    <Card as="article" tone="raised" className="h-full" data-provider-slug={provider.slug}>
+    <Card
+      as="article"
+      tone="raised"
+      className="h-full"
+      interactive={Boolean(subscription)}
+      data-provider-slug={provider.slug}
+      onClick={openFromCard}
+    >
       <CardHeader
-        title={provider.label}
+        title={
+          subscription ? (
+            <button
+              type="button"
+              className="link text-start"
+              onClick={() => setAccountsOpen(true)}
+              data-testid="provider-open-accounts"
+            >
+              {provider.label}
+            </button>
+          ) : (
+            provider.label
+          )
+        }
         subtitle={provider.slug}
         actions={
           signIn ? (
@@ -393,7 +434,23 @@ function ProviderCard({
         <dd dir="ltr">{provider.base_url ?? '—'}</dd>
         <dt>{t('models.row.models')}</dt>
         <dd>{provider.models.length}</dd>
+        {subscription && (
+          <>
+            <dt>{t('models.accounts.title')}</dt>
+            <dd data-testid="provider-accounts-count">
+              {t('models.accounts.count', {
+                count: subscription.accounts,
+                ready: subscription.accounts_ready,
+              })}
+            </dd>
+          </>
+        )}
       </dl>
+      {provider.gateway_move && (
+        <p className="text-xs text-muted" data-testid="provider-legacy-sign-in">
+          {t('models.subscription.legacy')}
+        </p>
+      )}
 
       {warn && host && (
         <Notice tone="warning">
@@ -460,6 +517,20 @@ function ProviderCard({
       )}
 
       <CardFooter>
+        {subscription && (
+          <Button
+            variant={provider.auth.signed_in ? 'primary' : 'secondary'}
+            onClick={() => setAccountsOpen(true)}
+            data-testid="provider-accounts"
+          >
+            {t('models.accounts.open')}
+          </Button>
+        )}
+        {provider.gateway_move && (
+          <Button onClick={() => setMoving(true)} data-testid="provider-move-to-gateway">
+            {t('models.subscription.move')}
+          </Button>
+        )}
         {signIn && (
           <Button
             variant={provider.auth.signed_in ? 'secondary' : 'primary'}
@@ -496,16 +567,18 @@ function ProviderCard({
             {t('models.provider.refresh')}
           </Button>
         )}
-        <Button
-          loading={test.isPending}
-          onClick={() => {
-            setOutcome(null);
-            test.mutate(provider.id, { onSuccess: setOutcome });
-          }}
-          data-testid="provider-test"
-        >
-          {t('models.provider.test')}
-        </Button>
+        {!subscription && (
+          <Button
+            loading={test.isPending}
+            onClick={() => {
+              setOutcome(null);
+              test.mutate(provider.id, { onSuccess: setOutcome });
+            }}
+            data-testid="provider-test"
+          >
+            {t('models.provider.test')}
+          </Button>
+        )}
         <Button
           aria-expanded={panel === 'edit'}
           onClick={() => setPanel(panel === 'edit' ? 'none' : 'edit')}
@@ -549,6 +622,10 @@ function ProviderCard({
       {panel === 'edit' && <EditPanel provider={provider} onDone={() => setPanel('none')} />}
       {panel === 'models' && <ModelsPanel provider={provider} onDone={() => setPanel('none')} />}
       {panel === 'sign-in' && <SignInPanel provider={provider} onDone={() => setPanel('none')} />}
+      {accountsOpen && (
+        <ProviderAccountsDialog provider={provider} onClose={() => setAccountsOpen(false)} />
+      )}
+      {moving && <MoveToGatewayDialog provider={provider} onClose={() => setMoving(false)} />}
 
       {test.isPending && <Spinner label={t('models.provider.testing')} />}
       {outcome && (

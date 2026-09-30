@@ -1,27 +1,77 @@
 /**
- * Signing in to a provider account by device code (contract decision §55), on the provider's
- * card: the code Hermes was given and the page to enter it on, then a quiet wait while the hub
- * polls, and the outcome in words — signed in, declined, ran out, or did not finish with the
- * runtime's own reason. Nothing here holds a token: Hermes keeps the credential.
+ * Signing in to a provider account (contract decision §55; through the hub's gateway, DECISIONS
+ * §143): on the provider's card and in "Sign in with a subscription".
+ *
+ * Two flows, as the sign-in says (`accepts_code`):
+ * - a **code**: the page to open and the short code to enter there, then a quiet wait while the
+ *   hub polls — it works from a phone and from a server with no browser;
+ * - a **link**: the page to open; after signing in there the browser lands on a `localhost`
+ *   address that may not load — the person copies that address and pastes it here.
+ *
+ * Then the outcome in words — signed in, declined, ran out, or did not finish with the runtime's
+ * own reason. Nothing here holds a token.
  */
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { describeError } from '../auth/client.js';
 import { useI18n } from '../i18n/context.js';
-import type { Provider } from '../types.js';
-import { Button } from '../ui/index.js';
+import type { Provider, ProviderSignIn } from '../types.js';
+import { Button, Field, Input } from '../ui/index.js';
 import { IconCopy } from '../ui/icons.js';
 import { Notice, Spinner } from '../ui/Notice.js';
-import { useSignInStatus, useStartSignIn } from './queries.js';
+import { useCompleteSignIn, useSignInStatus, useStartSignIn } from './queries.js';
 
-export function SignInPanel({ provider, onDone }: { provider: Provider; onDone(): void }) {
+export function SignInPanel({
+  provider,
+  onDone,
+  initial = null,
+  autoStart = false,
+  onApproved,
+}: {
+  provider: Pick<Provider, 'id' | 'label'>;
+  onDone(): void;
+  /** A sign-in already started elsewhere ("move to the gateway"). */
+  initial?: ProviderSignIn | null;
+  /** Start at once, rather than on the person's click (a dialog that exists to sign in). */
+  autoStart?: boolean;
+  onApproved?(): void;
+}) {
   const { t } = useI18n();
   const start = useStartSignIn();
-  const [signInId, setSignInId] = useState<string | null>(null);
+  const complete = useCompleteSignIn();
+  const [signInId, setSignInId] = useState<string | null>(initial?.id ?? null);
+  const [pasted, setPasted] = useState('');
   const status = useSignInStatus(provider.id, signInId);
-  const current = status.data ?? start.data ?? null;
+  const current = status.data ?? complete.data ?? start.data ?? initial ?? null;
   const begin = () => {
     setSignInId(null);
+    setPasted('');
+    complete.reset();
     start.mutate(provider.id, { onSuccess: (signIn) => setSignInId(signIn.id) });
+  };
+  const started = useRef(false);
+  useEffect(() => {
+    if (!autoStart || initial || started.current) return;
+    started.current = true;
+    begin();
+    // Once, when the panel opens.
+  }, []);
+  const approved = current?.status === 'approved';
+  const told = useRef(false);
+  useEffect(() => {
+    if (approved && !told.current) {
+      told.current = true;
+      onApproved?.();
+    }
+  }, [approved, onApproved]);
+
+  // Not a <form>: the panel also sits inside "Add provider"'s own form, and forms do not nest.
+  const submitPasted = () => {
+    if (!current || !pasted.trim()) return;
+    complete.mutate(
+      { providerId: provider.id, signInId: current.id, code: pasted.trim() },
+      // Ask at once rather than at the next poll: the hub may already have finished.
+      { onSuccess: () => void status.refetch() },
+    );
   };
 
   return (
@@ -42,7 +92,9 @@ export function SignInPanel({ provider, onDone }: { provider: Provider; onDone()
       {start.isError && <Notice tone="danger">{describeError(start.error, t)}</Notice>}
       {current && (
         <>
-          <p className="text-sm">{t('models.signin.steps')}</p>
+          <p className="text-sm">
+            {t(current.accepts_code ? 'models.signin.link_steps' : 'models.signin.steps')}
+          </p>
           {current.user_code && (
             <div className="flex items-center gap-2">
               <span className="text-xs text-muted">{t('models.signin.code')}</span>
@@ -73,7 +125,51 @@ export function SignInPanel({ provider, onDone }: { provider: Provider; onDone()
           >
             {t('models.signin.open')}
           </a>
-          {current.status === 'pending' && (
+          {current.accepts_code && current.status === 'pending' && !complete.isSuccess && (
+            <div className="flex flex-col gap-2">
+              <Field
+                label={t('models.signin.paste_label')}
+                hint={
+                  current.callback_hint
+                    ? t('models.signin.paste_hint', { start: current.callback_hint })
+                    : t('models.signin.paste_hint_any')
+                }
+              >
+                {(props) => (
+                  <Input
+                    {...props}
+                    dir="ltr"
+                    inputMode="url"
+                    autoComplete="off"
+                    spellCheck={false}
+                    placeholder={current.callback_hint ?? 'http://localhost/…'}
+                    value={pasted}
+                    onChange={(event) => setPasted(event.target.value)}
+                    onKeyDown={(event) => {
+                      if (event.key !== 'Enter') return;
+                      event.preventDefault();
+                      submitPasted();
+                    }}
+                    data-testid="sign-in-paste"
+                  />
+                )}
+              </Field>
+              <Button
+                variant="primary"
+                className="self-start"
+                disabled={!pasted.trim() || complete.isPending}
+                loading={complete.isPending}
+                onClick={submitPasted}
+                data-testid="sign-in-paste-submit"
+              >
+                {t('models.signin.paste_submit')}
+              </Button>
+              {complete.isError && (
+                <Notice tone="danger">{describeError(complete.error, t)}</Notice>
+              )}
+            </div>
+          )}
+          {current.status === 'pending' && (!current.accepts_code || complete.isSuccess) && (
             <div data-testid="sign-in-waiting">
               <Spinner label={t('models.signin.waiting')} />
             </div>

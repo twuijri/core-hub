@@ -21,7 +21,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { describeError } from '../auth/client.js';
 import { useI18n } from '../i18n/context.js';
-import type { ProviderHost, ProviderPreset } from '../types.js';
+import type { Provider, ProviderHost, ProviderPreset } from '../types.js';
 import {
   Button,
   Combobox,
@@ -36,12 +36,15 @@ import {
 } from '../ui/index.js';
 import { needsLoopbackWarning, suggestedHostUrl } from './loopback.js';
 import {
+  isUnsupported,
   useCreateProvider,
   useProbeProvider,
   useSaveDefaults,
   useSaveModel,
+  useSubscriptionVendors,
   type ProviderCreate,
 } from './queries.js';
+import { SubscriptionSignIn } from './SubscriptionSignIn.js';
 
 export function AddProviderDialog({
   kind: startKind = 'llm',
@@ -49,6 +52,8 @@ export function AddProviderDialog({
   host,
   taken,
   profileName,
+  providers = [],
+  startMode = 'preset',
   onClose,
 }: {
   /** What a custom endpoint is added as; the speech tabs open it as their own kind. */
@@ -62,6 +67,10 @@ export function AddProviderDialog({
   taken: { all: ReadonlySet<string>; profile: ReadonlySet<string> };
   /** The profile selected at the top: the one "this profile only" means. */
   profileName: string;
+  /** The providers already added (a subscription added before is signed in to again, §143). */
+  providers?: readonly Provider[];
+  /** Open on "Sign in with a subscription" rather than on a preset. */
+  startMode?: 'preset' | 'custom' | 'subscription';
   onClose(): void;
 }) {
   const { t } = useI18n();
@@ -76,7 +85,14 @@ export function AddProviderDialog({
     () => presets.filter((preset) => preset.repeatable || !taken[scope].has(preset.id)),
     [presets, taken, scope],
   );
-  const [mode, setMode] = useState<'preset' | 'custom'>('preset');
+  // "Sign in with a subscription" (DECISIONS §143): chat providers only, and only on a hub that
+  // offers it (an older one answers 404 and the choice is not shown).
+  const vendors = useSubscriptionVendors();
+  const subscriptions =
+    startKind === 'llm' && !(vendors.isError && isUnsupported(vendors.error)) && !vendors.isPending;
+  const [mode, setMode] = useState<'preset' | 'custom' | 'subscription'>(
+    startMode === 'subscription' && startKind !== 'llm' ? 'preset' : startMode,
+  );
   // A custom endpoint may be a speech server (Whisper-style `audio/transcriptions`,
   // `audio/speech`): what it is for is asked, never guessed (DECISIONS §63).
   const [customKind, setCustomKind] = useState<'llm' | 'stt' | 'tts'>(startKind);
@@ -153,6 +169,7 @@ export function AddProviderDialog({
 
   const submit = (event: React.FormEvent) => {
     event.preventDefault();
+    if (mode === 'subscription') return;
     const body: ProviderCreate = {
       ...(usingPreset ? { preset: preset.id } : {}),
       label: usingPreset ? label.trim() || preset.label : label.trim(),
@@ -224,6 +241,10 @@ export function AddProviderDialog({
             label={t('models.add.type')}
             value={mode}
             onChange={(next) => {
+              if (next === 'subscription') {
+                setMode('subscription');
+                return;
+              }
               if (next === 'preset') {
                 setMode('preset');
                 setBaseUrl(preset?.base_url ?? '');
@@ -248,188 +269,207 @@ export function AddProviderDialog({
                 label: t('models.add.type_custom'),
                 itemProps: { 'data-testid': 'add-mode-custom' },
               },
+              ...(subscriptions || mode === 'subscription'
+                ? [
+                    {
+                      value: 'subscription',
+                      label: t('models.add.type_subscription'),
+                      itemProps: { 'data-testid': 'add-mode-subscription' },
+                    },
+                  ]
+                : []),
             ]}
           />
         </fieldset>
 
-        {mode === 'preset' ? (
-          <div className="ch-field-row">
-            <Label>{t('models.add.select_provider')}</Label>
-            <Select
-              value={presetId}
-              onValueChange={(next) => next && setPresetId(next)}
-              label={t('models.add.select_provider')}
-              testId="add-preset"
-              options={offered.map((item) => ({ value: item.id, label: item.label }))}
-            />
-            {preset?.keys_url && (
-              <a
-                className="link text-xs underline"
-                href={preset.keys_url}
-                target="_blank"
-                rel="noreferrer"
-              >
-                {t('models.add.where_key')}
-              </a>
-            )}
-          </div>
+        {mode === 'subscription' ? (
+          <SubscriptionSignIn scope={scope} providers={providers} onClose={onClose} />
         ) : (
           <>
-            <fieldset className="flex flex-col gap-1">
-              <legend className="ch-label">{t('models.add.kind')}</legend>
-              <Segmented
-                className="self-start"
-                label={t('models.add.kind')}
-                value={customKind}
-                onChange={(next) => setCustomKind(next === 'stt' || next === 'tts' ? next : 'llm')}
-                wrap
-                options={(['llm', 'stt', 'tts'] as const).map((value) => ({
-                  value,
-                  label: t(`models.add.kind_${value}`),
-                  itemProps: { 'data-testid': `add-kind-${value}` },
-                }))}
-              />
-            </fieldset>
-            <Field label={t('models.provider.label')}>
-              {(props) => (
-                <Input
-                  {...props}
-                  dir="auto"
-                  value={label}
-                  onChange={(event) => setLabel(event.target.value)}
-                  required
-                  data-testid="add-label"
+            {mode === 'preset' ? (
+              <div className="ch-field-row">
+                <Label>{t('models.add.select_provider')}</Label>
+                <Select
+                  value={presetId}
+                  onValueChange={(next) => next && setPresetId(next)}
+                  label={t('models.add.select_provider')}
+                  testId="add-preset"
+                  options={offered.map((item) => ({ value: item.id, label: item.label }))}
                 />
+                {preset?.keys_url && (
+                  <a
+                    className="link text-xs underline"
+                    href={preset.keys_url}
+                    target="_blank"
+                    rel="noreferrer"
+                  >
+                    {t('models.add.where_key')}
+                  </a>
+                )}
+              </div>
+            ) : (
+              <>
+                <fieldset className="flex flex-col gap-1">
+                  <legend className="ch-label">{t('models.add.kind')}</legend>
+                  <Segmented
+                    className="self-start"
+                    label={t('models.add.kind')}
+                    value={customKind}
+                    onChange={(next) =>
+                      setCustomKind(next === 'stt' || next === 'tts' ? next : 'llm')
+                    }
+                    wrap
+                    options={(['llm', 'stt', 'tts'] as const).map((value) => ({
+                      value,
+                      label: t(`models.add.kind_${value}`),
+                      itemProps: { 'data-testid': `add-kind-${value}` },
+                    }))}
+                  />
+                </fieldset>
+                <Field label={t('models.provider.label')}>
+                  {(props) => (
+                    <Input
+                      {...props}
+                      dir="auto"
+                      value={label}
+                      onChange={(event) => setLabel(event.target.value)}
+                      required
+                      data-testid="add-label"
+                    />
+                  )}
+                </Field>
+              </>
+            )}
+
+            <Field label={t('models.provider.base_url')}>
+              {(props) => (
+                <>
+                  <Input
+                    {...props}
+                    dir="ltr"
+                    inputMode="url"
+                    placeholder={
+                      (usingPreset ? preset.base_url_example : null) ??
+                      'http://host.docker.internal:1234/v1'
+                    }
+                    value={baseUrl}
+                    onChange={(event) => setBaseUrl(event.target.value)}
+                    required
+                    data-testid="add-base-url"
+                  />
+                  {warn && host && (
+                    <Notice tone="warning" className="mt-1">
+                      <span data-testid="loopback-warning">
+                        {t('models.add.loopback', { url: suggestedHostUrl(baseUrl, host) })}
+                      </span>
+                    </Notice>
+                  )}
+                </>
               )}
             </Field>
-          </>
-        )}
 
-        <Field label={t('models.provider.base_url')}>
-          {(props) => (
-            <>
-              <Input
-                {...props}
-                dir="ltr"
-                inputMode="url"
-                placeholder={
-                  (usingPreset ? preset.base_url_example : null) ??
-                  'http://host.docker.internal:1234/v1'
-                }
-                value={baseUrl}
-                onChange={(event) => setBaseUrl(event.target.value)}
-                required
-                data-testid="add-base-url"
-              />
-              {warn && host && (
-                <Notice tone="warning" className="mt-1">
-                  <span data-testid="loopback-warning">
-                    {t('models.add.loopback', { url: suggestedHostUrl(baseUrl, host) })}
-                  </span>
-                </Notice>
-              )}
-            </>
-          )}
-        </Field>
-
-        {signInPreset && (
-          <Notice tone="info">
-            <span data-testid="add-sign-in-hint">{t('models.add.sign_in_hint')}</span>
-          </Notice>
-        )}
-
-        {!signInPreset && (
-          <Field
-            label={keyOptional ? t('models.add.key_optional') : t('models.add.key_required')}
-            hint={keyOnFile ? t('models.add.key_on_file') : undefined}
-          >
-            {(props) => (
-              <span className="field-row-inline">
-                <Input
-                  {...props}
-                  type={showKey ? 'text' : 'password'}
-                  autoComplete="off"
-                  spellCheck={false}
-                  dir="ltr"
-                  value={apiKey}
-                  onChange={(event) => setApiKey(event.target.value)}
-                  required={!keyOptional}
-                  data-testid="add-api-key"
-                />
-                <Button aria-pressed={showKey} onClick={() => setShowKey((shown) => !shown)}>
-                  {t(showKey ? 'models.add.hide_key' : 'models.add.show_key')}
-                </Button>
-              </span>
-            )}
-          </Field>
-        )}
-
-        {!signInPreset && !addsSpeech && (
-          <div className="ch-field-row">
-            <Label>{t('models.add.default_model')}</Label>
-            <div className="flex items-center gap-2">
-              {/* The list is empty until the provider is asked, so the picker says so and
-                keeps Fetch inside the popup, where the person already is. */}
-              <Combobox
-                value={model === '' ? null : model}
-                onChange={(next) => setModel(next ?? '')}
-                label={t('models.add.default_model')}
-                placeholder={t('models.add.model_placeholder')}
-                testId="add-default-model"
-                status={
-                  probe.isPending
-                    ? 'loading'
-                    : probeError !== null
-                      ? 'error'
-                      : models.length === 0
-                        ? 'unfetched'
-                        : 'ready'
-                }
-                errorMessage={probeError}
-                fetchAction={{
-                  label: t('models.add.fetch'),
-                  onSelect: fetchModels,
-                  disabled: probe.isPending || baseUrl.trim() === '',
-                }}
-                options={models.map((item) => ({
-                  value: item.id,
-                  label: item.label,
-                  detail: item.id,
-                }))}
-              />
-              <Button
-                disabled={probe.isPending || baseUrl.trim() === ''}
-                onClick={fetchModels}
-                data-testid="add-fetch-models"
-              >
-                {t('models.add.fetch')}
-              </Button>
-            </div>
-            {probe.isPending && <Spinner label={t('models.add.fetching')} />}
-            {probeError && (
-              <Notice tone="danger">
-                <span data-testid="add-fetch-error">{probeError}</span>
+            {signInPreset && (
+              <Notice tone="info">
+                <span data-testid="add-sign-in-hint">{t('models.add.sign_in_hint')}</span>
               </Notice>
             )}
-            {models.length > 0 && !probeError && (
-              <p className="ch-field-hint">{t('models.add.fetched', { count: models.length })}</p>
+
+            {!signInPreset && (
+              <Field
+                label={keyOptional ? t('models.add.key_optional') : t('models.add.key_required')}
+                hint={keyOnFile ? t('models.add.key_on_file') : undefined}
+              >
+                {(props) => (
+                  <span className="field-row-inline">
+                    <Input
+                      {...props}
+                      type={showKey ? 'text' : 'password'}
+                      autoComplete="off"
+                      spellCheck={false}
+                      dir="ltr"
+                      value={apiKey}
+                      onChange={(event) => setApiKey(event.target.value)}
+                      required={!keyOptional}
+                      data-testid="add-api-key"
+                    />
+                    <Button aria-pressed={showKey} onClick={() => setShowKey((shown) => !shown)}>
+                      {t(showKey ? 'models.add.hide_key' : 'models.add.show_key')}
+                    </Button>
+                  </span>
+                )}
+              </Field>
             )}
-          </div>
+
+            {!signInPreset && !addsSpeech && (
+              <div className="ch-field-row">
+                <Label>{t('models.add.default_model')}</Label>
+                <div className="flex items-center gap-2">
+                  {/* The list is empty until the provider is asked, so the picker says so and
+                keeps Fetch inside the popup, where the person already is. */}
+                  <Combobox
+                    value={model === '' ? null : model}
+                    onChange={(next) => setModel(next ?? '')}
+                    label={t('models.add.default_model')}
+                    placeholder={t('models.add.model_placeholder')}
+                    testId="add-default-model"
+                    status={
+                      probe.isPending
+                        ? 'loading'
+                        : probeError !== null
+                          ? 'error'
+                          : models.length === 0
+                            ? 'unfetched'
+                            : 'ready'
+                    }
+                    errorMessage={probeError}
+                    fetchAction={{
+                      label: t('models.add.fetch'),
+                      onSelect: fetchModels,
+                      disabled: probe.isPending || baseUrl.trim() === '',
+                    }}
+                    options={models.map((item) => ({
+                      value: item.id,
+                      label: item.label,
+                      detail: item.id,
+                    }))}
+                  />
+                  <Button
+                    disabled={probe.isPending || baseUrl.trim() === ''}
+                    onClick={fetchModels}
+                    data-testid="add-fetch-models"
+                  >
+                    {t('models.add.fetch')}
+                  </Button>
+                </div>
+                {probe.isPending && <Spinner label={t('models.add.fetching')} />}
+                {probeError && (
+                  <Notice tone="danger">
+                    <span data-testid="add-fetch-error">{probeError}</span>
+                  </Notice>
+                )}
+                {models.length > 0 && !probeError && (
+                  <p className="ch-field-hint">
+                    {t('models.add.fetched', { count: models.length })}
+                  </p>
+                )}
+              </div>
+            )}
+
+            {create.isError && <Notice tone="danger">{describeError(create.error, t)}</Notice>}
+
+            <div className="ch-dialog-actions">
+              <Button onClick={onClose}>{t('common.cancel')}</Button>
+              <Button
+                type="submit"
+                variant="primary"
+                disabled={!canSubmit || create.isPending}
+                data-testid="add-submit"
+              >
+                {t('models.add.submit')}
+              </Button>
+            </div>
+          </>
         )}
-
-        {create.isError && <Notice tone="danger">{describeError(create.error, t)}</Notice>}
-
-        <div className="ch-dialog-actions">
-          <Button onClick={onClose}>{t('common.cancel')}</Button>
-          <Button
-            type="submit"
-            variant="primary"
-            disabled={!canSubmit || create.isPending}
-            data-testid="add-submit"
-          >
-            {t('models.add.submit')}
-          </Button>
-        </div>
       </form>
     </Dialog>
   );
