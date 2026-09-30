@@ -109,6 +109,32 @@ $ pnpm i18n:check       # ios: 2734 keys, ar/en in parity · android: 2593 keys,
 $ pnpm nav:check        # nav:check  OK — 41 destinations …
 ```
 
+نتيجة CI على الـPR ‏#231 (الالتزام `b128610e`، التشغيل 36697155941): كل الفحوص خضراء — ومنها مهمة الوكلاء الحقيقيين:
+
+```
+ ✓  unit  src/modules/agents/model-gateway.real.test.ts (10 tests) 68061ms
+     ✓ Claude Code answers through an OpenAI-compatible provider and round-trips a tool call 8687ms
+     ✓ Codex answers through the Responses path 6385ms
+     ✓ gemini-cli round-trips a tool call through the gateway 13376ms
+     ✓ goose round-trips a tool call through the gateway 3031ms
+     ✓ opencode round-trips a tool call through the gateway 10515ms
+     ✓ qwen-code round-trips a tool call through the gateway 6516ms
+     ✓ kimi-code round-trips a tool call through the gateway 7006ms
+     ✓ grok-build round-trips a tool call through the gateway 2323ms
+     ✓ pi round-trips a tool call through the gateway 10038ms
+Android build, unit tests, lint                          pass
+Build and test on the iOS simulator                      pass
+Lint, typecheck, contracts, tests, build                 pass
+Server unit tests (shard 1/3, 2/3, 3/3)                  pass
+Web smoke journeys (Playwright against the real hub)     pass
+Docker image builds and answers /health                  pass
+Desktop app smoke (Electron under Xvfb against the real hub)  pass
+Real Hermes suites (floor, pinned)                       pass
+db:generate + db:migrate (SQLite and PostgreSQL)         pass
+```
+
+(الفشل الوحيد قبلها: `config.test.ts` يمنع `process.env` خارج ملف الإعداد — أزلت رجوعًا إليه في `agents/service.ts`.)
+
 تجارب يدوية مسجّلة: CLIProxyAPI 8.0.4 يترجم `generateContent`/`streamGenerateContent` (أداة وناتجها) و`countTokens` إلى Chat؛
 `grok models` يرى `[model.*]` من `config.toml` ولا يراه من `GROK_CONFIG`/`GROK_CONFIG_PATH`؛ Gemini CLI يتجاهل ملف إعدادات نظام
 لا يملكه root. لا أداة Swift ولا Java على هذا الجهاز: بناء iOS وAndroid واختباراتهما في CI فقط (نتيجتها في الـPR).
