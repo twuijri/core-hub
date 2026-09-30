@@ -42,7 +42,8 @@ const DYNAMIC: Record<string, string[]> = {
   'models.runtime.provider_keys': ['ok', 'missing'],
   'models.runtime.provider_verified': ['ok', 'missing'],
   'models.runtime.model_selected': ['ok', 'missing'],
-  'models.runtime.gateway_reloaded': ['ok', 'missing'],
+  // …and the hub's own restart on its way (`scheduled`, `waiting_for_run`, DECISIONS §145).
+  'models.runtime.gateway_reloaded': ['ok', 'missing', 'scheduled', 'waiting_for_run'],
   'pane.kind': ['tool', 'code', 'preview', 'artifact', 'tasks'],
   roles: ['owner', 'admin', 'member'],
   'sessions.source': [

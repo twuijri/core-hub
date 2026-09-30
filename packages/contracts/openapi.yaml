@@ -27702,7 +27702,13 @@ components:
           type: [string, 'null']
           description: >-
             A short fact, never a sentence to render on its own: a count, a provider
-            slug, a model id. The wording belongs to the client's own catalogue.
+            slug, a model id. The wording belongs to the client's own catalogue. For
+            `model_selected`, the chat model as people read it elsewhere, `<provider label> ·
+            <model name>` (since 2026-09-30, DECISIONS §145; before, `<hermes provider>/<model
+            id>`). For a failing `gateway_reloaded`, whether the hub's own restart is on its
+            way: `scheduled`, `waiting_for_run` (after the reply in progress), or null (none is
+            coming; a manual restart is the way out). A client that does not know a value shows
+            it as it is.
     ModelDefaults:
       type: object
       required: [default, fallbacks, auxiliary]

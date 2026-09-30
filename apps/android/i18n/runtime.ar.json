@@ -10,7 +10,7 @@
   "runtime_model_selected_ok": "‏تم اختيار نموذج محادثة لوقت التشغيل.",
   "runtime_model_selected_missing": "‏لا يوجد نموذج محادثة مختار — اختر واحدًا من الافتراضيات.",
   "runtime_gateway_reloaded_ok": "‏أُعيد تشغيل وقت التشغيل بعد آخر تغيير.",
-  "runtime_gateway_reloaded_missing": "تغيّرت الإعدادات بعد آخر تشغيل لهرمز. أعد تشغيله لتطبيقها.",
+  "runtime_gateway_reloaded_missing": "لم يُعِد هرمز التشغيل بعد آخر تغيير. أعِد تشغيله لتطبيق الإعدادات.",
   "runtime_ready": "وقت التشغيل جاهز · الفحوص %1$s/%2$s",
   "runtime_passed": "نجح %1$s من %2$s فحوص",
   "runtime_restart_now": "إعادة التشغيل الآن",
@@ -22,5 +22,7 @@
   "models_default_model": "النموذج الافتراضي",
   "notify_test": "إرسال إشعار تجريبي",
   "notify_test_sent": "أُرسل. انظر هذا الجوّال وأجهزتك الأخرى.",
-  "devices_just_paired": "أُقرن الآن. الجهاز في القائمة أدناه."
+  "devices_just_paired": "أُقرن الآن. الجهاز في القائمة أدناه.",
+  "runtime_gateway_reloaded_scheduled": "جارٍ تطبيق التغيير — يُعاد تشغيل هرمز تلقائيًا بعد لحظات.",
+  "runtime_gateway_reloaded_waiting_for_run": "جارٍ تطبيق التغيير — يُعاد تشغيل هرمز تلقائيًا بعد انتهاء الرد الجاري."
 }

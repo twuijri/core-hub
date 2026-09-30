@@ -15,6 +15,17 @@ enum RuntimeRules {
         return sorted.filter { !$0.ok } + sorted.filter(\.ok)
     }
 
+    /// The hub's own restart of Hermes on its way (DECISIONS §145): `scheduled` or `waiting_for_run`.
+    static func restartOnItsWay(_ check: RuntimeCheck) -> Bool {
+        check.id == .gatewayReloaded && !check.ok && (check.detail == "scheduled" || check.detail == "waiting_for_run")
+    }
+
+    /// The words for one check: the hub's restart on its way has its own.
+    static func textKey(_ check: RuntimeCheck) -> String {
+        if restartOnItsWay(check), let detail = check.detail { return "models_runtime.\(check.id.rawValue).\(detail)" }
+        return "models_runtime.\(check.id.rawValue).\(check.ok ? "ok" : "missing")"
+    }
+
     /// A pending restart is a thing to do, not a thing broken.
     static func onlyRestartPending(_ checks: [RuntimeCheck]) -> Bool {
         checks.allSatisfy { $0.ok || $0.id == .gatewayReloaded } && checks.contains { !$0.ok }
@@ -65,9 +76,9 @@ struct RuntimeCardSection: View {
                             LucideIcon(check.ok ? .check : pending ? .triangleAlert : .x, size: 14)
                                 .foregroundStyle(check.ok ? Tone.successSoftText : pending ? Tone.warningSoftText : Tone.dangerSoftText)
                             VStack(alignment: .leading, spacing: 2) {
-                                Text(l10n("models_runtime.\(check.id.rawValue).\(check.ok ? "ok" : "missing")"))
+                                Text(l10n(RuntimeRules.textKey(check)))
                                     .font(.system(size: FontSize.sizeSm, weight: check.ok ? .regular : .medium))
-                                if let detail = check.detail, !detail.isEmpty {
+                                if let detail = check.detail, !detail.isEmpty, check.id != .gatewayReloaded {
                                     Text(detail).font(.system(size: FontSize.sizeXs)).foregroundStyle(Tone.textMuted)
                                 }
                             }
@@ -75,7 +86,9 @@ struct RuntimeCardSection: View {
                         .accessibilityElement(children: .combine)
                         .accessibilityIdentifier("models.runtime.\(check.id.rawValue)")
                     }
-                    if checks.contains(where: { $0.id == .gatewayReloaded && !$0.ok }), let hermes = restartable {
+                    // Only when no restart of the hub's own is coming: the way out, not the normal flow.
+                    if checks.contains(where: { $0.id == .gatewayReloaded && !$0.ok && !RuntimeRules.restartOnItsWay($0) }),
+                       let hermes = restartable {
                         Button(l10n("models_runtime.restart_now")) { Task { await restart(hermes) } }
                             .disabled(restarting)
                             .accessibilityIdentifier("models.runtime.restart")
@@ -86,7 +99,14 @@ struct RuntimeCardSection: View {
         } header: {
             Text(l10n("models_runtime.title"))
         }
-        .task(id: app.currentProfile) { await load() }
+        .task(id: app.currentProfile) {
+            await load()
+            // While the hub's own restart is on its way, ask again until it has happened.
+            while !Task.isCancelled, report?.checks.contains(where: RuntimeRules.restartOnItsWay) == true {
+                try? await Task.sleep(for: .seconds(2))
+                await load()
+            }
+        }
     }
 
     /// The profile's Hermes, when this person may restart it.

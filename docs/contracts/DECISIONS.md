@@ -5129,3 +5129,34 @@ its own … everything through the hub, without a button"). It reverses the opt-
   still started on the gateway with no key, the failure words for no model / unserved provider /
   old version / unwritable file), `runner-gateway.test.ts` (a gateway that cannot start or a turn
   with no model fails before any process starts).
+
+## 145. Hermes is restarted by the hub after every change it needs; the runtime card names the model
+
+Status: the owner's request on preview.38, 2026-09-30 — after adding or changing things he had to
+press «Restart now» before "The runtime restarted after the last change" went green; the hub must
+recycle Hermes by itself after any change that needs it, with no manual restart in the normal
+flow.
+
+- **Every path that changes what Hermes reads schedules the same coalesced restart** (`ModelsService
+  .scheduleRestart`: debounced, waits while a turn is in flight, at most about two minutes):
+  a provider added, edited or removed, the model defaults and fallbacks, speech, the image model,
+  a subscription signed in through CLIProxyAPI (already), and — newly — a subscription's last
+  account signed out from its dialog, a subscription row whose accounts came or went outside a
+  sign-in (read every minute: an account CLIProxyAPI dropped, a backup restored without it; the
+  row's gateway block comes or goes), and a change only a named profile's files see (its own
+  messaging gateway reads them, and the restart recycles every one). The Hermes-through-gateway
+  blocks, their token and port (§144) are written by the same propagation, so they follow it.
+- **The runtime report says whether the restart is on its way.** `RuntimeCheck.detail` of a
+  failing `gateway_reloaded` is `scheduled`, `waiting_for_run` (after the reply in progress), or
+  null (none coming). No schema change: `detail` was always a free short fact. The web, iOS and
+  Android say "Applying the change — Hermes restarts by itself…" and ask again every 2 s until it
+  turns green; «Restart now» appears only when no restart is coming, as a way out.
+- **`model_selected`'s detail is the chat model as people read it elsewhere**: «<provider label> ·
+  <model name>» (was Hermes's `<block>/<model id>`, e.g. `corehub-gw-custom-cli-proxy-api/gemini-
+  3.8-flash-high`). A client shows `detail` as it is, so older apps show the new words too.
+- **Proven.** `gateway/hermes-restart.test.ts`: one test per path (provider added / turned off /
+  default changed / removed; a named profile's files only; a subscription signed in, its last
+  account signed out, an account gone outside the hub), each restarting Hermes once with no call
+  to the restart operation and the check green after; and `scheduled` → `waiting_for_run` → green
+  as a turn ends. Web `agent-restart.test.tsx`: no button while the restart is on its way, green
+  by itself, the button only when none is coming.

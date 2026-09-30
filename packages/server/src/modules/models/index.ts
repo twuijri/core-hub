@@ -677,12 +677,20 @@ export const modelsModule = defineModule({
       // tokens only while it runs, and the provider cards show their accounts, so a hub that has
       // any starts it now and reads them every minute — in the background, never holding boot.
       if (!gateway.available()) return;
-      // Hermes answers through it, so it starts now either way.
-      void service.subscriptions.refresh(true).then((read) => {
-        if (!read.ok) app.log.warn({ reason: read.reason }, 'gateway: subscriptions not read');
-      });
+      // Hermes answers through it, so it starts now either way. After each read, a row whose
+      // accounts came or went outside a sign-in is brought up to date, and Hermes with it.
+      const scope = { id: row.id, slug: row.slug, name: row.name, isDefault: row.isDefault };
+      const read = () =>
+        service.subscriptions.refresh(true).then((result) => {
+          if (!result.ok) {
+            app.log.warn({ reason: result.reason }, 'gateway: subscriptions not read');
+            return;
+          }
+          service.syncSubscriptionRows(scope, { userId: owner.id });
+        });
+      void read();
       subscriptionTimer = setInterval(() => {
-        if (gateway.hasSubscriptionAccounts()) void service.subscriptions.refresh(true);
+        if (gateway.hasSubscriptionAccounts() || service.hasSubscriptionRows()) void read();
       }, 60_000);
       subscriptionTimer.unref?.();
     });
@@ -1025,8 +1033,13 @@ export const modelsModule = defineModule({
     defineRoute(app, deps, {
       operationId: 'models.getProviderAccounts',
       handler: async (request, { params }) => {
-        const { service, scope } = enter(request);
-        return service.getProviderAccounts(scope, params.provider_id as string, request.language);
+        const { service, scope, actor } = enter(request);
+        return service.getProviderAccounts(
+          scope,
+          actor,
+          params.provider_id as string,
+          request.language,
+        );
       },
     });
 

@@ -66,7 +66,15 @@ object RuntimeRules {
     /** Only the pending restart fails: amber, not red. */
     fun onlyRestart(report: RuntimeReport): Boolean = report.checks.all { it.ok || it.id == RuntimeCheck.Id.GATEWAY_RELOADED }
 
-    fun needsRestart(report: RuntimeReport): Boolean = report.checks.any { it.id == RuntimeCheck.Id.GATEWAY_RELOADED && !it.ok }
+    /** The hub's own restart of Hermes on its way (DECISIONS §145): `scheduled` or `waiting_for_run`. */
+    fun restartOnItsWay(check: RuntimeCheck): Boolean =
+        check.id == RuntimeCheck.Id.GATEWAY_RELOADED && !check.ok && (check.detail == "scheduled" || check.detail == "waiting_for_run")
+
+    fun restartOnItsWay(report: RuntimeReport): Boolean = report.checks.any { restartOnItsWay(it) }
+
+    /** «Restart now» only when no restart of the hub's own is coming: the way out, not the normal flow. */
+    fun needsRestart(report: RuntimeReport): Boolean =
+        report.checks.any { it.id == RuntimeCheck.Id.GATEWAY_RELOADED && !it.ok && !restartOnItsWay(it) }
 }
 
 @Composable
@@ -76,7 +84,12 @@ private fun checkText(check: RuntimeCheck): String = stringResource(
         RuntimeCheck.Id.PROVIDER_KEYS -> if (check.ok) R.string.runtime_provider_keys_ok else R.string.runtime_provider_keys_missing
         RuntimeCheck.Id.PROVIDER_VERIFIED -> if (check.ok) R.string.runtime_provider_verified_ok else R.string.runtime_provider_verified_missing
         RuntimeCheck.Id.MODEL_SELECTED -> if (check.ok) R.string.runtime_model_selected_ok else R.string.runtime_model_selected_missing
-        RuntimeCheck.Id.GATEWAY_RELOADED -> if (check.ok) R.string.runtime_gateway_reloaded_ok else R.string.runtime_gateway_reloaded_missing
+        RuntimeCheck.Id.GATEWAY_RELOADED -> when {
+            check.ok -> R.string.runtime_gateway_reloaded_ok
+            check.detail == "scheduled" -> R.string.runtime_gateway_reloaded_scheduled
+            check.detail == "waiting_for_run" -> R.string.runtime_gateway_reloaded_waiting_for_run
+            else -> R.string.runtime_gateway_reloaded_missing
+        }
     },
 )
 
@@ -91,6 +104,11 @@ internal fun RuntimeCard(profile: String, isAdmin: Boolean, reloadKey: Any?) {
     LaunchedEffect(profile, reloadKey, tick) {
         val s = graph.store.current ?: return@LaunchedEffect
         hubCall { graph.apis(s).models.modelsGetRuntime(profile) }.onSuccess { report = it; error = null }.onFailure { error = it as HubError }
+        // While the hub's own restart is on its way, ask again until it has happened.
+        if (report?.let { RuntimeRules.restartOnItsWay(it) } == true) {
+            delay(2_000)
+            tick++
+        }
     }
     val r = report ?: run { if (error != null && error?.status != 404 && error?.status != 501) ErrorNotice(error); return }
     RuntimeCardView(r, isAdmin) {
@@ -147,7 +165,7 @@ internal fun RuntimeCardView(report: RuntimeReport, canRestart: Boolean, onResta
                         checkText(check), Modifier.weight(1f), fontSize = FontTokens.sizeSm.sp,
                         fontWeight = if (check.ok) FontWeight.Normal else FontWeight.Medium, color = if (warn) t.warningSoftText else t.text,
                     )
-                    check.detail?.let { Text(it, fontSize = FontTokens.sizeXs.sp, color = t.textMuted) }
+                    check.detail?.takeIf { check.id != RuntimeCheck.Id.GATEWAY_RELOADED }?.let { Text(it, fontSize = FontTokens.sizeXs.sp, color = t.textMuted) }
                 }
             }
             if (canRestart && RuntimeRules.needsRestart(report)) {

@@ -2150,6 +2150,7 @@ export class ModelsService {
   /** The provider's dialog: its accounts, their health and usage, its recent failed calls. */
   async getProviderAccounts(
     scope: WorkspaceScope,
+    actor: Actor,
     providerId: string,
     language: UiLanguage,
   ): Promise<{
@@ -2166,7 +2167,7 @@ export class ModelsService {
     // The dialog asks CLIProxyAPI every time it is opened or refreshed: its counts move by the
     // minute, and its queue of failed calls is read only here and by the minute's timer.
     const read = await this.subscriptions.refresh(true);
-    this.syncSignedIn(row);
+    if (this.syncSignedIn(row)) this.propagate(scope, actor);
     return {
       provider_id: row.id,
       vendor: signIn.vendor,
@@ -2183,17 +2184,46 @@ export class ModelsService {
    * A row with no account left reads as not signed in; one that has accounts, as signed in (an
    * account added or removed outside a sign-in, or a hub restored from a backup).
    */
-  private syncSignedIn(row: ProviderRow): void {
-    if (!this.subscriptions.known()) return;
+  private syncSignedIn(row: ProviderRow): boolean {
+    if (!this.subscriptions.known()) return false;
     const has = this.subscriptions.cached(row.id).length > 0;
     const status = has ? 'ok' : 'unconfigured';
-    if (row.status === status) return;
+    if (row.status === status) return false;
     const at = this.now();
     this.db
       .update(providers)
       .set({ status, lastCheckedAt: at, updatedAt: at })
       .where(eq(providers.id, row.id))
       .run();
+    return true;
+  }
+
+  /**
+   * After the minute's read of CLIProxyAPI (`index.ts`): every subscription row whose accounts
+   * came or went outside a sign-in (an account expired and was dropped, a hub restored from a
+   * backup) reads as signed in or not, and Hermes is told — its gateway block for that row comes
+   * or goes — with the same coalesced restart as a save. Never throws.
+   */
+  /** Whether any profile has a subscription row signed in through the gateway. */
+  hasSubscriptionRows(): boolean {
+    return this.store
+      .everyProviderRow()
+      .some((row) => !row.archivedAt && row.status === 'ok' && !!this.entryOf(row)?.gatewaySignIn);
+  }
+
+  syncSubscriptionRows(scope: WorkspaceScope, actor: Actor): boolean {
+    try {
+      let changed = false;
+      for (const row of this.store.everyProviderRow()) {
+        if (row.archivedAt || !this.entryOf(row)?.gatewaySignIn) continue;
+        if (this.syncSignedIn(row)) changed = true;
+      }
+      if (changed) this.propagate(scope, actor);
+      return changed;
+    } catch (error) {
+      this.options.log.warn({ err: error }, 'models: could not bring the subscriptions up to date');
+      return false;
+    }
   }
 
   async updateProviderAccount(
@@ -2222,7 +2252,8 @@ export class ModelsService {
     const { row } = this.subscriptionRow(scope, providerId);
     await this.subscriptions.remove(row.id, accountId);
     this.accountAudit(scope, actor, row, 'signed_out');
-    this.syncSignedIn(this.loadProvider(scope, row.id));
+    // The last account gone: Hermes's gateway block for this row goes too.
+    if (this.syncSignedIn(this.loadProvider(scope, row.id))) this.propagate(scope, actor);
   }
 
   async refreshProviderAccount(
@@ -2942,6 +2973,25 @@ export class ModelsService {
   }
 
   /**
+   * The chat model Hermes was given, as people read it elsewhere: «<provider> · <model>», the
+   * provider's own label and the model's name — not Hermes's block name (`corehub-gw-<slug>`).
+   */
+  private chatModelName(workspace: string, chosen: { provider: string; model: string }): string {
+    // The same choice `hermesModelChoice` made the block from: the profile's, else inherited.
+    const ref = this.refOfRole(workspace, 'chat');
+    const facts = ref ? this.modelFacts(workspace, ref.provider_id, ref.model) : null;
+    if (facts) return `${facts.providerLabel} · ${facts.modelLabel}`;
+    return `${chosen.provider} · ${chosen.model}`;
+  }
+
+  /** Whether a restart of Hermes is on its way (`scheduleRestart`), for the runtime report. */
+  private restartState(): 'scheduled' | 'waiting_for_run' | null {
+    if (!this.restartPending) return null;
+    if (this.restartTimer) return 'scheduled';
+    return (this.options.hermes.busy?.() ?? false) ? 'waiting_for_run' : 'scheduled';
+  }
+
+  /**
    * The self-check behind "I added a provider and nothing happened".
    *
    * Propagation used to be entirely invisible: the hub wrote two files and restarted a
@@ -3002,17 +3052,22 @@ export class ModelsService {
       id: 'model_selected',
       ok: Boolean(state?.hermesModel),
       detail: state?.hermesModel
-        ? `${state.hermesModel.provider}/${state.hermesModel.model}`
+        ? this.chatModelName(workspace, state.hermesModel)
         : (state?.hermesModelBlocked ?? null),
     });
 
     // 5. Did the process take the files? It reads them at start, so "reloaded after the
     //    last write" is the question, and the runtime is the only one who knows.
+    //    The hub restarts it by itself after every change that needs it (`scheduleRestart`);
+    //    `detail` says whether that restart is on its way (`scheduled`), waiting for a reply in
+    //    progress to end (`waiting_for_run`), or not coming (null) — only then is a manual
+    //    restart the way out.
     const reloadedAt = this.options.hermes.reloadedAt?.() ?? null;
+    const reloaded = mode === 'external' || (reloadedAt !== null && reloadedAt >= this.lastWriteAt);
     checks.push({
       id: 'gateway_reloaded',
-      ok: mode === 'external' || (reloadedAt !== null && reloadedAt >= this.lastWriteAt),
-      detail: null,
+      ok: reloaded,
+      detail: reloaded ? null : this.restartState(),
     });
 
     return {
@@ -3765,10 +3820,17 @@ export class ModelsService {
       return;
     }
     const plugin = this.installImageBackend(home, state.hermesImage === true);
-    this.propagateToProfiles(state);
-    if (!result.dirty && !envChanged && plugin.length === 0) return;
+    // A named profile's files are read by its own messaging gateway, which only a restart
+    // recycles (`restart()` restarts every one): a change there needs one too.
+    const profiles = this.propagateToProfiles(state);
+    if (!result.dirty && !envChanged && plugin.length === 0 && profiles.length === 0) return;
     this.lastWriteAt = this.now().getTime();
-    const changed = [...result.env.changed, ...result.config.changed, ...plugin];
+    const changed = [
+      ...result.env.changed,
+      ...result.config.changed,
+      ...plugin,
+      ...profiles.map((profile) => `profiles/${profile}`),
+    ];
     const removed = [...result.env.removed, ...result.config.removed];
     this.options.log.info(
       // Names only. A value never reaches a log line.
@@ -3850,11 +3912,16 @@ export class ModelsService {
     }
   }
 
-  /** Every named Hermes profile, made ready against the root it falls back on. */
-  private propagateToProfiles(root: PropagationState): void {
+  /**
+   * Every named Hermes profile, made ready against the root it falls back on. Returns the
+   * profiles whose files changed.
+   */
+  private propagateToProfiles(root: PropagationState): string[] {
+    const changed: string[] = [];
     for (const profileHome of this.options.hermes.profileHomes?.() ?? []) {
-      this.prepareProfileWith(profileHome, root);
+      if (this.prepareProfileWith(profileHome, root)) changed.push(path.basename(profileHome));
     }
+    return changed;
   }
 
   /**
@@ -3882,11 +3949,12 @@ export class ModelsService {
     this.prepareProfileWith(profileHome, this.state(this.hub().id));
   }
 
+  /** Returns whether any of the profile's files changed. */
   private prepareProfileWith(
     profileHome: string,
     root: PropagationState,
     options: { model?: boolean } = {},
-  ): void {
+  ): boolean {
     const profile = path.basename(profileHome);
     try {
       const workspace = this.options.profileWorkspace?.(profile) ?? `hermes-profile:${profile}`;
@@ -3931,12 +3999,15 @@ export class ModelsService {
           },
           'models: Hermes profile made ready for its providers',
         );
+        return true;
       }
+      return false;
     } catch (error) {
       this.options.log.warn(
         { err: error, profile },
         'models: could not prepare a Hermes profile; its configuration is unchanged',
       );
+      return false;
     }
   }
 

@@ -10,7 +10,7 @@
   "runtime_model_selected_ok": "A chat model is selected for the runtime.",
   "runtime_model_selected_missing": "No chat model is selected — choose one under Defaults.",
   "runtime_gateway_reloaded_ok": "The runtime restarted after the last change.",
-  "runtime_gateway_reloaded_missing": "Settings changed after Hermes last started — restart it to apply them.",
+  "runtime_gateway_reloaded_missing": "Hermes did not restart after the last change. Restart it to apply the settings.",
   "runtime_ready": "Runtime ready · %1$s/%2$s checks",
   "runtime_passed": "%1$s of %2$s checks pass",
   "runtime_restart_now": "Restart now",
@@ -22,5 +22,7 @@
   "models_default_model": "Default model",
   "notify_test": "Send a test notification",
   "notify_test_sent": "Sent. Check this phone and your other devices.",
-  "devices_just_paired": "Just paired. The device is in the list below."
+  "devices_just_paired": "Just paired. The device is in the list below.",
+  "runtime_gateway_reloaded_scheduled": "Applying the change — Hermes restarts by itself in a moment.",
+  "runtime_gateway_reloaded_waiting_for_run": "Applying the change — Hermes restarts by itself once the reply in progress ends."
 }

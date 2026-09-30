@@ -73,7 +73,22 @@ export function useRuntimeReport(options: { enabled?: boolean } = {}) {
     enabled: !!session && (options.enabled ?? true),
     staleTime: 0,
     refetchOnWindowFocus: true,
+    // The hub restarts Hermes by itself after a change (DECISIONS §145): while that restart is
+    // on its way, ask again until it has happened, so the card turns green on its own.
+    refetchInterval: (query) =>
+      restartOnItsWay(query.state.data as RuntimeReport | undefined) ? RUNTIME_POLL_MS : false,
   });
+}
+
+/** How often a report whose automatic restart is on its way is asked again. */
+const RUNTIME_POLL_MS = 2_000;
+
+/** Whether the hub said its own restart of Hermes is scheduled or waiting for a reply. */
+export function restartOnItsWay(report: RuntimeReport | undefined): boolean {
+  const check = report?.checks?.find((each) => each.id === 'gateway_reloaded');
+  return (
+    !!check && !check.ok && (check.detail === 'scheduled' || check.detail === 'waiting_for_run')
+  );
 }
 
 export function useModelDefaults() {

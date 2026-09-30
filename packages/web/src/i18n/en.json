@@ -1057,7 +1057,9 @@
       },
       "gateway_reloaded": {
         "ok": "The runtime restarted after the last change.",
-        "missing": "Settings changed after Hermes last started — restart it to apply them."
+        "missing": "Hermes did not restart after the last change. Restart it to apply the settings.",
+        "scheduled": "Applying the change — Hermes restarts by itself in a moment.",
+        "waiting_for_run": "Applying the change — Hermes restarts by itself once the reply in progress ends."
       },
       "ready": "Runtime ready · {passed}/{total} checks",
       "passed": "{passed} of {total} checks pass",

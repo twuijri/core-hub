@@ -1577,8 +1577,8 @@ describe('models: one key, every agent (ADR 0010)', () => {
       const after = await report();
       expect(check(after, 'provider_keys').ok).toBe(true);
       expect(check(after, 'model_selected').ok).toBe(true);
-      // The value is the pair the runtime was given, in its own vocabulary.
-      expect(check(after, 'model_selected').detail).toBe('anthropic/claude-haiku-4-5');
+      // The provider and model the runtime was given, as people read them elsewhere.
+      expect(check(after, 'model_selected').detail).toBe('anthropic · Claude Haiku 4.5');
       expect(check(after, 'gateway_reloaded').ok).toBe(true);
       expect(after.ready).toBe(true);
     } finally {
