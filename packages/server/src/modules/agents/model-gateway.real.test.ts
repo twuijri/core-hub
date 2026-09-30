@@ -692,6 +692,8 @@ describe.skipIf(!enabled)('the model gateway, for real (COREHUB_REAL_GATEWAY=1)'
       fallbacksFor: () => [],
       providerSlugOf: () => 'fake',
       modelSourceFor: () => 'hub',
+      // The hub always has the model these turns name (§144): nothing stops them.
+      gatewayMiss: () => null,
       openGateway: async () => grant,
       targetFor: () => target,
     };
