@@ -90,12 +90,42 @@ the hub leaves it alone and the agent uses its own account; the hub's log says w
 - **Developers:** run `pnpm cliproxy:fetch` once; the hub finds the copy in
   `~/.cache/corehub/cliproxy/`. Without it, coding agents use their own accounts and the log says why.
 
+## Subscriptions (sign in instead of a key)
+
+Settings → Models → **Add provider → Sign in with a subscription** lists every subscription the
+hub's gateway can sign in to (DECISIONS §143, ADR 0030): ChatGPT, Claude, xAI Grok, Kimi Code,
+Meta AI, Google Antigravity and Devin.
+
+- **By a short code** (ChatGPT, xAI, Kimi, Meta): open the page shown, type the code, done. It works
+  from a phone and from a server with no browser.
+- **By a link** (Claude, Antigravity, Devin): open the page, sign in; your browser then goes to an
+  address such as `http://localhost:54545/callback?code=…` that may not load — copy that whole
+  address from the address bar and paste it into the hub.
+- Sign in again under the same provider to add **another account**; the gateway uses them in turn,
+  and one that hit its limit waits for its reset while the others answer.
+- Click the provider's card to open its **accounts dialog**: each account's status and last error,
+  its usage windows with what is left and when each resets (Claude and ChatGPT), its requests over
+  the last 3 h 20 min, and **Check now** (asks the vendor; best effort — the vendors do not document
+  those addresses). Renew, turn off or sign out an account there.
+- Every agent can use a subscription's models, the hub's own agent and Hermes included.
+- Some vendors limit using a subscription outside their own apps. The hub does not decide for you.
+
+A ChatGPT or xAI subscription signed in to through Hermes (the older way) keeps working; its card
+offers **Move to Core Hub's gateway**, which signs in once more (a sign-in cannot be copied) and
+then moves your model choices to it.
+
+**Hermes uses Core Hub's models** (the switch at the top of Settings → Models): Hermes then reaches
+every model the gateway serves through it, subscriptions included; turn it off to give Hermes its
+own providers again. New hubs start with it on; hubs that already had providers keep Hermes as it
+was until you switch.
+
 ## If a message fails
 
 - "a Core Hub session token is required" — the agent's process outlived its session; send the message
   again (the hub starts the agent afresh).
-- "… is not available to coding agents through Core Hub" — the model's provider has no key, or it is a
-  subscription signed in to through Hermes; pick another model or switch the agent to its own account.
+- "… is not available to agents through Core Hub" — the model's provider has no key or signed-in
+  account, or it is a subscription signed in to through Hermes (move it to the gateway on its card);
+  pick another model or switch the agent to its own account.
 - "no model is chosen for this conversation" — pick a model, or set a default in Settings → Models.
 - "<provider> ran out of quota for <model>. Pick another model for this chat." — the provider said the
   model's quota (or credit) is spent. The chat says so within seconds instead of retrying for minutes,

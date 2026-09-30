@@ -471,6 +471,8 @@ export interface ContractProviderPreset {
    * holds a key: adding this one there needs none — the key is shared (ADR 0010, §94).
    */
   key_on_file: ('all' | 'profile')[];
+  /** A Hermes sign-in the gateway now does itself: the preset offered instead (§143). */
+  replaced_by: string | null;
 }
 
 export interface ProviderHostInfo {
@@ -876,6 +878,8 @@ export class ModelsService {
       keys_url: entry.keysUrl,
       sign_in: entry.signIn === true,
       base_url_example: entry.baseUrlExample ?? null,
+      // A Hermes sign-in the gateway now does itself (§143): what a newer client offers instead.
+      replaced_by: entry.gatewayMove ?? null,
       key_on_file:
         scope && !entry.repeatable && !entry.signIn
           ? (['all', 'profile'] as const).filter((which) =>
@@ -3412,7 +3416,8 @@ export class ModelsService {
           requiresKey: true,
           headers: {},
           settings: {},
-          fetchImpl: this.fetchImpl,
+          // Loopback to the hub's own translator, never a scripted provider's fetch.
+          fetchImpl: globalThis.fetch,
         },
         { ...chatRequest, model: upstreamModel(provider.id, request.model) },
       );

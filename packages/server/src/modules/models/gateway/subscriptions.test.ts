@@ -193,6 +193,23 @@ describe('subscriptions through the gateway', () => {
       catalogue.json() as { items: { key: string; agent_gateway?: boolean }[] }
     ).items.find((item) => item.key === 'xai-subscription/grok-4.5');
     expect(model?.agent_gateway).toBe(true);
+    // The hub's own agent reaches the account the same way, through the gateway's translator.
+    const workspace = (
+      requireSqlite(h.app.hub.database)
+        .$client.prepare("select id from workspaces where slug = 'default'")
+        .get() as { id: string }
+    ).id;
+    const events: { type: string; text?: string }[] = [];
+    for await (const event of modelsServiceFor(h.app).chat(workspace, {
+      providerId: provider.id,
+      model: 'grok-4.5',
+      messages: [{ role: 'user', content: 'hi' }],
+    })) {
+      events.push(event as { type: string; text?: string });
+    }
+    expect(events.filter((event) => event.type === 'delta').map((event) => event.text)).toEqual([
+      'hello',
+    ]);
     // No key, no token of the account anywhere in the hub's database.
     const db = requireSqlite(h.app.hub.database);
     const dump = JSON.stringify(db.$client.prepare('select * from secrets').all());

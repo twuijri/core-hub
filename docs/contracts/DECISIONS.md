@@ -4953,3 +4953,110 @@ already the `Error` envelope's). Proposed here — owner to confirm:
   picker; an older client shows the sentence and the code as before.
 - **No internal names**: an error the gateway passes on has `h<row id>/…` replaced by the
   provider's and model's names.
+
+## 143. Subscription sign-ins through the bundled CLIProxyAPI; Hermes on the hub's models
+
+ADR 0030 (the owner's decision of 2026-09-30, after the research of PR #230). Additive only. What
+follows is proposed here — owner to confirm:
+
+- **Who moves.** Every provider connected by signing in to an account is signed in to by the
+  CLIProxyAPI the hub bundles (8.0.4): ChatGPT (`codex`), Claude (`claude`), xAI (`xai`), Kimi
+  (`kimi`, `kimi-ai`), Meta (`meta`), Google Antigravity (`antigravity`), Devin (`devin`) — every
+  vendor its management API signs in to. Gemini CLI, Qwen and iFlow were removed from CLIProxyAPI;
+  Vertex is a service-account import, not a sign-in, and is not offered. Providers connected by
+  key or address stay exactly as they are. The hub does not block or judge a vendor; the list
+  carries one neutral sentence (`SubscriptionVendors.note`: some vendors limit using a
+  subscription outside their own apps).
+- **Flows.** A short code (`flow: device`) for xAI, Kimi and Meta (CLIProxyAPI's management API)
+  and for ChatGPT (`cli-proxy-api -codex-device-login -no-browser` run as a child process; the hub
+  reads `Codex device URL:` / `Codex device code:` and takes only "Codex device authentication
+  successful" as success, since the flag exits 0 either way). A link (`flow: link`) for Claude,
+  Antigravity and Devin: `ProviderSignIn.accepts_code: true`, `callback_hint` (how the address
+  begins), and `models.completeProviderSignIn` with the whole address the browser landed on — its
+  own `state` is what CLIProxyAPI checks, so an address from an older sign-in is refused. On the
+  desktop the callback could be caught on the same computer; that is a follow-up.
+- **Contract.** `models.listSubscriptionVendors` (`GET /models/subscription-vendors`);
+  `models.getProviderAccounts`, `models.updateProviderAccount` (`disabled`),
+  `models.removeProviderAccount`, `models.refreshProviderAccount`, `models.checkProviderAccount`
+  (`/models/providers/{id}/accounts[/{account_id}[/refresh|/check]]`);
+  `models.moveProviderToGateway`; `models.getHermesModelSource` / `models.setHermesModelSource`
+  (`/models/hermes-source`). Fields: `Provider.subscription {vendor, flow, accounts,
+  accounts_ready}`, `Provider.gateway_move {preset}`, `ProviderSignIn.callback_hint`,
+  `ProviderPreset.replaced_by`. The gateway presets are not in `models.listProviderPresets`, so an
+  older client never offers a link it cannot finish; an older client that meets such a row still
+  shows it and can sign in by code. `completeProviderSignIn` now accepts an address for a link
+  sign-in (it answered 409 for every sign-in before). An older hub answers 404 to the new
+  operations and a client hides them.
+- **Accounts belong to a row.** After an approved sign-in the hub finds the account CLIProxyAPI
+  saved (new, or renewed: same file name) and sets `prefix: h<row>`, `note: corehub:<row>`,
+  `disable_cooling: false` through `PATCH /credentials/fields`. The gateway's `h<row>/<model>`
+  then reaches only that row's accounts, round-robin; an account whose vendor says its limit is
+  reached cools until its reset while the others answer (the global `disable-cooling: true` of
+  §142 stays for key rows). A signed-in row is an upstream of kind `subscription`: no group in
+  CLIProxyAPI's file, so signing in starts no new process. Its models are what CLIProxyAPI serves
+  under `h<row>/` (`GET /v1/models`, its own catalogue for the vendor, with context windows). One
+  account can belong to one row at a time: the same e-mail signed in under a second row moves to
+  it.
+- **The dialog** (`ProviderAccounts`): per account its status (`active`, `cooling`, `error`,
+  `disabled`, `refreshing`, `unknown`), CLIProxyAPI's last error, `next_retry_at`, success and
+  failure totals and the 20 ten-minute buckets (kept in CLIProxyAPI's memory: a restart starts
+  them again), `last_refresh_at`, and `windows` — Claude's `anthropic-ratelimit-unified-<window>-
+  utilization`/`-reset` and ChatGPT's `x-codex-<primary|secondary>-used-percent`/`-window-minutes`/
+  `-reset-at` as CLIProxyAPI kept them from the last answer (`source: observed`), or what "check
+  now" read (`source: checked`): ChatGPT `wham/usage`, Claude `api/oauth/usage`, xAI
+  `v1/billing`, Kimi `coding/v1/usages`, Antigravity `retrieveUserQuotaSummary`, asked through
+  `POST /requests/api-call` with `$TOKEN$`. Those addresses are undocumented; a reading that fails
+  is `check_error`, still 200. `errors` are the row's failed calls, drained from CLIProxyAPI's
+  usage queue (`usage-statistics-enabled: true`, kept 300 s there, the last 200 in the hub's
+  memory). Everything is redacted of anything that looks like a token.
+- **Hermes on the hub's models.** One choice per hub, in `<DATA_DIR>/gateway/hermes-models.json`
+  (no migration). At the first boot with this code: `hub` for a hub with no provider and a
+  gateway, `native` for every other — an upgrade never moves Hermes. With `hub`, each row the
+  gateway serves is one more `providers:` block, `corehub-gw-<slug>`, at
+  `http://127.0.0.1:<port>/gateway/row/<row>/anthropic` (`anthropic_messages`, Claude models:
+  Hermes keeps prompt caching) or `…/openai/v1` (`responses` for OpenAI and ChatGPT,
+  `chat_completions` otherwise), `key_env: COREHUB_GATEWAY_TOKEN`; the model stays the provider's
+  own id; `model.provider`, the per-turn provider, cron's and the fallbacks name those blocks; the
+  chain ends on Hermes's own route to a chat model from a key, so Hermes answers if the gateway is
+  down. The token is `chgwh_<workspace>.<HMAC>` signed with `<DATA_DIR>/gateway/hermes-token.key`
+  (0600): long-lived, in that profile's `.env` only, bound to the profile. The gateway listens on
+  the port it had last time when it is free (`gateway.port`), so Hermes's files do not change
+  with each restart; when Hermes uses the gateway it listens at boot and CLIProxyAPI starts at
+  boot. A call on a Hermes token has no turn: the gateway counts nothing into the ledger (Hermes
+  reports its own usage). Speech, embeddings, the ChatGPT images and the Codex app-server of a
+  Hermes sign-in stay as they are; keys stay in Hermes's `.env`. `native` removes the hub's
+  blocks and the token.
+- **CLIProxyAPI at boot.** It renews tokens only while it runs, so a hub with any account in its
+  store, or with Hermes on the gateway, starts it at boot and reads the accounts every minute.
+- **Legacy.** Hermes's sign-ins keep working for the rows that have them. ChatGPT and xAI rows say
+  so and offer "Move to Core Hub's gateway" (`models.moveProviderToGateway`: adds or reuses the
+  gateway row of the same vendor and scope and starts its sign-in; tokens are never copied —
+  OpenAI and Anthropic rotate refresh tokens, and two holders would sign each other out; once
+  approved and its models are listed, the model defaults, fallbacks and ensemble members that
+  named the old row's models name the new row's same models; the old row stays until removed).
+  The web no longer offers those two Hermes presets where subscriptions are available
+  (`replaced_by`). Nous Portal and MiniMax stay Hermes's (CLIProxyAPI cannot sign in to them).
+- **Removal plan** (a later change, after the owner's live hubs have moved and on his word):
+  `models/signed-in-chat.ts` and its tests (the `direct` agent then refuses a Hermes sign-in it
+  cannot borrow with "move it to the gateway"), the Hermes half of `live-models.ts`, the `codex`
+  protocol of the two image scripts (images through CLIProxyAPI's `/v1/images/*` for a gateway
+  ChatGPT row, after a real test), and `sign-in.ts` down to Nous and MiniMax; the `openai-codex`
+  and `xai-oauth` presets stay readable for old rows, never offered. Contract unchanged.
+- **Proven.** With a stand-in of CLIProxyAPI's management API (`gateway/subscriptions.test.ts`,
+  `hermes-gateway.test.ts`, web `subscription-signin.test.tsx`, Playwright
+  `zzzzzzzzzzzzzzzz-subscriptions.spec.ts`), and with the real CLIProxyAPI 8.0.4 in the required
+  `model-gateway-real` job (`gateway/subscriptions.real.test.ts`): xAI's device-code sign-in
+  through the management API against stand-ins of xAI's discovery, device and token addresses
+  (CLIProxyAPI has no setting for them; it honours `HTTPS_PROXY` and `SSL_CERT_FILE`, so the test
+  answers their hosts itself behind a proxy with a throwaway authority), the account's prefix and
+  note, its models in the hub's catalogue, "check now" with the account's token put in by
+  CLIProxyAPI (never in the hub), renew (a refresh against the stand-in), off/on, sign out;
+  ChatGPT's `-codex-device-login` child process end to end; Claude's authorisation link and a
+  pasted address from another sign-in refused. The Claude code exchange itself is not driven:
+  CLIProxyAPI uses its own TLS client for Anthropic, which takes no proxy.
+
+Known limits: the request buckets and passive windows are CLIProxyAPI's memory (a restart, or a
+change of key providers that starts a new process, begins them again); a change of key providers
+while a sign-in is pending keeps the old process for that sign-in until it ends; phones show
+accounts, status, usage and "check now" and sign in by code or pasted address, but the web alone
+has turn off, renew, sign out and "move to the gateway".

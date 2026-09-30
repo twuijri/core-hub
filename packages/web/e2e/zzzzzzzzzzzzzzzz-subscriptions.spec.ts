@@ -87,9 +87,9 @@ test.describe('subscriptions through Core Hub’s gateway', () => {
     );
     await expect(account.getByTestId('account-buckets').locator('.account-bucket')).toHaveCount(20);
     await account.getByTestId('account-check').click();
-    await expect(account.locator('[data-window="secondary"]').getByTestId('window-left')).toHaveText(
-      'المتبقي 45%',
-    );
+    await expect(
+      account.locator('[data-window="secondary"]').getByTestId('window-left'),
+    ).toHaveText('المتبقي 45%');
     await page.waitForTimeout(200);
     await accounts.screenshot({ path: path.join(shots, 'subscription-accounts-ar-light.png') });
     await account.getByTestId('account-enabled').click();

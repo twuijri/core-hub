@@ -81,15 +81,21 @@ export function AddProviderDialog({
   const firstField = useRef<HTMLButtonElement>(null);
 
   const [scope, setScope] = useState<'all' | 'profile'>('all');
-  const offered = useMemo(
-    () => presets.filter((preset) => preset.repeatable || !taken[scope].has(preset.id)),
-    [presets, taken, scope],
-  );
-  // "Sign in with a subscription" (DECISIONS §143): chat providers only, and only on a hub that
-  // offers it (an older one answers 404 and the choice is not shown).
+  // "Sign in with a subscription" (DECISIONS §143), and only on a hub that offers it (an older one
+  // answers 404 and the choice is not shown). There, a sign-in through Hermes that the gateway now
+  // does itself is not offered again; rows already added keep working.
   const vendors = useSubscriptionVendors();
   const subscriptions =
     startKind === 'llm' && !(vendors.isError && isUnsupported(vendors.error)) && !vendors.isPending;
+  const offered = useMemo(
+    () =>
+      presets.filter(
+        (preset) =>
+          (preset.repeatable || !taken[scope].has(preset.id)) &&
+          !(vendors.data?.available && preset.replaced_by),
+      ),
+    [presets, taken, scope, vendors.data?.available],
+  );
   const [signingIn, setSigningIn] = useState(false);
   const [mode, setMode] = useState<'preset' | 'custom' | 'subscription'>(
     startMode === 'subscription' && startKind !== 'llm' ? 'preset' : startMode,

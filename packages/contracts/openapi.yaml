@@ -27106,8 +27106,9 @@ components:
             Coding agents (Claude Code, Codex, Goose, OpenCode, Qwen Code, Kimi Code; Gemini CLI,
             Grok Build and Pi from DECISIONS §141) can run this model through the hub's model
             gateway (added 2026-09-30, DECISIONS §140, ADR 0029):
-            its provider has a key the hub holds and is not a subscription signed in to through
-            Hermes, which the hub does not lend to other agents. The model picker of an agent
+            its provider has a key the hub holds, or is a subscription signed in to through the
+            gateway itself (DECISIONS §143); a subscription signed in to through Hermes is not
+            served. The model picker of an agent
             whose `model_source` is `hub` lists these models only. Absent from an older hub,
             which has no gateway.
         agent_tools:
@@ -27311,6 +27312,12 @@ components:
           description: >-
             An example of the address to type when `base_url` is null — the shape, never a
             value the hub would use (Azure Speech: `https://<region>.api.cognitive.microsoft.com`).
+        replaced_by:
+          type: [string, 'null']
+          description: >-
+            A sign-in through Hermes that Core Hub's gateway now does itself (DECISIONS §143): the
+            `SubscriptionVendor.preset` a client offers instead, where the hub lists subscription
+            vendors. The older way still works for rows already added. Absent or `null` otherwise.
         key_on_file:
           type: array
           items:

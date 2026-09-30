@@ -10,7 +10,11 @@
  * an agent in the middle of a stream is never cut off by somebody adding a provider.
  *
  * The hub starts it the first time an agent needs it, not at boot: a hub whose agents never use the
- * gateway never runs it.
+ * gateway never runs it — unless a subscription is signed in through it (it renews the accounts'
+ * tokens only while it runs) or Hermes uses the gateway (DECISIONS §143): then at boot.
+ *
+ * Its account store (`cliproxy-auth/`, the subscriptions signed in to through it) outlives each
+ * process; its management API answers a secret made here, from loopback only.
  */
 import { createHash, randomBytes } from 'node:crypto';
 import { spawn, type ChildProcess } from 'node:child_process';
