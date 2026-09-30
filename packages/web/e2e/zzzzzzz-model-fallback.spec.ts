@@ -114,8 +114,9 @@ test('34. a fallback model answers when the chat model is down, and the reply sa
   });
   const note = reply.getByTestId('fallback-note');
   await expect(note).toBeVisible();
-  await expect(note).toContainText(`فشل ${provider.slug}/gemini-3.8-flash-high`);
-  await expect(note).toContainText(`فأجاب ${provider.slug}/gpt-backup`);
+  // The models by the names people know: the provider's own name and the model (owner, 2026-09-30).
+  await expect(note).toContainText('فشل Proxy · gemini-3.8-flash-high');
+  await expect(note).toContainText('فأجاب Proxy · gpt-backup');
   await expect(note).toContainText('auth_unavailable');
   await shot(page, 'chat-fallback-note-ar-light');
 
@@ -123,7 +124,7 @@ test('34. a fallback model answers when the chat model is down, and the reply sa
   await page.reload();
   await expect(
     page.getByTestId('message-assistant').last().getByTestId('fallback-note'),
-  ).toContainText(`فأجاب ${provider.slug}/gpt-backup`);
+  ).toContainText('فأجاب Proxy · gpt-backup');
 
   // And in the Trajectory, on the turn the fallback answered.
   await page.getByTestId('chat-tabs-trajectory').click();

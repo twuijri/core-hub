@@ -43,6 +43,17 @@ sets:
 | `COREHUB_TRUST_PROXY` | Optional. Which reverse proxies may say who their client was (`X-Forwarded-For`). Unset: loopback and the private ranges, which fits Caddy/Traefik on the stack's Docker network and cloudflared on the same machine. A comma list of addresses/CIDRs, `false` for none, or a hop count (§3d). |
 | `COREHUB_MODELS_CATALOG_URL` | Optional. Where the hub reads the shared models catalogue every twelve hours (DECISIONS §110). Unset: the Core Hub repository's `catalog/models.json`, so model lists stay current without pulling a new image. An `https://` address of your own copy, or `off`. |
 | `COREHUB_CODEX_IMAGE_MODELS` | Optional. Extra ChatGPT-subscription image models to offer before the catalogue has them, comma-separated `gpt-image-…` names (§110). |
+| `COREHUB_MODEL_GATEWAY` | Optional, **on by default**. The model gateway (ADR 0029): every coding agent (Claude Code, Codex, Goose, OpenCode, Qwen Code, Kimi Code) reaches the hub's own providers through it, with a session token instead of a key. `off` hands agents the profile's keys as before. |
+| `COREHUB_AGENT_MODEL_SOURCE` | Optional. What an agent's "Automatic" model source means: the image sets `hub` (every coding agent on the hub's providers); `auto` (the default outside the image) keeps an agent signed in to its own account on it. A person's choice in the agent's Settings → Models always wins. |
+| `COREHUB_CLIPROXY_BIN` | Optional. Where CLIProxyAPI, the gateway's translator, is — only for a hub that is not the image or the desktop app (the image carries it at `/opt/corehub/bin/cli-proxy-api`). |
+
+Subscriptions signed in to through the gateway (ADR 0030) are kept by CLIProxyAPI in
+`<DATA_DIR>/gateway/cliproxy-auth/` (one `0600` file per account; they hold the accounts' tokens —
+back them up with the rest of the data folder, and keep them as private). The same folder holds
+`hermes-token.key` (what Hermes's
+profile tokens are signed with; deleting it revokes them, and the hub makes a new one) and
+`gateway.port` (the loopback port the gateway asks for again). Nothing else needs a volume: the
+existing data volume already covers it.
 
 These are the whole configuration (ARCHITECTURE invariant 5). There is
 no variable for model provider keys either — they are added once on the Models

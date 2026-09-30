@@ -55,6 +55,16 @@ export const CREDENTIAL_FAMILIES = [
   'openai-codex',
   'xai-oauth',
   'minimax-oauth',
+  // Signed in to through the hub's model gateway (DECISIONS §143, ADR 0030): one account set
+  // each, held by the bundled CLIProxyAPI, never a key.
+  'claude-subscription',
+  'chatgpt-subscription',
+  'antigravity-subscription',
+  'kimi-subscription',
+  'kimi-ai-subscription',
+  'xai-subscription',
+  'meta-subscription',
+  'devin-subscription',
 ] as const;
 export type CredentialFamily = (typeof CREDENTIAL_FAMILIES)[number];
 
@@ -110,7 +120,36 @@ export type KeyRequirement = 'required' | 'optional';
  * - `none` — the hub cannot say this provider to Hermes at all (a speech provider is not
  *   a chat route). The honest refusal of ADR 0010 stays, and the run says so.
  */
-export type HermesRouteKind = 'builtin' | 'openai-compatible' | 'none';
+export type HermesRouteKind = 'builtin' | 'openai-compatible' | 'none' | 'gateway';
+
+/**
+ * How a subscription is signed in to through the hub's model gateway (DECISIONS §143, ADR
+ * 0030). The sign-in is CLIProxyAPI's own, run through its management API on loopback; the
+ * account it adds is kept in its store under the hub's folder and served to every agent.
+ *
+ * - `device` — its management API answers with a short code and a link (xAI, Kimi, Meta).
+ * - `codex-device` — the same flow, which CLIProxyAPI 8.0.4 offers for ChatGPT only as a
+ *   command-line flag (`-codex-device-login`): the hub runs it as a child process, as it runs
+ *   an agent's own device-code sign-in (§106), and reads the link and code it prints.
+ * - `link` — a browser sign-in that ends on a `localhost` address (Claude, Antigravity,
+ *   Devin): the person pastes that address back, which works from a server with no browser.
+ */
+export interface GatewaySignIn {
+  /** CLIProxyAPI's name for the vendor (`?provider=` of its login, `type` of its accounts). */
+  vendor: 'claude' | 'codex' | 'antigravity' | 'kimi' | 'kimi-ai' | 'xai' | 'meta' | 'devin';
+  flow: 'device' | 'codex-device' | 'link';
+  /** Where a `link` sign-in's browser lands, for the paste box. */
+  callbackHint?: string;
+  /** The vendor's answers carry usage windows with reset times (Claude, ChatGPT). */
+  usageWindows: boolean;
+  /**
+   * "Check now": the vendor's own usage address, asked through CLIProxyAPI with the account's
+   * token (`$TOKEN$`), which never leaves it. These are the addresses CLIProxyAPI's own panel
+   * uses; the vendors do not document them, so a reading that fails says so and changes
+   * nothing.
+   */
+  check?: { method: 'GET' | 'POST'; url: string; headers?: Record<string, string>; body?: string };
+}
 
 export interface ProviderCatalogueEntry {
   slug: string;
@@ -190,6 +229,16 @@ export interface ProviderCatalogueEntry {
    * credential. Only a provider Hermes can sign in to from its own server says so.
    */
   signIn?: boolean;
+  /**
+   * The sign-in is the hub's model gateway's, not Hermes's (DECISIONS §143): `signIn` is true,
+   * `hermesRoute` is `gateway`, and there is no Hermes provider.
+   */
+  gatewaySignIn?: GatewaySignIn;
+  /**
+   * On a provider signed in to through Hermes: the gateway preset of the same vendor, which
+   * "Move this sign-in to Core Hub's gateway" adds (`models.moveProviderToGateway`).
+   */
+  gatewayMove?: string;
 }
 
 /**
@@ -208,6 +257,154 @@ export function authKindOf(
  * 2026-09-26; OpenAI shuts it down on 2027-02-26 and names `gpt-transcribe` as its successor.
  */
 export const OPENAI_STT_DEFAULT_MODEL = 'gpt-transcribe';
+
+/** One subscription the gateway signs in to: its preset, its words and its vendor's facts. */
+interface GatewaySubscription {
+  slug: CredentialFamily;
+  label: string;
+  /** The vendor's own API address, shown on the card; the gateway's translator knows its own. */
+  baseUrl: string;
+  keysUrl: string;
+  signIn: GatewaySignIn;
+}
+
+/**
+ * Every vendor CLIProxyAPI 8.0.4 can sign in to (its management API's `?provider=` values;
+ * Gemini CLI, Qwen and iFlow were removed from it, and Vertex is a service-account import, not
+ * a sign-in). The hub does not judge the vendors' terms (the owner, 2026-09-30): the dialog
+ * carries one neutral sentence and people decide.
+ */
+export const GATEWAY_SUBSCRIPTIONS: readonly GatewaySubscription[] = [
+  {
+    slug: 'chatgpt-subscription',
+    label: 'ChatGPT (Plus / Pro / Business)',
+    baseUrl: 'https://chatgpt.com/backend-api/codex',
+    keysUrl: 'https://chatgpt.com',
+    signIn: {
+      vendor: 'codex',
+      flow: 'codex-device',
+      usageWindows: true,
+      check: { method: 'GET', url: 'https://chatgpt.com/backend-api/wham/usage' },
+    },
+  },
+  {
+    slug: 'claude-subscription',
+    label: 'Claude (Pro / Max)',
+    baseUrl: 'https://api.anthropic.com',
+    keysUrl: 'https://claude.ai',
+    signIn: {
+      vendor: 'claude',
+      flow: 'link',
+      callbackHint: 'http://localhost:54545/callback',
+      usageWindows: true,
+      check: {
+        method: 'GET',
+        url: 'https://api.anthropic.com/api/oauth/usage',
+        headers: { 'anthropic-beta': 'oauth-2025-04-20' },
+      },
+    },
+  },
+  {
+    slug: 'xai-subscription',
+    label: 'xAI Grok (SuperGrok / Premium+)',
+    baseUrl: 'https://api.x.ai/v1',
+    keysUrl: 'https://grok.com',
+    signIn: {
+      vendor: 'xai',
+      flow: 'device',
+      usageWindows: false,
+      // The headers the Grok CLI's own billing call carries; without them xAI answers 401.
+      check: {
+        method: 'GET',
+        url: 'https://cli-chat-proxy.grok.com/v1/billing',
+        headers: { 'x-xai-token-auth': 'xai-grok-cli', 'x-grok-client-version': '0.2.91' },
+      },
+    },
+  },
+  {
+    slug: 'kimi-subscription',
+    label: 'Kimi Code (kimi.com)',
+    baseUrl: 'https://api.kimi.com/coding',
+    keysUrl: 'https://www.kimi.com/code',
+    signIn: {
+      vendor: 'kimi',
+      flow: 'device',
+      usageWindows: false,
+      check: { method: 'GET', url: 'https://api.kimi.com/coding/v1/usages' },
+    },
+  },
+  {
+    slug: 'kimi-ai-subscription',
+    label: 'Kimi Code (kimi.ai)',
+    baseUrl: 'https://api.kimi.ai/coding',
+    keysUrl: 'https://www.kimi.ai',
+    signIn: {
+      vendor: 'kimi-ai',
+      flow: 'device',
+      usageWindows: false,
+      check: { method: 'GET', url: 'https://api.kimi.ai/coding/v1/usages' },
+    },
+  },
+  {
+    slug: 'meta-subscription',
+    label: 'Meta AI',
+    baseUrl: 'https://api.meta.ai/v1',
+    keysUrl: 'https://www.meta.ai',
+    signIn: { vendor: 'meta', flow: 'device', usageWindows: false },
+  },
+  {
+    slug: 'antigravity-subscription',
+    label: 'Google Antigravity',
+    baseUrl: 'https://cloudcode-pa.googleapis.com',
+    keysUrl: 'https://antigravity.google',
+    signIn: {
+      vendor: 'antigravity',
+      flow: 'link',
+      callbackHint: 'http://localhost:51121/oauth-callback',
+      usageWindows: false,
+      check: {
+        method: 'POST',
+        url: 'https://cloudcode-pa.googleapis.com/v1internal:retrieveUserQuotaSummary',
+        headers: { 'content-type': 'application/json' },
+        body: '{}',
+      },
+    },
+  },
+  {
+    slug: 'devin-subscription',
+    label: 'Devin',
+    baseUrl: 'https://api.devin.ai',
+    keysUrl: 'https://devin.ai',
+    signIn: {
+      vendor: 'devin',
+      flow: 'link',
+      callbackHint: 'http://127.0.0.1',
+      usageWindows: false,
+    },
+  },
+];
+
+function subscriptionEntry(subscription: GatewaySubscription): ProviderCatalogueEntry {
+  return {
+    slug: subscription.slug,
+    label: subscription.label,
+    kind: 'llm',
+    family: subscription.slug,
+    envVar: null,
+    hermesEnvVars: [],
+    hermesProvider: null,
+    hermesRoute: 'gateway',
+    hermesApiMode: null,
+    protocol: 'openai',
+    apiMode: 'native',
+    keyRequirement: 'optional',
+    baseUrl: subscription.baseUrl,
+    capabilities: { chat: true, listModels: true },
+    keysUrl: subscription.keysUrl,
+    signIn: true,
+    gatewaySignIn: subscription.signIn,
+  };
+}
 
 /**
  * The presets. Every entry is a provider the hub knows how to talk to today: it has an
@@ -713,6 +910,7 @@ export const PROVIDER_CATALOGUE: readonly ProviderCatalogueEntry[] = [
     capabilities: { chat: true, listModels: true },
     keysUrl: 'https://developers.openai.com/codex',
     signIn: true,
+    gatewayMove: 'chatgpt-subscription',
   },
   // Signed in to through Hermes (contract decision §55): Hermes's own device-code sign-in
   // for its provider `xai-oauth` (MIT source `hermes_cli/web_routers/oauth.py`). No key, and
@@ -734,6 +932,7 @@ export const PROVIDER_CATALOGUE: readonly ProviderCatalogueEntry[] = [
     capabilities: { chat: true, listModels: true },
     keysUrl: 'https://hermes-agent.nousresearch.com/docs/guides/xai-grok-oauth',
     signIn: true,
+    gatewayMove: 'xai-subscription',
   },
   // Signed in to through Hermes (contract decision §55): Hermes's own device-code sign-in
   // for its provider `minimax-oauth` (MIT source `hermes_cli/web_routers/oauth.py`). No key, and
@@ -756,6 +955,10 @@ export const PROVIDER_CATALOGUE: readonly ProviderCatalogueEntry[] = [
     keysUrl: 'https://www.minimax.io',
     signIn: true,
   },
+  // Signed in to through the hub's model gateway (DECISIONS §143, ADR 0030): the bundled
+  // CLIProxyAPI performs the sign-in and keeps the account, and every agent reaches the
+  // account's models through the gateway. No key; many accounts per provider.
+  ...GATEWAY_SUBSCRIPTIONS.map(subscriptionEntry),
 ];
 
 export function catalogueEntry(slug: string): ProviderCatalogueEntry | undefined {
@@ -927,11 +1130,38 @@ export function assertCatalogueIsWellFormed(
         throw new Error(`provider catalogue: "${entry.slug}" has no usable base URL`);
       }
     }
-    // A sign-in is Hermes's (decision §55): its own provider, no key the hub could hold.
-    if (entry.signIn && (entry.hermesRoute !== 'builtin' || entry.keyRequirement !== 'optional')) {
+    // A sign-in is Hermes's (decision §55) — its own provider — or the hub's gateway's
+    // (DECISIONS §143); either way no key the hub could hold.
+    if (entry.gatewaySignIn) {
+      if (
+        !entry.signIn ||
+        entry.hermesRoute !== 'gateway' ||
+        entry.hermesProvider ||
+        entry.keyRequirement !== 'optional'
+      ) {
+        throw new Error(
+          `provider catalogue: "${entry.slug}" signs in through the gateway, so it is no ` +
+            "Hermes provider, takes no key, and says so ('gateway' route, signIn)",
+        );
+      }
+    } else if (entry.hermesRoute === 'gateway') {
+      throw new Error(`provider catalogue: "${entry.slug}" has a gateway route but no sign-in`);
+    } else if (
+      entry.signIn &&
+      (entry.hermesRoute !== 'builtin' || entry.keyRequirement !== 'optional')
+    ) {
       throw new Error(
         `provider catalogue: "${entry.slug}" signs in through Hermes, so it is Hermes's own ` +
           'provider and takes no key',
+      );
+    }
+    // "Move to the gateway" names a gateway sign-in (DECISIONS §143).
+    if (
+      entry.gatewayMove &&
+      !catalogue.find((other) => other.slug === entry.gatewayMove)?.gatewaySignIn
+    ) {
+      throw new Error(
+        `provider catalogue: "${entry.slug}" moves to "${entry.gatewayMove}", which is no gateway sign-in`,
       );
     }
     // A repeatable entry is added more than once, so it cannot own a shared family row.

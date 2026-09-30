@@ -13,7 +13,7 @@ import { useAgentSettings, useSaveAgentSetting } from '../hub/queries.js';
 import { useI18n } from '../i18n/context.js';
 import { chatModels, useCatalogue } from '../models/queries.js';
 import { modelOption } from '../models/useModelPicker.js';
-import type { Agent, SettingsSection } from '../types.js';
+import type { Agent, Model, ModelDefaults, SettingsSection } from '../types.js';
 import type { ComboboxOption } from '../ui/Combobox.js';
 import type { SelectOption } from '../ui/Select.js';
 
@@ -95,18 +95,29 @@ export function findApprovalMode(
  * knows — "Agent's own default". `null` keeps the plain "Default model".
  */
 export function defaultModelLabel(
-  agent: Pick<Agent, 'kind' | 'default_model' | 'agent_default_model'> | undefined,
+  agent: Pick<Agent, 'kind' | 'default_model' | 'agent_default_model' | 'model_source'> | undefined,
   models: readonly ComboboxOption[],
   t: (key: string, values?: Record<string, string | number>) => string,
+  /**
+   * The profile's defaults (`models.getDefaults`), for when the agent's row does not name its
+   * default (an older hub, or a moment before it does): a coding agent on the hub's models runs
+   * on the coding default, else the chat default — the same order the hub resolves them in.
+   */
+  defaults?: Pick<ModelDefaults, 'default' | 'auxiliary'> | null,
 ): string | null {
   if (!agent) return null;
-  if (agent.kind === 'acp') {
+  // A coding agent on the hub's models (ADR 0029) runs on the hub's default, as Hermes does.
+  if (agent.kind === 'acp' && agent.model_source !== 'hub') {
     const own = agent.agent_default_model;
     return own
       ? t('composer.model_default_named', { model: own })
       : t('composer.model_agent_default');
   }
-  const ref = agent.default_model;
+  const ref =
+    agent.default_model ??
+    (agent.kind === 'acp' ? defaults?.auxiliary?.assignments?.coding : undefined) ??
+    defaults?.default ??
+    null;
   if (!ref?.model) return null;
   const option = models.find(
     (candidate) => candidate.value === ref.model || candidate.value.endsWith(`/${ref.model}`),
@@ -114,15 +125,54 @@ export function defaultModelLabel(
   return t('composer.model_default_named', { model: option?.label ?? ref.model });
 }
 
-export function useComposerModels(): ComboboxOption[] {
+/**
+ * The chat models an agent's picker offers. A coding agent on the hub's models (ADR 0029) is
+ * offered what the gateway can serve it — every hub provider's model, but not a subscription
+ * signed in to through Hermes (`Model.agent_gateway`), nor a model its provider says cannot call
+ * tools (`Model.agent_tools`, DECISIONS §141); a model whose context window is smaller than the
+ * agent's floor (`Agent.gateway_min_context`) says so (`smallContext`). Every other agent, the
+ * whole catalogue.
+ */
+export function composerModelOptions(
+  catalogue: readonly Model[],
+  agent?: Pick<Agent, 'kind' | 'model_source' | 'gateway_min_context'> | undefined,
+  smallContext?: (floor: number) => string,
+): ComboboxOption[] {
+  const gatewayOnly = agent?.kind === 'acp' && agent.model_source === 'hub';
+  const floor = gatewayOnly ? (agent?.gateway_min_context ?? null) : null;
+  return (
+    chatModels([...catalogue])
+      .filter((model) => model.visible && !model.disabled)
+      .filter(
+        (model) => !gatewayOnly || (model.agent_gateway === true && model.agent_tools !== false),
+      )
+      // `key` is `<provider>/<model>`, which is what a session stores.
+      .map((model) => {
+        const option = modelOption(model, model.key);
+        if (!floor || !smallContext || model.context_window == null) return option;
+        if (model.context_window >= floor) return option;
+        return { ...option, detail: `${option.detail ?? model.key} · ${smallContext(floor)}` };
+      })
+  );
+}
+
+export function useComposerModels(
+  agent?: Pick<Agent, 'kind' | 'model_source' | 'gateway_min_context'> | undefined,
+): ComboboxOption[] {
   const catalogue = useCatalogue();
+  const { t } = useI18n();
+  const gatewayOnly = agent?.kind === 'acp' && agent.model_source === 'hub';
+  const floor = gatewayOnly ? (agent?.gateway_min_context ?? null) : null;
   return useMemo(
     () =>
-      chatModels(catalogue.data ?? [])
-        .filter((model) => model.visible && !model.disabled)
-        // `key` is `<provider>/<model>`, which is what a session stores.
-        .map((model) => modelOption(model, model.key)),
-    [catalogue.data],
+      composerModelOptions(
+        catalogue.data ?? [],
+        gatewayOnly
+          ? { kind: 'acp', model_source: 'hub', ...(floor ? { gateway_min_context: floor } : {}) }
+          : undefined,
+        (value) => t('composer.model_small_context', { tokens: Math.round(value / 1000) }),
+      ),
+    [catalogue.data, gatewayOnly, floor, t],
   );
 }
 

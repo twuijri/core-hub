@@ -1,0 +1,33 @@
+{
+  "name": "CLIProxyAPI",
+  "repository": "router-for-me/CLIProxyAPI",
+  "licence": "MIT",
+  "version": "8.0.4",
+  "binary": "cli-proxy-api",
+  "assets": {
+    "linux-x64": {
+      "file": "CLIProxyAPI_8.0.4_linux_amd64_no-plugin.tar.gz",
+      "sha256": "7d95db6671e140f3b38662abff5c7a81b179aca540bb7ff163f5350c0f183216"
+    },
+    "linux-arm64": {
+      "file": "CLIProxyAPI_8.0.4_linux_aarch64_no-plugin.tar.gz",
+      "sha256": "63c0ae962261b611451c6495968fdbb22ad6774c04f7620644e9129e00bb7c7f"
+    },
+    "darwin-x64": {
+      "file": "CLIProxyAPI_8.0.4_darwin_amd64.tar.gz",
+      "sha256": "ab60f62cfd55098ed42ae12733151d177e598637746b880918c05040d9ddfc8b"
+    },
+    "darwin-arm64": {
+      "file": "CLIProxyAPI_8.0.4_darwin_aarch64.tar.gz",
+      "sha256": "2f06c4e0786cb61f15484eaf22efa7b6324ec20679b9113cfa9b95ccf75a73f1"
+    },
+    "win32-x64": {
+      "file": "CLIProxyAPI_8.0.4_windows_amd64.zip",
+      "sha256": "af83d46396b63703b924c9535aaaa3edbcc493889c142a3c53099d7a0f9e7267"
+    },
+    "win32-arm64": {
+      "file": "CLIProxyAPI_8.0.4_windows_aarch64.zip",
+      "sha256": "f67c3f4f4d9a942fa9bd9beffa704dfa6cd33a41d73e173db87693b474a96f0f"
+    }
+  }
+}

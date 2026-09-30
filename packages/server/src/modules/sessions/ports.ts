@@ -237,7 +237,13 @@ export type AgentEvent =
       answered: { model: string; provider: string | null };
     }
   | { type: 'completed' }
-  | { type: 'failed'; code?: string; message: string };
+  | {
+      type: 'failed';
+      code?: string;
+      message: string;
+      /** Code-specific details for `Run.error.details` (a spent quota: which provider, model). */
+      details?: Record<string, unknown>;
+    };
 
 /** What a person's answer to an approval or question sends back to the agent. */
 export interface AgentRunInput {

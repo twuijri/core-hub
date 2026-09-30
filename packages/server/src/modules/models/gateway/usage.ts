@@ -1,0 +1,192 @@
+/**
+ * What one model call through the gateway used, read from the answer as it streams past
+ * (ADR 0029 §Usage). The gateway never changes a byte of the answer; it only looks.
+ *
+ * Each wire says it in its own place:
+ *
+ * - Anthropic Messages: `message_start.message.usage` (input and cache) and the last
+ *   `message_delta.usage` (output, and the final input count some servers send there);
+ * - OpenAI Responses: `response.completed.response.usage`;
+ * - OpenAI Chat Completions: the chunk that carries `usage` (the translator asks for it with
+ *   `stream_options.include_usage`);
+ * - Google Gemini: `usageMetadata`, on the stream's chunks (the last one is the total) or the
+ *   whole answer — `candidatesTokenCount` leaves thinking out, so the output is it plus
+ *   `thoughtsTokenCount`;
+ * - a whole JSON answer (no stream): its top-level `usage` (or `usageMetadata`), in the same
+ *   shapes; a Gemini stream sent without `alt=sse` is one JSON array of chunks.
+ */
+import { StringDecoder } from 'node:string_decoder';
+
+export interface CallUsage {
+  inputTokens: number;
+  outputTokens: number;
+  cacheReadTokens: number;
+  cacheWriteTokens: number;
+  reasoningTokens: number;
+}
+
+export const NO_USAGE: CallUsage = {
+  inputTokens: 0,
+  outputTokens: 0,
+  cacheReadTokens: 0,
+  cacheWriteTokens: 0,
+  reasoningTokens: 0,
+};
+
+const num = (value: unknown): number | undefined =>
+  typeof value === 'number' && Number.isFinite(value) && value >= 0 ? value : undefined;
+
+/** Gemini's `usageMetadata`, as far as it says anything. */
+export function readGeminiUsage(metadata: unknown): Partial<CallUsage> | null {
+  if (!metadata || typeof metadata !== 'object') return null;
+  const m = metadata as Record<string, unknown>;
+  const out: Partial<CallUsage> = {};
+  const prompt = num(m.promptTokenCount);
+  const candidates = num(m.candidatesTokenCount);
+  const thoughts = num(m.thoughtsTokenCount);
+  const cached = num(m.cachedContentTokenCount);
+  if (prompt !== undefined) out.inputTokens = prompt;
+  if (candidates !== undefined || thoughts !== undefined) {
+    out.outputTokens = (candidates ?? 0) + (thoughts ?? 0);
+  }
+  if (thoughts !== undefined) out.reasoningTokens = thoughts;
+  if (cached !== undefined) out.cacheReadTokens = cached;
+  return Object.keys(out).length > 0 ? out : null;
+}
+
+/** A `usage` object of any of the three wires, as far as it says anything. */
+export function readUsage(usage: unknown): Partial<CallUsage> | null {
+  if (!usage || typeof usage !== 'object') return null;
+  const u = usage as Record<string, unknown>;
+  const out: Partial<CallUsage> = {};
+  const set = (key: keyof CallUsage, value: unknown) => {
+    const n = num(value);
+    if (n !== undefined) out[key] = n;
+  };
+  // Anthropic (and OpenAI Responses, which uses the same two names).
+  set('inputTokens', u.input_tokens);
+  set('outputTokens', u.output_tokens);
+  set('cacheReadTokens', u.cache_read_input_tokens);
+  set('cacheWriteTokens', u.cache_creation_input_tokens);
+  // OpenAI Chat.
+  set('inputTokens', u.prompt_tokens);
+  set('outputTokens', u.completion_tokens);
+  const promptDetails = (u.prompt_tokens_details ?? u.input_tokens_details) as
+    Record<string, unknown> | undefined;
+  if (promptDetails) set('cacheReadTokens', promptDetails.cached_tokens);
+  const outputDetails = (u.completion_tokens_details ?? u.output_tokens_details) as
+    Record<string, unknown> | undefined;
+  if (outputDetails) set('reasoningTokens', outputDetails.reasoning_tokens);
+  return Object.keys(out).length > 0 ? out : null;
+}
+
+/**
+ * Reads usage out of an answer fed to it chunk by chunk (`push`), SSE or JSON. `result()` after
+ * the last chunk; `null` when the answer said nothing about usage.
+ */
+export class UsageTap {
+  private buffer = '';
+  private json = '';
+  private sse: boolean | null = null;
+  private found: Partial<CallUsage> | null = null;
+  /** A chunk may end inside a character (Arabic is two bytes a letter): decoded across chunks. */
+  private readonly decoder = new StringDecoder('utf8');
+  /** Bounds what is kept of a non-streamed answer (a large body is not parsed). */
+  private static readonly MAX_JSON = 4 * 1024 * 1024;
+
+  constructor(contentType: string | undefined) {
+    if (contentType) this.sse = contentType.includes('text/event-stream');
+  }
+
+  push(chunk: Buffer | string): void {
+    const text = typeof chunk === 'string' ? chunk : this.decoder.write(chunk);
+    if (this.sse === false) {
+      if (this.json.length < UsageTap.MAX_JSON) this.json += text;
+      return;
+    }
+    this.buffer += text;
+    let newline = this.buffer.indexOf('\n');
+    while (newline >= 0) {
+      const line = this.buffer.slice(0, newline).replace(/\r$/, '');
+      this.buffer = this.buffer.slice(newline + 1);
+      this.line(line);
+      newline = this.buffer.indexOf('\n');
+    }
+  }
+
+  private line(line: string): void {
+    if (!line.startsWith('data:')) return;
+    const data = line.slice(5).trim();
+    if (!data || data === '[DONE]') return;
+    let event: Record<string, unknown>;
+    try {
+      event = JSON.parse(data) as Record<string, unknown>;
+    } catch {
+      return;
+    }
+    this.event(event);
+  }
+
+  private event(event: Record<string, unknown>): void {
+    const type = event.type;
+    if (type === 'message_start') {
+      this.merge(readUsage((event.message as Record<string, unknown> | undefined)?.usage));
+      return;
+    }
+    if (type === 'message_delta') {
+      this.merge(readUsage(event.usage));
+      return;
+    }
+    if (type === 'response.completed' || type === 'response.incomplete') {
+      this.merge(readUsage((event.response as Record<string, unknown> | undefined)?.usage), true);
+      return;
+    }
+    if (event.usage) this.merge(readUsage(event.usage), true);
+    else if (event.usageMetadata) this.merge(readGeminiUsage(event.usageMetadata), true);
+  }
+
+  /** Later numbers win: a stream's last word on a count is its final one. */
+  private merge(usage: Partial<CallUsage> | null, replace = false): void {
+    if (!usage) return;
+    this.found = replace ? { ...usage } : { ...(this.found ?? {}), ...usage };
+  }
+
+  result(): CallUsage | null {
+    const rest = this.decoder.end();
+    if (rest) {
+      if (this.sse === false) this.json += rest;
+      else this.buffer += rest;
+    }
+    if (this.sse !== true && this.json) {
+      try {
+        const parsed = JSON.parse(this.json) as unknown;
+        // A Gemini stream without `alt=sse` is an array of chunks; the last word is the total.
+        for (const body of (Array.isArray(parsed) ? parsed : [parsed]) as Record<
+          string,
+          unknown
+        >[]) {
+          if (!body || typeof body !== 'object') continue;
+          if (body.usage) this.merge(readUsage(body.usage), true);
+          else if (body.usageMetadata) this.merge(readGeminiUsage(body.usageMetadata), true);
+        }
+      } catch {
+        // Not JSON after all: nothing to read.
+      }
+    } else if (this.buffer) {
+      this.line(this.buffer);
+      this.buffer = '';
+    }
+    return this.found ? { ...NO_USAGE, ...this.found } : null;
+  }
+}
+
+/** Two calls' usage, added. */
+export function addUsage(a: CallUsage, b: CallUsage): CallUsage {
+  return {
+    inputTokens: a.inputTokens + b.inputTokens,
+    outputTokens: a.outputTokens + b.outputTokens,
+    cacheReadTokens: a.cacheReadTokens + b.cacheReadTokens,
+    cacheWriteTokens: a.cacheWriteTokens + b.cacheWriteTokens,
+    reasoningTokens: a.reasoningTokens + b.reasoningTokens,
+  };
+}

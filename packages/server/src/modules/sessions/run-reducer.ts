@@ -134,7 +134,9 @@ export interface RunState {
   /** The agent is compressing the context inside this run (decision §57). */
   compressing: boolean;
   interruptRequested: boolean;
-  error: { code: string; message: string } | null;
+  error: { code: string; message: string; details?: Record<string, unknown> } | null;
+  /** How many tool calls there were when the agent last wrote words (a paragraph after tools). */
+  toolsAtText?: number;
   startedAt: number | null;
   finishedAt: number | null;
   /** Tool names approved for the rest of the session ("always" / "for this session"). */
@@ -401,8 +403,29 @@ export function reduceRun(state: RunState, input: RunInput, ctx: ReduceContext):
           if (next.reasoningStartedAt !== null && next.reasoningMs === null) {
             next.reasoningMs = ctx.now - next.reasoningStartedAt;
           }
+          // Words that resume after the agent's tools are a paragraph of their own: joined to
+          // the words before them they read as one run-on sentence (owner, 2026-09-30: "…سأقرأه
+          // الآن للتحقق من المحتوى.أنشأت test.md …").
+          let separator = '';
           if (event.text.length > 0) {
+            const resumesAfterTools =
+              next.text.length > 0 && next.toolCalls.length > (next.toolsAtText ?? 0);
+            // Only after a finished sentence that runs straight into the next word: an agent may
+            // also call a tool in the middle of a sentence and go on with it (Hermes's "مرحبا " …
+            // "بك."), and words that already end or start with space are left as they are.
+            if (
+              resumesAfterTools &&
+              /[.!?؟…:۔]["')\]»]*$/u.test(next.text) &&
+              /^[^\s]/u.test(event.text)
+            ) {
+              separator = '\n\n';
+              next.text += separator;
+            }
             const turn = openTurn();
+            // The break is between the turns, not the new turn's first words.
+            if (separator && turn.textStart === next.text.length - separator.length) {
+              updateTurn({ textStart: next.text.length });
+            }
             updateTurn({
               firstTokenAt: turn.firstTokenAt ?? ctx.now,
               ...(turn.reasoningStartedAt !== null && turn.reasoningEndedAt === null
@@ -411,7 +434,10 @@ export function reduceRun(state: RunState, input: RunInput, ctx: ReduceContext):
             });
           }
           next.text += event.text;
-          if (event.text.length > 0) actions.push({ type: 'message_delta', delta: event.text });
+          if (event.text.length > 0) {
+            next.toolsAtText = next.toolCalls.length;
+            actions.push({ type: 'message_delta', delta: separator + event.text });
+          }
           break;
         }
 
@@ -582,7 +608,11 @@ export function reduceRun(state: RunState, input: RunInput, ctx: ReduceContext):
         }
 
         case 'failed': {
-          next.error = { code: event.code ?? 'agent_error', message: event.message };
+          next.error = {
+            code: event.code ?? 'agent_error',
+            message: event.message,
+            ...(event.details ? { details: event.details } : {}),
+          };
           finishOpenWork('failed', 'cancelled');
           moveTo(next.interruptRequested ? 'cancelled' : 'failed');
           break;

@@ -70,6 +70,9 @@ import {
   type SpeechPatchInput,
 } from './service.js';
 import type { SpeechFormat } from './adapters/types.js';
+import { CliproxySupervisor } from './gateway/cliproxy.js';
+import { ModelGateway } from './gateway/gateway.js';
+import { locateCliproxy } from './gateway/locate.js';
 
 export { ModelsService } from './service.js';
 export type {
@@ -133,6 +136,13 @@ export {
 export type { HermesProviderRoute, PropagationState, ResolvedCredential } from './propagation.js';
 export { mergeEnv, parseEnv, quoteValue } from './dotenv.js';
 export { providerAdapter } from './adapters/index.js';
+// The model gateway (ADR 0029).
+export { CliproxySupervisor } from './gateway/cliproxy.js';
+export { cliproxyConfig, upstreamModel, upstreamPrefix } from './gateway/cliproxy-config.js';
+export type { GatewayUpstream } from './gateway/cliproxy-config.js';
+export { GATEWAY_MAIN_MODEL, GATEWAY_SMALL_MODEL, ModelGateway } from './gateway/gateway.js';
+export type { GatewayGrant, GatewaySource, GatewayTarget } from './gateway/gateway.js';
+export { CLIPROXY_VERSION, devCliproxyPath, locateCliproxy } from './gateway/locate.js';
 
 /** Test seams: a scripted `fetch` for the provider adapters, an in-memory key ring. */
 export interface ModelsOverrides {
@@ -156,6 +166,8 @@ export interface ModelsOverrides {
    * one; absent, it is Hermes's own server where the hub supervises Hermes.
    */
   signIn?: SignInRuntime | null;
+  /** The model gateway's CLIProxyAPI executable (ADR 0029): a test's fake, or `null` for none. */
+  cliproxyBin?: string | null;
 }
 
 let pendingOverrides: ModelsOverrides | null = null;
@@ -168,6 +180,81 @@ export function overrideModels(next: ModelsOverrides | null): void {
 
 const contexts = new WeakMap<SocketServer, ModelsService>();
 const rings = new WeakMap<SocketServer, DataKeyRing>();
+const gateways = new WeakMap<SocketServer, ModelGateway>();
+
+/**
+ * The hub's model gateway (ADR 0029): one per hub, started the first time an agent needs it,
+ * closed with the hub. `models` owns it because it owns what it serves — the providers and
+ * their keys; `agents` only ever sees a token and an address (the `gateway` port).
+ */
+export function modelGatewayFor(app: FastifyInstance): ModelGateway {
+  const { hub } = app;
+  const existing = gateways.get(hub.io);
+  if (existing) return existing;
+  if (pendingOverrides) {
+    overrides.set(hub.io, pendingOverrides);
+    pendingOverrides = null;
+  }
+  const own = overrides.get(hub.io) ?? {};
+  // A config built by hand (older tests) has no gateway section: off.
+  const settings = hub.config.modelGateway ?? {
+    enabled: false,
+    cliproxyBin: null,
+    defaultSource: 'auto' as const,
+  };
+  const binary =
+    own.cliproxyBin !== undefined
+      ? own.cliproxyBin
+      : settings.enabled
+        ? locateCliproxy({ configured: settings.cliproxyBin })
+        : null;
+  const cliproxy = new CliproxySupervisor({
+    binary,
+    stateDir: path.join(hub.config.dataDir, 'gateway'),
+    log: app.log,
+    env: hub.config.hostEnv.inherited ?? {},
+  });
+  const gateway = new ModelGateway({
+    cliproxy,
+    enabled: settings.enabled,
+    log: app.log,
+    stateDir: path.join(hub.config.dataDir, 'gateway'),
+    source: {
+      upstreams: () => contextOf(app).gatewayUpstreams(),
+      resolveKey: (workspace, key) => {
+        const ref = contextOf(app).resolveModelKey(workspace, key);
+        return ref ? { providerId: ref.provider_id, model: ref.model } : null;
+      },
+      target: (workspace, providerId, model) =>
+        contextOf(app).gatewayTarget(workspace, providerId, model),
+      modelKeys: (workspace) => contextOf(app).gatewayModelKeys(workspace),
+      // A call that ended after its turn: added to that run's row (the ledger keeps one row per
+      // run and model, so the per-call counts are summed rather than replacing the turn's).
+      recordLate: (grant, runId, usage) => {
+        if (!grant.userId) return;
+        auditFor(app).recordUsage({
+          workspace: grant.workspace,
+          ownerId: grant.userId,
+          runId,
+          sessionId: grant.sessionId,
+          agentId: grant.agentId,
+          providerId: usage.providerId,
+          modelLabel: usage.modelLabel,
+          inputTokens: usage.inputTokens,
+          outputTokens: usage.outputTokens,
+          cacheReadTokens: usage.cacheReadTokens,
+          cacheWriteTokens: usage.cacheWriteTokens,
+          reasoningTokens: usage.reasoningTokens,
+          ...(usage.costMicroUsd === undefined ? {} : { costMicroUsd: usage.costMicroUsd }),
+          costSource: usage.costSource,
+          accumulate: true,
+        });
+      },
+    },
+  });
+  gateways.set(hub.io, gateway);
+  return gateway;
+}
 
 /**
  * The hub's one data key ring (`${DATA_DIR}/keys/data.key`). Lent to the composition root
@@ -264,6 +351,23 @@ function contextOf(app: FastifyInstance): ModelsService {
     ...(own.fetchImpl ? { fetchImpl: own.fetchImpl } : {}),
     catalog: own.catalog ?? catalog,
     hostEnv,
+    gatewayAvailable: () => modelGatewayFor(app).available(),
+    // The subscriptions signed in to through the gateway (DECISIONS §143).
+    // Loopback calls to its own translator: never a test's scripted provider fetch.
+    subscriptions: () => modelGatewayFor(app).subscriptions(),
+    gatewayDirect: () => modelGatewayFor(app).direct(),
+    // Hermes reaches its models through the gateway, always (DECISIONS §144).
+    hermesGateway: {
+      unavailable: () => {
+        const gateway = modelGatewayFor(app);
+        return gateway.available()
+          ? null
+          : 'the model gateway is off on this hub, or it has no CLIProxyAPI';
+      },
+      token: (workspace) => modelGatewayFor(app).hermesToken(workspace),
+      rowAddress: (providerId, wire) => modelGatewayFor(app).rowAddress(providerId, wire),
+      listening: () => modelGatewayFor(app).port() !== null,
+    },
     ...(own.restartDelayMs === undefined ? {} : { restartDelayMs: own.restartDelayMs }),
     // Hermes signs in to a provider account through its own server (ADR 0015), which only a
     // hub that supervises Hermes runs (decision §55).
@@ -326,6 +430,16 @@ const actorOf = (request: FastifyRequest): { userId: string } => {
   if (!principal) throw new HubError('internal', { message: 'route has no principal' });
   return { userId: principal.user.id };
 };
+
+/** A `ProviderAccount.id` from the path; Fastify decoded it, unless something left `%` codes. */
+function accountIdOf(value: unknown): string {
+  const text = String(value ?? '');
+  try {
+    return /%[0-9a-f]{2}/i.test(text) ? decodeURIComponent(text) : text;
+  } catch {
+    return text;
+  }
+}
 
 /** The service, the workspace and the acting user in one step. */
 function enter(request: FastifyRequest): {
@@ -492,8 +606,26 @@ export const modelsModule = defineModule({
       prepareGatewayProfile(profile, home) {
         contextOf(app).prepareGateway(profile, home);
       },
+      // The model gateway (ADR 0029): a coding agent gets an address and a session token, never
+      // a key; which model a token reaches is set per turn by the runner.
+      gateway: {
+        available: () => modelGatewayFor(app).available(),
+        enabled: () => modelGatewayFor(app).enabled(),
+        serves: (workspace, providerId) => contextOf(app).gatewayServes(workspace, providerId),
+        contextWindow: (workspace, providerId, model) =>
+          contextOf(app).gatewayContextWindow(workspace, providerId, model),
+        open: (input) => modelGatewayFor(app).open(input),
+      },
     };
     registerAgentModelsPort(app.hub.io, port);
+    // Reads the gateway's subscriptions every minute while any are signed in (§143).
+    let subscriptionTimer: NodeJS.Timeout | null = null;
+    // The gateway's listener and CLIProxyAPI stop with the hub.
+    app.addHook('onClose', async () => {
+      if (subscriptionTimer) clearInterval(subscriptionTimer);
+      contexts.get(app.hub.io)?.abandonSignIns();
+      await gateways.get(app.hub.io)?.close();
+    });
 
     /**
      * Boot reconciliation (ADR 0010 §Propagation).
@@ -511,9 +643,21 @@ export const modelsModule = defineModule({
      */
     app.addHook('onReady', async () => {
       const db = requireSqlite(app.hub.database);
+      const service = contextOf(app);
+      // Hermes reaches its models through the gateway, on every hub (DECISIONS §144, reversing
+      // §143's per-hub choice): the gateway listens before Hermes's files are written, so they
+      // carry its address (the same port as last time whenever it is free).
+      const gateway = modelGatewayFor(app);
+      if (gateway.available()) {
+        await gateway.listen().catch((error: unknown) => {
+          app.log.error(
+            { err: error },
+            'gateway: could not listen; Hermes cannot reach the models the gateway serves',
+          );
+        });
+      }
       const owner = ownerUser(db);
       if (!owner) return;
-      const service = contextOf(app);
       // Once: the root is the default profile's, whoever saved (decision §37). Reconciling per
       // profile used to leave Hermes with whichever profile came last.
       const row = defaultWorkspace(db);
@@ -529,6 +673,26 @@ export const modelsModule = defineModule({
           'models: could not reconcile the Hermes configuration at boot',
         );
       }
+      // Subscriptions signed in to through the gateway (DECISIONS §143): CLIProxyAPI renews their
+      // tokens only while it runs, and the provider cards show their accounts, so a hub that has
+      // any starts it now and reads them every minute — in the background, never holding boot.
+      if (!gateway.available()) return;
+      // Hermes answers through it, so it starts now either way. After each read, a row whose
+      // accounts came or went outside a sign-in is brought up to date, and Hermes with it.
+      const scope = { id: row.id, slug: row.slug, name: row.name, isDefault: row.isDefault };
+      const read = () =>
+        service.subscriptions.refresh(true).then((result) => {
+          if (!result.ok) {
+            app.log.warn({ reason: result.reason }, 'gateway: subscriptions not read');
+            return;
+          }
+          service.syncSubscriptionRows(scope, { userId: owner.id });
+        });
+      void read();
+      subscriptionTimer = setInterval(() => {
+        if (gateway.hasSubscriptionAccounts() || service.hasSubscriptionRows()) void read();
+      }, 60_000);
+      subscriptionTimer.unref?.();
     });
 
     // --------------------------------------------------------------- providers
@@ -845,13 +1009,107 @@ export const modelsModule = defineModule({
 
     defineRoute(app, deps, {
       operationId: 'models.completeProviderSignIn',
-      handler: (request, { params }) => {
+      handler: async (request, { params, body }) => {
         const { service, scope } = enter(request);
         return service.completeSignIn(
           scope,
           params.provider_id as string,
           params.sign_in_id as string,
+          String((body as { code?: unknown } | null)?.code ?? ''),
         );
+      },
+    });
+
+    // ------------------------ subscriptions through the gateway (DECISIONS §143)
+
+    defineRoute(app, deps, {
+      operationId: 'models.listSubscriptionVendors',
+      handler: (request) => {
+        const { service } = enter(request);
+        return service.listSubscriptionVendors(request.language);
+      },
+    });
+
+    defineRoute(app, deps, {
+      operationId: 'models.getProviderAccounts',
+      handler: async (request, { params }) => {
+        const { service, scope, actor } = enter(request);
+        return service.getProviderAccounts(
+          scope,
+          actor,
+          params.provider_id as string,
+          request.language,
+        );
+      },
+    });
+
+    defineRoute(app, deps, {
+      operationId: 'models.updateProviderAccount',
+      handler: async (request, { params, body }) => {
+        const { service, scope, actor } = enter(request);
+        return service.updateProviderAccount(
+          scope,
+          actor,
+          params.provider_id as string,
+          accountIdOf(params.account_id),
+          body as { disabled: boolean },
+          request.language,
+        );
+      },
+    });
+
+    defineRoute(app, deps, {
+      operationId: 'models.removeProviderAccount',
+      status: 204,
+      handler: async (request, { params }) => {
+        const { service, scope, actor } = enter(request);
+        await service.removeProviderAccount(
+          scope,
+          actor,
+          params.provider_id as string,
+          accountIdOf(params.account_id),
+        );
+        return null;
+      },
+    });
+
+    defineRoute(app, deps, {
+      operationId: 'models.refreshProviderAccount',
+      handler: async (request, { params }) => {
+        const { service, scope, actor } = enter(request);
+        return service.refreshProviderAccount(
+          scope,
+          actor,
+          params.provider_id as string,
+          accountIdOf(params.account_id),
+          request.language,
+        );
+      },
+    });
+
+    defineRoute(app, deps, {
+      operationId: 'models.checkProviderAccount',
+      handler: async (request, { params }) => {
+        const { service, scope } = enter(request);
+        return service.checkProviderAccount(
+          scope,
+          params.provider_id as string,
+          accountIdOf(params.account_id),
+          request.language,
+        );
+      },
+    });
+
+    defineRoute(app, deps, {
+      operationId: 'models.moveProviderToGateway',
+      handler: async (request, { params }, reply: FastifyReply) => {
+        const { service, scope, actor } = enter(request);
+        const moved = await service.moveProviderToGateway(
+          scope,
+          actor,
+          params.provider_id as string,
+        );
+        return reply.code(201).send(moved);
       },
     });
 

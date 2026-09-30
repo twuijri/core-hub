@@ -4763,3 +4763,450 @@ settings `env`); removing the old bridge in place before installing the new one 
 would leave no agent); a shared `~/.agents/skills` page now (the survey's next step, not tonight's);
 calling ACP `authenticate` for Codex (it writes the key into Codex's own `auth.json`; the gateway
 work decides how the hub signs agents in).
+
+## 140. The model gateway, phase 1: every coding agent runs on any model the hub has
+
+ADR 0029 (the hybrid the owner approved on 2026-09-29: the hub's own gateway in front, CLIProxyAPI
+behind it as the translator). Phase 1. The owner's rules are the ADR's; what follows is how phase 1
+does them, proposed here — owner to confirm:
+
+- **Contract, additive only.** `Agent.model_source` (a string: `hub` or `agent`; absent for Hermes, the
+  hub's own agent, agents not wired yet, a hub whose gateway is off, and older hubs): where a coding
+  agent's model calls go in this profile. `Model.agent_gateway` (boolean; absent when the hub has no
+  gateway): a coding agent can run this model through the gateway — its provider has a key the hub
+  holds and is not a subscription signed in to through Hermes. The choice itself is a field of the
+  agent's settings form (`models` section, `model_source`: `auto` / `hub` / `agent`, default `auto`),
+  which the settings operations already carry; no new operation. The gateway's own routes
+  (`/gateway/anthropic/…`, `/gateway/openai/…`) are not `/api/v1`: they are served on a loopback port
+  of their own to the programs the hub starts, and documented in ADR 0029 §2.
+- **Which agents, and how.** Claude Code (`ANTHROPIC_BASE_URL`, `ANTHROPIC_AUTH_TOKEN` = the token,
+  `ANTHROPIC_MODEL` and the Opus/Sonnet aliases = `corehub-main`, `ANTHROPIC_DEFAULT_HAIKU_MODEL` =
+  `corehub-small`, `CLAUDE_CODE_DISABLE_EXPERIMENTAL_BETAS=1`,
+  `CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1`, the model's context window when known; its API key,
+  OAuth token and Bedrock/Vertex switches taken out). Codex (`CODEX_CONFIG`: a `corehub` provider,
+  Responses wire, `env_key` = the token's variable, model `corehub-main`; and codex-acp's own `gateway`
+  sign-in method as `DEFAULT_AUTH_REQUEST`, which changes only the running session — the `api-key`
+  method was not used because it writes the token into Codex's `auth.json`, over a ChatGPT sign-in).
+  Goose (its OpenAI provider at the gateway's Chat Completions path), OpenCode (an OpenAI-compatible
+  provider in `OPENCODE_CONFIG_CONTENT`, models.dev not asked), Qwen Code (`OPENAI_BASE_URL`,
+  `OPENAI_API_KEY`, `OPENAI_MODEL`) and Kimi Code (its env-only temporary model), all from the
+  research's verified names; all six are proven with the real agents (below). Each entry's wiring is data in its catalog file (`gateway`). Gemini
+  CLI, Grok Build and Pi keep their own account (phases 2–3).
+- **What an agent on the gateway is given.** Its own settings `env` and `secret_refs` as before; none
+  of the profile's provider keys; the wiring's variables; `NO_PROXY` with the loopback addresses added.
+  The wiring's `clears` and the entry's key variables are taken out after everything is merged
+  (`AgentTarget.envRemove`), so a key in the host's environment does not reach it either. An agent not
+  on the gateway gets exactly what it got before.
+- **Automatic.** `hub` in the image (`COREHUB_AGENT_MODEL_SOURCE=hub`); elsewhere `hub` unless the agent
+  has its own sign-in or provider on this computer (its sign-in file, a provider its settings name, a
+  key in the environment the hub runs in — `agent-credentials.ts` §`ownSignIn`). In every mode `agent`
+  when there is no model to give it (none picked, no default), and, on Automatic, when the chosen
+  model's provider is one the gateway does not serve. A choice of `hub` with such a model is refused by
+  the gateway with the reason, never silently served by the agent's own account. A change applies from
+  the next message: the runner starts the agent again with the other environment. When the gateway
+  cannot start (no CLIProxyAPI, it fails), the agent runs on its own account and the log says why.
+- **Per turn.** The runner sets the token's turn (run, provider row, model) before each prompt and
+  clears it after; the gateway resolves `corehub-main`, `corehub-small` and any id it does not know to
+  it, and a catalogue key to its own model. A call between turns runs on the last turn's model.
+- **Usage.** Read from each answer (Anthropic `message_start`/`message_delta`, Responses
+  `response.completed`, Chat's usage chunk, or a whole JSON body) without changing a byte; the turn's
+  running totals per model reach the run as the adapters' usage events do, priced from the model row
+  (`estimated`); a call that ends after its turn is added to that run's row (`recordUsage` gains
+  `accumulate`, which adds instead of replacing).
+- **CLIProxyAPI** 8.0.4, pinned per platform by SHA-256 (`scripts/cliproxy/pin.json`, the Linux builds
+  are the static `no-plugin` ones); in the image at `/opt/corehub/bin/cli-proxy-api` (+22.6 MB
+  compressed), in each desktop installer at `resources/cliproxy/` (+16–24 MB measured: `.exe` +15.9, `.deb` +17.6, `.dmg` +20.9, `.AppImage` +22.7,
+  `.msix` +23.7), for a developer from
+  `pnpm cliproxy:fetch`; `COREHUB_CLIPROXY_BIN` names another, `COREHUB_MODEL_GATEWAY=off` switches the
+  whole gateway off. Started the first time an agent needs it, run with `-local-model` (no remote model
+  catalogue), restarted with a backoff (1, 2, 5, 10, 30 s), its lines in the hub's log under `cliproxy`
+  (its per-request lines at debug), a change of providers served by a new process while the old one
+  finishes its streams. Known: it still asks GitHub for the Antigravity client version every three
+  hours, which the hub cannot switch off.
+- **Proven for real** (`agents/model-gateway.real.test.ts`, a CI job required through `gate`):
+  CLIProxyAPI 8.0.4 + the hub's gateway + the real `claude-agent-acp` 0.84.0 and `codex-acp` 2.0.0,
+  against a provider that speaks only Chat Completions: Claude Code writes a file with its `Write` tool
+  on the provider's tool call and the next request carries the result; Codex answers through Responses;
+  a call without a token, with a forged one or a revoked one is refused; the provider's key reaches the
+  provider only — not the agent's environment, not the hub's log — and the token never reaches the
+  provider; and Goose 1.52.0, OpenCode 1.18.31, Qwen Code 0.24.5 and Kimi Code 2.1.1 each answer a
+  turn through the Chat Completions path on nothing but their catalog wiring.
+
+Rejected: an agent pointed at CLIProxyAPI directly (static shared keys, no profile, turn or ledger); a
+download of CLIProxyAPI on first use in the desktop app (a runtime download-and-run path for 16–24 MB
+the owner's size budget allows); lending Hermes-held subscriptions (the owner); restarting CLIProxyAPI
+in place on a provider change (it would cut other agents' streams); counting a call's usage into the
+ledger directly while its turn is live (the run's own totals would double it).
+
+## 141. The model gateway, phase 2: Gemini CLI, Grok Build and Pi; tool calls for every agent; phones; picker quality
+
+ADR 0029, phase 2 (stacked on §140). The owner's priority: Gemini CLI on any connected model. What
+follows is proposed here — owner to confirm:
+
+- **The Gemini wire in the hub's gateway.** `POST /gateway/google/v1beta/models/<model>:generateContent`,
+  `:streamGenerateContent` (with `?alt=sse`) and `:countTokens`, and `GET /gateway/google/v1beta/models`
+  (and one model), on the same loopback listener as §140 and, like it, not `/api/v1`. The model is in
+  the path, so the path is what is resolved and rewritten — `corehub-main`, `corehub-small` and any
+  id the hub does not know (Gemini CLI's router and utility calls name flash-lite models) become the
+  turn's model, a catalogue key its own — to CLIProxyAPI's `/v1beta/models/h<row>/<model>:<method>`.
+  CLIProxyAPI 8.0.4 serves those three methods and translates Gemini in to OpenAI Chat, Anthropic or
+  Gemini out, tools included (checked against its source, `translator/openai/gemini`, and for real).
+  The token is read from `x-goog-api-key` (what `@google/genai` sends) or `?key=`, which is taken
+  out of the query before anything is forwarded. Usage is read from `usageMetadata` (output =
+  candidates + thoughts), streamed or whole, a stream without `alt=sse` being one JSON array. Errors
+  come back in the Gemini envelope (`{error: {code, message, status}}`).
+- **A model id with a colon** (Ollama's `qwen3:8b`) is served to CLIProxyAPI under an alias with `__`
+  for the colon: its Gemini route splits `models/<model>:<method>` on the colon. The group's `name`
+  keeps the real id, so the provider gets the id it listed (checked).
+- **Gemini CLI** (0.60.0): `GOOGLE_GEMINI_BASE_URL=<gateway>/gateway/google` (loopback may be
+  http), `GEMINI_API_KEY=<token>`, `GEMINI_MODEL=corehub-main`; taken out: `GOOGLE_API_KEY`, the
+  Vertex, Code Assist and Cloud variables, `GOOGLE_GENAI_API_VERSION`, `GEMINI_API_KEY_AUTH_MECHANISM`.
+  With no sign-in type chosen, or an API key, that is all. A person who chose a Google or Vertex
+  sign-in has it win over the variables (its ACP `newSession` reads `security.auth.selectedType`
+  first), and only the system settings rank above theirs — which it reads only from a root-owned
+  folder (checked: a hub-owned file is skipped as "not owned by root"). So such a Gemini CLI runs in a
+  home of the hub's own (`GEMINI_CLI_HOME=<DATA_DIR>/gateway/agents/gemini-cli/home`) whose `.gemini`
+  links every entry of the person's own (sessions, memory, extensions, credentials — the same files)
+  and holds a copy of their `settings.json` with `selectedType: "gateway"`; nothing of theirs is
+  changed. Not on Windows (links): there it keeps its own account. The ACP `authenticate` call was
+  not used: it writes the type into the person's settings and clears their Google credentials. Its
+  flag stays `--experimental-acp` (0.60.0 and 0.62 take it; a Gemini CLI found on the computer may be
+  older than `--acp`). A Gemini CLI older than 0.60.0 (no `gateway` type) keeps its own account.
+- **Grok Build** (1.0.41) takes a model with its own address only from a `[model.<id>]` table of
+  `$GROK_HOME/config.toml`; its `GROK_CONFIG`/`GROK_CONFIG_PATH` overlay does not define models
+  (checked). The hub keeps one table, `[model.corehub-gateway]` (Chat Completions, `base_url` the
+  gateway, `env_key = "COREHUB_GATEWAY_TOKEN"`, `model = "corehub-main"`, `context_window`), between
+  two marker lines at the end of the file, the rest of the file byte for byte, and picks it with
+  `GROK_DEFAULT_MODEL=corehub-gateway` — the person's `[models] default` stays theirs.
+- **Pi** (0.87.1 with pi-acp 0.0.34) takes a provider only from `$PI_CODING_AGENT_DIR/models.json`.
+  The hub keeps one key there, `providers["corehub-gateway"]` (`openai-completions`, `apiKey:
+  "$COREHUB_GATEWAY_TOKEN"`, the two aliases as its models), known as the hub's by its loopback
+  gateway address, every other key as it was; and switches the ACP session to it with
+  `session/set_config_option` (`model` = `corehub-gateway/corehub-main`), which pi-acp turns into Pi's
+  `set_model` without saving a default. A session that refuses it does not start (no other model
+  answers instead). `AgentTarget.sessionConfig` carries it; the ACP adapter now also closes the
+  process when a session cannot be opened.
+- **Written, never a key.** The blocks name the token's variable; the gateway's port is in them (a
+  new one each time the hub starts), so they are rewritten when they differ. They stay when the agent
+  runs on its own account (another conversation may be using them; without the token they serve
+  nothing). Refused — the agent keeps its own account and the log says why — when the file does not
+  parse, is over 1 MiB, is a link out of the home, or already has a table/provider of that name that
+  is the person's.
+- **Tool calls, for real, for every wired agent** (`agents/model-gateway.real.test.ts`, the
+  required `model-gateway-real` job): with the real CLIProxyAPI 8.0.4 and a provider that speaks
+  only Chat Completions, Gemini CLI 0.60.0, Goose 1.52.0, OpenCode 1.18.31, Qwen Code 0.24.5, Kimi
+  Code 2.1.1, Grok Build 1.0.41 and Pi 0.87.1 each write a file with their own tool on the
+  provider's streamed tool call, and the next request carries the result (Claude Code and Codex as
+  in §140). The provider's key reaches the provider only; the person's own settings beside the
+  hub's block come through unchanged.
+- **Contract, additive only.** `Model.agent_tools` (boolean, `false` only when the provider's
+  metadata says the model takes no tools — OpenRouter's `supported_parameters` without `tools`;
+  absent when unknown). Kept in `models.capabilities` as an internal `no_tools` marker, never served
+  as a capability and taken out of profile exports (an older hub would serve it). `Agent.gateway_min_context`
+  (integer, with `model_source`): the smallest context window worth giving the agent through the
+  gateway — Claude Code, Codex, Gemini CLI, Grok Build 64K; Goose, OpenCode, Qwen Code, Kimi Code
+  32K; Pi 16K.
+- **Pickers.** On web, iOS and Android, a coding agent on the hub's models is offered gateway models
+  that can call tools; one whose known context window is under the agent's floor says "small
+  context (under 64K)". A hint, not a refusal.
+- **Phones.** iOS and Android read the chat's agent (`agents.get`) to filter the picker and name the
+  default ("Default · <model>", the web's rule), and the agent card says "Models: Core Hub's
+  providers" / "the agent's own account". `model_source` is changed in the agent's settings form,
+  which both apps render from the server. An older hub, without the fields, leaves both as they were.
+
+Known limits: Grok Build refuses a Chat Completions chunk without `created` (real providers send
+it); CLIProxyAPI's Gemini-in translation appends an empty user message after a tool result, which a
+strict provider might refuse (not seen); Gemini in to an Anthropic provider round-trips tools
+(checked by hand) but CLIProxyAPI 8.0.4 reports its input tokens as 0, so such a turn's cost is
+counted low.
+
+## 142. The model gateway after its first live test: one reader per turn; a spent quota fails fast and plainly
+
+ADR 0029, after the owner's first live test (2026-09-30). Additive only (`Run.error.details` is
+already the `Error` envelope's). Proposed here — owner to confirm:
+
+- **One reader per turn.** A turn the runner ends itself (the agent refused the prompt) lets go of
+  the session's event stream; an ACP turn drops what the agent said after the last turn ended, and
+  waits (at most 15 s) for a turn the hub stopped before it asks again. Before this, a stale reader
+  took every other event of the next turn: the owner's «هلا! كيف أقدر أساعد؟» arrived as
+  «لا كيفقدرساعد؟», and the turn never ended.
+- **CLIProxyAPI does not cool a provider row down** (`routing.cooldown.disable-cooling`, no retry
+  rounds): each row is one key, so after one 429 it only refused the row for a growing while, in
+  words carrying the row's internal id.
+- **Spent or passing.** Google says `RESOURCE_EXHAUSTED` for a spent quota and for a per-minute
+  rate or token limit alike (the owner's models had credit), so the gateway tells them apart:
+  - **spent** — a 402, or a 429/403 saying `insufficient_quota`, billing, payment, credit, a usage
+    limit, or a daily/monthly quota (`…PerDay…`): answered at once;
+  - **passing** — a 429/403 saying quota, `RESOURCE_EXHAUSTED` or CLIProxyAPI's "cooling down"
+    without those: the gateway waits the provider's own time (`retry-after(-ms)`, Google's
+    `RetryInfo.retryDelay`, "Please retry in …", `reset_seconds`; else 20 s) **once**, at most 30 s,
+    and asks again in the same turn. A second refusal, or a longer wait, counts as spent.
+    CLIProxyAPI 8.0.4 keeps only the message when it translates such an error to the Anthropic,
+    Responses or Gemini wires (checked), so there the wait is the 20 s default;
+  - anything else — a plain rate limit ("slow down") — passes to the agent as before.
+  A spent quota is answered in the agent's own envelope and in words it does not retry: 429 with
+  `x-should-retry: false`, `rate_limit_error` (Anthropic), `insufficient_quota` (OpenAI), and for
+  Gemini an `ErrorInfo` `MODEL_CAPACITY_EXHAUSTED` (Gemini CLI's terminal quota error). The message
+  names the provider and the model as people know them. The same turn does not ask that model
+  again; a new turn does. There is no live "waiting" line in the chat yet (it needs a new event).
+- **Every call is the turn's model.** On the hub's models the gateway serves each call the model
+  picked for the turn (else the agent's default in the profile), whatever id the agent names —
+  `corehub-main`, `corehub-small`, a vendor id, or a catalogue key it picked itself from
+  `/v1/models` (this replaces §140's "a catalogue key names its own model"). The chain applies
+  only after that model failed.
+- **The profile's fallback chain** (§54, which lists a rate limit among its failures) takes over:
+  the gateway moves the turn to the chain's next model it can serve, for the rest of the turn, and
+  the run says so (`model_fallback`, as a Hermes turn does, every model it went past in order —
+  the chosen one first). With nothing left, the run fails. The web names the models in that line
+  and in "Answered by" as «<provider> · <model>» from the catalogue, not by their keys.
+- **The run's error:** `code: rate_limited`, `error` the sentence in the request's language
+  ("{provider} ran out of quota for {model}. Pick another model for this chat."), and
+  `details: {reason: "quota_exhausted", provider, model, provider_id, model_id}` — `provider` and
+  `model` being the names people know. An agent that writes the error as its answer (Goose, Kimi
+  Code, Pi) fails the same way; one that keeps retrying (OpenCode, Qwen Code) is stopped after 8 s.
+  Clients: the web says it in the person's language with a button that opens the chat's model
+  picker; an older client shows the sentence and the code as before.
+- **No internal names**: an error the gateway passes on has `h<row id>/…` replaced by the
+  provider's and model's names.
+
+## 143. Subscription sign-ins through the bundled CLIProxyAPI; Hermes on the hub's models
+
+ADR 0030 (the owner's decision of 2026-09-30, after the research of PR #230). Additive only. What
+follows was confirmed by the owner on 2026-10-01 («اعتمد»), including the full CLIProxyAPI provider
+list and "check now" on the vendors' undocumented usage addresses; §144 replaced its Hermes choice:
+
+- **Who moves.** Every provider connected by signing in to an account is signed in to by the
+  CLIProxyAPI the hub bundles (8.0.4): ChatGPT (`codex`), Claude (`claude`), xAI (`xai`), Kimi
+  (`kimi`, `kimi-ai`), Meta (`meta`), Google Antigravity (`antigravity`), Devin (`devin`) — every
+  vendor its management API signs in to. Gemini CLI, Qwen and iFlow were removed from CLIProxyAPI;
+  Vertex is a service-account import, not a sign-in, and is not offered. Providers connected by
+  key or address stay exactly as they are. The hub does not block or judge a vendor; the list
+  carries one neutral sentence (`SubscriptionVendors.note`: some vendors limit using a
+  subscription outside their own apps).
+- **Flows.** A short code (`flow: device`) for xAI, Kimi and Meta (CLIProxyAPI's management API)
+  and for ChatGPT (`cli-proxy-api -codex-device-login -no-browser` run as a child process; the hub
+  reads `Codex device URL:` / `Codex device code:` and takes only "Codex device authentication
+  successful" as success, since the flag exits 0 either way). A link (`flow: link`) for Claude,
+  Antigravity and Devin: `ProviderSignIn.accepts_code: true`, `callback_hint` (how the address
+  begins), and `models.completeProviderSignIn` with the whole address the browser landed on — its
+  own `state` is what CLIProxyAPI checks, so an address from an older sign-in is refused. On the
+  desktop the callback could be caught on the same computer; that is a follow-up.
+- **Contract.** `models.listSubscriptionVendors` (`GET /models/subscription-vendors`);
+  `models.getProviderAccounts`, `models.updateProviderAccount` (`disabled`),
+  `models.removeProviderAccount`, `models.refreshProviderAccount`, `models.checkProviderAccount`
+  (`/models/providers/{id}/accounts[/{account_id}[/refresh|/check]]`);
+  `models.moveProviderToGateway`; `models.getHermesModelSource` / `models.setHermesModelSource`
+  (`/models/hermes-source`). Fields: `Provider.subscription {vendor, flow, accounts,
+  accounts_ready}`, `Provider.gateway_move {preset}`, `ProviderSignIn.callback_hint`,
+  `ProviderPreset.replaced_by`. The gateway presets are not in `models.listProviderPresets`, so an
+  older client never offers a link it cannot finish; an older client that meets such a row still
+  shows it and can sign in by code. `completeProviderSignIn` now accepts an address for a link
+  sign-in (it answered 409 for every sign-in before). An older hub answers 404 to the new
+  operations and a client hides them.
+- **Accounts belong to a row.** After an approved sign-in the hub finds the account CLIProxyAPI
+  saved (new, or renewed: same file name) and sets `prefix: h<row>`, `note: corehub:<row>`,
+  `disable_cooling: false` through `PATCH /credentials/fields`. The gateway's `h<row>/<model>`
+  then reaches only that row's accounts, round-robin; an account whose vendor says its limit is
+  reached cools until its reset while the others answer (the global `disable-cooling: true` of
+  §142 stays for key rows). A signed-in row is an upstream of kind `subscription`: no group in
+  CLIProxyAPI's file, so signing in starts no new process. Its models are what CLIProxyAPI serves
+  under `h<row>/` (`GET /v1/models`, its own catalogue for the vendor, with context windows). One
+  account can belong to one row at a time: the same e-mail signed in under a second row moves to
+  it.
+- **The dialog** (`ProviderAccounts`): per account its status (`active`, `cooling`, `error`,
+  `disabled`, `refreshing`, `unknown`), CLIProxyAPI's last error, `next_retry_at`, success and
+  failure totals and the 20 ten-minute buckets (kept in CLIProxyAPI's memory: a restart starts
+  them again), `last_refresh_at`, and `windows` — Claude's `anthropic-ratelimit-unified-<window>-
+  utilization`/`-reset` and ChatGPT's `x-codex-<primary|secondary>-used-percent`/`-window-minutes`/
+  `-reset-at` as CLIProxyAPI kept them from the last answer (`source: observed`), or what "check
+  now" read (`source: checked`): ChatGPT `wham/usage`, Claude `api/oauth/usage`, xAI
+  `v1/billing`, Kimi `coding/v1/usages`, Antigravity `retrieveUserQuotaSummary`, asked through
+  `POST /requests/api-call` with `$TOKEN$`. Those addresses are undocumented; a reading that fails
+  is `check_error`, still 200. `errors` are the row's failed calls, drained from CLIProxyAPI's
+  usage queue (`usage-statistics-enabled: true`, kept 300 s there, the last 200 in the hub's
+  memory). Everything is redacted of anything that looks like a token.
+- **Hermes on the hub's models.** One choice per hub, in `<DATA_DIR>/gateway/hermes-models.json`
+  (no migration). At the first boot with this code: `hub` for a hub with no provider and a
+  gateway, `native` for every other — an upgrade never moves Hermes. With `hub`, each row the
+  gateway serves is one more `providers:` block, `corehub-gw-<slug>`, at
+  `http://127.0.0.1:<port>/gateway/row/<row>/anthropic` (`anthropic_messages`, Claude models:
+  Hermes keeps prompt caching) or `…/openai/v1` (`responses` for OpenAI and ChatGPT,
+  `chat_completions` otherwise), `key_env: COREHUB_GATEWAY_TOKEN`; the model stays the provider's
+  own id; `model.provider`, the per-turn provider, cron's and the fallbacks name those blocks; the
+  chain ends on Hermes's own route to a chat model from a key, so Hermes answers if the gateway is
+  down. The token is `chgwh_<workspace>.<HMAC>` signed with `<DATA_DIR>/gateway/hermes-token.key`
+  (0600): long-lived, in that profile's `.env` only, bound to the profile. The gateway listens on
+  the port it had last time when it is free (`gateway.port`), so Hermes's files do not change
+  with each restart; when Hermes uses the gateway it listens at boot and CLIProxyAPI starts at
+  boot. A call on a Hermes token has no turn: the gateway counts nothing into the ledger (Hermes
+  reports its own usage). Speech, embeddings, the ChatGPT images and the Codex app-server of a
+  Hermes sign-in stay as they are; keys stay in Hermes's `.env`. `native` removes the hub's
+  blocks and the token.
+- **CLIProxyAPI at boot.** It renews tokens only while it runs, so a hub with any account in its
+  store, or with Hermes on the gateway, starts it at boot and reads the accounts every minute.
+- **Legacy.** Hermes's sign-ins keep working for the rows that have them. ChatGPT and xAI rows say
+  so and offer "Move to Core Hub's gateway" (`models.moveProviderToGateway`: adds or reuses the
+  gateway row of the same vendor and scope and starts its sign-in; tokens are never copied —
+  OpenAI and Anthropic rotate refresh tokens, and two holders would sign each other out; once
+  approved and its models are listed, the model defaults, fallbacks and ensemble members that
+  named the old row's models name the new row's same models; the old row stays until removed).
+  The web no longer offers those two Hermes presets where subscriptions are available
+  (`replaced_by`). Nous Portal and MiniMax stay Hermes's (CLIProxyAPI cannot sign in to them).
+- **Removal plan** (a later change, after the owner's live hubs have moved and on his word):
+  `models/signed-in-chat.ts` and its tests (the `direct` agent then refuses a Hermes sign-in it
+  cannot borrow with "move it to the gateway"), the Hermes half of `live-models.ts`, the `codex`
+  protocol of the two image scripts (images through CLIProxyAPI's `/v1/images/*` for a gateway
+  ChatGPT row, after a real test), and `sign-in.ts` down to Nous and MiniMax; the `openai-codex`
+  and `xai-oauth` presets stay readable for old rows, never offered. Contract unchanged.
+- **Proven.** With a stand-in of CLIProxyAPI's management API (`gateway/subscriptions.test.ts`,
+  `hermes-gateway.test.ts`, web `subscription-signin.test.tsx`, Playwright
+  `zzzzzzzzzzzzzzzz-subscriptions.spec.ts`), and with the real CLIProxyAPI 8.0.4 in the required
+  `model-gateway-real` job (`gateway/subscriptions.real.test.ts`): xAI's device-code sign-in
+  through the management API against stand-ins of xAI's discovery, device and token addresses
+  (CLIProxyAPI has no setting for them; it honours `HTTPS_PROXY` and `SSL_CERT_FILE`, so the test
+  answers their hosts itself behind a proxy with a throwaway authority), the account's prefix and
+  note, its models in the hub's catalogue, "check now" with the account's token put in by
+  CLIProxyAPI (never in the hub), renew (a refresh against the stand-in), off/on, sign out;
+  ChatGPT's `-codex-device-login` child process end to end; Claude's authorisation link and a
+  pasted address from another sign-in refused. The Claude code exchange itself is not driven:
+  CLIProxyAPI uses its own TLS client for Anthropic, which takes no proxy.
+
+Known limits: the request buckets and passive windows are CLIProxyAPI's memory (a restart, or a
+change of key providers that starts a new process, begins them again); a change of key providers
+while a sign-in is pending keeps the old process for that sign-in until it ends; phones show
+accounts, status, usage and "check now" and sign in by code or pasted address, but the web alone
+has turn off, renew, sign out and "move to the gateway".
+
+## 144. Every agent reaches its model through the hub, with no switch
+
+Status: decided by the owner, 2026-09-30 — «ابي كل الايجنتات تمر عن طريقنا مالها اتصال بنفسها …
+كل شي يكون عن طريق الهب بدون زر» ("I want every agent to go through us, with no connection of
+its own … everything through the hub, without a button"). It reverses the opt-in parts of §140,
+§141, §142 and §143 named below; everything else in them stands.
+
+- **Hermes.** The "Hermes uses Core Hub's models" choice of §143 is gone, with its operations
+  (`models.getHermesModelSource` / `models.setHermesModelSource`, `/models/hermes-source`) and its
+  schema `HermesModelSource`. They were added in this same unreleased change (the compatibility
+  base, v1.1.5, never had them), so removing them breaks no released client; a preview build that
+  called them gets 404 and hides the card. On every hub whose gateway is available the hub writes
+  Hermes's `providers:` blocks at the gateway (§143's `corehub-gw-<slug>`, token, port) for every
+  row the gateway serves, at every boot and every change; `<DATA_DIR>/gateway/hermes-models.json`,
+  left by a preview build, is read by nobody. §143's escape hatch — Hermes's own route to the chat
+  model at the end of its fallback chain — is removed: the chain goes through the gateway too.
+  Speech, embeddings, the ChatGPT images of a Hermes sign-in and the rows the gateway cannot serve
+  (a Nous Portal or MiniMax sign-in through Hermes) stay as they were. A hub whose operator
+  switched the gateway off (`COREHUB_MODEL_GATEWAY=off`) or that has no CLIProxyAPI gives Hermes
+  its own routes, as before the gateway: that is the operator's switch, not a person's.
+- **A person's own Hermes, on a computer.** The hub never writes `~/.hermes`. Every Hermes turn
+  the hub starts (web, phones, channels, workflows, schedules) runs in the hub's own Hermes home,
+  `${DATA_DIR}/hermes` (ADR 0021 decision 3, `hermes-runtime.ts`: `HERMES_HOME` of the TUI gateway
+  and of the gateway child the hub supervises, whatever the mode; only the install's dependency
+  state is shared, by a link inside the hub's home, and §129's lock-directory isolation keeps the
+  two gateways apart). The gateway blocks and the token are written there only. So messages sent
+  through Core Hub go through the gateway, and messages the person sends from their own Hermes
+  app keep their own configuration. Limit: where the hub attaches to a Hermes gateway somebody
+  else runs (`external` mode), the jobs that gateway runs by itself follow its own files.
+- **Coding agents.** No model source choice: the settings form no longer has the `models`
+  section (`model_source`: Automatic / Core Hub's models / the agent's own account), an agent's
+  own sign-in on the computer no longer counts, and `COREHUB_AGENT_MODEL_SOURCE` (§140, `hub` in
+  the image) is still accepted and ignored. Every coding agent the gateway wires runs through it.
+  When the hub has no model for it — none chosen and no default, a model of a provider the
+  gateway cannot serve, an agent older than its wiring, a gateway that cannot start or a settings
+  file the hub cannot write — the turn fails before any process starts, `provider_not_configured`,
+  with words saying what to do (Settings → Models, the model picker, or Agents); it never runs on
+  the agent's own account. §142's rewriting of the agent's "Authentication required" is gone with
+  that path.
+- **Compatibility.** `Agent.model_source` stays in the contract (`hub`, or absent where the hub
+  does not wire the agent); `agent` is no longer sent, and clients that read it keep working. A
+  `PATCH /agents/{id}/settings` with `section: models` and only `model_source`, from an app
+  written before this, is answered 200 and changes nothing; any other key in that section is 404,
+  as an unknown section always was. Stored `model_source` values are left in the settings rows
+  and ignored. Phones had no control of their own (they render the server's form), so nothing
+  changes there.
+- **Proven.** `hermes-gateway.test.ts` (no switch; a preview build's `native` ignored; blocks and
+  token written with no native route in the chain; operator off gives Hermes its own routes; a
+  person's `~/.hermes` byte-for-byte unchanged), `hub-gateway.test.ts` (no `models` section, an old
+  app's `model_source: agent` ignored, an agent signed in to its own account on the computer
+  still started on the gateway with no key, the failure words for no model / unserved provider /
+  old version / unwritable file), `runner-gateway.test.ts` (a gateway that cannot start or a turn
+  with no model fails before any process starts).
+
+## 145. Hermes is restarted by the hub after every change it needs; the runtime card names the model
+
+Status: the owner's request on preview.38, 2026-09-30 — after adding or changing things he had to
+press «Restart now» before "The runtime restarted after the last change" went green; the hub must
+recycle Hermes by itself after any change that needs it, with no manual restart in the normal
+flow.
+
+- **Every path that changes what Hermes reads schedules the same coalesced restart** (`ModelsService
+  .scheduleRestart`: debounced, waits while a turn is in flight, at most about two minutes):
+  a provider added, edited or removed, the model defaults and fallbacks, speech, the image model,
+  a subscription signed in through CLIProxyAPI (already), and — newly — a subscription's last
+  account signed out from its dialog, a subscription row whose accounts came or went outside a
+  sign-in (read every minute: an account CLIProxyAPI dropped, a backup restored without it; the
+  row's gateway block comes or goes), and a change only a named profile's files see (its own
+  messaging gateway reads them, and the restart recycles every one). The Hermes-through-gateway
+  blocks, their token and port (§144) are written by the same propagation, so they follow it.
+- **The runtime report says whether the restart is on its way.** `RuntimeCheck.detail` of a
+  failing `gateway_reloaded` is `scheduled`, `waiting_for_run` (after the reply in progress), or
+  null (none coming). No schema change: `detail` was always a free short fact. The web, iOS and
+  Android say "Applying the change — Hermes restarts by itself…" and ask again every 2 s until it
+  turns green; «Restart now» appears only when no restart is coming, as a way out.
+- **`model_selected`'s detail is the chat model as people read it elsewhere**: «<provider label> ·
+  <model name>» (was Hermes's `<block>/<model id>`, e.g. `corehub-gw-custom-cli-proxy-api/gemini-
+  3.8-flash-high`). A client shows `detail` as it is, so older apps show the new words too.
+- **Proven.** `gateway/hermes-restart.test.ts`: one test per path (provider added / turned off /
+  default changed / removed; a named profile's files only; a subscription signed in, its last
+  account signed out, an account gone outside the hub), each restarting Hermes once with no call
+  to the restart operation and the check green after; and `scheduled` → `waiting_for_run` → green
+  as a turn ends. Web `agent-restart.test.tsx`: no button while the restart is on its way, green
+  by itself, the button only when none is coming.
+
+## 146. One provider list in "Add a provider"; one dropdown shape everywhere
+
+Status: the owner's choices on preview.38, 2026-09-30.
+
+- **One list, two tabs.** "Add a provider" has two tabs: the list (**Preset**) and **Custom**
+  (kept as it was, the owner's correction). The "Sign in with a subscription" tab is gone: the
+  subscriptions the gateway signs in to are in the same list, under a "Subscriptions" heading,
+  each with a «Subscription» tag and its own name ("ChatGPT (Plus / Pro / Business)", "Claude
+  (Pro / Max)", "xAI Grok (SuperGrok / Premium+)", "Kimi Code (kimi.com)" …). Picking one shows its
+  detail line (how its sign-in goes; "Shows usage and reset times" where it does), the neutral
+  note, and «Continue to sign in», which starts the sign-in in the same dialog. The providers used
+  with a key follow under "With an API key".
+- **No duplicates, no dead ends.** A Hermes sign-in preset that the gateway also signs in to
+  (`openai-codex`, `xai-oauth`) is not offered (`ProviderPreset.replaced_by`, §143); rows already
+  added keep working. MiniMax (sign-in) and Nous Portal have no CLIProxyAPI sign-in: they stay in
+  the list, tagged «Subscription», with the detail "Sign in with a short code, through Hermes · for
+  Hermes and Core Hub's own agent". Serving them to coding agents through the gateway would need
+  the hub to borrow Hermes's short-lived tokens into CLIProxyAPI per call (CLIProxyAPI takes a key
+  only from its file, and a new file restarts it) and to translate Nous's Chat Completions for
+  every agent's wire; that is not done here (the owner, 2026-10-01: Hermes-only in 1.1.6, a gateway design later). So under §144 a coding agent pointed at one of them
+  fails, saying the gateway cannot serve that provider; Hermes uses them on its own route in the
+  hub's Hermes home, and the hub's own agent borrows them per turn (§118).
+- **The provider dropdown is our `Select`**, the one the composer's approval picker uses: a large
+  panel, readable text, a check on the chosen row, a highlighted row, and per option the company's
+  logo (a one-colour mark tinted in the brand accent), the name as the title with the tag beside
+  it, and the detail line under it. `SelectOption.badge` is new (typeahead still finds an option
+  by its name), and `Select.block` fills a form field's width. Radix's typeahead jumps to a name
+  as it is typed; a filter field inside the list is not added (the list is about thirty rows).
+  Logos: `@lobehub/icons-static-svg` 1.95.1 (MIT) and Simple Icons 16.33.0 (CC0) for Deepgram,
+  generated into the client by `scripts/icons/vendor-logos.mjs`; a monogram for a company with
+  none; THIRD-PARTY-NOTICES.md records both.
+- **One trigger shape** (the owner, 2026-09-30, with no exception for the composer): every
+  dropdown trigger — `Select` and the searchable picker's (`Combobox`) — is a rounded rectangle
+  with the Runtime card's radius (`--ch-radius-md`) and its thin 1px border (`--ch-color-border`),
+  a comfortable height (`--ch-control-height-lg`), normal text (`--ch-font-size-sm`) and the
+  chevron at the far inline end (the left in Arabic). It replaces the filled pill, the top bar's
+  profile switcher included. The composer's toolbar (under the message box, and on the new-chat
+  screen) keeps a compact size — 2rem, small text — in the same shape as the secondary buttons
+  ("Test", "Edit"): rounded rectangle, thin border, no pill. Done once in the shared styles, so it
+  applies to every settings form, dialog, filter and the switcher.
+- **Phones.** iOS and Android keep their own add-provider screens (a subscriptions section beside
+  the presets) for now; the single list with logos there is a follow-up.
+- **Proven.** Web `subscription-signin.test.tsx` (two tabs, the subscriptions tagged in the one
+  list with their logo and detail, the sign-in from it, none on an older hub), `models-screen
+  .test.tsx`; Playwright `zzzzzzzzzzzzzzzz-subscriptions.spec.ts` (the list photographed,
+  `provider-list-ar-light.png`), `zz-design.spec.ts` (screenshots of the chat, models, settings
+  with the new triggers), `zzzzzzzzzzz-design-family.spec.ts`, and the pseudo-locale width pass
+  (`zzzzzzzzzzzzzzzzz-pseudo-locales.spec.ts`, en-XA, ar-XB, zh-XC, th-XD, desktop and phone).

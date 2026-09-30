@@ -136,5 +136,7 @@
   "agents_card_done_upgrade_version": "حُدِّث إلى %1$s.",
   "agents_card_done_uninstall": "أُزيل.",
   "agents_card_done_restart": "تمّت إعادة التشغيل.",
-  "agents_card_failed_with": "فشل: %1$s"
+  "agents_card_failed_with": "فشل: %1$s",
+  "agents_model_source_hub": "النماذج: مزوّدو كور هب",
+  "agents_model_source_agent": "النماذج: حساب الوكيل نفسه"
 }

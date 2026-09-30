@@ -68,6 +68,15 @@ export interface ContractProvider {
   draws_images: boolean;
   visibility: { mode: string; models: string[] };
   models: ContractModel[];
+  /** A subscription signed in to through the gateway (DECISIONS §143). */
+  subscription?: {
+    vendor: string;
+    flow: 'device' | 'link';
+    accounts: number;
+    accounts_ready: number;
+  };
+  /** A Hermes sign-in the gateway can take over (DECISIONS §143). */
+  gateway_move?: { preset: string };
 }
 
 export interface ContractSpeechProvider {

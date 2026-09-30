@@ -55,9 +55,11 @@ import type {
   RunnerRunInput,
   RunnerRunRequest,
   RunnerSubagentControl,
+  RunnerFallbackAttempt,
   RunnerSubagentSignal,
   RunnerToolKind,
 } from './ports.js';
+import type { AgentGatewayGrant, AgentGatewayQuotaFailure, AgentGatewayUsage } from './ports.js';
 import type { AgentsService } from './service.js';
 import type { RunLeases } from './hub-tools/leases.js';
 
@@ -87,6 +89,10 @@ interface LiveSession {
   sessionId: string;
   /** Stops forwarding its subagent reports (§56). */
   unwatch: () => void;
+  /** Where its model calls go (ADR 0029): chosen when the process started, for its life. */
+  modelSource: 'hub' | 'agent' | null;
+  /** Its model gateway token, when `modelSource` is `hub`. */
+  gateway: AgentGatewayGrant | null;
 }
 
 interface LiveRun {
@@ -106,7 +112,23 @@ interface LiveRun {
   outputDir: string | null;
   /** The copies `handOver` made into `outputDir` this turn, settled as the turn ends. */
   handedOver: string[];
+  /** Stops this turn's reading of the session's events (`pump`), once the turn has ended. */
+  release?: () => void;
+  /** The gateway said the turn's model is out of quota (ADR 0029): how the run fails, said plainly. */
+  quota?: AgentGatewayQuotaFailure;
+  /** Ends a turn whose agent keeps retrying a spent quota (`QUOTA_GRACE_MS`). */
+  quotaTimer?: NodeJS.Timeout;
+  /** The models the gateway moved this turn past, in order (`model_fallback`). */
+  fallenBack?: RunnerFallbackAttempt[];
 }
+
+/**
+ * How long a turn whose provider said its quota is spent is left to end on its own. Claude Code,
+ * Codex, Gemini CLI and Grok Build stop at once on the gateway's answer; OpenCode and Qwen Code
+ * retry it with a backoff of their own for minutes (measured 2026-09-30), so the hub stops the
+ * turn itself.
+ */
+const QUOTA_GRACE_MS = 8_000;
 
 export interface AgentRunnerDeps {
   service: AgentsService;
@@ -141,7 +163,7 @@ export class AgentRunner implements AgentRunnerPort {
       provider: request.provider,
     });
 
-    const live = await this.open(row, request);
+    const live = await this.open(row, request, selection);
 
     const run: LiveRun = {
       runId: request.runId,
@@ -167,6 +189,63 @@ export class AgentRunner implements AgentRunnerPort {
       userId: request.userId ?? null,
     });
 
+    // On the hub's models (ADR 0029) the agent names an alias; the gateway serves this turn's
+    // choice, and hands back each call's usage for the run's ledger.
+    const fallbacks = service.fallbacksFor(request.workspace, selection);
+    if (live.gateway && selection.providerId && selection.model) {
+      const workspace = request.workspace;
+      live.gateway.setTurn({
+        runId: run.runId,
+        providerId: selection.providerId,
+        model: selection.model,
+        report: (usage) => this.gatewayUsage(run, usage),
+        // A spent quota moves the turn down the profile's chain, as a Hermes turn does (§54).
+        fallbacks: fallbacks.map((member) => ({
+          providerId: member.providerId,
+          model: member.model,
+        })),
+        exhausted: (failure) => {
+          run.quota = failure;
+          if (run.quotaTimer || run.ended) return;
+          run.quotaTimer = setTimeout(() => {
+            if (run.ended) return;
+            this.deps.log.info(
+              { runId: run.runId, agent: live.agentId },
+              'agents: the provider is out of quota and the agent is still retrying; the turn ends',
+            );
+            void live.session.interrupt().catch(() => undefined);
+            this.push(run, { type: 'failed', code: 'rate_limited', message: 'quota' });
+          }, QUOTA_GRACE_MS);
+          run.quotaTimer.unref?.();
+        },
+        fellBack: (move) => {
+          const slug = (providerId: string, model: string) =>
+            service.providerSlugOf(workspace, { providerId, model, provider: null });
+          // Every model the turn went past, in order: the chosen one first (a second move
+          // reported alone read as if the turn had started on the chain's first model).
+          run.fallenBack = [
+            ...(run.fallenBack ?? []),
+            {
+              model: move.failed.model,
+              provider: slug(move.failed.providerId, move.failed.model),
+              code: 'rate_limited',
+              error: quotaSentence(move.failed),
+            },
+          ];
+          this.push(run, {
+            type: 'model_fallback',
+            failed: run.fallenBack.map((attempt) => ({ ...attempt })),
+            answered: {
+              model: move.answered.model,
+              provider: slug(move.answered.providerId, move.answered.model),
+            },
+          });
+        },
+      });
+    }
+
+    // Anything the agent said after its last turn ended is that turn's, not this one's.
+    live.session.discardStale?.();
     // The turn: events are pumped from the session stream while `send()` drives the agent.
     // Neither is awaited here — the engine consumes `stream()` and `send()` resolves on the
     // agent's own terms.
@@ -180,7 +259,7 @@ export class AgentRunner implements AgentRunnerPort {
       modelProvider: selection.provider,
       modelProviderId: selection.providerId,
       modelProviderSlug: service.providerSlugOf(request.workspace, selection),
-      fallbacks: service.fallbacksFor(request.workspace, selection),
+      fallbacks,
       reasoningEffort: request.reasoningEffort,
     };
     void live.session.send(prompt).catch((error: unknown) => {
@@ -213,7 +292,8 @@ export class AgentRunner implements AgentRunnerPort {
       | 'model'
       | 'provider'
       | 'reasoningEffort'
-    >,
+    > & { userId?: string | null },
+    selection?: ReturnType<AgentsService['selectionFor']>,
   ): Promise<LiveSession> {
     const { service, adapters } = this.deps;
     let live = this.sessions.get(request.sessionId);
@@ -221,19 +301,63 @@ export class AgentRunner implements AgentRunnerPort {
       // Its process went away between turns — a Hermes TUI gateway retired after a key
       // change and closed once idle: reopen by the stored ref rather than hand the turn to
       // a session that can only refuse it ("Hermes session is closed").
-      live.unwatch();
-      this.sessions.delete(request.sessionId);
+      this.drop(live);
       live = undefined;
     }
+    // Where this process's model calls go is fixed when it starts (its environment says so):
+    // a turn that should go elsewhere — the person switched the agent between the hub's models
+    // and its own, or the hub now has a model to give it — reopens it by its stored ref.
+    const chosen = selection ?? service.selectionFor(row, request.workspace, request);
+    const source = service.modelSourceFor(row, request.workspace, chosen);
+    if (live && live.modelSource !== source && live.adapterKind === 'acp') {
+      this.drop(live);
+      void live.session.close().catch(() => undefined);
+      live = undefined;
+    }
+    // Every coding agent reaches its model through the hub's gateway, with no path to its own
+    // account (the owner, 2026-09-30, DECISIONS §144): a turn the hub has no model for fails
+    // here, saying what to fix, rather than running on whatever the agent has of its own.
+    if (source === 'hub') {
+      const miss = service.gatewayMiss(row, request.workspace, chosen);
+      if (miss) throw new HubError('provider_not_configured', { message: miss });
+    }
     if (!live) {
+      let gateway: AgentGatewayGrant | null = null;
+      // The process's own session, once it exists: what the token's `alive` asks about.
+      const started: { live?: LiveSession } = {};
+      if (source === 'hub') {
+        try {
+          gateway = await service.openGateway(row, request.workspace, {
+            sessionId: request.sessionId,
+            userId: request.userId ?? null,
+            // The token dies with the process.
+            alive: () => !started.live || !isClosed(started.live.session),
+          });
+        } catch (error) {
+          this.deps.log.warn(
+            { err: error, agent: row.slug },
+            'agents: the model gateway could not start',
+          );
+          throw new HubError('provider_not_configured', {
+            message: `${row.name} cannot run: Core Hub's model gateway could not start, and agents reach models only through it. The hub's log says why.`,
+          });
+        }
+      }
       const target = service.targetFor(row, request.workspace, {
         sessionRef: request.agentSessionRef ?? mintSessionRef(row.adapterKind, request.sessionId),
         cwd: request.workingDir,
         model: request.model,
         provider: request.provider,
         reasoningEffort: request.reasoningEffort,
+        gateway,
       });
-      const session = await adapters.byKind(row.adapterKind).start(target);
+      let session: AgentSession;
+      try {
+        session = await adapters.byKind(row.adapterKind).start(target);
+      } catch (error) {
+        gateway?.revoke();
+        throw error;
+      }
       const sessionId = request.sessionId;
       // A subagent's reports are the conversation's, not the turn's: forwarded as they come,
       // between turns too (Hermes's asynchronous delegation).
@@ -241,10 +365,47 @@ export class AgentRunner implements AgentRunnerPort {
         session.subagents?.watch((signal) => {
           for (const listener of this.subagentListeners) listener(sessionId, signal);
         }) ?? (() => undefined);
-      live = { session, adapterKind: row.adapterKind, agentId: row.id, sessionId, unwatch };
+      started.live = {
+        session,
+        adapterKind: row.adapterKind,
+        agentId: row.id,
+        sessionId,
+        unwatch,
+        modelSource: source,
+        gateway,
+      };
+      live = started.live;
       this.sessions.set(request.sessionId, live);
     }
     return live;
+  }
+
+  /** Forgets a live session: no more subagent reports, and its gateway token stops working. */
+  private drop(live: LiveSession): void {
+    live.unwatch();
+    live.gateway?.revoke();
+    if (this.sessions.get(live.sessionId) === live) this.sessions.delete(live.sessionId);
+  }
+
+  /** A call through the model gateway ended: the turn's totals for that model, into the run. */
+  private gatewayUsage(run: LiveRun, usage: AgentGatewayUsage): void {
+    if (run.ended) return;
+    const event = toRunnerEvent(
+      {
+        type: 'usage',
+        modelLabel: usage.modelLabel,
+        providerId: usage.providerId,
+        inputTokens: usage.inputTokens,
+        outputTokens: usage.outputTokens,
+        cacheReadTokens: usage.cacheReadTokens,
+        cacheWriteTokens: usage.cacheWriteTokens,
+        reasoningTokens: usage.reasoningTokens,
+        ...(usage.costMicroUsd === undefined ? {} : { costMicroUsd: usage.costMicroUsd }),
+        costSource: usage.costSource,
+      },
+      { interruptRequested: run.interruptRequested },
+    );
+    if (event) this.push(run, event);
   }
 
   /**
@@ -324,8 +485,7 @@ export class AgentRunner implements AgentRunnerPort {
         live.retire = true;
         continue;
       }
-      live.unwatch();
-      this.sessions.delete(sessionId);
+      this.drop(live);
       void live.session.close().catch((error: unknown) => {
         this.deps.log.warn({ err: error, sessionId }, 'agents: close after update failed');
       });
@@ -520,6 +680,7 @@ export class AgentRunner implements AgentRunnerPort {
   /** Shutdown: end every live agent session (ACP children exit, Hermes streams close). */
   async closeAll(): Promise<void> {
     const open = [...this.sessions.values()];
+    for (const live of open) live.gateway?.revoke();
     this.sessions.clear();
     await Promise.all(
       open.map((live) =>
@@ -534,13 +695,27 @@ export class AgentRunner implements AgentRunnerPort {
 
   // -------------------------------------------------------------- internals
 
+  /**
+   * This turn's reader of the session's events. The session's stream outlives the turn, so the
+   * reader is let go when the turn ends however it ended (`end` → `release`): a turn failed by the
+   * runner itself (the agent refused the prompt) left one waiting, and the next turn's events were
+   * then dealt out between the two (owner, 2026-09-30: every other word lost, and the turn never
+   * ended when its `run.completed` went to the stale reader).
+   */
   private async pump(run: LiveRun): Promise<void> {
+    const events = run.live.session.stream()[Symbol.asyncIterator]();
+    run.release = () => {
+      void events.return?.();
+    };
     try {
-      for await (const event of run.live.session.stream()) {
-        const mapped = this.translate(run, event);
+      while (!run.ended) {
+        const next = await events.next();
+        if (next.done) break;
+        const mapped = this.translate(run, next.value);
         for (const out of mapped) this.push(run, out);
         if (mapped.some((out) => out.type === 'completed' || out.type === 'failed')) break;
       }
+      void events.return?.();
       if (!run.ended) {
         // The session closed under the run (agent exited): the engine reads a silent
         // end as `agent_error` on its own; say why when the adapter told us.
@@ -612,6 +787,28 @@ export class AgentRunner implements AgentRunnerPort {
 
   private push(run: LiveRun, event: RunnerEvent): void {
     if (run.ended) return;
+    // However the agent put it ("API Error: 429 …", or its own words after giving up), a turn
+    // whose model the provider said is out of quota fails as that: which provider, which model,
+    // and that another model is the way on (owner, 2026-09-30).
+    // An agent that gives up by writing the error as its answer and ending the turn (Goose,
+    // Kimi Code, Pi) did not answer either.
+    if (
+      run.quota &&
+      (event.type === 'completed' || (event.type === 'failed' && event.code !== 'cancelled'))
+    ) {
+      event = {
+        type: 'failed',
+        code: 'rate_limited',
+        message: quotaSentence(run.quota),
+        details: {
+          reason: 'quota_exhausted',
+          provider: run.quota.providerLabel,
+          model: run.quota.modelLabel,
+          provider_id: run.quota.providerId,
+          model_id: run.quota.model,
+        },
+      };
+    }
     if (event.type === 'completed' || event.type === 'failed') {
       // Before the engine hears the end and reads the output folder.
       const dropped = dropDuplicateHandOvers(run.handedOver, run.outputDir);
@@ -631,21 +828,31 @@ export class AgentRunner implements AgentRunnerPort {
   private end(run: LiveRun): void {
     if (run.ended) return;
     run.ended = true;
+    if (run.quotaTimer) clearTimeout(run.quotaTimer);
+    run.release?.();
+    // A call still streaming after the turn is added to this run's ledger row by the gateway.
+    run.live.gateway?.setTurn(null);
     for (const waiter of run.waiting.splice(0)) waiter({ value: undefined as never, done: true });
     this.runs.delete(run.runId);
     this.deps.leases?.close(run.runId);
     // A session whose process died is not reusable; forget it so the next turn opens a
     // fresh one (an ACP child, or the Hermes TUI gateway). Hermes's HTTP sessions stay.
     if (isClosed(run.live.session)) {
-      if (this.sessions.get(run.sessionId) === run.live) run.live.unwatch();
-      this.sessions.delete(run.sessionId);
+      if (this.sessions.get(run.sessionId) === run.live) this.drop(run.live);
+      else run.live.gateway?.revoke();
     } else if (run.live.retire && this.sessions.get(run.sessionId) === run.live) {
       // Updated under this turn: the process is the old CLI, so it goes now.
-      run.live.unwatch();
-      this.sessions.delete(run.sessionId);
+      this.drop(run.live);
       void run.live.session.close().catch(() => undefined);
     }
   }
+}
+
+/** A spent quota, in English; the sessions module says it in the person's language (`Run.error`). */
+export function quotaSentence(
+  failure: Pick<AgentGatewayQuotaFailure, 'providerLabel' | 'modelLabel'>,
+): string {
+  return `${failure.providerLabel} ran out of quota for ${failure.modelLabel}. Pick another model for this chat.`;
 }
 
 /** The agent has no such command (decision §57): `409 state_invalid`, said plainly. */

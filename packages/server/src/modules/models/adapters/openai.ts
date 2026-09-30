@@ -28,7 +28,7 @@ import type {
   TranscribeResult,
   DiscoveredModel,
 } from './types.js';
-import type { ModelCapability, ModelKind, ModelPricing } from '../schema.js';
+import { NO_TOOLS, type ModelKind, type ModelPricing, type StoredCapability } from '../schema.js';
 import { documentedVoices } from '../speech/documented.js';
 
 /** The media type of each `SpeechFormat`, for the `accept` header and a missing `Content-Type`. */
@@ -78,7 +78,7 @@ function enrich(raw: OpenAiModel, model: DiscoveredModel): DiscoveredModel {
   const contextWindow =
     numberOf(raw.context_length) ?? numberOf(raw.top_provider?.context_length) ?? null;
   const maxOutput = numberOf(raw.top_provider?.max_completion_tokens) ?? null;
-  const capabilities: ModelCapability[] = [];
+  const capabilities: StoredCapability[] = [];
   const modalities = raw.architecture?.input_modalities;
   if (Array.isArray(modalities) && modalities.includes('image')) capabilities.push('vision');
   // A model that answers with pictures (decision §72): what the Images tab offers.
@@ -87,6 +87,8 @@ function enrich(raw: OpenAiModel, model: DiscoveredModel): DiscoveredModel {
   const parameters = raw.supported_parameters;
   if (Array.isArray(parameters)) {
     if (parameters.includes('tools')) capabilities.push('tools');
+    // The provider lists what the model takes, and tools are not among them (§141).
+    else capabilities.push(NO_TOOLS);
     if (parameters.includes('reasoning') || parameters.includes('include_reasoning')) {
       capabilities.push('reasoning');
     }

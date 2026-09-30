@@ -3,6 +3,7 @@ package hub.core.android.chat
 import hub.core.android.chat.ChatControls.Action
 import hub.core.android.data.HubApis
 import hub.core.client.infrastructure.Serializer
+import hub.core.client.model.Agent
 import hub.core.client.model.AgentCapability
 import hub.core.client.model.Choice
 import hub.core.client.model.LocalizedText
@@ -44,12 +45,69 @@ class ChatControlsTest {
 
     private fun ok(body: String) = MockResponse().setResponseCode(200).setHeader("Content-Type", "application/json").setBody(body)
 
-    private fun model(key: String, alias: String? = null, kind: ModelKind = ModelKind.CHAT, visible: Boolean = true, disabled: Boolean = false, imageOnly: Boolean? = null) =
+    private fun model(
+        key: String, alias: String? = null, kind: ModelKind = ModelKind.CHAT, visible: Boolean = true, disabled: Boolean = false,
+        imageOnly: Boolean? = null, gateway: Boolean? = null, tools: Boolean? = null, window: Int? = null,
+    ) =
         Model(
             key = key, providerId = key.substringBefore('/'), provider = key.substringBefore('/').replaceFirstChar { it.uppercase() },
             model = key.substringAfter('/'), kind = kind, visible = visible, custom = false, preview = false, disabled = disabled,
-            capabilities = emptyList(), alias = alias, imageOnly = imageOnly,
+            capabilities = emptyList(), alias = alias, imageOnly = imageOnly, agentGateway = gateway, agentTools = tools,
+            contextWindow = window,
         )
+
+    /** An agent as the hub sends it; [extra] adds `default_model`, `agent_default_model`, `model_source`. */
+    private fun agent(kind: String = "acp", extra: String = "") = json.decodeFromString(
+        Agent.serializer(),
+        """{"id":"A1","profile":"work","owner_id":"u1","created_at":"2026-09-21T10:00:00Z","updated_at":"2026-09-21T10:00:00Z",
+            "slug":"gemini-cli","name":"Gemini CLI","kind":"$kind","avatar":{"kind":"generated","url":null,"seed":"g"},"status":"available",
+            "enabled":true,"install":{"source":"managed","update_available":false,"newer_than_tested":false,"auto_update":false,
+            "auto_update_supported":false},"runtime":{"state":"not_applicable"},"capabilities":[],"sections":[],"limited":false,
+            "subagents":"none","vendor":"Google"$extra}""",
+    )
+
+    /** The model gateway (ADR 0029, DECISIONS §140–141): the same rules as iOS ChatControlsTests. */
+    @Test fun `a coding agent on the hub's models is offered what the gateway serves, and Default names the profile's model`() {
+        val catalogue = listOf(model("groq/llama", alias = "Llama", gateway = true), model("openai-codex/gpt-5", gateway = false), model("older/model"))
+        val ref = ",\"default_model\":{\"provider_id\":\"p1\",\"model\":\"llama\"},\"agent_default_model\":\"gemini-2.5-pro\""
+        val onHub = agent(extra = """$ref,"model_source":"hub"""")
+        assertTrue(ChatControls.gatewayOnly(onHub))
+        val options = ChatControls.models(catalogue, ChatControls.gatewayOnly(onHub))
+        assertEquals(listOf("groq/llama"), options.map { it.value })
+        assertEquals("Llama", ChatControls.defaultModelName(onHub, options))
+        assertEquals("hub", ChatControls.modelSource(onHub))
+        // On its own account: the whole catalogue, and its own settings' model.
+        val own = agent(extra = """$ref,"model_source":"agent"""")
+        assertFalse(ChatControls.gatewayOnly(own))
+        assertEquals(3, ChatControls.models(catalogue, ChatControls.gatewayOnly(own)).size)
+        assertEquals("gemini-2.5-pro", ChatControls.defaultModelName(own, options))
+        assertEquals("agent", ChatControls.modelSource(own))
+        // An older hub says nothing: the whole catalogue, the plain «Default model», no line.
+        val older = agent()
+        assertFalse(ChatControls.gatewayOnly(older))
+        assertNull(ChatControls.defaultModelName(older, options))
+        assertNull(ChatControls.modelSource(older))
+        // Hermes runs on the profile's default, named by the catalogue.
+        val hermes = agent(kind = "hermes", extra = ""","default_model":{"provider_id":"p1","model":"llama"}""")
+        assertEquals("Llama", ChatControls.defaultModelName(hermes, options))
+        assertNull(ChatControls.defaultModelName(null, options))
+    }
+
+    /** Picker quality (§141): no tools, left out; under the agent's context floor, marked; on its own account, neither. */
+    @Test fun `the gateway picker leaves out models without tools and marks small ones`() {
+        val catalogue = listOf(
+            model("openrouter/coder", gateway = true, window = 262_144),
+            model("openrouter/no-tools", gateway = true, tools = false, window = 131_072),
+            model("openrouter/small", gateway = true, window = 32_768),
+            model("ollama/unknown", gateway = true),
+        )
+        val options = ChatControls.models(catalogue, gatewayOnly = true, minContext = 64_000)
+        assertEquals(listOf("openrouter/coder", "openrouter/small", "ollama/unknown"), options.map { it.value })
+        assertEquals(listOf(null, 64_000, null), options.map { it.smallUnder })
+        val own = ChatControls.models(catalogue, gatewayOnly = false, minContext = 64_000)
+        assertEquals(4, own.size)
+        assertTrue(own.all { it.smallUnder == null })
+    }
 
     private fun sessionJson(title: String? = "Trip plan", pinned: Boolean = false, archived: Boolean = false, model: String? = null) =
         """{"id":"01J8QK3ZR2W7M5N4P6T8V9X0S1","profile":"work","owner_id":"01J8QK3ZR2W7M5N4P6T8V9X0HM","created_at":"2026-09-20T10:00:00Z",

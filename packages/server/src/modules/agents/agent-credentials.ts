@@ -163,3 +163,22 @@ export function credentialState(
   if (sources.needsOwnSetting) return 'missing';
   return declared.some((name) => present(env, name)) ? 'ready' : 'missing';
 }
+
+/**
+ * Whether an agent has an account or provider of its own on this computer — its sign-in file, a
+ * provider its own settings name, or a key in the environment the hub runs it in — leaving out
+ * what the hub itself would hand it. On a person's computer such an agent keeps using it until the
+ * person switches it to the hub's models (ADR 0029: the automatic model source). `false` for an
+ * agent the hub cannot answer for.
+ */
+export function ownSignIn(slug: string, options: CredentialProbeOptions): boolean {
+  const sources = Object.hasOwn(SOURCES, slug) ? SOURCES[slug] : undefined;
+  if (!sources) return false;
+  const env = options.env;
+  const where: Where = { env, home: path.resolve(options.home ?? (env.HOME || homedir())) };
+  return (
+    sources.env.some((name) => present(env, name)) ||
+    sources.files(where).some((file) => existsSync(file)) ||
+    (sources.mentions?.(where) ?? []).some(({ file, pattern }) => mentions(file, pattern))
+  );
+}

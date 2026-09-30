@@ -33,6 +33,9 @@ export const ENV_KEYS = [
   'COREHUB_MODELS_CATALOG_URL',
   'COREHUB_TELEGRAM_API_BASE',
   'COREHUB_PLUGIN_TIMEOUT_MS',
+  'COREHUB_MODEL_GATEWAY',
+  'COREHUB_CLIPROXY_BIN',
+  'COREHUB_AGENT_MODEL_SOURCE',
 ] as const;
 export type EnvKey = (typeof ENV_KEYS)[number];
 export type EnvSource = Partial<Record<EnvKey, string | undefined>> & {
@@ -193,6 +196,28 @@ const envSchema = z.object({
     .trim()
     .regex(/^https?:\/\/\S+$/, 'COREHUB_TELEGRAM_API_BASE must be an http(s):// address')
     .optional(),
+  /**
+   * The model gateway (ADR 0029): every coding agent reaches the hub's providers through it. On
+   * unless `off` (`0`, `false`); off, agents are handed the profile's keys as before it existed.
+   */
+  COREHUB_MODEL_GATEWAY: z
+    .enum(['on', 'off', '1', '0', 'true', 'false'], {
+      message: 'COREHUB_MODEL_GATEWAY must be on or off',
+    })
+    .optional(),
+  /**
+   * Where CLIProxyAPI is, when not where the image (`/opt/corehub/bin/cli-proxy-api`) or the
+   * desktop app puts it. The desktop app sets it for its embedded hub.
+   */
+  COREHUB_CLIPROXY_BIN: z.string().trim().min(1).optional(),
+  /**
+   * Retired (DECISIONS §144): was an agent's automatic model source (ADR 0029). Every coding
+   * agent now goes through the gateway wherever the hub runs; still accepted, so a stack that
+   * sets it starts as before, and ignored.
+   */
+  COREHUB_AGENT_MODEL_SOURCE: z
+    .enum(['hub', 'auto'], { message: 'COREHUB_AGENT_MODEL_SOURCE must be hub or auto' })
+    .optional(),
 });
 
 /** The shared models catalogue every hub reads (DECISIONS §110). */
@@ -341,6 +366,17 @@ export interface HubConfig {
   modelsCatalogUrl?: string | null;
   /** Telegram's Bot API origin for "Send message" steps (`COREHUB_TELEGRAM_API_BASE`, §124). */
   telegramApiBase?: string;
+  /** The model gateway (ADR 0029). Absent in tests that build a config by hand: on, `auto`. */
+  modelGateway?: ModelGatewayConfig;
+}
+
+export interface ModelGatewayConfig {
+  /** `COREHUB_MODEL_GATEWAY` is not `off`. */
+  enabled: boolean;
+  /** `COREHUB_CLIPROXY_BIN`, when set. */
+  cliproxyBin: string | null;
+  /** `COREHUB_AGENT_MODEL_SOURCE`: retired and ignored (§144); read for older stacks only. */
+  defaultSource: 'hub' | 'auto';
 }
 
 export interface WebTerminalConfig {
@@ -415,6 +451,11 @@ export function loadConfig(
     trustProxy: parseTrustProxy(env.COREHUB_TRUST_PROXY),
     modelsCatalogUrl: parseModelsCatalogUrl(env.COREHUB_MODELS_CATALOG_URL),
     telegramApiBase: env.COREHUB_TELEGRAM_API_BASE ?? 'https://api.telegram.org',
+    modelGateway: {
+      enabled: !['off', '0', 'false'].includes(env.COREHUB_MODEL_GATEWAY ?? 'on'),
+      cliproxyBin: env.COREHUB_CLIPROXY_BIN ? path.resolve(env.COREHUB_CLIPROXY_BIN) : null,
+      defaultSource: env.COREHUB_AGENT_MODEL_SOURCE ?? 'auto',
+    },
   };
 }
 

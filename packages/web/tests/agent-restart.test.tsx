@@ -137,7 +137,7 @@ function held() {
   return { promise, release };
 }
 
-const report = (reloaded: boolean): RuntimeReport =>
+const report = (reloaded: boolean, pending: string | null = null): RuntimeReport =>
   ({
     agent: 'hermes',
     mode: 'managed',
@@ -147,7 +147,7 @@ const report = (reloaded: boolean): RuntimeReport =>
       { id: 'runtime_writable', ok: true, detail: 'managed' },
       { id: 'provider_keys', ok: true, detail: '1' },
       { id: 'model_selected', ok: true, detail: 'anthropic/claude-sonnet-4-5' },
-      { id: 'gateway_reloaded', ok: reloaded, detail: null },
+      { id: 'gateway_reloaded', ok: reloaded, detail: reloaded ? null : pending },
     ],
   }) as unknown as RuntimeReport;
 
@@ -232,7 +232,49 @@ describe('the restart beside the agent’s name', () => {
 });
 
 describe('the Runtime card: settings changed after Hermes last started', () => {
-  it('is a warning with plain words, and «Restart now» clears it', async () => {
+  it('while the hub’s own restart is on its way: says so, offers no button, and turns green by itself', async () => {
+    let asked = 0;
+    const script: Script = {
+      agents: [hermes()],
+      job: job('succeeded'),
+      restart: Promise.resolve(),
+      // The hub restarts Hermes a moment after the change; the card asks again meanwhile.
+      runtime: () => {
+        asked += 1;
+        return asked < 2 ? report(false, 'scheduled') : report(true);
+      },
+      calls: [],
+    };
+    mount(script, <RuntimeCardFromHub />);
+    const row = await screen.findByText(
+      'Applying the change — Hermes restarts by itself in a moment.',
+    );
+    expect(row.closest('li')!.getAttribute('data-tone')).toBe('warning');
+    // No state word shown raw, and no restart to press.
+    expect(row.closest('li')!.textContent).not.toContain('scheduled');
+    expect(screen.queryByTestId('runtime-restart-now')).toBeNull();
+    expect(await screen.findByTestId('runtime-all-ok', {}, { timeout: 5_000 })).toBeTruthy();
+    expect(script.calls.some((call) => call.startsWith('POST'))).toBe(false);
+  });
+
+  it('says a reply in progress is waited for', async () => {
+    const script: Script = {
+      agents: [hermes()],
+      job: job('succeeded'),
+      restart: Promise.resolve(),
+      runtime: () => report(false, 'waiting_for_run'),
+      calls: [],
+    };
+    mount(script, <RuntimeCardFromHub />, 'owner', 'ar');
+    expect(
+      await screen.findByText(
+        'جارٍ تطبيق التغيير — يُعاد تشغيل هرمز تلقائيًا بعد انتهاء الرد الجاري.',
+      ),
+    ).toBeTruthy();
+    expect(screen.queryByTestId('runtime-restart-now')).toBeNull();
+  });
+
+  it('when no restart is coming: a warning with plain words, and «Restart now» as the way out', async () => {
     const script: Script = {
       agents: [hermes()],
       job: job('succeeded'),
@@ -248,7 +290,7 @@ describe('the Runtime card: settings changed after Hermes last started', () => {
     expect(item.textContent).toContain('⚠');
     expect(item.textContent).not.toContain('✕');
     expect(row.textContent).toBe(
-      'Settings changed after Hermes last started — restart it to apply them.',
+      'Hermes did not restart after the last change. Restart it to apply the settings.',
     );
 
     fireEvent.click(await screen.findByTestId('runtime-restart-now'));
@@ -268,7 +310,7 @@ describe('the Runtime card: settings changed after Hermes last started', () => {
     };
     mount(script, <RuntimeCardFromHub />, 'member', 'ar');
     expect(
-      await screen.findByText('تغيّرت الإعدادات بعد آخر تشغيل لهرمز. أعد تشغيله لتطبيقها.'),
+      await screen.findByText('لم يُعِد هرمز التشغيل بعد آخر تغيير. أعِد تشغيله لتطبيق الإعدادات.'),
     ).toBeTruthy();
     expect(screen.queryByTestId('runtime-restart-now')).toBeNull();
   });

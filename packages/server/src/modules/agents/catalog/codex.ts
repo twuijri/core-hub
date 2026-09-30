@@ -38,6 +38,43 @@ export const codex: CatalogEntry = {
     'RUST_LOG',
     'NO_BROWSER',
   ],
+  // On the hub's model gateway (ADR 0029): a model provider of the hub's own, speaking Responses,
+  // whose key is the session token (`env_key`), passed to the session as `CODEX_CONFIG` — a
+  // repository's `.codex/config.toml` cannot move `model_provider`. When Codex has no sign-in,
+  // codex-acp's own `gateway` sign-in method is used with the same address and token: it only
+  // changes the running session, never Codex's `auth.json` (the `api-key` method would write the
+  // token there, over a person's ChatGPT sign-in).
+  gateway: {
+    wire: 'openai-responses',
+    minContext: 64_000,
+    env: (gw) => ({
+      COREHUB_GATEWAY_TOKEN: gw.token,
+      CODEX_CONFIG: JSON.stringify({
+        model_provider: 'corehub',
+        model: gw.mainModel,
+        model_providers: {
+          corehub: {
+            name: 'Core Hub',
+            base_url: gw.openaiBaseUrl,
+            env_key: 'COREHUB_GATEWAY_TOKEN',
+            wire_api: 'responses',
+          },
+        },
+        ...(gw.contextWindow ? { model_context_window: gw.contextWindow } : {}),
+      }),
+      DEFAULT_AUTH_REQUEST: JSON.stringify({
+        methodId: 'gateway',
+        _meta: {
+          gateway: {
+            baseUrl: gw.openaiBaseUrl,
+            headers: { Authorization: `Bearer ${gw.token}` },
+            providerName: 'Core Hub',
+          },
+        },
+      }),
+    }),
+    clears: ['OPENAI_API_KEY', 'CODEX_API_KEY', 'OPENAI_BASE_URL', 'MODEL_PROVIDER'],
+  },
   // The hub asks npm's package for the version (#226), so nothing is run at boot.
   health: { kind: 'installed' },
   capabilities: ['streaming', 'tools', 'approvals', 'mcp', 'config_files'],

@@ -37,6 +37,7 @@ import type {
   TranscribeResult,
 } from './adapters/types.js';
 import {
+  HERMES_PROVIDER_PREFIX,
   PROVIDER_CATALOGUE,
   authKindOf,
   catalogueEntry,
@@ -79,7 +80,9 @@ import {
   type ResolvedCredential,
 } from './propagation.js';
 import {
+  NO_TOOLS,
   ensembles,
+  modelDefaults,
   models,
   providers,
   speechSettings,
@@ -93,11 +96,26 @@ import {
   type SpeechProviderSettings,
 } from './schema.js';
 import type { SecretStore } from './secrets.js';
+import type { GatewayUpstream, UpstreamKind } from './gateway/cliproxy-config.js';
+import type { GatewayTarget } from './gateway/gateway.js';
 import { ModelsStore } from './store.js';
 import { joinAudio, type AudioPart } from './speech/audio.js';
 import { splitForSpeech } from './speech/split.js';
 import { signInStatusOf, type SignInRuntime, type SignInStatus } from './sign-in.js';
 import { signedInChat } from './signed-in-chat.js';
+import {
+  Subscriptions,
+  gatewayUnavailable,
+  type ContractProviderAccount,
+  type ContractProviderAccountError,
+  type GatewayLogin,
+  type SubscriptionBackend,
+} from './subscriptions.js';
+import { upstreamModel, upstreamPrefix } from './gateway/cliproxy-config.js';
+import { t, type UiLanguage } from '../../i18n/index.js';
+
+/** The variable a Hermes profile's gateway token is in (DECISIONS §143). */
+export const HERMES_GATEWAY_TOKEN_ENV = 'COREHUB_GATEWAY_TOKEN';
 import {
   modelKeyOf,
   serializeEnsemble,
@@ -233,6 +251,35 @@ export interface ModelsServiceOptions {
    * with the reason rather than started somewhere its credential could not be used.
    */
   signIn?: () => SignInRuntime | null;
+  /** Whether this hub runs the model gateway (ADR 0029): `Model.agent_gateway` is said then. */
+  gatewayAvailable?: () => boolean;
+  /**
+   * The gateway's side of the subscriptions signed in to through it (DECISIONS §143): its
+   * translator's management API, sign-ins and models. Null or absent where the gateway is off.
+   */
+  subscriptions?: () => SubscriptionBackend | null;
+  /**
+   * The gateway's translator for one `direct` turn on a subscription (DECISIONS §143): its OpenAI
+   * address and the hub's key, held until `done()`.
+   */
+  gatewayDirect?: () => Promise<{ baseUrl: string; key: string; done(): void }>;
+  /**
+   * "Hermes uses Core Hub's models" (DECISIONS §143): the choice, and what the gateway gives
+   * Hermes — a row's address on its listener and a profile's long-lived token. Absent: native.
+   */
+  hermesGateway?: HermesGatewayPort;
+}
+
+/** What the models module needs of the gateway to route Hermes through it (§143). */
+export interface HermesGatewayPort {
+  /** Why the gateway cannot serve Hermes (off, no CLIProxyAPI), or null. */
+  unavailable(): string | null;
+  /** A profile's token, or null when there can be none. */
+  token(workspace: string): string | null;
+  /** A provider row's address on the listener, or null before the listener is up. */
+  rowAddress(providerId: string, wire: 'anthropic' | 'openai'): string | null;
+  /** Whether the listener is up. */
+  listening(): boolean;
 }
 
 /** A sign-in the hub started and still answers polls for (contract `ProviderSignIn`). */
@@ -251,6 +298,10 @@ interface SignInRecord {
   expiresAt: number;
   status: SignInStatus;
   error: string | null;
+  /** A subscription signed in to through the gateway (DECISIONS §143); null for Hermes's. */
+  gateway?: GatewayLogin | null;
+  /** "Move to the gateway": the Hermes-signed provider whose uses move here on approval. */
+  moveFrom?: string | null;
 }
 
 /** How long a finished or abandoned sign-in stays readable after its code ran out. */
@@ -368,18 +419,22 @@ export interface ContractProviderSignIn {
   accepts_code: boolean;
   expires_at: string;
   error: string | null;
+  callback_hint?: string | null;
 }
 
 function signInView(record: SignInRecord): ContractProviderSignIn {
+  const pastes = record.gateway?.acceptsCode === true;
   return {
     id: record.id,
     status: record.status,
     user_code: record.userCode,
     verification_url: record.verificationUrl,
-    // Every sign-in the hub offers is a device code, entered on the provider's page.
-    accepts_code: false,
+    // A device code is entered on the provider's page; a gateway sign-in by link is pasted back
+    // (DECISIONS §143).
+    accepts_code: pastes,
     expires_at: new Date(record.expiresAt).toISOString(),
     error: record.error,
+    ...(pastes ? { callback_hint: record.gateway?.callbackHint ?? null } : {}),
   };
 }
 
@@ -413,6 +468,8 @@ export interface ContractProviderPreset {
    * holds a key: adding this one there needs none — the key is shared (ADR 0010, §94).
    */
   key_on_file: ('all' | 'profile')[];
+  /** A Hermes sign-in the gateway now does itself: the preset offered instead (§143). */
+  replaced_by: string | null;
 }
 
 export interface ProviderHostInfo {
@@ -522,6 +579,8 @@ export class ModelsService {
   private readonly restartDelayMs: number;
   /** Sign-ins in flight (contract decision §55); process memory, as Hermes's own are. */
   private readonly signIns = new Map<string, SignInRecord>();
+  /** The subscriptions signed in to through the gateway (DECISIONS §143). */
+  readonly subscriptions: Subscriptions;
 
   constructor(private readonly options: ModelsServiceOptions) {
     this.store = new ModelsStore({
@@ -531,6 +590,10 @@ export class ModelsService {
     this.now = options.now ?? (() => new Date());
     this.fetchImpl = options.fetchImpl ?? globalThis.fetch;
     this.restartDelayMs = options.restartDelayMs ?? 1_500;
+    this.subscriptions = new Subscriptions({
+      backend: () => options.subscriptions?.() ?? null,
+      now: () => this.now().getTime(),
+    });
   }
 
   /**
@@ -688,7 +751,9 @@ export class ModelsService {
           context_window: model.contextWindow,
           max_output_tokens: model.maxOutputTokens,
           pricing: { ...model.pricing },
-          capabilities: [...model.capabilities],
+          // The contract's values only: a marker kept beside them (`NO_TOOLS`) would reach an older
+          // hub that imports the file as a capability it serves (§141). A refresh finds it again.
+          capabilities: model.capabilities.filter((value) => value !== NO_TOOLS),
           enabled: model.enabled,
           visible: model.visible,
           preview: model.preview,
@@ -791,8 +856,11 @@ export class ModelsService {
     items: ContractProviderPreset[];
     host: ProviderHostInfo;
   } {
+    // A subscription signed in to through the gateway is offered by
+    // `models.listSubscriptionVendors` alone: an older client, which knows no paste-back, never
+    // offers one it could not finish (DECISIONS §143).
     const items = PROVIDER_CATALOGUE.filter(
-      (entry) => !filter.kind || entry.kind === filter.kind,
+      (entry) => (!filter.kind || entry.kind === filter.kind) && !entry.gatewaySignIn,
     ).map((entry) => ({
       id: entry.slug,
       label: entry.label,
@@ -807,6 +875,8 @@ export class ModelsService {
       keys_url: entry.keysUrl,
       sign_in: entry.signIn === true,
       base_url_example: entry.baseUrlExample ?? null,
+      // A Hermes sign-in the gateway now does itself (§143): what a newer client offers instead.
+      replaced_by: entry.gatewayMove ?? null,
       key_on_file:
         scope && !entry.repeatable && !entry.signIn
           ? (['all', 'profile'] as const).filter((which) =>
@@ -1144,10 +1214,13 @@ export class ModelsService {
       .filter((sibling) => sibling.id !== row.id && !sibling.archivedAt);
     if (remaining.length === 0) this.clearKey(this.ownerOf(row), row.family);
     if (row.authKind === 'oauth') {
-      // Removing a provider applies everywhere (§37): Hermes forgets the account too.
+      // Removing a provider applies everywhere (§37): Hermes forgets the account too — or the
+      // gateway's translator, for a subscription signed in to through it (§143).
       const entry = this.entryOf(row);
       const runtime = this.options.signIn?.();
-      if (entry?.hermesProvider && runtime) {
+      if (entry?.gatewaySignIn) {
+        void this.subscriptions.removeAll(row.id);
+      } else if (entry?.hermesProvider && runtime) {
         void runtime.signOut(entry.hermesProvider, this.signInProfileOf(scope, row));
       }
     }
@@ -1334,9 +1407,13 @@ export class ModelsService {
     const row = this.loadProvider(scope, id);
     const entry = this.entryOf(row);
     if (entry && entry.capabilities.listModels === false) return null;
-    // A provider signed in to through Hermes lists what Hermes lists for it, once signed in.
-    if (row.authKind === 'oauth' && (row.status !== 'ok' || !this.options.signIn?.())) {
-      return null;
+    // A provider signed in to through Hermes lists what Hermes lists for it, once signed in; one
+    // signed in to through the gateway, what the gateway's translator serves its accounts (§143).
+    if (row.authKind === 'oauth') {
+      if (row.status !== 'ok') return null;
+      if (entry?.gatewaySignIn ? this.subscriptions.unavailable() : !this.options.signIn?.()) {
+        return null;
+      }
     }
     const at = this.now();
     this.db
@@ -1358,8 +1435,9 @@ export class ModelsService {
         handle.progress(20, `asking ${row.label} for its models`);
         const adapter = providerAdapter(entry?.protocol ?? 'openai');
         const current = this.loadProvider(scope, row.id);
-        const result =
-          current.authKind === 'oauth'
+        const result = entry?.gatewaySignIn
+          ? await this.subscriptionModels(current)
+          : current.authKind === 'oauth'
             ? await this.signedInModels(scope, current)
             : await this.keyProviderModels(entry?.slug ?? null, current.kind, () =>
                 adapter.listModels(this.contextOf(scope, current)),
@@ -1418,6 +1496,7 @@ export class ModelsService {
         // provider, watches its models load, sends a message and is told by Hermes that
         // no provider is configured, with nothing in the hub having said a word.
         this.ensureChatDefault(scope, actor, row.id);
+        this.runPendingMove(row.id);
         return { ...report, models: listed.length };
       },
     );
@@ -1475,8 +1554,20 @@ export class ModelsService {
       .filter((row) => !after || catalogueCursorOf(row) > after);
     const page = matching.slice(0, limit);
     const last = page.at(-1);
+    // Which of them a coding agent can run through the model gateway (ADR 0029); said only by a
+    // hub whose gateway is on.
+    const served = this.options.gatewayAvailable?.() ? this.gatewayProviderIds(scope.id) : null;
     return {
-      items: page.map((row) => serializeModel(row, bySlug.get(row.providerId)!.slug)),
+      items: page.map((row) => {
+        const model = serializeModel(row, bySlug.get(row.providerId)!.slug);
+        if (!served) return model;
+        return {
+          ...model,
+          agent_gateway: served.has(row.providerId) && row.kind === 'chat' && row.enabled,
+          // A coding agent needs tool calls; said only when the provider's metadata says it cannot.
+          ...(row.capabilities.includes(NO_TOOLS) ? { agent_tools: false } : {}),
+        };
+      }),
       next_cursor:
         matching.length > limit && last ? encodeCatalogueCursor(catalogueCursorOf(last)) : null,
     };
@@ -1569,6 +1660,9 @@ export class ModelsService {
   ): Promise<ContractProviderSignIn> {
     const row = this.loadProvider(scope, providerId);
     const entry = this.entryOf(row);
+    if (row.authKind === 'oauth' && entry?.gatewaySignIn) {
+      return this.startGatewaySignIn(scope, actor, row, entry.gatewaySignIn, null);
+    }
     if (row.authKind !== 'oauth' || !entry?.signIn || !entry.hermesProvider) {
       throw new HubError('state_invalid', {
         messageKey: 'models.signin.unsupported',
@@ -1625,6 +1719,7 @@ export class ModelsService {
   ): Promise<ContractProviderSignIn> {
     const record = this.signInOf(scope, providerId, signInId);
     if (record.status !== 'pending') return signInView(record);
+    if (record.gateway) return this.pollGatewaySignIn(scope, record);
     const runtime = this.options.signIn?.() ?? null;
     const expired = this.now().getTime() >= record.expiresAt;
     if (!runtime) {
@@ -1639,17 +1734,187 @@ export class ModelsService {
     return signInView(record);
   }
 
-  /** A pasted code: none of the sign-ins the hub offers takes one (decision §55). */
-  completeSignIn(
+  /**
+   * A pasted-back address: a gateway sign-in by link (DECISIONS §143). A device code — every
+   * sign-in through Hermes, and the gateway's by code — takes none (decision §55).
+   */
+  async completeSignIn(
     scope: WorkspaceScope,
     providerId: string,
     signInId: string,
-  ): ContractProviderSignIn {
+    code: string,
+  ): Promise<ContractProviderSignIn> {
     const record = this.signInOf(scope, providerId, signInId);
-    throw new HubError('state_invalid', {
-      messageKey: 'models.signin.code_not_accepted',
-      details: { reason: 'code_not_accepted', sign_in_id: record.id },
+    if (!record.gateway?.acceptsCode) {
+      throw new HubError('state_invalid', {
+        messageKey: 'models.signin.code_not_accepted',
+        details: { reason: 'code_not_accepted', sign_in_id: record.id },
+      });
+    }
+    if (record.status !== 'pending') return signInView(record);
+    await this.subscriptions.complete(record.gateway, code);
+    return this.pollGatewaySignIn(scope, record);
+  }
+
+  /**
+   * Starts a subscription's sign-in through the gateway's translator (DECISIONS §143): a short
+   * code and a link, or a link whose landing address is pasted back. Each approved sign-in adds
+   * an account to the row (or renews one signed in before).
+   */
+  private async startGatewaySignIn(
+    scope: WorkspaceScope,
+    actor: Actor,
+    row: ProviderRow,
+    gatewaySignIn: NonNullable<ProviderCatalogueEntry['gatewaySignIn']>,
+    moveFrom: string | null,
+  ): Promise<ContractProviderSignIn> {
+    this.forgetOldSignIns();
+    // One sign-in at a time per provider: a new one replaces the one before.
+    for (const [id, other] of this.signIns) {
+      if (other.providerId !== row.id || !other.gateway || other.status !== 'pending') continue;
+      this.subscriptions.abandon(other.gateway);
+      other.status = 'failed';
+      other.error = 'replaced by a newer sign-in';
+      this.signIns.set(id, other);
+    }
+    const login = await this.subscriptions.start(gatewaySignIn);
+    const record: SignInRecord = {
+      id: newUlid(),
+      providerId: row.id,
+      workspace: scope.id,
+      actorId: actor.userId,
+      hermesProvider: '',
+      profile: null,
+      session: login.state ?? '',
+      userCode: login.userCode,
+      verificationUrl: login.url,
+      expiresAt: this.now().getTime() + login.expiresIn * 1000,
+      status: 'pending',
+      error: null,
+      gateway: login,
+      moveFrom,
+    };
+    this.signIns.set(record.id, record);
+    // A sign-in nobody asks about again still ends when its code does: the child process stops
+    // and the translator it held may go.
+    const expiry = setTimeout(
+      () => {
+        if (record.status !== 'pending') return;
+        this.subscriptions.abandon(login);
+        record.status = 'expired';
+      },
+      Math.max(0, record.expiresAt - this.now().getTime()) + 1_000,
+    );
+    expiry.unref?.();
+    this.options.audit.record({
+      workspace: scope.id,
+      ownerId: actor.userId,
+      actorKind: 'user',
+      actorId: actor.userId,
+      action: 'provider.sign_in_started',
+      entityKind: 'provider',
+      entityId: row.id,
+      summary: `sign-in to ${row.slug} started`,
+      data: {
+        slug: row.slug,
+        scope: row.shared ? 'all' : 'profile',
+        through: 'gateway',
+        flow: gatewaySignIn.flow,
+      },
     });
+    return signInView(record);
+  }
+
+  private async pollGatewaySignIn(
+    scope: WorkspaceScope,
+    record: SignInRecord,
+  ): Promise<ContractProviderSignIn> {
+    const login = record.gateway!;
+    const expired = this.now().getTime() >= record.expiresAt;
+    const poll = await this.subscriptions.poll(login, record.providerId);
+    if (poll.status === 'approved') {
+      record.status = 'approved';
+      record.error = null;
+      this.gatewaySignedIn(scope, record, poll.account);
+    } else if (poll.status === 'failed') {
+      record.status = /denied|declined|access_denied|cancel/i.test(poll.error)
+        ? 'denied'
+        : /timeout|expired/i.test(poll.error)
+          ? 'expired'
+          : 'failed';
+      record.error = poll.error;
+    } else if (expired) {
+      this.subscriptions.abandon(login);
+      record.status = 'expired';
+    }
+    return signInView(record);
+  }
+
+  /** An account added through the gateway: the row reads signed in and gets its models. */
+  private gatewaySignedIn(scope: WorkspaceScope, record: SignInRecord, account: string): void {
+    const at = this.now();
+    this.db
+      .update(providers)
+      .set({ status: 'ok', lastCheckedAt: at, lastError: null, updatedAt: at })
+      .where(eq(providers.id, record.providerId))
+      .run();
+    const actor = { userId: record.actorId };
+    const row = this.store.providerById(record.providerId);
+    this.options.audit.record({
+      workspace: scope.id,
+      ownerId: actor.userId,
+      actorKind: 'user',
+      actorId: actor.userId,
+      action: 'provider.signed_in',
+      entityKind: 'provider',
+      entityId: record.providerId,
+      summary: `signed in to ${row?.slug ?? record.providerId} through the gateway`,
+      // The account's name in the store is its e-mail; it stays out of the audit trail.
+      data: { provider: row?.slug ?? null, through: 'gateway', accounts: account ? 1 : 0 },
+    });
+    if (record.moveFrom) {
+      // The uses move once the new provider has its models (the refresh below ends with it).
+      this.pendingMoves.set(record.providerId, { from: record.moveFrom, scope, actor });
+      record.moveFrom = null;
+    }
+    let job: JobRow | null = null;
+    try {
+      job = this.refreshProvider(scope, actor, record.providerId);
+    } catch (error) {
+      this.options.log.warn(
+        { err: error, provider: record.providerId },
+        'models: signed in through the gateway, but the model list could not be asked for',
+      );
+    }
+    if (!job) this.runPendingMove(record.providerId);
+    this.propagate(scope, actor);
+  }
+
+  /** The hub is closing: every gateway sign-in still pending lets its process go. */
+  abandonSignIns(): void {
+    for (const record of this.signIns.values()) {
+      if (record.gateway && record.status === 'pending') this.subscriptions.abandon(record.gateway);
+    }
+  }
+
+  /** "Move to the gateway" waiting for the new provider's models (DECISIONS §143). */
+  private readonly pendingMoves = new Map<
+    string,
+    { from: string; scope: WorkspaceScope; actor: Actor }
+  >();
+
+  private runPendingMove(providerId: string): void {
+    const pending = this.pendingMoves.get(providerId);
+    if (!pending) return;
+    this.pendingMoves.delete(providerId);
+    try {
+      this.moveUses(pending.scope, pending.actor, pending.from, providerId);
+    } catch (error) {
+      this.options.log.warn(
+        { err: error, provider: providerId },
+        'models: the model choices could not be moved to the gateway sign-in',
+      );
+    }
   }
 
   private signInOf(scope: WorkspaceScope, providerId: string, signInId: string): SignInRecord {
@@ -1785,6 +2050,356 @@ export class ModelsService {
         reason: error instanceof Error ? error.message : 'Hermes could not be asked',
       };
     }
+  }
+
+  // ------------------------------------------- subscriptions through the gateway (§143)
+
+  /**
+   * A gateway subscription's models: what the gateway's translator serves its accounts under the
+   * row's prefix — its own catalogue for the vendor, which only lists models the account can run.
+   */
+  private async subscriptionModels(
+    row: ProviderRow,
+  ): Promise<
+    | { supported: true; models: DiscoveredModel[]; source: 'provider'; reason: null }
+    | { supported: false; reason: string }
+  > {
+    const backend = this.options.subscriptions?.() ?? null;
+    const reason = backend ? backend.unavailable() : 'the model gateway is off on this hub';
+    if (!backend || reason) return { supported: false, reason: reason ?? 'unavailable' };
+    try {
+      const listed = await backend.models(upstreamPrefix(row.id));
+      if (listed.length === 0) {
+        return {
+          supported: false,
+          reason: `no account signed in under ${row.label} serves a model yet`,
+        };
+      }
+      return {
+        supported: true,
+        models: listed.map((model) => ({
+          key: model.id,
+          label: model.label ?? model.id,
+          kind: 'chat' as const,
+          contextWindow: model.contextWindow,
+          maxOutputTokens: model.maxOutputTokens,
+        })),
+        source: 'provider',
+        reason: null,
+      };
+    } catch (error) {
+      return {
+        supported: false,
+        reason: error instanceof Error ? error.message : 'the gateway could not be asked',
+      };
+    }
+  }
+
+  /** The subscriptions the gateway can sign in to (`models.listSubscriptionVendors`). */
+  listSubscriptionVendors(language: UiLanguage): {
+    available: boolean;
+    reason: string | null;
+    note: string | null;
+    items: {
+      preset: string;
+      vendor: string;
+      label: string;
+      flow: 'device' | 'link';
+      usage_windows: boolean;
+      checkable: boolean;
+    }[];
+  } {
+    const reason = this.subscriptions.unavailable();
+    return {
+      available: reason === null,
+      reason,
+      note: t('models.subscription.note', language),
+      items: PROVIDER_CATALOGUE.flatMap((entry) => {
+        const signIn = entry.gatewaySignIn;
+        if (!signIn) return [];
+        return [
+          {
+            preset: entry.slug,
+            vendor: signIn.vendor,
+            label: entry.label,
+            flow: signIn.flow === 'link' ? ('link' as const) : ('device' as const),
+            usage_windows: signIn.usageWindows,
+            checkable: Boolean(signIn.check),
+          },
+        ];
+      }),
+    };
+  }
+
+  /** A gateway subscription row of this profile, or `409 not_a_subscription`. */
+  private subscriptionRow(
+    scope: WorkspaceScope,
+    providerId: string,
+  ): { row: ProviderRow; signIn: NonNullable<ProviderCatalogueEntry['gatewaySignIn']> } {
+    const row = this.loadProvider(scope, providerId);
+    const signIn = this.entryOf(row)?.gatewaySignIn;
+    if (!signIn) {
+      throw new HubError('state_invalid', {
+        messageKey: 'models.subscription.not_a_subscription',
+        details: { reason: 'not_a_subscription', provider: row.slug },
+      });
+    }
+    return { row, signIn };
+  }
+
+  /** The provider's dialog: its accounts, their health and usage, its recent failed calls. */
+  async getProviderAccounts(
+    scope: WorkspaceScope,
+    actor: Actor,
+    providerId: string,
+    language: UiLanguage,
+  ): Promise<{
+    provider_id: string;
+    vendor: string;
+    flow: 'device' | 'link';
+    available: boolean;
+    reason: string | null;
+    observed_at: string;
+    accounts: ContractProviderAccount[];
+    errors: ContractProviderAccountError[];
+  }> {
+    const { row, signIn } = this.subscriptionRow(scope, providerId);
+    // The dialog asks CLIProxyAPI every time it is opened or refreshed: its counts move by the
+    // minute, and its queue of failed calls is read only here and by the minute's timer.
+    const read = await this.subscriptions.refresh(true);
+    if (this.syncSignedIn(row)) this.propagate(scope, actor);
+    return {
+      provider_id: row.id,
+      vendor: signIn.vendor,
+      flow: signIn.flow === 'link' ? 'link' : 'device',
+      available: read.ok,
+      reason: read.ok ? null : read.reason,
+      observed_at: this.now().toISOString(),
+      accounts: read.ok ? this.subscriptions.accountsView(row.id, language) : [],
+      errors: this.subscriptions.errorsOf(row.id),
+    };
+  }
+
+  /**
+   * A row with no account left reads as not signed in; one that has accounts, as signed in (an
+   * account added or removed outside a sign-in, or a hub restored from a backup).
+   */
+  private syncSignedIn(row: ProviderRow): boolean {
+    if (!this.subscriptions.known()) return false;
+    const has = this.subscriptions.cached(row.id).length > 0;
+    const status = has ? 'ok' : 'unconfigured';
+    if (row.status === status) return false;
+    const at = this.now();
+    this.db
+      .update(providers)
+      .set({ status, lastCheckedAt: at, updatedAt: at })
+      .where(eq(providers.id, row.id))
+      .run();
+    return true;
+  }
+
+  /**
+   * After the minute's read of CLIProxyAPI (`index.ts`): every subscription row whose accounts
+   * came or went outside a sign-in (an account expired and was dropped, a hub restored from a
+   * backup) reads as signed in or not, and Hermes is told — its gateway block for that row comes
+   * or goes — with the same coalesced restart as a save. Never throws.
+   */
+  /** Whether any profile has a subscription row signed in through the gateway. */
+  hasSubscriptionRows(): boolean {
+    return this.store
+      .everyProviderRow()
+      .some((row) => !row.archivedAt && row.status === 'ok' && !!this.entryOf(row)?.gatewaySignIn);
+  }
+
+  syncSubscriptionRows(scope: WorkspaceScope, actor: Actor): boolean {
+    try {
+      let changed = false;
+      for (const row of this.store.everyProviderRow()) {
+        if (row.archivedAt || !this.entryOf(row)?.gatewaySignIn) continue;
+        if (this.syncSignedIn(row)) changed = true;
+      }
+      if (changed) this.propagate(scope, actor);
+      return changed;
+    } catch (error) {
+      this.options.log.warn({ err: error }, 'models: could not bring the subscriptions up to date');
+      return false;
+    }
+  }
+
+  async updateProviderAccount(
+    scope: WorkspaceScope,
+    actor: Actor,
+    providerId: string,
+    accountId: string,
+    patch: { disabled: boolean },
+    language: UiLanguage,
+  ): Promise<ContractProviderAccount> {
+    const { row } = this.subscriptionRow(scope, providerId);
+    if (typeof patch?.disabled !== 'boolean') {
+      throw validationFailed({ field: 'disabled', reason: 'true or false' });
+    }
+    await this.subscriptions.setDisabled(row.id, accountId, patch.disabled);
+    this.accountAudit(scope, actor, row, patch.disabled ? 'disabled' : 'enabled');
+    return this.subscriptions.accountView(row.id, accountId, language);
+  }
+
+  async removeProviderAccount(
+    scope: WorkspaceScope,
+    actor: Actor,
+    providerId: string,
+    accountId: string,
+  ): Promise<void> {
+    const { row } = this.subscriptionRow(scope, providerId);
+    await this.subscriptions.remove(row.id, accountId);
+    this.accountAudit(scope, actor, row, 'signed_out');
+    // The last account gone: Hermes's gateway block for this row goes too.
+    if (this.syncSignedIn(this.loadProvider(scope, row.id))) this.propagate(scope, actor);
+  }
+
+  async refreshProviderAccount(
+    scope: WorkspaceScope,
+    actor: Actor,
+    providerId: string,
+    accountId: string,
+    language: UiLanguage,
+  ): Promise<ContractProviderAccount> {
+    const { row } = this.subscriptionRow(scope, providerId);
+    await this.subscriptions.renew(row.id, accountId);
+    this.accountAudit(scope, actor, row, 'renewed');
+    return this.subscriptions.accountView(row.id, accountId, language);
+  }
+
+  async checkProviderAccount(
+    scope: WorkspaceScope,
+    providerId: string,
+    accountId: string,
+    language: UiLanguage,
+  ): Promise<ContractProviderAccount> {
+    const { row, signIn } = this.subscriptionRow(scope, providerId);
+    await this.subscriptions.check(row.id, accountId, signIn);
+    return this.subscriptions.accountView(row.id, accountId, language);
+  }
+
+  private accountAudit(
+    scope: WorkspaceScope,
+    actor: Actor,
+    row: ProviderRow,
+    what: 'disabled' | 'enabled' | 'signed_out' | 'renewed',
+  ): void {
+    this.options.audit.record({
+      workspace: scope.id,
+      ownerId: actor.userId,
+      actorKind: 'user',
+      actorId: actor.userId,
+      action: `provider.account_${what}`,
+      entityKind: 'provider',
+      entityId: row.id,
+      summary: `an account of ${row.slug}: ${what.replace('_', ' ')}`,
+      data: { slug: row.slug },
+    });
+  }
+
+  /**
+   * "Move this sign-in to Core Hub's gateway" (DECISIONS §143): the gateway's provider of the same
+   * vendor in the same scope — added, or the one already there — and its sign-in. A sign-in is
+   * never copied from Hermes (both would hold one refresh token, which the vendors rotate).
+   */
+  async moveProviderToGateway(
+    scope: WorkspaceScope,
+    actor: Actor,
+    providerId: string,
+  ): Promise<{ provider: ContractProvider; sign_in: ContractProviderSignIn }> {
+    const from = this.loadProvider(scope, providerId);
+    const target = this.entryOf(from)?.gatewayMove;
+    const preset = target ? catalogueEntry(target) : undefined;
+    if (!preset?.gatewaySignIn || from.authKind !== 'oauth') {
+      throw new HubError('state_invalid', {
+        messageKey: 'models.subscription.not_movable',
+        details: { reason: 'not_movable', provider: from.slug },
+      });
+    }
+    const reason = this.subscriptions.unavailable();
+    if (reason) throw gatewayUnavailable(reason);
+    const owner = this.ownerOf(from);
+    const existing = this.store.scopeRowBySlug(owner.workspace, owner.shared, preset.slug);
+    let rowId: string;
+    if (existing && !existing.archivedAt) {
+      rowId = existing.id;
+    } else {
+      const created = await this.createProvider(scope, actor, {
+        preset: preset.slug,
+        label: preset.label,
+        kind: 'llm',
+        scope: owner.shared ? 'all' : 'profile',
+      });
+      rowId = created.provider.id;
+    }
+    const row = this.loadProvider(scope, rowId);
+    const signIn = await this.startGatewaySignIn(scope, actor, row, preset.gatewaySignIn, from.id);
+    return { provider: this.getProvider(scope, rowId), sign_in: signIn };
+  }
+
+  /**
+   * The model choices that named one provider's models name another's same models: the chat
+   * default and every role, their fallbacks, and ensemble members — in every profile. A model the
+   * new provider does not have is left as it was.
+   */
+  private moveUses(scope: WorkspaceScope, actor: Actor, fromId: string, toId: string): void {
+    const fromModels = this.store.modelsOf(fromId);
+    const toModels = new Map(this.store.modelsOf(toId).map((model) => [model.modelKey, model.id]));
+    const map = new Map<string, string>();
+    for (const model of fromModels) {
+      const next = toModels.get(model.modelKey);
+      if (next) map.set(model.id, next);
+    }
+    if (map.size === 0) return;
+    const at = this.now();
+    let moved = 0;
+    for (const row of this.db.select().from(modelDefaults).all()) {
+      const modelId = map.get(row.modelId) ?? row.modelId;
+      const fallbacks = row.fallbackModelIds.map((id) => map.get(id) ?? id);
+      if (modelId === row.modelId && fallbacks.every((id, i) => id === row.fallbackModelIds[i])) {
+        continue;
+      }
+      this.db
+        .update(modelDefaults)
+        .set({ modelId, fallbackModelIds: fallbacks, updatedAt: at })
+        .where(eq(modelDefaults.id, row.id))
+        .run();
+      moved += 1;
+    }
+    for (const ensemble of this.db.select().from(ensembles).all()) {
+      const swap = (member: EnsembleMemberValue): EnsembleMemberValue => {
+        if (member.provider_id !== fromId || !toModels.has(member.model)) return member;
+        return { ...member, provider_id: toId };
+      };
+      const members = ensemble.members.map(swap);
+      const aggregator = swap(ensemble.aggregator);
+      if (
+        members.every((member, i) => member === ensemble.members[i]) &&
+        aggregator === ensemble.aggregator
+      ) {
+        continue;
+      }
+      this.db
+        .update(ensembles)
+        .set({ members, aggregator, updatedAt: at })
+        .where(eq(ensembles.id, ensemble.id))
+        .run();
+      moved += 1;
+    }
+    this.options.audit.record({
+      workspace: scope.id,
+      ownerId: actor.userId,
+      actorKind: 'user',
+      actorId: actor.userId,
+      action: 'provider.moved_to_gateway',
+      entityKind: 'provider',
+      entityId: toId,
+      summary: `model choices moved to the gateway sign-in (${moved})`,
+      data: { from: fromId, to: toId, choices: moved },
+    });
+    this.propagate(scope, actor);
   }
 
   /** The Hermes profile a provider's sign-in belongs to: null for the root. */
@@ -2358,6 +2973,25 @@ export class ModelsService {
   }
 
   /**
+   * The chat model Hermes was given, as people read it elsewhere: «<provider> · <model>», the
+   * provider's own label and the model's name — not Hermes's block name (`corehub-gw-<slug>`).
+   */
+  private chatModelName(workspace: string, chosen: { provider: string; model: string }): string {
+    // The same choice `hermesModelChoice` made the block from: the profile's, else inherited.
+    const ref = this.refOfRole(workspace, 'chat');
+    const facts = ref ? this.modelFacts(workspace, ref.provider_id, ref.model) : null;
+    if (facts) return `${facts.providerLabel} · ${facts.modelLabel}`;
+    return `${chosen.provider} · ${chosen.model}`;
+  }
+
+  /** Whether a restart of Hermes is on its way (`scheduleRestart`), for the runtime report. */
+  private restartState(): 'scheduled' | 'waiting_for_run' | null {
+    if (!this.restartPending) return null;
+    if (this.restartTimer) return 'scheduled';
+    return (this.options.hermes.busy?.() ?? false) ? 'waiting_for_run' : 'scheduled';
+  }
+
+  /**
    * The self-check behind "I added a provider and nothing happened".
    *
    * Propagation used to be entirely invisible: the hub wrote two files and restarted a
@@ -2418,17 +3052,22 @@ export class ModelsService {
       id: 'model_selected',
       ok: Boolean(state?.hermesModel),
       detail: state?.hermesModel
-        ? `${state.hermesModel.provider}/${state.hermesModel.model}`
+        ? this.chatModelName(workspace, state.hermesModel)
         : (state?.hermesModelBlocked ?? null),
     });
 
     // 5. Did the process take the files? It reads them at start, so "reloaded after the
     //    last write" is the question, and the runtime is the only one who knows.
+    //    The hub restarts it by itself after every change that needs it (`scheduleRestart`);
+    //    `detail` says whether that restart is on its way (`scheduled`), waiting for a reply in
+    //    progress to end (`waiting_for_run`), or not coming (null) — only then is a manual
+    //    restart the way out.
     const reloadedAt = this.options.hermes.reloadedAt?.() ?? null;
+    const reloaded = mode === 'external' || (reloadedAt !== null && reloadedAt >= this.lastWriteAt);
     checks.push({
       id: 'gateway_reloaded',
-      ok: mode === 'external' || (reloadedAt !== null && reloadedAt >= this.lastWriteAt),
-      detail: null,
+      ok: reloaded,
+      detail: reloaded ? null : this.restartState(),
     });
 
     return {
@@ -2512,8 +3151,27 @@ export class ModelsService {
       for (const name of hermesEnvVars) named.add(name);
       credentials.push({ family: row.family, envVar, hermesEnvVars, value });
     }
+    // Hermes on the hub's models (§143): each row the gateway serves is one more block, at its own
+    // gateway address, with this profile's token — in the file whichever model is chosen, as every
+    // other block is, so a turn may name any of them.
+    const viaGateway = this.hermesViaGateway();
+    const gatewayToken = viaGateway ? this.options.hermesGateway!.token(workspace) : null;
+    if (viaGateway && gatewayToken) {
+      hermesProviders.push(...this.gatewayBlocks(ordered));
+      credentials.push({
+        family: 'corehub-gateway',
+        envVar: HERMES_GATEWAY_TOKEN_ENV,
+        hermesEnvVars: [HERMES_GATEWAY_TOKEN_ENV],
+        value: gatewayToken,
+      });
+    }
     const chat = this.hermesModelChoice(workspace);
     const image = this.imageChoice(workspace);
+    const fallbacks = chat.choice
+      ? this.fallbackChain(workspace).flatMap((member) =>
+          member.provider ? [{ provider: member.provider, model: member.model }] : [],
+        )
+      : null;
     return {
       credentials,
       hermesProviders,
@@ -2526,11 +3184,7 @@ export class ModelsService {
       hermesModel: chat.choice,
       hermesModelBlocked: chat.blocked,
       // Owned where the model selection is (contract decision §54).
-      hermesFallbacks: chat.choice
-        ? this.fallbackChain(workspace).flatMap((member) =>
-            member.provider ? [{ provider: member.provider, model: member.model }] : [],
-          )
-        : null,
+      hermesFallbacks: fallbacks,
       ownedEnv: this.ownedEnvNames(),
     };
   }
@@ -2561,6 +3215,8 @@ export class ModelsService {
     }
     // The image model's variables are the hub's in every `.env` it writes (decision §72).
     for (const name of IMAGE_ENV_NAMES) names.add(name);
+    // The gateway token (§143): the hub's, so switching Hermes back takes it out of the files.
+    names.add(HERMES_GATEWAY_TOKEN_ENV);
     return [...names].sort();
   }
 
@@ -2780,7 +3436,47 @@ export class ModelsService {
       ...(row?.maxOutputTokens ? { maxOutputTokens: row.maxOutputTokens } : {}),
     };
     let stream: AsyncIterable<ChatEvent>;
-    if (provider.authKind === 'oauth') {
+    let release: (() => void) | null = null;
+    if (entry?.gatewaySignIn) {
+      // Signed in to through the gateway (§143): the turn goes through its translator like any
+      // agent's, and the account's token never comes into the hub.
+      if (provider.status !== 'ok' || !this.options.gatewayDirect) {
+        yield {
+          type: 'failed',
+          code: 'provider_not_configured',
+          message: `${provider.label} is not signed in yet; sign in under Models → Providers`,
+          retryable: false,
+        };
+        return;
+      }
+      let held: { baseUrl: string; key: string; done(): void };
+      try {
+        held = await this.options.gatewayDirect();
+      } catch (error) {
+        yield {
+          type: 'failed',
+          code: 'provider_not_configured',
+          message: error instanceof Error ? error.message : 'the model gateway is not available',
+          retryable: false,
+        };
+        return;
+      }
+      release = () => held.done();
+      stream = providerAdapter('openai').chat(
+        {
+          slug: provider.slug,
+          label: provider.label,
+          baseUrl: held.baseUrl,
+          apiKey: held.key,
+          requiresKey: true,
+          headers: {},
+          settings: {},
+          // Loopback to the hub's own translator, never a scripted provider's fetch.
+          fetchImpl: globalThis.fetch,
+        },
+        { ...chatRequest, model: upstreamModel(provider.id, request.model) },
+      );
+    } else if (provider.authKind === 'oauth') {
       // Signed in through Hermes (§55): the credential stays Hermes's, and the turn borrows it
       // from Hermes's own Python for this turn only (§118).
       const refused = this.signedInRefusal(provider, entry);
@@ -2815,27 +3511,31 @@ export class ModelsService {
       stream = providerAdapter(entry?.protocol ?? 'openai').chat(ctx, chatRequest);
     }
 
-    for await (const event of stream) {
-      if (event.type === 'usage') {
-        yield {
-          ...event,
-          modelLabel,
-          providerId: provider.id,
-          ...costOf(row?.pricing, event),
-        };
-        continue;
+    try {
+      for await (const event of stream) {
+        if (event.type === 'usage') {
+          yield {
+            ...event,
+            modelLabel,
+            providerId: provider.id,
+            ...costOf(row?.pricing, event),
+          };
+          continue;
+        }
+        if (event.type === 'failed') {
+          yield {
+            type: 'failed',
+            code: DIRECT_ERROR_CODES[event.reason],
+            // The provider's own words when it sent any; ours only when it sent none.
+            message: event.detail ?? directFailureText(event.reason, provider.label),
+            retryable: retryableFailure(event),
+          };
+          return;
+        }
+        yield event;
       }
-      if (event.type === 'failed') {
-        yield {
-          type: 'failed',
-          code: DIRECT_ERROR_CODES[event.reason],
-          // The provider's own words when it sent any; ours only when it sent none.
-          message: event.detail ?? directFailureText(event.reason, provider.label),
-          retryable: retryableFailure(event),
-        };
-        return;
-      }
-      yield event;
+    } finally {
+      release?.();
     }
   }
 
@@ -2936,6 +3636,156 @@ export class ModelsService {
     return this.effectiveFor(workspace, providerId)?.slug ?? null;
   }
 
+  // ------------------------------------------------- the model gateway (ADR 0029)
+
+  /**
+   * How CLIProxyAPI reaches a provider row, or null when the gateway cannot serve it: a row that
+   * is off, not a chat provider, a subscription signed in to through Hermes (the owner,
+   * 2026-09-29: never lent to another vendor's agent), or one with no key where it needs one. A
+   * subscription signed in to through the gateway itself (the owner, 2026-09-30, §143) is served
+   * to every agent by its accounts.
+   */
+  private gatewayRoute(row: ProviderRow): { kind: UpstreamKind; baseUrl: string } | null {
+    if (row.archivedAt || !row.enabled || row.kind !== 'llm') return null;
+    const entry = this.entryOf(row);
+    // A subscription signed in to through the gateway (§143) is served by its accounts, once
+    // there is one; a sign-in through Hermes stays Hermes's.
+    if (entry?.gatewaySignIn) {
+      return row.authKind === 'oauth' && row.status === 'ok'
+        ? { kind: 'subscription', baseUrl: '' }
+        : null;
+    }
+    if (row.authKind === 'oauth') return null;
+    if (entry?.signIn) return null;
+    if (
+      row.authKind === 'api_key' &&
+      !this.options.secrets.has(row.workspace, row.apiKeySecretId)
+    ) {
+      return null;
+    }
+    const base = (row.baseUrl ?? entry?.baseUrl ?? '').trim().replace(/\/+$/, '');
+    if (!/^https?:\/\//.test(base)) return null;
+    switch (entry?.protocol ?? 'openai') {
+      case 'anthropic':
+        return { kind: 'claude', baseUrl: base.replace(/\/v1$/, '') };
+      case 'google':
+        return { kind: 'gemini', baseUrl: base.replace(/\/v1(beta)?$/, '') };
+      case 'ollama':
+        return { kind: 'openai-compatibility', baseUrl: /\/v1$/.test(base) ? base : `${base}/v1` };
+      case 'openai':
+      case 'groq':
+        return { kind: 'openai-compatibility', baseUrl: base };
+      default:
+        return null;
+    }
+  }
+
+  /** A row's chat models the gateway can hand CLIProxyAPI. */
+  private gatewayModelsOf(row: ProviderRow): ModelRow[] {
+    return this.store
+      .modelsOf(row.id)
+      .filter((model) => !model.archivedAt && model.enabled && model.kind === 'chat');
+  }
+
+  /**
+   * Every provider CLIProxyAPI may serve, with its key: the input of its configuration file
+   * (`gateway/cliproxy-config.ts`). All profiles' rows at once, each under its own row id.
+   */
+  gatewayUpstreams(): GatewayUpstream[] {
+    const out: GatewayUpstream[] = [];
+    for (const row of this.store.everyProviderRow()) {
+      const route = this.gatewayRoute(row);
+      if (!route) continue;
+      const apiKey =
+        route.kind !== 'subscription' && row.apiKeySecretId
+          ? this.options.secrets.reveal(row.workspace, row.apiKeySecretId)
+          : null;
+      if (row.authKind === 'api_key' && !apiKey) continue;
+      out.push({
+        providerId: row.id,
+        kind: route.kind,
+        baseUrl: route.baseUrl,
+        apiKey: apiKey ?? null,
+        headers: { ...row.headers },
+        models: this.gatewayModelsOf(row).map((model) => ({
+          id: model.modelKey,
+          contextWindow: model.contextWindow ?? null,
+        })),
+      });
+    }
+    return out.sort((a, b) => a.providerId.localeCompare(b.providerId));
+  }
+
+  /** The providers of a profile the gateway serves, by row id. */
+  private gatewayProviderIds(workspace: string): Set<string> {
+    return new Set(
+      this.effectiveRows(workspace, 'llm')
+        .filter((row) => this.gatewayRoute(row) !== null)
+        .map((row) => row.id),
+    );
+  }
+
+  /** The catalogue keys (`"<provider slug>/<model>"`) a profile's coding agents can run. */
+  gatewayModelKeys(workspace: string): string[] {
+    const keys: string[] = [];
+    for (const row of this.effectiveRows(workspace, 'llm')) {
+      if (!this.gatewayRoute(row)) continue;
+      for (const model of this.gatewayModelsOf(row)) {
+        if (!model.visible || !this.passesVisibility(row, model.modelKey)) continue;
+        keys.push(`${row.slug}/${model.modelKey}`);
+      }
+    }
+    return keys;
+  }
+
+  /** Whether the gateway can serve a profile's provider row (the one it uses for that slug). */
+  gatewayServes(workspace: string, providerId: string): boolean {
+    const row = this.effectiveFor(workspace, providerId);
+    return !!row && this.gatewayRoute(row) !== null;
+  }
+
+  /** A model row's context window, for the agents that must be told it (Claude Code, Codex). */
+  gatewayContextWindow(workspace: string, providerId: string, model: string): number | null {
+    const row = this.effectiveFor(workspace, providerId);
+    if (!row) return null;
+    return this.store.model(row.id, model)?.contextWindow ?? null;
+  }
+
+  /** The row and model a turn's choice runs on through the gateway, or why it cannot. */
+  gatewayTarget(
+    workspace: string,
+    providerId: string,
+    model: string,
+  ): GatewayTarget | { refusal: string } {
+    const provider = this.effectiveFor(workspace, providerId);
+    if (!provider || provider.archivedAt) {
+      return { refusal: 'the chosen model belongs to a provider this profile does not have' };
+    }
+    if (!this.gatewayRoute(provider)) {
+      return {
+        refusal: `${provider.label} is not available to agents through Core Hub: it has no key or signed-in account the hub can use, or it is a subscription signed in to through Hermes (move it to Core Hub's gateway in Settings → Models)`,
+      };
+    }
+    const row = this.store.model(provider.id, model);
+    if (!row || row.archivedAt || !row.enabled || row.kind !== 'chat') {
+      return {
+        refusal: `${model} is not in ${provider.label}'s model list; refresh its models in Settings → Models`,
+      };
+    }
+    return {
+      providerId: provider.id,
+      model: row.modelKey,
+      modelLabel: row.alias ?? row.label,
+      providerLabel: provider.label,
+      price: (usage) => costOf(row.pricing, usage),
+    };
+  }
+
+  /** The profile's catalogue keys the gateway serves, for `Model.agent_gateway`. */
+  gatewayServedIds(workspace: string): Set<string> {
+    return this.gatewayProviderIds(workspace);
+  }
+
   /**
    * Writes the shared credentials and the chat default into the Hermes home this hub
    * supervises, then recycles the gateway so the change is live. Never throws: a hub
@@ -2970,10 +3820,17 @@ export class ModelsService {
       return;
     }
     const plugin = this.installImageBackend(home, state.hermesImage === true);
-    this.propagateToProfiles(state);
-    if (!result.dirty && !envChanged && plugin.length === 0) return;
+    // A named profile's files are read by its own messaging gateway, which only a restart
+    // recycles (`restart()` restarts every one): a change there needs one too.
+    const profiles = this.propagateToProfiles(state);
+    if (!result.dirty && !envChanged && plugin.length === 0 && profiles.length === 0) return;
     this.lastWriteAt = this.now().getTime();
-    const changed = [...result.env.changed, ...result.config.changed, ...plugin];
+    const changed = [
+      ...result.env.changed,
+      ...result.config.changed,
+      ...plugin,
+      ...profiles.map((profile) => `profiles/${profile}`),
+    ];
     const removed = [...result.env.removed, ...result.config.removed];
     this.options.log.info(
       // Names only. A value never reaches a log line.
@@ -3055,11 +3912,16 @@ export class ModelsService {
     }
   }
 
-  /** Every named Hermes profile, made ready against the root it falls back on. */
-  private propagateToProfiles(root: PropagationState): void {
+  /**
+   * Every named Hermes profile, made ready against the root it falls back on. Returns the
+   * profiles whose files changed.
+   */
+  private propagateToProfiles(root: PropagationState): string[] {
+    const changed: string[] = [];
     for (const profileHome of this.options.hermes.profileHomes?.() ?? []) {
-      this.prepareProfileWith(profileHome, root);
+      if (this.prepareProfileWith(profileHome, root)) changed.push(path.basename(profileHome));
     }
+    return changed;
   }
 
   /**
@@ -3087,11 +3949,12 @@ export class ModelsService {
     this.prepareProfileWith(profileHome, this.state(this.hub().id));
   }
 
+  /** Returns whether any of the profile's files changed. */
   private prepareProfileWith(
     profileHome: string,
     root: PropagationState,
     options: { model?: boolean } = {},
-  ): void {
+  ): boolean {
     const profile = path.basename(profileHome);
     try {
       const workspace = this.options.profileWorkspace?.(profile) ?? `hermes-profile:${profile}`;
@@ -3136,12 +3999,15 @@ export class ModelsService {
           },
           'models: Hermes profile made ready for its providers',
         );
+        return true;
       }
+      return false;
     } catch (error) {
       this.options.log.warn(
         { err: error, profile },
         'models: could not prepare a Hermes profile; its configuration is unchanged',
       );
+      return false;
     }
   }
 
@@ -3210,7 +4076,7 @@ export class ModelsService {
 
   private present(scope: WorkspaceScope, row: ProviderRow): ContractProvider {
     const entry = this.entryOf(row);
-    return serializeProvider(row, {
+    const provider = serializeProvider(row, {
       drawsImages: this.drawsImages(row),
       // A shared row is stored under the default profile; an own row is the asking one's.
       profile: row.shared ? this.hub(scope).slug : scope.slug,
@@ -3218,6 +4084,21 @@ export class ModelsService {
       keyStored: this.hasKey(scope, row),
       refreshable: entry ? entry.capabilities.listModels !== false : true,
     });
+    // A subscription through the gateway (§143): its vendor, flow and accounts as last seen.
+    const signIn = entry?.gatewaySignIn;
+    if (signIn) {
+      const summary = this.subscriptions.summary(row.id);
+      provider.subscription = {
+        vendor: signIn.vendor,
+        flow: signIn.flow === 'link' ? 'link' : 'device',
+        accounts: this.subscriptions.known() ? summary.accounts : row.status === 'ok' ? 1 : 0,
+        accounts_ready: summary.ready,
+      };
+    }
+    if (entry?.gatewayMove && !this.subscriptions.unavailable()) {
+      provider.gateway_move = { preset: entry.gatewayMove };
+    }
+    return provider;
   }
 
   /** A live provider this profile can see — its own, or a shared one (decision §37). */
@@ -3426,6 +4307,10 @@ export class ModelsService {
   private requireExpressible(scope: WorkspaceScope, providerId: string): void {
     const row = this.loadProvider(scope, providerId);
     if (this.hermesNameOfProvider(row)) return;
+    // A subscription signed in to through the gateway (§143) serves every agent; Hermes reaches
+    // it once it uses the hub's models, and keeps its own model until then (the runtime report
+    // says so).
+    if (this.entryOf(row)?.gatewaySignIn) return;
     throw validationFailed({
       field: 'default',
       reason: 'the agent runtime cannot be told about this provider, so it cannot be the default',
@@ -3436,7 +4321,65 @@ export class ModelsService {
   private hermesNameOfProvider(row: ProviderRow): string | null {
     const entry = this.entryOf(row);
     if (hermesRouteOf(entry) === 'openai-compatible' && row.kind !== 'llm') return null;
+    // Hermes on the hub's models (§143): a row the gateway serves is its block at the gateway.
+    if (this.hermesViaGateway() && this.gatewayRoute(row)) return this.gatewayBlockName(row);
     return hermesProviderNameOf(row.slug, entry);
+  }
+
+  // ------------------------------------------- Hermes on the hub's models (§143, §144)
+
+  /**
+   * Whether Hermes is given the gateway now: available and the listener up — on every hub, with
+   * no choice to make (§144). Only a hub whose operator switched the gateway off, or that has no
+   * CLIProxyAPI, writes Hermes's own routes instead.
+   */
+  private hermesViaGateway(): boolean {
+    const port = this.options.hermesGateway;
+    if (!port || port.unavailable()) return false;
+    return port.listening();
+  }
+
+  /** The name of a row's block at the gateway in Hermes's `providers:`. */
+  private gatewayBlockName(row: ProviderRow): string {
+    return `${HERMES_PROVIDER_PREFIX}gw-${row.slug}`;
+  }
+
+  /**
+   * The wire Hermes speaks to a row through the gateway: a model's own, so Claude models keep
+   * Anthropic Messages (and Hermes's prompt caching), OpenAI's and ChatGPT's keep Responses, and
+   * everything else is Chat Completions, which CLIProxyAPI translates.
+   */
+  private gatewayWire(row: ProviderRow): 'anthropic_messages' | 'responses' | 'chat_completions' {
+    const entry = this.entryOf(row);
+    const vendor = entry?.gatewaySignIn?.vendor;
+    if (vendor === 'claude' || (!vendor && entry?.protocol === 'anthropic')) {
+      return 'anthropic_messages';
+    }
+    if (vendor === 'codex' || (!vendor && row.apiMode === 'responses')) return 'responses';
+    return 'chat_completions';
+  }
+
+  /** The profile's rows the gateway serves, as Hermes blocks at the gateway. */
+  private gatewayBlocks(rows: readonly ProviderRow[]): HermesProviderRoute[] {
+    const port = this.options.hermesGateway;
+    if (!port) return [];
+    const out: HermesProviderRoute[] = [];
+    for (const row of rows) {
+      if (!row.enabled || row.kind !== 'llm' || !this.gatewayRoute(row)) continue;
+      const wire = this.gatewayWire(row);
+      const baseUrl = port.rowAddress(
+        row.id,
+        wire === 'anthropic_messages' ? 'anthropic' : 'openai',
+      );
+      if (!baseUrl) continue;
+      out.push({
+        name: this.gatewayBlockName(row),
+        baseUrl,
+        apiMode: wire,
+        keyEnv: HERMES_GATEWAY_TOKEN_ENV,
+      });
+    }
+    return out;
   }
 
   private requireModel(scope: WorkspaceScope, ref: ModelRefInput): ModelRow {

@@ -199,6 +199,8 @@ struct ProviderDetailView: View {
             ForEach(Array(ModelLogic.catalogueNotes(provider).enumerated()), id: \.offset) { _, item in
                 catalogueNote(item)
             }
+            // A subscription through Core Hub's gateway (§143): its accounts and their usage.
+            if provider.subscription != nil { ProviderAccountsSection(providerId: provider.id) }
             if app.isAdmin { actions }
             modelsSection
         }
@@ -257,9 +259,11 @@ struct ProviderDetailView: View {
                 }
                 .accessibilityIdentifier("provider.sign_in")
             }
-            Button { Task { await test() } } label: { LucideLabel(l10n("models.test"), icon: .activity, size: 16) }
-                .disabled(busy)
-                .accessibilityIdentifier("provider.test")
+            if provider.subscription == nil {
+                Button { Task { await test() } } label: { LucideLabel(l10n("models.test"), icon: .activity, size: 16) }
+                    .disabled(busy)
+                    .accessibilityIdentifier("provider.test")
+            }
             if provider.catalogue.refreshable {
                 Button { Task { await refresh() } } label: { LucideLabel(l10n("models_page.refresh"), icon: .refreshCw, size: 16) }
                     .disabled(busy || provider.catalogue.status == .loading)

@@ -16,6 +16,8 @@ const PATTERNS: readonly [RegExp, string][] = [
   [/\b(?:sk|pk|rk)-[A-Za-z0-9_-]{12,}/g, '[redacted]'],
   [/\b(?:ghp|gho|ghu|ghs|github_pat|xai|glpat|hf)_[A-Za-z0-9_]{12,}/g, '[redacted]'],
   [/\bxai-[A-Za-z0-9]{12,}/g, '[redacted]'],
+  // The model gateway's own tokens (ADR 0029; a Hermes profile's, DECISIONS §143).
+  [/\bchgwh?_[A-Za-z0-9_.-]{16,}/g, '[redacted]'],
   [/\bAIza[0-9A-Za-z_-]{20,}/g, '[redacted]'],
   [/\beyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}/g, '[redacted]'],
   [/\b[A-Za-z0-9]{40,}\b/g, '[redacted]'],

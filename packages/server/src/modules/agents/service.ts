@@ -25,6 +25,9 @@ import {
   type CredentialState,
 } from './agent-credentials.js';
 import { agentOwnModel } from './agent-own-model.js';
+import { GATEWAY_MAIN_MODEL, GATEWAY_SMALL_MODEL } from './gateway-models.js';
+import { applyGatewayConfig } from './gateway-config.js';
+import { homedir } from 'node:os';
 import { and, eq, inArray, isNull } from 'drizzle-orm';
 import type { FastifyBaseLogger } from 'fastify';
 import type { ModuleDb } from '../../lib/db.js';
@@ -60,7 +63,7 @@ import {
   type UpdateCandidate,
   type UpdatePolicyStore,
 } from './update-policy.js';
-import type { AgentModelsPort } from './ports.js';
+import type { AgentGatewayGrant, AgentModelsPort } from './ports.js';
 import { agents, agentSettings, agentAdapters } from './schema.js';
 import {
   serializeAgent,
@@ -124,6 +127,17 @@ export interface AgentsServiceOptions {
    * environment the hub hands its agents and their home. Absent: no card says either way.
    */
   credentialProbe?: CredentialProbeOptions;
+  /**
+   * Retired (§144): every coding agent goes through the gateway wherever the hub runs. Accepted
+   * from an older caller and ignored.
+   */
+  modelSourceDefault?: () => 'hub' | 'auto';
+  /**
+   * Where the hub writes files of its own for agents on the model gateway (Gemini CLI's home when
+   * it is signed in another way; `gateway-config.ts`): `<DATA_DIR>/gateway/agents`. Absent: an agent that needs one
+   * keeps its own account.
+   */
+  gatewayStateDir?: string;
   /**
    * Where `check-update` and the periodic check ask for a newer version
    * (`update-policy.ts`). Absent: the hub knows only the catalog's pins.
@@ -415,6 +429,23 @@ export class AgentsService implements UpdatePolicyStore {
     const row = this.loadAgent(id);
     const sections = this.settings(scope, id);
     const section = sections.find((candidate) => candidate.key === input.section);
+    if (
+      !section &&
+      input.section === 'models' &&
+      Object.keys(input.values).every((key) => key === 'model_source')
+    ) {
+      // The retired model source choice (§144): an app from before it still sends it. Accepted,
+      // stored nowhere, changes nothing — every coding agent goes through the hub's gateway.
+      return {
+        section: {
+          key: 'models',
+          title: { ar: 'النماذج', en: 'Models' },
+          restart_required: false,
+          fields: [],
+        },
+        restart_job_id: null,
+      };
+    }
     if (!section) throw notFound({ resource: 'settings_section', id: input.section });
     const allowed = new Set(section.fields.map((field) => field.key));
     const unknown = Object.keys(input.values).filter((key) => !allowed.has(key));
@@ -1097,15 +1128,22 @@ export class AgentsService implements UpdatePolicyStore {
       model: string | null;
       provider?: string | null;
       reasoningEffort: string | null;
+      /** The model gateway's grant, when this process runs on the hub's models (ADR 0029). */
+      gateway?: AgentGatewayGrant | null;
     },
   ): AgentTarget {
     const settings = this.settingsRow(workspaceId, row.id);
     const cwd = run.cwd ?? settings?.workingDir ?? null;
-    const env = this.environmentFor(row, workspaceId, settings);
     const selection = this.selectionFor(row, workspaceId, run);
+    const onGateway = run.gateway
+      ? this.gatewayEnvironment(row, workspaceId, settings, selection, run.gateway)
+      : null;
+    const env = onGateway?.env ?? this.environmentFor(row, workspaceId, settings);
     return {
       ...this.targetOf(row),
       ...(Object.keys(env).length > 0 ? { env } : {}),
+      ...(onGateway ? { envRemove: onGateway.remove } : {}),
+      ...(onGateway?.sessionConfig ? { sessionConfig: onGateway.sessionConfig } : {}),
       ...(cwd ? { cwd } : {}),
       // The hub's own adapter has no process to hand an environment to: it resolves the
       // workspace's provider at the moment of each turn (`adapters/direct.ts`).
@@ -1147,7 +1185,18 @@ export class AgentsService implements UpdatePolicyStore {
     const asked = run.model?.trim() ?? '';
     if (asked && port) {
       try {
-        const ref = port.resolveModelKey(workspaceId, asked);
+        // A run on the agent's default names the model by its bare id and the provider by its
+        // row (`AgentDirectory.defaultProvider`): that row first. The bare id alone is found in
+        // whichever provider lists it first — another provider's model of the same name, such
+        // as a subscription the gateway does not lend (owner, 2026-09-30: a new Codex chat ran
+        // on its own account and asked for a sign-in).
+        const slug =
+          run.provider && !asked.includes('/') && port.providerSlug
+            ? port.providerSlug(workspaceId, run.provider)
+            : null;
+        const ref =
+          (slug ? port.resolveModelKey(workspaceId, `${slug}/${asked}`) : null) ??
+          port.resolveModelKey(workspaceId, asked);
         if (ref) {
           return {
             model: ref.model,
@@ -1235,6 +1284,199 @@ export class AgentsService implements UpdatePolicyStore {
     }
   }
 
+  // ------------------------------------------------- the model gateway (ADR 0029)
+
+  /**
+   * Where this agent's model calls go in this profile: `hub` — through the model gateway, to the
+   * model the turn chose, with no provider key handed to it. `null` where it is not the hub's to
+   * say: Hermes and the hub's own agent (they reach the gateway their own way), an agent the
+   * gateway does not wire yet, and a hub whose operator switched the gateway off
+   * (`COREHUB_MODEL_GATEWAY=off`).
+   *
+   * There is no other answer (the owner, 2026-09-30: «ابي كل الايجنتات تمر عن طريقنا مالها اتصال
+   * بنفسها … كل شي يكون عن طريق الهب بدون زر», DECISIONS §144): the agent's settings no longer
+   * choose, its own sign-in on this computer does not count, and when the hub has no model for
+   * it the turn fails with `gatewayMiss`'s words instead of running on the agent's own account.
+   * `agent` stays in the type for callers written against the opt-in design; it is never
+   * returned.
+   */
+  modelSourceFor(
+    row: AgentRow,
+    _workspaceId: string,
+    _selection: AgentSelection,
+  ): 'hub' | 'agent' | null {
+    const entry = this.catalog.find((candidate) => candidate.id === row.slug);
+    if (!entry?.gateway) return null;
+    const gateway = this.options.models?.()?.gateway;
+    if (!gateway) return null;
+    if (!(gateway.enabled?.() ?? gateway.available())) return null;
+    return 'hub';
+  }
+
+  /**
+   * Why a turn that must run on the hub's models cannot, in words for the chat — pointing at
+   * what to fix (Settings → Models, the model picker, or Agents). `null` when it can, or when
+   * `modelSourceFor` says the agent is not the gateway's.
+   */
+  gatewayMiss(row: AgentRow, workspaceId: string, selection: AgentSelection): string | null {
+    if (this.modelSourceFor(row, workspaceId, selection) !== 'hub') return null;
+    const entry = this.catalog.find((candidate) => candidate.id === row.slug)!;
+    const gateway = this.options.models!()!.gateway!;
+    if (!gateway.available()) {
+      return `${row.name} cannot run: Core Hub's model gateway is not available on this hub (its CLIProxyAPI is missing), and agents reach models only through it. Check the hub's log, or ask the administrator.`;
+    }
+    if (entry.gateway!.config === 'gemini-settings' && !this.options.gatewayStateDir) {
+      return `${row.name} cannot run: Core Hub has nowhere to write its model gateway settings. Check the hub's log, or ask the administrator.`;
+    }
+    if (
+      entry.gateway!.minVersion &&
+      row.version &&
+      compareVersions(row.version, entry.gateway!.minVersion) < 0
+    ) {
+      return `${row.name} ${row.version} cannot run on Core Hub's models: it needs version ${entry.gateway!.minVersion} or newer. Update it in Agents.`;
+    }
+    if (!selection.providerId || !selection.model) {
+      return `${row.name} cannot run: Core Hub has no model for it. Add a provider or choose a default model in Settings → Models, or pick a model for this chat.`;
+    }
+    let serves: boolean;
+    try {
+      serves = gateway.serves(workspaceId, selection.providerId);
+    } catch {
+      serves = false;
+    }
+    if (!serves) {
+      const port = this.options.models?.() ?? null;
+      const name = port?.providerSlug?.(workspaceId, selection.providerId) ?? 'its provider';
+      return `${row.name} cannot run on «${selection.model}» of ${name}: Core Hub's model gateway cannot serve that provider (it has no key the hub can use, or it is a sign-in only Hermes can use). Pick another model, or add the provider again in Settings → Models.`;
+    }
+    return null;
+  }
+
+  /** A gateway token for one agent process (the runner revokes it when the process goes). */
+  openGateway(
+    row: AgentRow,
+    workspaceId: string,
+    input: { sessionId: string; userId: string | null; alive(): boolean },
+  ): Promise<AgentGatewayGrant> {
+    const gateway = this.options.models?.()?.gateway;
+    if (!gateway) return Promise.reject(new Error('this hub has no model gateway'));
+    return gateway.open({
+      workspace: workspaceId,
+      agentId: row.id,
+      agentSlug: row.slug,
+      sessionId: input.sessionId,
+      userId: input.userId,
+      alive: input.alive,
+    });
+  }
+
+  /**
+   * An agent's environment on the gateway: its own settings `env` and `secret_refs` as ever, but
+   * none of the profile's provider keys, and nothing that would outrank the token (the entry's
+   * `clears` and its key variables); then the gateway's address, token and model alias. A proxy
+   * the host sets is told to leave the loopback gateway alone.
+   */
+  private gatewayEnvironment(
+    row: AgentRow,
+    workspaceId: string,
+    settings: AgentSettingsRow | undefined,
+    selection: AgentSelection,
+    grant: AgentGatewayGrant,
+  ): {
+    env: Record<string, string>;
+    remove: string[];
+    sessionConfig?: Record<string, string>;
+  } | null {
+    const entry = this.catalog.find((candidate) => candidate.id === row.slug)!;
+    const wiring = entry.gateway!;
+    const port = this.options.models?.() ?? null;
+    let own: Record<string, string> = { ...(settings?.env ?? {}) };
+    if (port) {
+      try {
+        // No `declared` families: the profile's keys are exactly what the agent must not get.
+        own = port.environmentFor(
+          workspaceId,
+          {},
+          {
+            ...(settings?.env ? { settingsEnv: settings.env } : {}),
+            ...(settings?.secretRefs ? { secretRefs: settings.secretRefs } : {}),
+          },
+        );
+      } catch (error) {
+        this.options.log.warn(
+          { agent: row.slug, err: error },
+          'agents: could not resolve the agent settings for the model gateway',
+        );
+      }
+    }
+    let contextWindow: number | null;
+    try {
+      contextWindow =
+        selection.providerId && selection.model
+          ? (port?.gateway?.contextWindow(workspaceId, selection.providerId, selection.model) ??
+            null)
+          : null;
+    } catch {
+      contextWindow = null;
+    }
+    const context = {
+      anthropicBaseUrl: grant.anthropicBaseUrl,
+      openaiBaseUrl: grant.openaiBaseUrl,
+      googleBaseUrl: grant.googleBaseUrl,
+      origin: grant.origin,
+      token: grant.token,
+      mainModel: GATEWAY_MAIN_MODEL,
+      smallModel: GATEWAY_SMALL_MODEL,
+      contextWindow,
+    };
+    const wired = wiring.env(context);
+    // The piece of its own configuration no variable can say (Gemini CLI, Grok Build, Pi).
+    let sessionConfig: Record<string, string> | undefined;
+    if (wiring.config) {
+      const hostEnv = this.options.credentialProbe?.env ?? {};
+      const seen = { ...hostEnv, ...own };
+      const written = applyGatewayConfig({
+        kind: wiring.config,
+        context,
+        env: seen,
+        home: this.options.credentialProbe?.home ?? seen.HOME ?? homedir(),
+        stateDir: this.options.gatewayStateDir ?? '',
+      });
+      if (!written.ok) {
+        // Nothing half-wired, and no quiet fall back to the agent's own account (§144).
+        this.options.log.warn(
+          { agent: row.slug, reason: written.reason },
+          'agents: could not write the model gateway into the agent’s own settings',
+        );
+        throw new HubError('provider_not_configured', {
+          message: `${row.name} cannot run: Core Hub could not write its model gateway settings (${written.reason}). Check the hub's log.`,
+        });
+      }
+      Object.assign(wired, written.env);
+      sessionConfig = written.sessionConfig;
+    }
+    const remove = [...new Set([...wiring.clears, ...Object.values(entry.credentials)])].filter(
+      (name) => !(name in wired),
+    );
+    const gone = new Set(remove.map((name) => name.toUpperCase()));
+    const env: Record<string, string> = {};
+    for (const [name, value] of Object.entries(own)) {
+      if (!gone.has(name.toUpperCase())) env[name] = value;
+    }
+    Object.assign(env, wired);
+    const loopback = ['127.0.0.1', 'localhost', '::1'];
+    const hostEnv = this.options.credentialProbe?.env ?? {};
+    for (const name of ['NO_PROXY', 'no_proxy']) {
+      const current = env[name] ?? hostEnv[name] ?? '';
+      const listed = current
+        .split(',')
+        .map((part) => part.trim())
+        .filter(Boolean);
+      env[name] = [...listed, ...loopback.filter((host) => !listed.includes(host))].join(',');
+    }
+    return { env, remove, ...(sessionConfig ? { sessionConfig } : {}) };
+  }
+
   /**
    * The model this agent uses when a run does not name one: the model pinned to it in
    * this workspace, else the workspace default for its kind (ADR 0010).
@@ -1282,7 +1524,14 @@ export class AgentsService implements UpdatePolicyStore {
     settings: AgentSettingsRow | undefined,
     language: Language = this.language,
   ): ContractAgent {
+    const modelSource =
+      row.adapterKind === 'acp' && row.installState === 'installed'
+        ? this.modelSourceSafe(row, scope.id)
+        : null;
     return serializeAgent(row, {
+      modelSource,
+      gatewayMinContext:
+        this.catalog.find((entry) => entry.id === row.slug)?.gateway?.minContext ?? null,
       profile: scope.slug,
       hasAvatar: this.options.avatars?.has(row.id) ?? false,
       settings,
@@ -1290,7 +1539,8 @@ export class AgentsService implements UpdatePolicyStore {
       defaultModel: this.defaultModelOf(row, scope.id),
       name: this.displayName(row, language),
       selfUpdate: this.selfUpdates(row),
-      credentials: this.credentialsOf(row, scope.id, settings),
+      // On the hub's models it answers with the hub's providers, whatever it has of its own.
+      credentials: modelSource === 'hub' ? 'ready' : this.credentialsOf(row, scope.id, settings),
       ownModel:
         this.options.credentialProbe &&
         row.adapterKind === 'acp' &&
@@ -1298,6 +1548,19 @@ export class AgentsService implements UpdatePolicyStore {
           ? agentOwnModel(row.slug, this.options.credentialProbe)
           : null,
     });
+  }
+
+  /** `modelSourceFor` at the profile's default, for the card; never throws. */
+  private modelSourceSafe(row: AgentRow, workspaceId: string): 'hub' | 'agent' | null {
+    try {
+      return this.modelSourceFor(row, workspaceId, this.selectionFor(row, workspaceId, {}));
+    } catch (error) {
+      this.options.log.warn(
+        { agent: row.slug, err: error },
+        'agents: could not read the model source',
+      );
+      return null;
+    }
   }
 
   /**

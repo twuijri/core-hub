@@ -13,6 +13,9 @@ struct AddProviderView: View {
     @Environment(AppModel.self) private var app
     @Environment(\.l10n) private var l10n
     @State private var scope: ProviderScope = .all
+    /// The hub signs in to subscriptions through its gateway (§143): a Hermes sign-in it replaces is
+    /// then not offered a second time under another name.
+    @State private var gatewaySubscriptions = false
 
     var body: some View {
         AsyncContent(key: app.currentProfile) {
@@ -20,6 +23,7 @@ struct AddProviderView: View {
             return try await app.api.call { try await ModelsAPI.modelsListProviderPresets(xHubProfile: profile, apiConfiguration: $0) }
         } content: { answer, _ in
             let presets = ModelLogic.offered(answer.items, added: added, scope: scope)
+                .filter { !(gatewaySubscriptions && $0.replacedBy != nil) }
             List {
                 Section {
                     Picker(l10n("models_page.for_whom"), selection: $scope) {
@@ -57,6 +61,8 @@ struct AddProviderView: View {
                         }
                     }
                 }
+                // Subscriptions signed in to through Core Hub's gateway (§143).
+                SubscriptionVendorsSection(scope: scope, added: added, done: done, available: $gatewaySubscriptions)
                 Section {
                     NavigationLink {
                         CustomProviderForm(scope: scope, host: answer.host, done: done)
@@ -267,6 +273,9 @@ struct ProviderSignInView: View {
     @State private var signIn: ProviderSignIn?
     @State private var error: String?
     @State private var attempt = 0
+    /// The address a sign-in by link landed on, pasted back (§143).
+    @State private var pasted = ""
+    @State private var sending = false
 
     var body: some View {
         ScrollView {
@@ -278,7 +287,7 @@ struct ProviderSignInView: View {
                         NoticeView(text: l10n("models.sign_in_approved"), tone: .success)
                             .accessibilityIdentifier("signin.approved")
                     case .pending:
-                        Text(l10n("models_page.sign_in_steps")).font(.system(size: FontSize.sizeSm)).foregroundStyle(Tone.textMuted)
+                        Text(l10n(signIn.acceptsCode ? "subscriptions.paste_steps" : "models_page.sign_in_steps")).font(.system(size: FontSize.sizeSm)).foregroundStyle(Tone.textMuted)
                         if let code = signIn.userCode {
                             Text(code)
                                 .font(.system(size: FontSize.sizeXl, weight: .bold, design: .monospaced))
@@ -302,6 +311,25 @@ struct ProviderSignInView: View {
                             Text(signIn.verificationUrl).font(.system(size: FontSize.sizeXs, design: .monospaced)).foregroundStyle(Tone.textMuted)
                                 .textSelection(.enabled)
                                 .environment(\.layoutDirection, .leftToRight)
+                        }
+                        if signIn.acceptsCode {
+                            TextField(signIn.callbackHint ?? "http://localhost/…", text: $pasted)
+                                .textInputAutocapitalization(.never).autocorrectionDisabled().keyboardType(.URL)
+                                .font(.system(size: FontSize.sizeSm, design: .monospaced))
+                                .environment(\.layoutDirection, .leftToRight)
+                                .textFieldStyle(.roundedBorder)
+                                .accessibilityIdentifier("signin.paste")
+                            if let hint = signIn.callbackHint {
+                                Text(l10n("subscriptions.paste_hint", ["start": hint])).font(.system(size: FontSize.sizeXs)).foregroundStyle(Tone.textMuted)
+                            }
+                            Button {
+                                Task { await submit(signIn) }
+                            } label: {
+                                Text(l10n("subscriptions.paste_submit")).frame(maxWidth: .infinity)
+                            }
+                            .buttonStyle(.borderedProminent).tint(Tone.accent)
+                            .disabled(pasted.trimmingCharacters(in: .whitespaces).isEmpty || sending)
+                            .accessibilityIdentifier("signin.paste_submit")
                         }
                         HStack { ProgressView(); Text(l10n("models_page.waiting_sign_in")).font(.system(size: FontSize.sizeXs)).foregroundStyle(Tone.textMuted) }
                     default:
@@ -333,6 +361,24 @@ struct ProviderSignInView: View {
         default: head = l10n("models_page.sign_in_failed")
         }
         return [head, signIn.error].compactMap { $0 }.joined(separator: " ")
+    }
+
+    /// The pasted address goes to the hub; the loop below keeps asking how the sign-in stands.
+    private func submit(_ current: ProviderSignIn) async {
+        sending = true
+        defer { sending = false }
+        let profile = app.currentProfile, id = provider.id, signInID = current.id
+        let code = pasted.trimmingCharacters(in: .whitespacesAndNewlines)
+        do {
+            signIn = try await app.api.call {
+                try await ModelsAPI.modelsCompleteProviderSignIn(
+                    xHubProfile: profile, providerId: id, signInId: signInID,
+                    modelsCompleteProviderSignInRequest: ModelsCompleteProviderSignInRequest(code: code), apiConfiguration: $0
+                )
+            }
+        } catch {
+            self.error = HubFailure(error).describe(l10n)
+        }
     }
 
     private func run() async {

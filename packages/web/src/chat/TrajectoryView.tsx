@@ -7,13 +7,13 @@
  * The data is `sessions.getTrajectory`; the pure rules (filters, the axis, folding idle
  * time, packing parallel calls) are `trajectory.ts`. This file only draws.
  */
-import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
+import { useContext, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
 import { describeError } from '../auth/client.js';
 import { useI18n } from '../i18n/context.js';
 import { Badge, Button, EmptyState, Input, Notice, SkeletonText, Tooltip } from '../ui/index.js';
 import { IconDownload, IconSearch, IconSpark, IconTool } from '../ui/icons.js';
 import { ToolCallBody } from './ToolCallCard.js';
-import { failedNames, failureReasons } from './fallback.js';
+import { ModelNamesContext, failedNames, failureReasons } from './fallback.js';
 import {
   LANES,
   NO_FILTER,
@@ -103,12 +103,16 @@ function TrajectoryBody({
   const numbers = useMemo(() => new Map(data.steps.map((step, i) => [step.id, i + 1])), [data]);
 
   // A bar clicked on the timeline brings its step into view — clearing the filters when
-  // they hide it — and flashes it.
+  // they hide it — and flashes it. Once per click: while a step runs the list re-renders on
+  // every tick, and scrolling back each time held the page on that step until the agent
+  // finished (owner, 2026-09-30).
   const list = useRef<HTMLOListElement>(null);
+  const scrolled = useRef<number | null>(null);
   useEffect(() => {
-    if (!focus) return;
+    if (!focus || scrolled.current === focus.at) return;
     const node = list.current?.querySelector<HTMLElement>(`[data-step-id="${focus.id}"]`);
     if (!node) return;
+    scrolled.current = focus.at;
     node.scrollIntoView({ block: 'center', behavior: 'smooth' });
     node.focus({ preventScroll: true });
   }, [focus, shown]);
@@ -392,6 +396,7 @@ function StepRow({
   onToggle(): void;
 }) {
   const { t, language } = useI18n();
+  const names = useContext(ModelNamesContext);
   const ms = durationOf(step, now);
   const summary = summaryOf(step);
   const result = resultOf(step);
@@ -443,7 +448,7 @@ function StepRow({
         {step.fallback && step.fallback.failed.length > 0 && (
           // The turn was answered by a fallback model (contract decision §54).
           <Badge tone="warning" testId="trajectory-fallback">
-            {t('trajectory.fallback', { failed: failedNames(step.fallback, language) })}
+            {t('trajectory.fallback', { failed: failedNames(step.fallback, language, names) })}
           </Badge>
         )}
         {step.status !== 'succeeded' && (
@@ -457,7 +462,7 @@ function StepRow({
         <div className="trajectory-step-body" id={bodyId} data-testid="trajectory-step-body">
           {step.kind === 'turn' && step.model && (
             <p className="trajectory-step-meta" dir="auto" data-testid="trajectory-step-model">
-              {t('trajectory.model', { model: step.model })}
+              {t('trajectory.model', { model: names?.(step.model) ?? step.model })}
             </p>
           )}
           {step.fallback && failureReasons(step.fallback) && (

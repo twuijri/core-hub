@@ -6,6 +6,11 @@
  * show/hide eye, marked optional wherever it is), and a default-model select with a
  * Fetch button that asks the endpoint itself.
  *
+ * Since 2026-09-30 (DECISIONS §146, owner): the preset list is one list — keys and
+ * subscriptions together, a subscription tagged «Subscription» — drawn by our own `Select`
+ * with each company's logo; "Custom" stays a tab of its own. A Hermes sign-in that the
+ * gateway now does itself is not offered twice.
+ *
  * First question (contract decision §37, owner 2026-09-24): who is it for — every profile
  * (shared, the default) or only the profile selected at the top, whose own key then wins
  * there over a shared one. A provider never changes scope afterwards.
@@ -21,8 +26,9 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { describeError } from '../auth/client.js';
 import { useI18n } from '../i18n/context.js';
-import type { ProviderHost, ProviderPreset } from '../types.js';
+import type { Provider, ProviderHost, ProviderPreset, SubscriptionVendor } from '../types.js';
 import {
+  Badge,
   Button,
   Combobox,
   Dialog,
@@ -36,12 +42,19 @@ import {
 } from '../ui/index.js';
 import { needsLoopbackWarning, suggestedHostUrl } from './loopback.js';
 import {
+  isUnsupported,
   useCreateProvider,
   useProbeProvider,
   useSaveDefaults,
   useSaveModel,
+  useSubscriptionVendors,
   type ProviderCreate,
 } from './queries.js';
+import { VendorLogo } from '../ui/brand/VendorLogo.js';
+import { SubscriptionSignIn, subscriptionDetail } from './SubscriptionSignIn.js';
+
+/** A subscription's value in the provider list, apart from the presets' own ids. */
+const SUBSCRIPTION = 'subscription:';
 
 export function AddProviderDialog({
   kind: startKind = 'llm',
@@ -49,6 +62,8 @@ export function AddProviderDialog({
   host,
   taken,
   profileName,
+  providers = [],
+  startMode = 'preset',
   onClose,
 }: {
   /** What a custom endpoint is added as; the speech tabs open it as their own kind. */
@@ -62,6 +77,10 @@ export function AddProviderDialog({
   taken: { all: ReadonlySet<string>; profile: ReadonlySet<string> };
   /** The profile selected at the top: the one "this profile only" means. */
   profileName: string;
+  /** The providers already added (a subscription added before is signed in to again, §143). */
+  providers?: readonly Provider[];
+  /** Open on "Custom", or on the first subscription in the list, rather than the first preset. */
+  startMode?: 'preset' | 'custom' | 'subscription';
   onClose(): void;
 }) {
   const { t } = useI18n();
@@ -72,16 +91,49 @@ export function AddProviderDialog({
   const firstField = useRef<HTMLButtonElement>(null);
 
   const [scope, setScope] = useState<'all' | 'profile'>('all');
-  const offered = useMemo(
-    () => presets.filter((preset) => preset.repeatable || !taken[scope].has(preset.id)),
-    [presets, taken, scope],
+  // The subscriptions the gateway signs in to (DECISIONS §143), listed with the presets, and only
+  // on a hub that offers them (an older one answers 404 and none is listed). There, a sign-in
+  // through Hermes that the gateway now does itself is not offered again; rows already added keep
+  // working.
+  const vendors = useSubscriptionVendors();
+  const subscriptions = useMemo<readonly SubscriptionVendor[]>(
+    () =>
+      startKind === 'llm' && !(vendors.isError && isUnsupported(vendors.error))
+        ? (vendors.data?.items ?? [])
+        : [],
+    [startKind, vendors.isError, vendors.error, vendors.data],
   );
-  const [mode, setMode] = useState<'preset' | 'custom'>('preset');
+  const offered = useMemo(
+    () =>
+      presets.filter(
+        (preset) =>
+          (preset.repeatable || !taken[scope].has(preset.id)) &&
+          !(vendors.data?.available && preset.replaced_by),
+      ),
+    [presets, taken, scope, vendors.data?.available],
+  );
+  const [signingIn, setSigningIn] = useState(false);
+  const [mode, setMode] = useState<'preset' | 'custom'>(
+    startMode === 'custom' ? 'custom' : 'preset',
+  );
   // A custom endpoint may be a speech server (Whisper-style `audio/transcriptions`,
   // `audio/speech`): what it is for is asked, never guessed (DECISIONS §63).
   const [customKind, setCustomKind] = useState<'llm' | 'stt' | 'tts'>(startKind);
-  const [presetId, setPresetId] = useState<string>(offered[0]?.id ?? '');
+  // The one list: the subscriptions first, then the presets (keys, and Hermes's own sign-ins).
+  const choices = useMemo(
+    () => [
+      ...subscriptions.map((item) => `${SUBSCRIPTION}${item.preset}`),
+      ...offered.map((item) => item.id),
+    ],
+    [subscriptions, offered],
+  );
+  const [presetId, setPresetId] = useState<string>(
+    startMode === 'subscription' ? '' : (offered[0]?.id ?? ''),
+  );
   const preset = offered.find((item) => item.id === presetId);
+  const vendor = presetId.startsWith(SUBSCRIPTION)
+    ? subscriptions.find((item) => `${SUBSCRIPTION}${item.preset}` === presetId)
+    : undefined;
   const [label, setLabel] = useState('');
   const [baseUrl, setBaseUrl] = useState(preset?.base_url ?? '');
   const [apiKey, setApiKey] = useState('');
@@ -102,12 +154,54 @@ export function AddProviderDialog({
   useEffect(() => firstField.current?.focus(), []);
 
   // A preset already added in the chosen scope is not offered; move off it when the scope
-  // changes rather than submitting a 409.
+  // changes rather than submitting a 409. Opened on a subscription: the first one, once listed.
   useEffect(() => {
-    if (!offered.some((item) => item.id === presetId)) setPresetId(offered[0]?.id ?? '');
-  }, [offered, presetId]);
+    if (choices.includes(presetId)) return;
+    if (startMode === 'subscription' && presetId === '') {
+      if (subscriptions[0]) setPresetId(`${SUBSCRIPTION}${subscriptions[0].preset}`);
+      else if (!vendors.isPending) setPresetId(offered[0]?.id ?? '');
+      return;
+    }
+    setPresetId(offered[0]?.id ?? choices[0] ?? '');
+  }, [choices, offered, presetId, startMode, subscriptions, vendors.isPending]);
+
+  // Subscriptions first, under their heading — the gateway's, then Hermes's own sign-ins, which
+  // serve Hermes and Core Hub's own agent (the gateway cannot sign in to them, §146) — then the
+  // providers used with a key. Each with its company's logo.
+  const listOptions = useMemo(() => {
+    const tag = <Badge tone="info">{t('models.add.subscription_badge')}</Badge>;
+    const subscriptionsGroup = t('models.add.group_subscriptions');
+    const keysGroup = t('models.add.group_keys');
+    const signIns = offered.filter((item) => item.sign_in);
+    const keys = offered.filter((item) => !item.sign_in);
+    return [
+      ...subscriptions.map((item) => ({
+        value: `${SUBSCRIPTION}${item.preset}`,
+        label: item.label,
+        icon: <VendorLogo preset={item.preset} name={item.label} />,
+        badge: tag,
+        description: subscriptionDetail(item, t),
+        group: subscriptionsGroup,
+      })),
+      ...signIns.map((item) => ({
+        value: item.id,
+        label: item.label,
+        icon: <VendorLogo preset={item.id} name={item.label} />,
+        badge: tag,
+        description: t('models.add.hermes_sign_in_detail'),
+        group: subscriptionsGroup,
+      })),
+      ...keys.map((item) => ({
+        value: item.id,
+        label: item.label,
+        icon: <VendorLogo preset={item.id} name={item.label} />,
+        group: keysGroup,
+      })),
+    ];
+  }, [subscriptions, offered, t]);
 
   const usingPreset = mode === 'preset' && preset !== undefined;
+  const usingSubscription = mode === 'preset' && vendor !== undefined;
   // A family that already holds a key in the chosen scope lends it: Groq added for chat also
   // speaks, and adding its speech row asks for nothing (DECISIONS §94).
   const keyOnFile = usingPreset && (preset.key_on_file ?? []).includes(scope);
@@ -153,6 +247,7 @@ export function AddProviderDialog({
 
   const submit = (event: React.FormEvent) => {
     event.preventDefault();
+    if (usingSubscription) return;
     const body: ProviderCreate = {
       ...(usingPreset ? { preset: preset.id } : {}),
       label: usingPreset ? label.trim() || preset.label : label.trim(),
@@ -187,7 +282,8 @@ export function AddProviderDialog({
       testId="add-provider-dialog"
     >
       <form className="flex flex-col gap-3" onSubmit={submit}>
-        <fieldset className="flex flex-col gap-1">
+        {/* Once a subscription's sign-in has started, the choices above it are made. */}
+        <fieldset className="flex flex-col gap-1" hidden={signingIn}>
           <legend className="ch-label">{t('models.add.scope')}</legend>
           <Segmented
             className="self-start"
@@ -217,7 +313,7 @@ export function AddProviderDialog({
           </p>
         </fieldset>
 
-        <fieldset className="flex flex-col gap-1">
+        <fieldset className="flex flex-col gap-1" hidden={signingIn}>
           <legend className="ch-label">{t('models.add.type')}</legend>
           <Segmented
             className="self-start"
@@ -252,17 +348,19 @@ export function AddProviderDialog({
           />
         </fieldset>
 
-        {mode === 'preset' ? (
-          <div className="ch-field-row">
+        {mode === 'preset' && (
+          <div className="ch-field-row" hidden={signingIn}>
             <Label>{t('models.add.select_provider')}</Label>
             <Select
-              value={presetId}
+              value={presetId === '' ? null : presetId}
               onValueChange={(next) => next && setPresetId(next)}
               label={t('models.add.select_provider')}
+              title={null}
+              block
               testId="add-preset"
-              options={offered.map((item) => ({ value: item.id, label: item.label }))}
+              options={listOptions}
             />
-            {preset?.keys_url && (
+            {!usingSubscription && preset?.keys_url && (
               <a
                 className="link text-xs underline"
                 href={preset.keys_url}
@@ -273,163 +371,185 @@ export function AddProviderDialog({
               </a>
             )}
           </div>
+        )}
+
+        {usingSubscription && vendor ? (
+          <SubscriptionSignIn
+            key={vendor.preset}
+            vendor={vendor}
+            available={vendors.data?.available ?? false}
+            reason={vendors.data?.reason ?? null}
+            note={vendors.data?.note ?? null}
+            scope={scope}
+            providers={providers}
+            onClose={onClose}
+            onSigningIn={() => setSigningIn(true)}
+          />
         ) : (
           <>
-            <fieldset className="flex flex-col gap-1">
-              <legend className="ch-label">{t('models.add.kind')}</legend>
-              <Segmented
-                className="self-start"
-                label={t('models.add.kind')}
-                value={customKind}
-                onChange={(next) => setCustomKind(next === 'stt' || next === 'tts' ? next : 'llm')}
-                wrap
-                options={(['llm', 'stt', 'tts'] as const).map((value) => ({
-                  value,
-                  label: t(`models.add.kind_${value}`),
-                  itemProps: { 'data-testid': `add-kind-${value}` },
-                }))}
-              />
-            </fieldset>
-            <Field label={t('models.provider.label')}>
+            {mode === 'custom' && (
+              <>
+                <fieldset className="flex flex-col gap-1">
+                  <legend className="ch-label">{t('models.add.kind')}</legend>
+                  <Segmented
+                    className="self-start"
+                    label={t('models.add.kind')}
+                    value={customKind}
+                    onChange={(next) =>
+                      setCustomKind(next === 'stt' || next === 'tts' ? next : 'llm')
+                    }
+                    wrap
+                    options={(['llm', 'stt', 'tts'] as const).map((value) => ({
+                      value,
+                      label: t(`models.add.kind_${value}`),
+                      itemProps: { 'data-testid': `add-kind-${value}` },
+                    }))}
+                  />
+                </fieldset>
+                <Field label={t('models.provider.label')}>
+                  {(props) => (
+                    <Input
+                      {...props}
+                      dir="auto"
+                      value={label}
+                      onChange={(event) => setLabel(event.target.value)}
+                      required
+                      data-testid="add-label"
+                    />
+                  )}
+                </Field>
+              </>
+            )}
+
+            <Field label={t('models.provider.base_url')}>
               {(props) => (
-                <Input
-                  {...props}
-                  dir="auto"
-                  value={label}
-                  onChange={(event) => setLabel(event.target.value)}
-                  required
-                  data-testid="add-label"
-                />
+                <>
+                  <Input
+                    {...props}
+                    dir="ltr"
+                    inputMode="url"
+                    placeholder={
+                      (usingPreset ? preset.base_url_example : null) ??
+                      'http://host.docker.internal:1234/v1'
+                    }
+                    value={baseUrl}
+                    onChange={(event) => setBaseUrl(event.target.value)}
+                    required
+                    data-testid="add-base-url"
+                  />
+                  {warn && host && (
+                    <Notice tone="warning" className="mt-1">
+                      <span data-testid="loopback-warning">
+                        {t('models.add.loopback', { url: suggestedHostUrl(baseUrl, host) })}
+                      </span>
+                    </Notice>
+                  )}
+                </>
               )}
             </Field>
-          </>
-        )}
 
-        <Field label={t('models.provider.base_url')}>
-          {(props) => (
-            <>
-              <Input
-                {...props}
-                dir="ltr"
-                inputMode="url"
-                placeholder={
-                  (usingPreset ? preset.base_url_example : null) ??
-                  'http://host.docker.internal:1234/v1'
-                }
-                value={baseUrl}
-                onChange={(event) => setBaseUrl(event.target.value)}
-                required
-                data-testid="add-base-url"
-              />
-              {warn && host && (
-                <Notice tone="warning" className="mt-1">
-                  <span data-testid="loopback-warning">
-                    {t('models.add.loopback', { url: suggestedHostUrl(baseUrl, host) })}
-                  </span>
-                </Notice>
-              )}
-            </>
-          )}
-        </Field>
-
-        {signInPreset && (
-          <Notice tone="info">
-            <span data-testid="add-sign-in-hint">{t('models.add.sign_in_hint')}</span>
-          </Notice>
-        )}
-
-        {!signInPreset && (
-          <Field
-            label={keyOptional ? t('models.add.key_optional') : t('models.add.key_required')}
-            hint={keyOnFile ? t('models.add.key_on_file') : undefined}
-          >
-            {(props) => (
-              <span className="field-row-inline">
-                <Input
-                  {...props}
-                  type={showKey ? 'text' : 'password'}
-                  autoComplete="off"
-                  spellCheck={false}
-                  dir="ltr"
-                  value={apiKey}
-                  onChange={(event) => setApiKey(event.target.value)}
-                  required={!keyOptional}
-                  data-testid="add-api-key"
-                />
-                <Button aria-pressed={showKey} onClick={() => setShowKey((shown) => !shown)}>
-                  {t(showKey ? 'models.add.hide_key' : 'models.add.show_key')}
-                </Button>
-              </span>
-            )}
-          </Field>
-        )}
-
-        {!signInPreset && !addsSpeech && (
-          <div className="ch-field-row">
-            <Label>{t('models.add.default_model')}</Label>
-            <div className="flex items-center gap-2">
-              {/* The list is empty until the provider is asked, so the picker says so and
-                keeps Fetch inside the popup, where the person already is. */}
-              <Combobox
-                value={model === '' ? null : model}
-                onChange={(next) => setModel(next ?? '')}
-                label={t('models.add.default_model')}
-                placeholder={t('models.add.model_placeholder')}
-                testId="add-default-model"
-                status={
-                  probe.isPending
-                    ? 'loading'
-                    : probeError !== null
-                      ? 'error'
-                      : models.length === 0
-                        ? 'unfetched'
-                        : 'ready'
-                }
-                errorMessage={probeError}
-                fetchAction={{
-                  label: t('models.add.fetch'),
-                  onSelect: fetchModels,
-                  disabled: probe.isPending || baseUrl.trim() === '',
-                }}
-                options={models.map((item) => ({
-                  value: item.id,
-                  label: item.label,
-                  detail: item.id,
-                }))}
-              />
-              <Button
-                disabled={probe.isPending || baseUrl.trim() === ''}
-                onClick={fetchModels}
-                data-testid="add-fetch-models"
-              >
-                {t('models.add.fetch')}
-              </Button>
-            </div>
-            {probe.isPending && <Spinner label={t('models.add.fetching')} />}
-            {probeError && (
-              <Notice tone="danger">
-                <span data-testid="add-fetch-error">{probeError}</span>
+            {signInPreset && (
+              <Notice tone="info">
+                <span data-testid="add-sign-in-hint">{t('models.add.sign_in_hint')}</span>
               </Notice>
             )}
-            {models.length > 0 && !probeError && (
-              <p className="ch-field-hint">{t('models.add.fetched', { count: models.length })}</p>
+
+            {!signInPreset && (
+              <Field
+                label={keyOptional ? t('models.add.key_optional') : t('models.add.key_required')}
+                hint={keyOnFile ? t('models.add.key_on_file') : undefined}
+              >
+                {(props) => (
+                  <span className="field-row-inline">
+                    <Input
+                      {...props}
+                      type={showKey ? 'text' : 'password'}
+                      autoComplete="off"
+                      spellCheck={false}
+                      dir="ltr"
+                      value={apiKey}
+                      onChange={(event) => setApiKey(event.target.value)}
+                      required={!keyOptional}
+                      data-testid="add-api-key"
+                    />
+                    <Button aria-pressed={showKey} onClick={() => setShowKey((shown) => !shown)}>
+                      {t(showKey ? 'models.add.hide_key' : 'models.add.show_key')}
+                    </Button>
+                  </span>
+                )}
+              </Field>
             )}
-          </div>
+
+            {!signInPreset && !addsSpeech && (
+              <div className="ch-field-row">
+                <Label>{t('models.add.default_model')}</Label>
+                <div className="flex items-center gap-2">
+                  {/* The list is empty until the provider is asked, so the picker says so and
+                keeps Fetch inside the popup, where the person already is. */}
+                  <Combobox
+                    value={model === '' ? null : model}
+                    onChange={(next) => setModel(next ?? '')}
+                    label={t('models.add.default_model')}
+                    placeholder={t('models.add.model_placeholder')}
+                    testId="add-default-model"
+                    status={
+                      probe.isPending
+                        ? 'loading'
+                        : probeError !== null
+                          ? 'error'
+                          : models.length === 0
+                            ? 'unfetched'
+                            : 'ready'
+                    }
+                    errorMessage={probeError}
+                    fetchAction={{
+                      label: t('models.add.fetch'),
+                      onSelect: fetchModels,
+                      disabled: probe.isPending || baseUrl.trim() === '',
+                    }}
+                    options={models.map((item) => ({
+                      value: item.id,
+                      label: item.label,
+                      detail: item.id,
+                    }))}
+                  />
+                  <Button
+                    disabled={probe.isPending || baseUrl.trim() === ''}
+                    onClick={fetchModels}
+                    data-testid="add-fetch-models"
+                  >
+                    {t('models.add.fetch')}
+                  </Button>
+                </div>
+                {probe.isPending && <Spinner label={t('models.add.fetching')} />}
+                {probeError && (
+                  <Notice tone="danger">
+                    <span data-testid="add-fetch-error">{probeError}</span>
+                  </Notice>
+                )}
+                {models.length > 0 && !probeError && (
+                  <p className="ch-field-hint">
+                    {t('models.add.fetched', { count: models.length })}
+                  </p>
+                )}
+              </div>
+            )}
+
+            {create.isError && <Notice tone="danger">{describeError(create.error, t)}</Notice>}
+
+            <div className="ch-dialog-actions">
+              <Button onClick={onClose}>{t('common.cancel')}</Button>
+              <Button
+                type="submit"
+                variant="primary"
+                disabled={!canSubmit || create.isPending}
+                data-testid="add-submit"
+              >
+                {t('models.add.submit')}
+              </Button>
+            </div>
+          </>
         )}
-
-        {create.isError && <Notice tone="danger">{describeError(create.error, t)}</Notice>}
-
-        <div className="ch-dialog-actions">
-          <Button onClick={onClose}>{t('common.cancel')}</Button>
-          <Button
-            type="submit"
-            variant="primary"
-            disabled={!canSubmit || create.isPending}
-            data-testid="add-submit"
-          >
-            {t('models.add.submit')}
-          </Button>
-        </div>
       </form>
     </Dialog>
   );

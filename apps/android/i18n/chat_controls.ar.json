@@ -61,5 +61,7 @@
   "chat_controls_steer_hint": "وجّه الرد الجاري دون إيقافه.",
   "chat_controls_steered": "وصل توجيهك إلى الرد الجاري.",
   "chat_controls_steer_queued": "لم يقبله الرد الجاري الآن؛ يُرسل رسالةً تالية.",
-  "chat_controls_save": "حفظ"
+  "chat_controls_save": "حفظ",
+  "chat_controls_model_default_named": "الافتراضي · %1$s",
+  "chat_controls_model_small_context": "سياق صغير (أقل من %1$s ألف)"
 }

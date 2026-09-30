@@ -39,6 +39,19 @@ export const pi: CatalogEntry = {
   },
   // Pi's own folder and settings, and every provider it can use.
   hostEnv: ['PI_*', ...PROVIDER_HOST_ENV],
+  // On the hub's model gateway (ADR 0029, DECISIONS §141): a provider with its own address is only
+  // an entry of `$PI_CODING_AGENT_DIR/models.json`, so the hub keeps one there
+  // (`gateway-config.ts`: `corehub-gateway`, OpenAI Chat Completions, `apiKey:
+  // "$COREHUB_GATEWAY_TOKEN"`) and switches the ACP session to it — `pi-acp`'s `model` option,
+  // which does not change Pi's saved default. The provider keys the hub would hand it are taken
+  // away (its `credentials`), as for every agent on the gateway.
+  gateway: {
+    wire: 'openai-chat',
+    minContext: 16_000,
+    env: (gw) => ({ COREHUB_GATEWAY_TOKEN: gw.token }),
+    clears: [],
+    config: 'pi-models',
+  },
   health: { kind: 'command', args: ['--version'], binary: 'pi' },
   // Pi runs its tools without asking (its design), so no `approvals`.
   capabilities: ['streaming', 'tools', 'resume', 'config_files'],

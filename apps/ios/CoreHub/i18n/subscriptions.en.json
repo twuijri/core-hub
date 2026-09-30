@@ -1,0 +1,29 @@
+{
+  "subscriptions": {
+    "title": "Sign in with a subscription",
+    "accounts": "Accounts",
+    "unavailable": "Not available on this hub: {reason}",
+    "none": "No account is signed in yet.",
+    "errors": "Recent errors",
+    "status": {
+      "active": "Working",
+      "cooling": "Waiting",
+      "error": "Failing",
+      "disabled": "Turned off",
+      "refreshing": "Renewing",
+      "unknown": "Unknown"
+    },
+    "retry_at": "Tried again",
+    "no_windows": "No usage seen yet.",
+    "check_failed": "“Check now” read nothing: {reason}",
+    "requests": "{success} answered · {failed} failed",
+    "check": "Check now",
+    "left": "{percent}% left",
+    "resets": "Resets",
+    "flow_device": "A short code — works from this phone",
+    "flow_link": "A link, then paste the address back",
+    "paste_steps": "Open the sign-in page and sign in. Your browser then goes to an address that may not load — copy that whole address and paste it here.",
+    "paste_hint": "It starts with {start}",
+    "paste_submit": "Finish signing in"
+  }
+}

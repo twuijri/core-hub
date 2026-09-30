@@ -24,6 +24,21 @@ export const kimiCode: CatalogEntry = {
   credentials: {},
   // Kimi Code's own settings and Moonshot's.
   hostEnv: ['KIMI_*', 'MOONSHOT_*'],
+  // On the hub's model gateway (ADR 0029): Kimi Code's environment-only "temporary model" (its
+  // env-vars page: `KIMI_MODEL_NAME` and `KIMI_MODEL_API_KEY` both required), OpenAI-compatible,
+  // at the gateway. Nothing is written to its `config.toml`.
+  gateway: {
+    wire: 'openai-chat',
+    minContext: 32_000,
+    env: (gw) => ({
+      KIMI_MODEL_NAME: gw.mainModel,
+      KIMI_MODEL_API_KEY: gw.token,
+      KIMI_MODEL_PROVIDER_TYPE: 'openai',
+      KIMI_MODEL_BASE_URL: gw.openaiBaseUrl,
+      ...(gw.contextWindow ? { KIMI_MODEL_MAX_CONTEXT_SIZE: String(gw.contextWindow) } : {}),
+    }),
+    clears: [],
+  },
   health: { kind: 'command', args: ['--version'] },
   capabilities: ['streaming', 'tools', 'approvals', 'mcp', 'resume', 'config_files'],
   sections: ['mcp', 'settings'],

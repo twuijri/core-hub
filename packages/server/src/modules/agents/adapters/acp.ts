@@ -144,6 +144,11 @@ export class AcpSession implements AgentSession {
   private readonly transport: AcpTransport;
   private readonly pending = new Map<number, Pending>();
   private readonly queue = new EventQueue();
+  /** The prompt in flight, and which turn asked it: a turn the hub stopped may still be ending. */
+  private inflight: Promise<unknown> | null = null;
+  private turnSeq = 0;
+  /** A new turn is waiting for the stopped one to end: what the agent says meanwhile is not its. */
+  private settling = false;
   private readonly approvals = new Map<string, number | string>();
   private nextId = 1;
   private closed = false;
@@ -182,6 +187,11 @@ export class AcpSession implements AgentSession {
        * (`agentCapabilities.mcpCapabilities.http`); ACP requires every agent to take stdio.
        */
       mcpServers?: readonly AcpMcpServer[];
+      /**
+       * Session options set once the session exists (`session/set_config_option`): the model
+       * gateway's model for an agent that has no variable for it (Pi, DECISIONS §141).
+       */
+      sessionConfig?: Readonly<Record<string, string>>;
     },
   ): Promise<{ session: AcpSession; agentCapabilities: Record<string, unknown> }> {
     const client = new AcpSession(transport, '');
@@ -215,6 +225,13 @@ export class AcpSession implements AgentSession {
     )) as { sessionId?: string };
     if (!created.sessionId) throw new Error('agent returned no sessionId');
     client.sessionId = created.sessionId;
+    for (const [configId, value] of Object.entries(options.sessionConfig ?? {})) {
+      await client.request(
+        'session/set_config_option',
+        { sessionId: created.sessionId, configId, value },
+        options.timeoutMs,
+      );
+    }
     return { session: client, agentCapabilities: initialize.agentCapabilities ?? {} };
   }
 
@@ -295,6 +312,7 @@ export class AcpSession implements AgentSession {
   }
 
   private onUpdate(params: unknown): void {
+    if (this.settling) return;
     const update = (params as { update?: Record<string, unknown> } | undefined)?.update;
     if (!update) return;
     const kind = update.sessionUpdate;
@@ -433,12 +451,37 @@ export class AcpSession implements AgentSession {
   }
 
   async send(prompt: PromptInput): Promise<{ stopReason: string }> {
-    const result = (await this.request(
+    const turn = ++this.turnSeq;
+    if (this.inflight) {
+      // The hub ended the last turn while the agent was still in it (a spent quota the agent
+      // kept retrying: cancelled, `runner.ts`): wait for it to end before asking again, and drop
+      // what it said on its way out — its late `run.completed` would end this turn empty.
+      this.settling = true;
+      await Promise.race([
+        this.inflight.then(
+          () => undefined,
+          () => undefined,
+        ),
+        new Promise((resolve) => setTimeout(resolve, SETTLE_MAX_MS).unref?.()),
+      ]);
+      this.settling = false;
+      this.queue.discardBuffered();
+    }
+    const asked = this.request(
       'session/prompt',
       { sessionId: this.sessionId, prompt: [{ type: 'text', text: prompt.text }] },
       10 * 60_000,
-    )) as { stopReason?: string };
+    );
+    this.inflight = asked;
+    let result: { stopReason?: string };
+    try {
+      result = (await asked) as { stopReason?: string };
+    } finally {
+      if (this.inflight === asked) this.inflight = null;
+    }
     const stopReason = result.stopReason ?? 'completed';
+    // A newer turn has started since: this one's end is not its.
+    if (turn !== this.turnSeq) return { stopReason };
     // An ACP delegation lives inside its turn: one the stream never closed ends with it.
     this.subagentSignals.endAll();
     this.queue.push({ type: 'run.completed', stopReason });
@@ -447,6 +490,12 @@ export class AcpSession implements AgentSession {
 
   stream(): AsyncIterable<AgentEvent> {
     return this.queue.iterator();
+  }
+
+  discardStale(): void {
+    // Between turns an ACP agent has nothing to say to the next one: a buffered event is the
+    // tail of a turn that already ended (its prompt refused, or a cancel answered late).
+    this.queue.discardBuffered();
   }
 
   async interrupt(): Promise<void> {
@@ -493,6 +542,9 @@ export type AcpMcpServer =
       env: Array<{ name: string; value: string }>;
     };
 
+/** The longest a new turn waits for one the hub stopped to end (`AcpSession.send`). */
+const SETTLE_MAX_MS = 15_000;
+
 export interface AcpAdapterOptions {
   host: HostEnvironment;
   /** The MCP servers a session in this target's workspace is given (the hub's own tools). */
@@ -514,10 +566,19 @@ export interface AcpAdapterOptions {
  */
 export function agentEnvironment(
   inherited: NodeJS.ProcessEnv,
-  target: Pick<AgentTarget, 'executablePath' | 'env'>,
+  target: Pick<AgentTarget, 'executablePath' | 'env' | 'envRemove'>,
   names: readonly string[] = [],
 ): NodeJS.ProcessEnv {
   const env: NodeJS.ProcessEnv = { ...pickHostEnv(inherited, names), ...(target.env ?? {}) };
+  // A variable the hub does not hand out wins over one the host has (the model gateway's
+  // token over a host's own key, ADR 0029): taken out, whatever case the host wrote it in.
+  if (target.envRemove && target.envRemove.length > 0) {
+    const gone = new Set(target.envRemove.map((name) => name.toUpperCase()));
+    const handed = new Set(Object.keys(target.env ?? {}));
+    for (const name of Object.keys(env)) {
+      if (gone.has(name.toUpperCase()) && !handed.has(name)) delete env[name];
+    }
+  }
   if (target.executablePath && path.isAbsolute(target.executablePath)) {
     const own = path.dirname(target.executablePath);
     const rest = (env.PATH ?? '').split(path.delimiter).filter((dir) => dir && dir !== own);
@@ -668,13 +729,20 @@ export function createAcpAdapter(options: AcpAdapterOptions): AgentAdapter {
 
     async start(target: AgentTarget): Promise<AgentSession> {
       const transport = await openTransport(target);
-      const { session } = await AcpSession.connect(transport, {
-        cwd: target.cwd ?? process.cwd(),
-        clientName,
-        clientVersion,
-        mcpServers: options.mcpServers?.(target) ?? [],
-      });
-      return session;
+      try {
+        const { session } = await AcpSession.connect(transport, {
+          cwd: target.cwd ?? process.cwd(),
+          clientName,
+          clientVersion,
+          mcpServers: options.mcpServers?.(target) ?? [],
+          ...(target.sessionConfig ? { sessionConfig: target.sessionConfig } : {}),
+        });
+        return session;
+      } catch (error) {
+        // A session that could not be opened (or pointed at its model) leaves no process behind.
+        transport.close();
+        throw error;
+      }
     },
   };
 }

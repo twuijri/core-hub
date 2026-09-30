@@ -151,6 +151,10 @@
       "done_uninstall": "أُزيل.",
       "done_restart": "تمّت إعادة التشغيل.",
       "failed_with": "فشل: {error}"
+    },
+    "model_source": {
+      "hub": "النماذج: مزوّدو كور هب",
+      "agent": "النماذج: حساب الوكيل نفسه"
     }
   }
 }

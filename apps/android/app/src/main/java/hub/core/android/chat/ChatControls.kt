@@ -1,7 +1,9 @@
 package hub.core.android.chat
 
 import hub.core.android.data.HubApis
+import hub.core.client.model.Agent
 import hub.core.client.model.AgentCapability
+import hub.core.client.model.AgentKind
 import hub.core.client.model.AgentSettingsPatch
 import hub.core.client.model.Choice
 import hub.core.client.model.Model
@@ -33,12 +35,46 @@ object ChatControls {
         val group: String,
         /** The catalogue's `context_window`, for the context ring's estimate (apps batch 6). */
         val window: Int? = null,
+        /** The agent's context floor this model is under (`Agent.gateway_min_context`, §141): «small context». */
+        val smallUnder: Int? = null,
     )
 
-    /** The chat models this profile can run, as the web's composer offers them. */
-    fun models(catalogue: List<Model>): List<ModelOption> =
-        catalogue.filter { it.kind == ModelKind.CHAT && it.imageOnly != true && it.visible && !it.disabled }
-            .map { ModelOption(it.key, it.alias ?: it.model, it.provider, it.contextWindow) }
+    /**
+     * The chat models this profile can run, as the web's composer offers them. A coding agent on the
+     * hub's models ([gatewayOnly], ADR 0029) is offered only what the hub's model gateway can serve
+     * it (`Model.agent_gateway`): a subscription signed in to through Hermes is not lent.
+     */
+    fun models(catalogue: List<Model>, gatewayOnly: Boolean = false, minContext: Int? = null): List<ModelOption> {
+        val floor = if (gatewayOnly) minContext else null
+        return catalogue.filter { it.kind == ModelKind.CHAT && it.imageOnly != true && it.visible && !it.disabled }
+            // Nor a model its provider says cannot call tools (`Model.agent_tools`, §141).
+            .filter { !gatewayOnly || (it.agentGateway == true && it.agentTools != false) }
+            .map { model ->
+                val window = model.contextWindow
+                val small = if (floor != null && window != null && window < floor) floor else null
+                ModelOption(model.key, model.alias ?: model.model, model.provider, window, small)
+            }
+    }
+
+    /** Whether a coding agent runs on the hub's models in this profile (`Agent.model_source`, §140); an older hub says nothing. */
+    fun gatewayOnly(agent: Agent?): Boolean = agent != null && agent.kind == AgentKind.ACP && agent.modelSource == "hub"
+
+    /**
+     * Which model «Default» is, as the web names it: a coding agent on its own account runs on the
+     * model its own settings name (`agent_default_model`); Hermes, the hub's own agent and a coding
+     * agent on the hub's models run on the profile's default (`default_model`), by the catalogue's
+     * label. `null` when the hub does not say: the plain «Default model».
+     */
+    fun defaultModelName(agent: Agent?, options: List<ModelOption>): String? {
+        if (agent == null) return null
+        if (agent.kind == AgentKind.ACP && agent.modelSource != "hub") return agent.agentDefaultModel?.ifEmpty { null }
+        val ref = agent.defaultModel ?: return null
+        if (ref.model.isEmpty()) return null
+        return options.firstOrNull { it.value == ref.model || it.value.endsWith("/${ref.model}") }?.label ?: ref.model
+    }
+
+    /** Where the agent's model calls go, for its card: `hub`, `agent`, or null (not wired, or an older hub). */
+    fun modelSource(agent: Agent): String? = agent.modelSource?.takeIf { it == "hub" || it == "agent" }
 
     /** The options matching what was typed, in the label, the id or the provider; case does not matter. */
     fun filter(options: List<ModelOption>, query: String): List<ModelOption> {
@@ -177,16 +213,22 @@ class ChatActions(private val api: HubApis) {
         api.sessions.sessionsSteerRun(profile, id, run, RunSteerRequest(text))
 
     /** Every page of the profile's catalogue (200 a page, ten pages at most, as the web). */
-    suspend fun catalogue(profile: String): List<ChatControls.ModelOption> {
+    suspend fun catalogue(profile: String): List<ChatControls.ModelOption> = ChatControls.models(catalogueModels(profile))
+
+    /** The same pages, as the catalogue's own rows (the chat's picker filters them for its agent). */
+    suspend fun catalogueModels(profile: String): List<Model> {
         val all = mutableListOf<Model>()
         var cursor: String? = null
         repeat(10) {
             val page = api.models.modelsListCatalogue(profile, visible = null, cursor = cursor, limit = 200)
             all += page.items
-            cursor = page.nextCursor ?: return ChatControls.models(all)
+            cursor = page.nextCursor ?: return all
         }
-        return ChatControls.models(all)
+        return all
     }
+
+    /** The chat's agent in this profile: which models it is offered, and what «Default» is. */
+    suspend fun agent(profile: String, agentId: String): Agent = api.agents.agentsGet(profile, agentId)
 
     suspend fun approval(profile: String, agentId: String): ChatControls.ApprovalField? =
         ChatControls.approval(api.agents.agentsGetSettings(profile, agentId).sections)

@@ -20,14 +20,59 @@ enum ChatControls {
         let group: String
         /// The catalogue's `context_window`, for the context ring's estimate (apps batch 6).
         var window: Int? = nil
+        /// The agent's context floor this model is under (`Agent.gateway_min_context`, §141): the
+        /// picker says «small context». `nil`: big enough, or not known.
+        var smallUnder: Int? = nil
         var id: String { value }
     }
 
-    /// The chat models this profile can run, as the web's composer offers them.
-    static func models(_ catalogue: [Model]) -> [ModelOption] {
-        catalogue
+    /// The chat models this profile can run, as the web's composer offers them. A coding agent on
+    /// the hub's models (`gatewayOnly`, ADR 0029) is offered only what the hub's model gateway can
+    /// serve it (`Model.agent_gateway`) — a subscription signed in to through Hermes is not lent —
+    /// and not a model its provider says cannot call tools (`Model.agent_tools`, §141); a model
+    /// under the agent's context floor (`minContext`) is marked.
+    static func models(_ catalogue: [Model], gatewayOnly: Bool = false, minContext: Int? = nil) -> [ModelOption] {
+        let floor = gatewayOnly ? minContext : nil
+        return catalogue
             .filter { $0.kind == .chat && $0.imageOnly != true && $0.visible && !$0.disabled }
-            .map { ModelOption(value: $0.key, label: $0.alias ?? $0.model, group: $0.provider, window: $0.contextWindow) }
+            .filter { !gatewayOnly || ($0.agentGateway == true && $0.agentTools != false) }
+            .map { (model: Model) -> ModelOption in
+                var small: Int?
+                if let floor, let window = model.contextWindow, window < floor { small = floor }
+                return ModelOption(value: model.key, label: model.alias ?? model.model, group: model.provider, window: model.contextWindow, smallUnder: small)
+            }
+    }
+
+    /// Whether a coding agent runs on the hub's models in this profile (`Agent.model_source`,
+    /// DECISIONS §140). An older hub says nothing: the whole catalogue, as before.
+    static func gatewayOnly(_ agent: Agent?) -> Bool {
+        guard let agent else { return false }
+        return agent.kind == .acp && agent.modelSource == "hub"
+    }
+
+    /// Which model «Default» is, as the web names it: a coding agent on its own account runs on
+    /// the model its own settings name (`agent_default_model`); Hermes, the hub's own agent and a
+    /// coding agent on the hub's models run on the profile's default (`default_model`), by the
+    /// catalogue's label. `nil` when the hub does not say: the plain «Default model».
+    static func defaultModelName(_ agent: Agent?, _ options: [ModelOption]) -> String? {
+        guard let agent else { return nil }
+        if agent.kind == .acp && agent.modelSource != "hub" {
+            guard let own = agent.agentDefaultModel, !own.isEmpty else { return nil }
+            return own
+        }
+        guard let ref = agent.defaultModel, !ref.model.isEmpty else { return nil }
+        let option = options.first { $0.value == ref.model || $0.value.hasSuffix("/\(ref.model)") }
+        return option?.label ?? ref.model
+    }
+
+    /// The agent card's line on where its model calls go (`hub` / `agent`); `nil` hides it — an
+    /// agent the gateway does not wire, or an older hub.
+    static func modelSourceKey(_ agent: Agent) -> String? {
+        switch agent.modelSource {
+        case "hub": return "agents.model_source.hub"
+        case "agent": return "agents.model_source.agent"
+        default: return nil
+        }
     }
 
     /// The options matching what was typed, in the label, the id or the provider; case does not matter.
@@ -261,6 +306,10 @@ final class ChatControlsModel {
 
     private(set) var models: [ChatControls.ModelOption] = []
     private(set) var modelsLoaded = false
+    /// The chat's agent in this profile: which models its picker offers, and what «Default» is.
+    private(set) var agent: Agent?
+    /// Which model «Default» is, when the hub says (`nil`: the plain «Default model»).
+    var defaultModelName: String? { ChatControls.defaultModelName(agent, models) }
     private(set) var approval: ApprovalState = .loading
     private(set) var dirs: WorkingDirs?
     private(set) var dirsError: String?
@@ -269,7 +318,8 @@ final class ChatControlsModel {
     @ObservationIgnored private weak var app: AppModel?
     @ObservationIgnored private var loadedKey: String?
     /// The catalogue of each profile, so a chat opens with its chips already filled.
-    @ObservationIgnored private static var catalogues: [String: [ChatControls.ModelOption]] = [:]
+    @ObservationIgnored private static var catalogues: [String: [Model]] = [:]
+    @ObservationIgnored private var catalogue: [Model]?
     /// 200 models a page, ten pages at most: far past any provider's list (as the web).
     private static let pageSize = 200
     private static let maxPages = 10
@@ -282,8 +332,11 @@ final class ChatControlsModel {
         let key = "\(profile)|\(agentID ?? "")|\(folders)"
         guard key != loadedKey, let app else { return }
         loadedKey = key
+        agent = nil
+        catalogue = nil
         if let cached = Self.catalogues[profile] {
-            models = cached
+            catalogue = cached
+            refreshModels()
             modelsLoaded = true
         }
         Task {
@@ -299,16 +352,36 @@ final class ChatControlsModel {
                     cursor = page.nextCursor
                     if cursor == nil { break }
                 }
-                let options = ChatControls.models(all)
-                Self.catalogues[profile] = options
-                models = options
+                Self.catalogues[profile] = all
+                catalogue = all
+                refreshModels()
             } catch {
                 // The chip stays on the chat's own model; the picker says the list is empty.
             }
             modelsLoaded = true
         }
         loadApproval(profile: profile, agentID: agentID)
+        loadAgent(profile: profile, agentID: agentID)
         if folders { loadDirs(profile: profile) }
+    }
+
+    /// The options for this agent: the gateway's models for a coding agent on the hub's models.
+    private func refreshModels() {
+        guard let catalogue else { return }
+        models = ChatControls.models(catalogue, gatewayOnly: ChatControls.gatewayOnly(agent), minContext: agent?.gatewayMinContext)
+    }
+
+    private func loadAgent(profile: String, agentID: String?) {
+        guard let app, let agentID else { return }
+        Task {
+            // Without it the picker offers the whole catalogue, as before (an older hub, an error).
+            if let found = try? await app.api.call({
+                try await AgentsAPI.agentsGet(xHubProfile: profile, agentId: agentID, apiConfiguration: $0)
+            }) {
+                agent = found
+                refreshModels()
+            }
+        }
     }
 
     private func loadApproval(profile: String, agentID: String?) {

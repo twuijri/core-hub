@@ -915,8 +915,11 @@ export class RunEngine {
       timing: {
         turns: state.turns,
         ...(state.fallback ? { fallback: { failed: state.fallback.failed } } : {}),
+        ...(state.error?.details ? { failure: { details: state.error.details } } : {}),
       },
     });
+    // A spent quota is said in the person's language, naming the provider and the model.
+    const errorMessage = state.error ? localisedError(state.error, scope.language) : null;
 
     const produced = await this.collectProduced(run);
     // Written before the terminal event, so a client that reads the changes when it arrives
@@ -937,7 +940,7 @@ export class RunEngine {
       finishedAt: new Date(),
       finalMessageId: messageId,
       errorCode: state.error?.code ?? null,
-      errorMessage: state.error?.message ?? null,
+      errorMessage: errorMessage,
     });
 
     const session = store.getSession(scope.workspace, run.sessionId);
@@ -953,7 +956,7 @@ export class RunEngine {
       run.jobId,
       terminal === 'succeeded' ? 'succeeded' : terminal === 'cancelled' ? 'cancelled' : 'failed',
       state.error
-        ? { errorCode: state.error.code, errorMessage: state.error.message }
+        ? { errorCode: state.error.code, errorMessage: errorMessage ?? state.error.message }
         : { result: { message_id: messageId } },
     );
 
@@ -1265,6 +1268,24 @@ function promptOf(
  * "where is my file?" must never be answered by an empty space (TEAM-RULES §4: no
  * silent dead end).
  */
+/**
+ * A run's error message as it is stored: the adapter's words, except a spent quota the gateway
+ * recognised (ADR 0029), which the hub says itself in the person's language.
+ */
+export function localisedError(
+  error: { code: string; message: string; details?: Record<string, unknown> },
+  language: Language,
+): string {
+  const details = error.details;
+  if (error.code !== 'rate_limited' || details?.reason !== 'quota_exhausted') return error.message;
+  const provider = typeof details.provider === 'string' ? details.provider : '';
+  const model = typeof details.model === 'string' ? details.model : '';
+  if (!provider || !model) return error.message;
+  return t('sessions.quota_exhausted', language)
+    .replace('{provider}', provider)
+    .replace('{model}', model);
+}
+
 export function refusalNote(refused: readonly ProducedRefusal[], language: Language): string {
   if (refused.length === 0) return '';
   const names = refused.map((item) => item.relativePath).join('، ');

@@ -204,7 +204,7 @@ export function Combobox({
         {/* The provider, under the name: two models can share a name across providers. */}
         {chosen?.group !== undefined && <span className="ch-combo-sub">{chosen.group}</span>}
       </span>
-      <IconChevron size={12} />
+      <IconChevron size={14} />
     </button>
   );
 

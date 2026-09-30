@@ -136,5 +136,7 @@
   "agents_card_done_upgrade_version": "Updated to %1$s.",
   "agents_card_done_uninstall": "Removed.",
   "agents_card_done_restart": "Restarted.",
-  "agents_card_failed_with": "Failed: %1$s"
+  "agents_card_failed_with": "Failed: %1$s",
+  "agents_model_source_hub": "Models: Core Hub's providers",
+  "agents_model_source_agent": "Models: the agent's own account"
 }

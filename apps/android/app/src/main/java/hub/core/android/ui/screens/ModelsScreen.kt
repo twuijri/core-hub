@@ -275,6 +275,13 @@ class ModelOps(private val apis: () -> HubApis?, val profile: String) {
         call { it.models.modelsPutModel(profile, p.id, ModelRules.pathModel(model), hub.core.client.model.ModelPatch(custom = true)) }
     suspend fun signIn(p: Provider) = call { it.models.modelsStartProviderSignIn(profile, p.id) }
     suspend fun signInState(providerId: String, id: String) = call { it.models.modelsGetProviderSignIn(profile, providerId, id) }
+    /** The address a sign-in by link landed on, pasted back (DECISIONS §143). */
+    suspend fun completeSignIn(providerId: String, id: String, code: String) =
+        call { it.models.modelsCompleteProviderSignIn(profile, providerId, id, hub.core.client.model.ModelsCompleteProviderSignInRequest(code = code)) }
+    /** A subscription's accounts through Core Hub's gateway, and «Check now» (§143). */
+    suspend fun accounts(p: Provider) = call { it.models.modelsGetProviderAccounts(profile, p.id) }
+    suspend fun checkAccount(p: Provider, id: String) = call { it.models.modelsCheckProviderAccount(profile, p.id, id) }
+    suspend fun subscriptionVendors() = call { it.models.modelsListSubscriptionVendors(profile) }
     suspend fun defaults() = call { it.models.modelsGetDefaults(profile) }
     suspend fun writeDefaults(body: ModelDefaultsWrite) = call { it.models.modelsSetDefaults(profile, body) }
     suspend fun setDefault(ref: ModelRef?) =

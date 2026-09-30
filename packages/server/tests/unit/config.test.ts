@@ -48,6 +48,9 @@ describe('config', () => {
       'COREHUB_MODELS_CATALOG_URL',
       'COREHUB_TELEGRAM_API_BASE',
       'COREHUB_PLUGIN_TIMEOUT_MS',
+      'COREHUB_MODEL_GATEWAY',
+      'COREHUB_CLIPROXY_BIN',
+      'COREHUB_AGENT_MODEL_SOURCE',
     ]);
     const picked = pickEnv({
       DATA_DIR: '/x',
@@ -98,6 +101,21 @@ describe('config', () => {
   });
 
   it('the web terminal is off by default, closes idle sessions after 15 minutes, three at most', () => {
+    expect(loadConfig({}).modelGateway).toEqual({
+      enabled: true,
+      cliproxyBin: null,
+      defaultSource: 'auto',
+    });
+    expect(
+      loadConfig({
+        COREHUB_MODEL_GATEWAY: 'off',
+        COREHUB_CLIPROXY_BIN: '/opt/x/cli-proxy-api',
+        COREHUB_AGENT_MODEL_SOURCE: 'hub',
+      }).modelGateway,
+    ).toEqual({ enabled: false, cliproxyBin: '/opt/x/cli-proxy-api', defaultSource: 'hub' });
+    expect(() => loadConfig({ COREHUB_AGENT_MODEL_SOURCE: 'agent' as never })).toThrow(
+      /COREHUB_AGENT_MODEL_SOURCE/,
+    );
     expect(loadConfig({}).webTerminal).toEqual({
       enabled: false,
       idleMs: 15 * 60_000,

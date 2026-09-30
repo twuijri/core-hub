@@ -103,6 +103,92 @@ export interface AgentModelsPort {
    * `prepareRuntimeProfile` for a named profile, plus the model. Never throws.
    */
   prepareGatewayProfile?(profile: string, home: string): void;
+  /**
+   * The model gateway (ADR 0029): the door a coding agent reaches the hub's providers through,
+   * with a session token instead of a key. Absent on a hub built without it.
+   */
+  gateway?: AgentGatewayPort;
+}
+
+// ------------------------------------------------- the model gateway (ADR 0029)
+
+/** What one agent session is given: the gateway's addresses, its token, and the turn switch. */
+export interface AgentGatewayGrant {
+  /** Anthropic Messages, as `ANTHROPIC_BASE_URL` takes it (`…/gateway/anthropic`). */
+  anthropicBaseUrl: string;
+  /** OpenAI Responses and Chat Completions (`…/gateway/openai/v1`). */
+  openaiBaseUrl: string;
+  /** The Gemini API root (`…/gateway/google`), as `GOOGLE_GEMINI_BASE_URL` takes it. */
+  googleBaseUrl: string;
+  /** `http://127.0.0.1:<port>`, for an agent that takes a host and a path separately. */
+  origin: string;
+  token: string;
+  /** The turn in flight — its model and where its usage goes — or null between turns. */
+  setTurn(turn: AgentGatewayTurn | null): void;
+  /** The session is over: the token stops working at once. */
+  revoke(): void;
+}
+
+export interface AgentGatewayTurn {
+  runId: string;
+  providerId: string;
+  model: string;
+  /** The turn's totals so far for one model, after each call through the gateway. */
+  report(usage: AgentGatewayUsage): void;
+  /** The profile's fallback chain after the turn's model (§54), for a spent quota. */
+  fallbacks?: readonly { providerId: string; model: string }[];
+  /** The provider says the turn's model is out of quota, and no model of the chain took over. */
+  exhausted?(failure: AgentGatewayQuotaFailure): void;
+  /** The turn moved on down the chain after its model ran out of quota. */
+  fellBack?(move: {
+    failed: AgentGatewayQuotaFailure;
+    answered: { providerId: string; model: string; modelLabel: string };
+  }): void;
+}
+
+/** A provider said a model's quota is spent; the names are the ones people know. */
+export interface AgentGatewayQuotaFailure {
+  providerId: string;
+  model: string;
+  providerLabel: string;
+  modelLabel: string;
+  /** The provider's own words, without the hub's internal names. */
+  said: string;
+}
+
+export interface AgentGatewayUsage {
+  modelLabel: string;
+  providerId: string;
+  inputTokens: number;
+  outputTokens: number;
+  cacheReadTokens: number;
+  cacheWriteTokens: number;
+  reasoningTokens: number;
+  costMicroUsd?: number;
+  costSource: 'estimated' | 'unknown';
+}
+
+export interface AgentGatewayPort {
+  /** Switched on, and the hub has CLIProxyAPI. */
+  available(): boolean;
+  /**
+   * Switched on by the operator (`COREHUB_MODEL_GATEWAY` is not `off`), whether or not the hub has
+   * CLIProxyAPI. Absent on an older port: `available()` stands in.
+   */
+  enabled?(): boolean;
+  /** Whether a profile's provider row can be served (it has a key; not a signed-in subscription). */
+  serves(workspace: string, providerId: string): boolean;
+  /** The model row's context window, for the agents that must be told it. */
+  contextWindow(workspace: string, providerId: string, model: string): number | null;
+  /** A token for one agent process; throws when the gateway cannot start. */
+  open(input: {
+    workspace: string;
+    agentId: string;
+    agentSlug: string;
+    sessionId: string;
+    userId: string | null;
+    alive(): boolean;
+  }): Promise<AgentGatewayGrant>;
 }
 
 // ------------------------------------------------- the direct path (ADOPTION §2.15)
@@ -309,7 +395,13 @@ export type RunnerEvent =
       answered: { model: string; provider: string | null };
     }
   | { type: 'completed' }
-  | { type: 'failed'; code?: string; message: string };
+  | {
+      type: 'failed';
+      code?: string;
+      message: string;
+      /** Code-specific details for `Run.error.details` (a spent quota: which provider, model). */
+      details?: Record<string, unknown>;
+    };
 
 export type RunnerDecision = 'approve_once' | 'approve_session' | 'approve_always' | 'deny';
 

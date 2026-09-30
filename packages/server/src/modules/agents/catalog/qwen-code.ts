@@ -21,6 +21,19 @@ export const qwenCode: CatalogEntry = {
   },
   // Qwen Code's own settings and the providers it speaks to.
   hostEnv: ['QWEN_*', 'OPENAI_*', 'ANTHROPIC_*', 'GEMINI_*', 'GOOGLE_*', 'DASHSCOPE_*'],
+  // On the hub's model gateway (ADR 0029): its OpenAI-compatible mode, which `OPENAI_API_KEY`
+  // selects on its own (its auth table), at the gateway's Chat Completions address. A person's
+  // own `modelProviders` selection in `~/.qwen/settings.json` still wins, as Qwen Code orders it.
+  gateway: {
+    wire: 'openai-chat',
+    minContext: 32_000,
+    env: (gw) => ({
+      OPENAI_BASE_URL: gw.openaiBaseUrl,
+      OPENAI_API_KEY: gw.token,
+      OPENAI_MODEL: gw.mainModel,
+    }),
+    clears: ['ANTHROPIC_API_KEY', 'ANTHROPIC_BASE_URL', 'GEMINI_API_KEY', 'DASHSCOPE_API_KEY'],
+  },
   health: { kind: 'command', args: ['--version'] },
   capabilities: ['streaming', 'tools', 'approvals', 'mcp', 'resume', 'config_files'],
   sections: ['mcp', 'settings'],

@@ -93,6 +93,20 @@ function ToolFiles({ call }: { call: ToolCall }) {
   );
 }
 
+/**
+ * Whether a tool's title or preview is words for a person rather than a name, a path or code: a
+ * title an agent writes in the person's language (Gemini CLI's «Update tactical intent: "سأنشئ
+ * ملف test.md …"», owner 2026-09-30), or a sentence. Words are set in the reading font and
+ * their own direction; names, paths and commands stay monospace.
+ */
+export function isProse(text: string | null | undefined): boolean {
+  if (!text) return false;
+  // Letters outside Latin: Arabic, Hebrew, CJK… never a tool's identifier.
+  if (/[^\p{Script=Latin}\P{L}]/u.test(text)) return true;
+  // A sentence: several words and none of what paths, commands or code are made of.
+  return text.trim().split(/\s+/).length >= 4 && !/[\\/=<>{}|$`;]/.test(text);
+}
+
 function ToolRow({ call }: { call: ToolCall }) {
   const { t } = useI18n();
   const output = call.output ?? '';
@@ -100,9 +114,14 @@ function ToolRow({ call }: { call: ToolCall }) {
   const head = (
     <>
       <IconTool size={12} />
-      <span className="tool-name">{call.name}</span>
+      <span className={isProse(call.name) ? 'tool-name tool-prose' : 'tool-name'} dir="auto">
+        {call.name}
+      </span>
       {call.preview && (
-        <span className="tool-preview" dir="auto">
+        <span
+          className={isProse(call.preview) ? 'tool-preview tool-prose' : 'tool-preview'}
+          dir="auto"
+        >
           {call.preview}
         </span>
       )}

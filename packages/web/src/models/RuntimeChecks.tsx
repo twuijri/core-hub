@@ -15,6 +15,7 @@ import { canRestart, useRestartAgent } from '../agents/useRestartAgent.js';
 import { useAuth } from '../auth/context.js';
 import { useAgents } from '../hub/queries.js';
 import { useI18n } from '../i18n/context.js';
+import { restartOnItsWay } from './queries.js';
 import { IconChevron } from '../ui/icons.js';
 import { Badge, Button } from '../ui/index.js';
 import type { RuntimeCheck, RuntimeReport } from '../types.js';
@@ -38,7 +39,10 @@ export function sortChecks(checks: readonly RuntimeCheck[] | undefined): Runtime
 /**
  * A check that is a thing to do, not a thing broken: the settings changed after Hermes last
  * started, and a restart applies them (owner, 2026-09-25 — the red ✕ read as a failure he
- * could not place). Amber, with its own words and the restart beside it on the Models screen.
+ * could not place). Amber, with its own words. The hub restarts Hermes by itself (DECISIONS
+ * §145, owner 2026-09-30: no manual restart in the normal flow): while that restart is on its
+ * way the card says so and asks again until it turns green; only when none is coming does the
+ * restart button appear, as a way out.
  */
 export const PENDING_RESTART: RuntimeCheck['id'] = 'gateway_reloaded';
 
@@ -73,6 +77,14 @@ export function RuntimeChecks({
     <ul className="space-y-1 text-sm" data-testid="runtime-checks" data-ready={report.ready}>
       {checks.map((check) => {
         const warn = !check.ok && check.id === PENDING_RESTART;
+        // The hub's own restart on its way: its words, not the raw state word as a detail.
+        const onItsWay =
+          warn && (check.detail === 'scheduled' || check.detail === 'waiting_for_run');
+        const key = onItsWay
+          ? `models.runtime.${check.id}.${check.detail}`
+          : check.ok
+            ? `models.runtime.${check.id}.ok`
+            : `models.runtime.${check.id}.missing`;
         return (
           <li
             key={check.id}
@@ -81,12 +93,12 @@ export function RuntimeChecks({
             data-tone={check.ok ? 'ok' : warn ? 'warning' : 'danger'}
           >
             <span aria-hidden="true">{check.ok ? '✓' : warn ? '⚠' : '✕'}</span>
-            <span className={check.ok ? '' : 'font-medium'}>
-              {t(check.ok ? `models.runtime.${check.id}.ok` : `models.runtime.${check.id}.missing`)}
-            </span>
+            <span className={check.ok ? '' : 'font-medium'}>{t(key)}</span>
             {/* The server's `detail` is a fact, never a sentence: a count, a slug, a mode.
               It is shown next to our wording, never instead of it. */}
-            {check.detail && <span className="text-xs text-muted">{check.detail}</span>}
+            {check.detail && check.id !== PENDING_RESTART && (
+              <span className="text-xs text-muted">{check.detail}</span>
+            )}
           </li>
         );
       })}
@@ -152,9 +164,8 @@ export function RuntimeCard({ report }: { report: RuntimeReport }) {
         <div id={listId}>
           <p className="mb-2 mt-1 text-xs text-muted">{t('models.runtime.hint')}</p>
           <RuntimeChecks report={report} />
-          {report.checks.some((check) => check.id === PENDING_RESTART && !check.ok) && (
-            <RestartNow />
-          )}
+          {report.checks.some((check) => check.id === PENDING_RESTART && !check.ok) &&
+            !restartOnItsWay(report) && <RestartNow />}
         </div>
       )}
     </section>

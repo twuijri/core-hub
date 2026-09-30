@@ -139,7 +139,11 @@ internal fun AddProviderSheet(ops: ModelOps, added: List<Provider>, profileName:
                         if (shared == ProviderScope.ALL) stringResource(R.string.models_scope_all_hint) else stringResource(R.string.models_scope_profile_hint, profileName),
                         fontSize = FontTokens.sizeXs.sp, color = t.textMuted,
                     )
-                    val offered = ModelRules.offered(answer.items, added, shared)
+                    // Subscriptions signed in to through Core Hub's gateway (§143); a Hermes sign-in
+                    // they replace is then not offered a second time under another name.
+                    var gatewaySubscriptions by remember { mutableStateOf(false) }
+                    SubscriptionVendorsGroup(ops, added, shared, onChosen = { onDone(it) }, onAvailable = { gatewaySubscriptions = it })
+                    val offered = ModelRules.offered(answer.items, added, shared).filter { !(gatewaySubscriptions && it.replacedBy != null) }
                     ProviderKind.entries.forEach { kind ->
                         val group = offered.filter { it.kind == kind }
                         if (group.isEmpty()) return@forEach
@@ -226,6 +230,10 @@ internal fun SignInSheet(ops: ModelOps, provider: Provider, onDone: () -> Unit) 
     var signIn by remember { mutableStateOf<ProviderSignIn?>(null) }
     var error by remember { mutableStateOf<HubError?>(null) }
     var attempt by remember { mutableIntStateOf(0) }
+    // A sign-in by link (§143): the address the browser landed on, pasted back.
+    var pasted by remember { mutableStateOf("") }
+    var sending by remember { mutableStateOf(false) }
+    val pasteScope = rememberCoroutineScope()
     LaunchedEffect(provider.id, attempt) {
         signIn = null
         error = null
@@ -257,7 +265,7 @@ internal fun SignInSheet(ops: ModelOps, provider: Provider, onDone: () -> Unit) 
                 HubButton(stringResource(R.string.models_sign_in_retry), { attempt++ }, kind = ButtonKind.Secondary, size = ControlSize.Md, icon = Lucide.RotateCcw, modifier = Modifier.testTag("signin.retry"))
             }
             s != null -> {
-                Text(stringResource(R.string.models_sign_in_steps), fontSize = FontTokens.sizeSm.sp, color = t.textMuted)
+                Text(stringResource(if (s.acceptsCode) R.string.subscriptions_paste_steps else R.string.models_sign_in_steps), fontSize = FontTokens.sizeSm.sp, color = t.textMuted)
                 s.userCode?.let { code ->
                     Box(Modifier.fillMaxWidth().background(t.surface2, RoundedCornerShape(RadiusTokens.md.dp)).padding(16.dp), contentAlignment = Alignment.Center) {
                         Text(code, fontSize = FontTokens.sizeXl.sp, fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace, modifier = Modifier.testTag("signin.code"))
@@ -269,6 +277,25 @@ internal fun SignInSheet(ops: ModelOps, provider: Provider, onDone: () -> Unit) 
                 }
                 HubButton(stringResource(R.string.models_open_sign_in), { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(s.verificationUrl))) }, icon = Lucide.ExternalLink, fill = true, modifier = Modifier.fillMaxWidth().testTag("signin.open"))
                 Text(s.verificationUrl, fontSize = FontTokens.sizeXs.sp, color = t.textMuted, fontFamily = FontFamily.Monospace)
+                if (s.acceptsCode) {
+                    HubTextField(
+                        pasted, { pasted = it }, placeholder = s.callbackHint ?: "http://localhost/…", mono = true,
+                        label = stringResource(R.string.subscriptions_paste_label), size = ControlSize.Md, fieldTag = "signin.paste",
+                    )
+                    s.callbackHint?.let { Text(stringResource(R.string.subscriptions_paste_hint, it), fontSize = FontTokens.sizeXs.sp, color = t.textMuted) }
+                    HubButton(
+                        stringResource(R.string.subscriptions_paste_submit),
+                        {
+                            sending = true
+                            pasteScope.launch {
+                                ops.completeSignIn(provider.id, s.id, pasted.trim()).onSuccess { signIn = it }.onFailure { error = it as HubError }
+                                sending = false
+                            }
+                        },
+                        enabled = pasted.isNotBlank() && !sending, loading = sending, fill = true,
+                        modifier = Modifier.fillMaxWidth().testTag("signin.paste_submit"),
+                    )
+                }
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     Spinner(14.dp, t.textMuted)
                     Text(stringResource(R.string.models_waiting_sign_in), fontSize = FontTokens.sizeXs.sp, color = t.textMuted)

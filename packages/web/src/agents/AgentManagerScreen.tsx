@@ -183,6 +183,16 @@ function AgentCard({ agent, jobs }: { agent: Agent; jobs: Record<string, Job> })
         </Notice>
       )}
       {agent.limited && <Notice tone="warning">{t('agents.limited')}</Notice>}
+      {/* Where its model calls go (ADR 0029): the hub's providers, or its own account. */}
+      {(agent.model_source === 'hub' || agent.model_source === 'agent') && (
+        <p
+          className="text-xs text-muted"
+          data-testid="agent-model-source"
+          data-source={agent.model_source}
+        >
+          {t(`agents.model_source.${agent.model_source}`)}
+        </p>
+      )}
       {/* Errors carry paths and commands with no spaces to break at: they wrap anywhere
           rather than run past the card's edge. */}
       {agent.runtime.error && (

@@ -121,6 +121,8 @@ const AGENTS = [
       auto_update: true,
       auto_update_supported: true,
     },
+    // On the hub's models (ADR 0029).
+    model_source: 'hub',
   } as Partial<Agent>),
   // A person's own Hermes (§119, §132): past the release Core Hub is tested with, and a newer
   // release on GitHub that its own updater would take.
@@ -282,6 +284,11 @@ describe('the Agents page says when a version is newer than the tested one', () 
       'Needs a provider or sign-in',
     );
     expect(within(card('pi')).queryByTestId('agent-needs-setup')).toBeNull();
+    // Where its models come from (ADR 0029): said where the hub says it, nowhere else.
+    expect(within(card('pi')).getByTestId('agent-model-source').textContent).toBe(
+      "Models: Core Hub's providers",
+    );
+    expect(within(card('qwen-code')).queryByTestId('agent-model-source')).toBeNull();
   });
 
   it("on a person's own Hermes: newer than tested, may not be supported, and an update to take", async () => {

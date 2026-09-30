@@ -49,6 +49,18 @@ export interface AgentTarget {
   /** Non-secret environment for the process. */
   env?: Record<string, string>;
   /**
+   * Variables taken out of the process's environment after everything else is merged — the
+   * credential routes that would win over the model gateway's token (ADR 0029), wherever they
+   * came from.
+   */
+  envRemove?: readonly string[];
+  /**
+   * ACP session options set right after the session opens (`session/set_config_option`, by id:
+   * `model` …) — how the model gateway points an agent whose default it cannot set by variable
+   * at the hub's model (Pi, DECISIONS §141). A failure is the start's failure.
+   */
+  sessionConfig?: Readonly<Record<string, string>>;
+  /**
    * The workspace's stored settings for this agent, exactly as the adapter's own
    * `settings()` form declared them. A process adapter has no use for them — its
    * configuration is its argv and its environment — but an adapter the hub *is* reads
@@ -355,6 +367,11 @@ export interface AgentSession {
   send(prompt: PromptInput): Promise<{ stopReason: string }>;
   /** Everything the agent emits, in order, until the session closes. */
   stream(): AsyncIterable<AgentEvent>;
+  /**
+   * A new turn is about to start reading `stream()`: drop what the agent emitted after the last
+   * turn ended (a late answer to a prompt the hub already failed). Absent: nothing to drop.
+   */
+  discardStale?(): void;
   /** Answer an `approval.requested` the agent is blocked on. */
   respond(approvalId: string, optionId: string): Promise<void>;
   /** Answer a `question.asked`: the person's words, or `null` when they skipped it. */

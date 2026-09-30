@@ -60,6 +60,11 @@ data class ChatUi(
     /** The composer's chips (apps batch 1): the profile's chat models and the agent's approval mode. */
     val models: List<ChatControls.ModelOption> = emptyList(),
     val modelsLoaded: Boolean = false,
+    /** The catalogue's rows and the chat's agent, from which [models] and [defaultModelName] are made. */
+    val catalogue: List<hub.core.client.model.Model>? = null,
+    val controlsAgent: hub.core.client.model.Agent? = null,
+    /** Which model «Default» is, when the hub says (ADR 0029: a coding agent on the hub's models too). */
+    val defaultModelName: String? = null,
     val approval: ChatControls.ApprovalField? = null,
     /** A new chat's model and working folder, chosen before it exists; `null` is the default / automatic. */
     val draftModel: String? = null,
@@ -368,9 +373,17 @@ class ChatViewModel(
         val key = agentId.orEmpty()
         if (key == controlsKey) return
         controlsKey = key
+        _ui.update { it.copy(controlsAgent = null) }
         viewModelScope.launch {
-            val models = runCatching { act.catalogue(profile) }.getOrNull()
-            _ui.update { it.copy(models = models ?: it.models, modelsLoaded = true) }
+            val rows = runCatching { act.catalogueModels(profile) }.getOrNull()
+            _ui.update { withModels(it.copy(catalogue = rows ?: it.catalogue, modelsLoaded = true)) }
+        }
+        if (agentId != null) {
+            viewModelScope.launch {
+                // Without it the picker offers the whole catalogue, as before (an older hub, an error).
+                val agent = runCatching { act.agent(profile, agentId) }.getOrNull() ?: return@launch
+                _ui.update { withModels(it.copy(controlsAgent = agent)) }
+            }
         }
         viewModelScope.launch {
             val field = agentId?.let { id -> runCatching { act.approval(profile, id) }.getOrNull() }
@@ -383,6 +396,13 @@ class ChatViewModel(
                     .onFailure { e -> _ui.update { it.copy(dirsError = e as HubError) } }
             }
         }
+    }
+
+    /** The picker's options for the chat's agent (the gateway's models on the hub's models) and its «Default». */
+    private fun withModels(state: ChatUi): ChatUi {
+        val rows = state.catalogue ?: return state
+        val options = ChatControls.models(rows, ChatControls.gatewayOnly(state.controlsAgent), state.controlsAgent?.gatewayMinContext)
+        return state.copy(models = options, defaultModelName = ChatControls.defaultModelName(state.controlsAgent, options))
     }
 
     /** The chat's model; in the draft it is kept for `sessions.create` (null = the agent's default). */

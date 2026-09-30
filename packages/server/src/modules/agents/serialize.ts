@@ -135,6 +135,10 @@ export function serializeAgent(
     credentials?: 'ready' | 'missing' | null;
     /** The model a coding agent's own settings name as its default (`agent-own-model.ts`). */
     ownModel?: string | null;
+    /** Where its model calls go in this profile (ADR 0029): `hub`, `agent`, or not said. */
+    modelSource?: 'hub' | 'agent' | null;
+    /** The smallest context window worth giving it through the gateway (§141), with `modelSource`. */
+    gatewayMinContext?: number | null;
   },
 ): ContractAgent {
   const enabled = options.settings?.enabled ?? true;
@@ -203,6 +207,10 @@ export function serializeAgent(
     subagents: subagentSupport(row),
     ...(options.credentials ? { credentials: options.credentials } : {}),
     ...(options.ownModel ? { agent_default_model: options.ownModel } : {}),
+    ...(options.modelSource ? { model_source: options.modelSource } : {}),
+    ...(options.modelSource && options.gatewayMinContext
+      ? { gateway_min_context: options.gatewayMinContext }
+      : {}),
   };
 }
 

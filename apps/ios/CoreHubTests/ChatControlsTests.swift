@@ -5,12 +5,72 @@ import CoreHubClient
 import XCTest
 
 final class ChatControlsTests: XCTestCase {
-    private func model(_ key: String, alias: String? = nil, kind: ModelKind = .chat, visible: Bool = true, disabled: Bool = false, imageOnly: Bool? = nil) -> Model {
+    private func model(_ key: String, alias: String? = nil, kind: ModelKind = .chat, visible: Bool = true, disabled: Bool = false, imageOnly: Bool? = nil,
+                       gateway: Bool? = nil, tools: Bool? = nil, window: Int? = nil) -> Model {
         let parts = key.split(separator: "/", maxSplits: 1).map(String.init)
         return Model(
             key: key, providerId: parts[0], provider: parts[0].capitalized, model: parts[1], alias: alias, kind: kind,
-            visible: visible, custom: false, preview: false, disabled: disabled, capabilities: [], imageOnly: imageOnly
+            visible: visible, custom: false, preview: false, disabled: disabled, contextWindow: window, capabilities: [], imageOnly: imageOnly,
+            agentGateway: gateway, agentTools: tools
         )
+    }
+
+    private func agent(kind: AgentKind = .acp, defaultModel: ModelRef? = nil, own: String? = nil, source: String? = nil) -> Agent {
+        Agent(id: "01J8QK3ZR2W7M5N4P6T8V9X0AG", profile: "work", ownerId: "u1", createdAt: Fixture.date, updatedAt: Fixture.date, slug: "gemini-cli",
+              name: "Gemini CLI", kind: kind, avatar: Avatar(kind: .generated, seed: "g"), status: .available, enabled: true,
+              install: AgentInstall(source: .managed, version: "0.60.0", latestVersion: nil, updateAvailable: false, pinnedVersion: nil,
+                                    newerThanTested: false, autoUpdate: false, autoUpdateSupported: true),
+              runtime: AgentRuntime(state: .notApplicable), capabilities: [], sections: [], defaultModel: defaultModel, limited: false,
+              subagents: ._none, agentDefaultModel: own, modelSource: source)
+    }
+
+    /// The model gateway (ADR 0029, DECISIONS §140–141): a coding agent on the hub's models is
+    /// offered what the gateway serves, and «Default» names the profile's default; an older hub,
+    /// which says neither, keeps the picker as it was.
+    func testACodingAgentOnTheHubsModelsIsOfferedWhatTheGatewayServes() {
+        let catalogue = [
+            model("groq/llama", alias: "Llama", gateway: true),
+            model("openai-codex/gpt-5", gateway: false),
+            model("older/model"),
+        ]
+        let onHub = agent(defaultModel: ModelRef(providerId: "p1", model: "llama"), own: "gemini-2.5-pro", source: "hub")
+        XCTAssertTrue(ChatControls.gatewayOnly(onHub))
+        let options = ChatControls.models(catalogue, gatewayOnly: ChatControls.gatewayOnly(onHub))
+        XCTAssertEqual(options.map(\.value), ["groq/llama"])
+        XCTAssertEqual(ChatControls.defaultModelName(onHub, options), "Llama")
+        XCTAssertEqual(ChatControls.modelSourceKey(onHub), "agents.model_source.hub")
+        // On its own account: the whole catalogue, and its own settings' model.
+        let own = agent(defaultModel: ModelRef(providerId: "p1", model: "llama"), own: "gemini-2.5-pro", source: "agent")
+        XCTAssertFalse(ChatControls.gatewayOnly(own))
+        XCTAssertEqual(ChatControls.models(catalogue, gatewayOnly: false).count, 3)
+        XCTAssertEqual(ChatControls.defaultModelName(own, options), "gemini-2.5-pro")
+        XCTAssertEqual(ChatControls.modelSourceKey(own), "agents.model_source.agent")
+        // An older hub says nothing: the whole catalogue, the plain «Default model», no line.
+        let older = agent()
+        XCTAssertFalse(ChatControls.gatewayOnly(older))
+        XCTAssertNil(ChatControls.defaultModelName(older, options))
+        XCTAssertNil(ChatControls.modelSourceKey(older))
+        // Hermes runs on the profile's default, named by the catalogue.
+        let hermes = agent(kind: .hermes, defaultModel: ModelRef(providerId: "p1", model: "llama"))
+        XCTAssertEqual(ChatControls.defaultModelName(hermes, options), "Llama")
+        XCTAssertNil(ChatControls.defaultModelName(nil, options))
+    }
+
+    /// Picker quality (§141): a model its provider says cannot call tools is left out, and one under
+    /// the agent's context floor is marked; on its own account, nothing is.
+    func testTheGatewayPickerLeavesOutModelsWithoutToolsAndMarksSmallOnes() {
+        let catalogue = [
+            model("openrouter/coder", gateway: true, window: 262_144),
+            model("openrouter/no-tools", gateway: true, tools: false, window: 131_072),
+            model("openrouter/small", gateway: true, window: 32_768),
+            model("ollama/unknown", gateway: true),
+        ]
+        let options = ChatControls.models(catalogue, gatewayOnly: true, minContext: 64_000)
+        XCTAssertEqual(options.map(\.value), ["openrouter/coder", "openrouter/small", "ollama/unknown"])
+        XCTAssertEqual(options.map(\.smallUnder), [nil, 64_000, nil])
+        let own = ChatControls.models(catalogue, gatewayOnly: false, minContext: 64_000)
+        XCTAssertEqual(own.count, 4)
+        XCTAssertTrue(own.allSatisfy { $0.smallUnder == nil })
     }
 
     func testTheModelChipOffersTheVisibleChatModelsByTheirKey() {

@@ -41,7 +41,7 @@ struct ComposerChips: View {
                 }
                 chip(
                     icon: .cpu,
-                    text: ChatControls.modelLabel(model, controls.models) ?? l10n("chat_controls.model_default"),
+                    text: ChatControls.modelLabel(model, controls.models) ?? defaultLabel,
                     label: l10n("chat_controls.model"), id: "composer.model"
                 ) { sheet = .model }
                 if case .ready(let field) = controls.approval {
@@ -68,7 +68,7 @@ struct ComposerChips: View {
             case .model:
                 ModelPickerSheet(
                     options: controls.models, loaded: controls.modelsLoaded, current: model, allowDefault: allowDefault,
-                    choose: onModel
+                    defaultLabel: defaultLabel, choose: onModel
                 )
             case .approvals:
                 if case .ready(let field) = controls.approval, let agentID {
@@ -83,6 +83,12 @@ struct ComposerChips: View {
                 }
             }
         }
+    }
+
+    /// «Default · <model>» when the hub says which model that is, else «Default model».
+    private var defaultLabel: String {
+        controls.defaultModelName.map { l10n("chat_controls.model_default_named", ["model": $0]) }
+            ?? l10n("chat_controls.model_default")
     }
 
     private func chip(
@@ -121,6 +127,8 @@ struct ModelPickerSheet: View {
     let loaded: Bool
     let current: String?
     let allowDefault: Bool
+    /// The «Default» row's words (which model it is, when known).
+    var defaultLabel: String? = nil
     let choose: (String?) -> Void
     @Environment(\.l10n) private var l10n
     @Environment(\.dismiss) private var dismiss
@@ -131,7 +139,7 @@ struct ModelPickerSheet: View {
         NavigationStack {
             List {
                 if allowDefault && query.isEmpty {
-                    row(value: nil, label: l10n("chat_controls.model_default"), detail: l10n("chat_controls.model_default_hint"))
+                    row(value: nil, label: defaultLabel ?? l10n("chat_controls.model_default"), detail: l10n("chat_controls.model_default_hint"))
                 }
                 if !loaded {
                     ProgressView().frame(maxWidth: .infinity)
@@ -143,7 +151,7 @@ struct ModelPickerSheet: View {
                 ForEach(ChatControls.groups(shown), id: \.group) { group in
                     Section(group.group) {
                         ForEach(group.options) { option in
-                            row(value: option.value, label: option.label, detail: option.label == option.value ? nil : option.value)
+                            row(value: option.value, label: option.label, detail: detail(option))
                         }
                     }
                 }
@@ -156,6 +164,14 @@ struct ModelPickerSheet: View {
             }
         }
         .accessibilityIdentifier("sheet.model")
+    }
+
+    /// The id under the name, and «small context» for a model under the agent's floor (§141).
+    private func detail(_ option: ChatControls.ModelOption) -> String? {
+        let id = option.label == option.value ? nil : option.value
+        guard let floor = option.smallUnder else { return id }
+        let small = l10n("chat_controls.model_small_context", ["tokens": String(floor / 1000)])
+        return [id, small].compactMap { $0 }.joined(separator: " · ")
     }
 
     private func row(value: String?, label: String, detail: String?) -> some View {

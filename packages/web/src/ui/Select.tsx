@@ -23,6 +23,11 @@ export interface SelectOption {
   description?: string;
   /** Drawn before the label, in the list and — for the chosen one — in the trigger. */
   icon?: ReactNode;
+  /**
+   * A small tag after the label ("Subscription"), in the list and in the trigger. Typing a
+   * name still finds the option by its label alone.
+   */
+  badge?: ReactNode;
   /** Paints the option, and the trigger while it is the chosen one. */
   tone?: 'danger' | 'warning';
   /** Options that share a group name are listed under it, with a heading. */
@@ -39,6 +44,7 @@ export function Select({
   icon,
   disabled = false,
   title,
+  block = false,
   testId,
 }: {
   /** `null` means "nothing chosen"; Radix wants a string, so it maps to the empty option. */
@@ -53,6 +59,8 @@ export function Select({
   disabled?: boolean;
   /** Set to null when the label is already visible beside the control. */
   title?: string | null | undefined;
+  /** Fill the width it is given (a form field), instead of fitting its text. */
+  block?: boolean;
   testId?: string;
 }) {
   // An empty string is "nothing chosen", not a nameless option.
@@ -69,6 +77,7 @@ export function Select({
       className="ch-select"
       aria-label={label}
       data-tone={chosen?.tone}
+      data-block={block ? 'true' : undefined}
       data-testid={testId}
     >
       {chosen?.icon ?? icon}
@@ -76,7 +85,7 @@ export function Select({
         <span className="truncate">{chosen?.label ?? placeholder ?? label}</span>
       </RadixSelect.Value>
       <RadixSelect.Icon className="ch-select-chevron">
-        <IconChevron size={12} />
+        <IconChevron size={14} />
       </RadixSelect.Icon>
     </RadixSelect.Trigger>
   );
@@ -144,6 +153,8 @@ function Item({ option }: { option: SelectOption }) {
       data-tone={option.tone}
       data-described={option.description ? 'true' : undefined}
       value={option.value}
+      // Typeahead finds an option by its name, not by its badge's words.
+      textValue={option.label}
       {...(option.disabled === undefined ? {} : { disabled: option.disabled })}
     >
       {option.icon !== undefined && (
@@ -152,7 +163,16 @@ function Item({ option }: { option: SelectOption }) {
         </span>
       )}
       <span className="ch-select-item-body">
-        <RadixSelect.ItemText>{option.label}</RadixSelect.ItemText>
+        <RadixSelect.ItemText>
+          {option.badge === undefined ? (
+            option.label
+          ) : (
+            <span className="ch-select-item-title">
+              <span dir="auto">{option.label}</span>
+              {option.badge}
+            </span>
+          )}
+        </RadixSelect.ItemText>
         {/* Outside `ItemText`, so the trigger keeps the label alone (Radix renders
             `ItemText` there) and the explanation stays in the list where it belongs. */}
         {option.description !== undefined && (

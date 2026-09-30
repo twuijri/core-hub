@@ -116,6 +116,11 @@ export interface ControllerPaths {
   rendererDir: string;
   /** The embedded hub's entry (`dist/hub/dist/app/hub.mjs`), for local mode. */
   hubEntry: string;
+  /**
+   * CLIProxyAPI in the installer's resources, the embedded hub's model gateway translator
+   * (ADR 0029); absent in development, where the hub finds a developer's copy itself.
+   */
+  cliproxyBin?: string | null;
   preload: string;
   assetsDir: string;
 }
@@ -445,7 +450,9 @@ export class DesktopController {
           entry: this.paths.hubEntry,
           dataDir: this.localDataDir(),
           pathEnv: pathWithHermes(process.platform, this.hermes.cli, process.env.PATH),
-          env: process.env,
+          env: this.paths.cliproxyBin
+            ? { ...process.env, COREHUB_CLIPROXY_BIN: this.paths.cliproxyBin }
+            : process.env,
           preferredPort: this.config.get().localHubPort,
           onMessage: (message) => void this.answerHub(message),
           onExit: (code, signal) => this.localHubExited(code, signal),

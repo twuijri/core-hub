@@ -178,6 +178,11 @@ export interface CatalogEntry {
    * (`adapters/child-env.ts`, DECISIONS §139); the hub's own variables never, whatever is named.
    */
   hostEnv?: readonly string[];
+  /**
+   * How the hub points this agent at its model gateway (ADR 0029), so it runs on any model the
+   * hub's providers serve. Absent: the agent is not wired yet and keeps its own account.
+   */
+  gateway?: GatewayWiring;
   /** Hermes only: the gateway the adapter talks to. */
   defaultEndpoint?: string;
   capabilities: AgentCapability[];
@@ -253,4 +258,57 @@ export function downloadPlatform(
 ): DownloadPlatform | null {
   const key = `${platform}-${arch}`;
   return (DOWNLOAD_PLATFORMS as readonly string[]).includes(key) ? (key as DownloadPlatform) : null;
+}
+
+/** What the hub knows when it starts an agent on its model gateway (ADR 0029). */
+export interface GatewayContext {
+  /** Anthropic Messages (`http://127.0.0.1:<port>/gateway/anthropic`). */
+  anthropicBaseUrl: string;
+  /** OpenAI Responses and Chat Completions (`…/gateway/openai/v1`). */
+  openaiBaseUrl: string;
+  /** The Gemini API root (`…/gateway/google`; the client adds `/v1beta/models/…`). */
+  googleBaseUrl: string;
+  /** `http://127.0.0.1:<port>`. */
+  origin: string;
+  /** The session token, in place of any key. */
+  token: string;
+  /** The model the agent names for its main work; the gateway resolves it to the turn's choice. */
+  mainModel: string;
+  /** The model it names for its small background calls (titles, summaries). */
+  smallModel: string;
+  /** The chosen model's context window, when the hub knows it. */
+  contextWindow: number | null;
+}
+
+/**
+ * The piece of an agent's own configuration the gateway needs and no variable can say
+ * (`gateway-config.ts`, DECISIONS §141): Gemini CLI's settings when it is signed in another way (a
+ * home of the hub's own), Grok Build's `[model.corehub-gateway]` table, Pi's `corehub-gateway` provider.
+ */
+export type GatewayConfigKind = 'gemini-settings' | 'grok-model' | 'pi-models';
+
+export interface GatewayWiring {
+  /** The wire the agent speaks to the gateway. */
+  wire: 'anthropic' | 'openai-responses' | 'openai-chat' | 'google';
+  /** What the agent is started with: the gateway's address, the token, the model alias. */
+  env(context: GatewayContext): Record<string, string>;
+  /**
+   * Variables taken out of the agent's environment on the gateway — another credential route
+   * that would win over the token, or point it elsewhere — whoever set them (the host, the
+   * agent's own settings, a key the hub would otherwise hand it).
+   */
+  clears: readonly string[];
+  /** A block of its own configuration the hub writes and keeps (`gateway-config.ts`). */
+  config?: GatewayConfigKind;
+  /**
+   * The smallest context window worth giving the agent through the gateway (its system prompt and
+   * tools alone fill much of a small one): the model picker marks a smaller model (DECISIONS §141,
+   * `Agent.gateway_min_context`). A hint, not a refusal.
+   */
+  minContext: number;
+  /**
+   * The oldest version the wiring works with; an older one (found on the computer, or not updated)
+   * keeps its own account. Absent: any.
+   */
+  minVersion?: string;
 }

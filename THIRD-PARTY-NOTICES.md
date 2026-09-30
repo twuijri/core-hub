@@ -41,6 +41,27 @@ SST, Nous Research, Alibaba Cloud's Qwen team, Moonshot AI and Earendil. Core Hu
 what a trademark is for. Core Hub is not affiliated with, endorsed by, or a product of any
 of them. The ninth mark, for our own `direct` agent, is drawn by us.
 
+## lobe-icons and Simple Icons — the companies' logos in "Add a provider"
+
+Since 2026-09-30 (DECISIONS §146) the provider list in "Add a provider" shows each company's
+logo, one colour, tinted by the page. `packages/web/src/ui/brand/vendor-logos.generated.ts` holds
+the path data of twenty logos, written by `scripts/icons/vendor-logos.mjs` (verified 2026-09-30):
+
+- nineteen from [`@lobehub/icons-static-svg`](https://github.com/lobehub/lobe-icons) `1.95.1`, the
+  same MIT package the agents' marks above come from (Anthropic, Claude, OpenAI, OpenRouter,
+  Gemini, Groq, Mistral, DeepSeek, xAI, Grok, Ollama, LM Studio, ElevenLabs, Azure, MiniMax, Kimi,
+  Meta, Antigravity, Devin), under the MIT licence quoted above;
+- Deepgram's from [Simple Icons](https://github.com/simple-icons/simple-icons) `16.33.0`, which is
+  dedicated to the public domain under CC0 1.0 Universal
+  (https://creativecommons.org/publicdomain/zero/1.0/) — no notice is required; this line is
+  the record of where it came from.
+
+A company with no logo in either (LiteLLM, Nous Portal) shows a monogram of its name, drawn by us.
+
+**Trademarks.** The logos belong to their owners. Core Hub shows each one only to identify the
+company a provider is, is not affiliated with, endorsed by, or a product of any of them, and
+does not use them to suggest otherwise.
+
 ## Lucide — the icons of every client
 
 The web client, the desktop app (which shows the web client), and the iOS and Android apps draw
@@ -151,3 +172,35 @@ deliberately absent, because in both cases we took an idea and wrote our own cod
 Dependencies installed from npm are not listed here: their licences travel with
 them in `node_modules` and in `pnpm-lock.yaml`. This file is only for source we
 carry ourselves.
+
+## CLIProxyAPI — the model gateway's translator
+
+The container image (`/opt/corehub/bin/cli-proxy-api`) and the desktop installers
+(`resources/cliproxy/`) carry the unmodified release binary of
+[CLIProxyAPI](https://github.com/router-for-me/CLIProxyAPI) `8.0.4`, one per platform, each checked
+against the SHA-256 pinned in `scripts/cliproxy/pin.json` before it is used (ADR 0029). Core Hub runs
+it as a separate program on a loopback port; none of its code is copied into Core Hub. Its licence
+file ships beside it as `LICENSE.CLIProxyAPI`.
+
+> MIT License
+>
+> Copyright (c) 2025-2005.9 Luis Pater
+> Copyright (c) 2025.9-present Router-For.ME
+>
+> Permission is hereby granted, free of charge, to any person obtaining a copy
+> of this software and associated documentation files (the "Software"), to deal
+> in the Software without restriction, including without limitation the rights
+> to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+> copies of the Software, and to permit persons to whom the Software is
+> furnished to do so, subject to the following conditions:
+>
+> The above copyright notice and this permission notice shall be included in all
+> copies or substantial portions of the Software.
+>
+> THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+> IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+> FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+> AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+> LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+> OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+> SOFTWARE.
