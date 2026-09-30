@@ -155,10 +155,10 @@ $ docker run --rm corehub-mgw-cliproxy:test sh -c 'du -sb /opt/corehub; tar -C /
 22573622
 ```
 
-CI على \`36d48d72\` (قبل تشغيل الأربعة الأخرى في CI): كل المهام نجحت، ومنها المهمة الجديدة بالبرامج الحقيقية وبناء الصورة
-(مرحلة CLIProxyAPI) وفحص \`/health\` وسطح المكتب:
+CI على `36d48d72` (قبل تشغيل الأربعة الأخرى في CI): كل المهام نجحت، ومنها المهمة الجديدة بالبرامج الحقيقية وبناء الصورة
+(مرحلة CLIProxyAPI) وفحص `/health` وسطح المكتب:
 
-\`\`\`
+```
 $ gh run view 36647691052 --json conclusion,jobs
 success
 Lint, typecheck, contracts, tests, build: success
@@ -169,7 +169,7 @@ Real Hermes suites (floor): success · Real Hermes suites (pinned): success
 Server unit tests (shard 1/3, 2/3, 3/3): success
 Web smoke journeys (Playwright against the real hub): success
 Translations fit their labels (measured widths): success
-\`\`\`
+```
 
 ## المخاطر والرجوع
 - Anthropic لا تدعم Claude Code على نماذج غير Claude: ميزات تنادي Anthropic مباشرة (WebSearch، الوضع السريع) لا تعمل هناك، والجودة
