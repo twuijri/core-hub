@@ -11,7 +11,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { I18nProvider } from '../src/i18n/context.js';
 import { PaneProvider } from '../src/shell/pane.js';
 import { MessageView } from '../src/chat/MessageView.js';
-import { ToolCalls, LIVE_WINDOW } from '../src/chat/ToolCallCard.js';
+import { ToolCalls, LIVE_WINDOW, isProse } from '../src/chat/ToolCallCard.js';
 import {
   durationParts,
   summarizeTools,
@@ -276,5 +276,17 @@ describe('a question the agent asked', () => {
     expect(rows[0]).toHaveTextContent('You answered: Windows');
     expect(rows[1]).toHaveTextContent('Question skipped');
     expect(rows[2]).toHaveTextContent('Time ran out without an answer');
+  });
+});
+
+describe('a tool title that is words for a person (owner, 2026-09-30)', () => {
+  it('is set in the reading font and its own direction; names, paths and commands stay code', () => {
+    expect(isProse('Update tactical intent: "سأنشئ ملف test.md بسطر واحد"')).toBe(true);
+    expect(isProse('Reading the file to check what it says')).toBe(true);
+    expect(isProse('write_file')).toBe(false);
+    expect(isProse('Write')).toBe(false);
+    expect(isProse('/home/agent/work/test.md')).toBe(false);
+    expect(isProse('ls -la | grep test > out.txt')).toBe(false);
+    expect(isProse(null)).toBe(false);
   });
 });

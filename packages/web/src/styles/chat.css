@@ -477,6 +477,18 @@ summary.tool-head:hover {
 .tool-name {
   font-family: var(--ch-font-mono);
   font-weight: 500;
+  unicode-bidi: isolate;
+}
+/* A tool's title or preview that is words for a person: the reading font, its own direction. */
+.tool-name.tool-prose,
+.tool-preview.tool-prose {
+  font-family: inherit;
+}
+.tool-name.tool-prose {
+  min-inline-size: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .tool-preview {
   min-inline-size: 0;
