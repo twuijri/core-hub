@@ -81,7 +81,8 @@ export function SignInPanel({
       aria-label={t('models.signin.title', { provider: provider.label })}
     >
       <h4 className="text-sm font-medium" dir="auto">
-        {t('models.signin.title', { provider: provider.label })}
+        {/* The name isolated: "Claude (Pro / Max)" in an Arabic sentence keeps its brackets. */}
+        {t('models.signin.title', { provider: `\u2068${provider.label}\u2069` })}
       </h4>
       {!current && !start.isPending && !start.isError && (
         <Button variant="primary" onClick={begin} data-testid="sign-in-start">

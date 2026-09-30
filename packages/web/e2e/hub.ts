@@ -1323,7 +1323,16 @@ function silentWav(): ArrayBuffer {
     buffer.byteOffset + buffer.byteLength,
   ) as ArrayBuffer;
 }
-overrideModels({ fetchImpl: scriptedProvider });
+// The model gateway's translator is the stand-in the server's own tests use: it answers the
+// subscription sign-ins (DECISIONS §143) — a short code approved a moment after it is shown, a
+// pasted-back address, ChatGPT's code from its command line — and the accounts' dialog.
+overrideModels({
+  fetchImpl: scriptedProvider,
+  cliproxyBin: path.resolve(
+    path.dirname(fileURLToPath(import.meta.url)),
+    '../../server/src/modules/models/gateway/testing/fake-cliproxy.mjs',
+  ),
+});
 // The browser-push journey's fake push service listens on 127.0.0.1, which a hub refuses to
 // call unless told otherwise (a Web Push endpoint is otherwise https and public).
 overrideDevices({ allowPrivateEndpoints: true });

@@ -260,6 +260,8 @@ private fun ProviderSheet(ops: ModelOps, initial: Provider, isAdmin: Boolean, pr
                             NoticeBox(stringResource(R.string.models_list_from_account, provider.label), BadgeTone.Info, Modifier.testTag("provider.catalogue_account"))
                     }
                 }
+                // A subscription through Core Hub's gateway (§143): its accounts and their usage.
+                if (provider.subscription != null) ProviderAccountsBlock(ops, provider, isAdmin)
                 if (isAdmin) {
                     ToggleRow(stringResource(R.string.models_enabled), provider.enabled, { on -> patch(hub.core.client.model.ProviderPatch(enabled = on)) }, Modifier.testTag("provider.enabled"), enabled = !busy)
                     GroupedList {
@@ -270,7 +272,7 @@ private fun ProviderSheet(ops: ModelOps, initial: Provider, isAdmin: Boolean, pr
                                 tag = "provider.sign_in", onClick = { onSignIn(provider) },
                             )
                         }
-                        Item(stringResource(R.string.models_test), icon = Lucide.Activity, tag = "provider.test", onClick = if (busy) null else ({
+                        if (provider.subscription == null) Item(stringResource(R.string.models_test), icon = Lucide.Activity, tag = "provider.test", onClick = if (busy) null else ({
                             busy = true
                             note = testingText to BadgeTone.Info
                             scope.launch {

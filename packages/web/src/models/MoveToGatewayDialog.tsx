@@ -34,7 +34,7 @@ export function MoveToGatewayDialog({
         if (!next) onClose();
       }}
       size="md"
-      title={t('models.subscription.move_title', { provider: provider.label })}
+      title={t('models.subscription.move_title', { provider: `\u2068${provider.label}\u2069` })}
       closeLabel={t('ui.close')}
       testId="move-to-gateway-dialog"
     >
@@ -68,7 +68,9 @@ export function MoveToGatewayDialog({
             {approved && (
               <Notice tone="success">
                 <span data-testid="move-to-gateway-done">
-                  {t('models.subscription.move_done', { provider: provider.label })}
+                  {t('models.subscription.move_done', {
+                    provider: `\u2068${provider.label}\u2069`,
+                  })}
                 </span>
               </Notice>
             )}

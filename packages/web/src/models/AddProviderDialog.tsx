@@ -90,6 +90,7 @@ export function AddProviderDialog({
   const vendors = useSubscriptionVendors();
   const subscriptions =
     startKind === 'llm' && !(vendors.isError && isUnsupported(vendors.error)) && !vendors.isPending;
+  const [signingIn, setSigningIn] = useState(false);
   const [mode, setMode] = useState<'preset' | 'custom' | 'subscription'>(
     startMode === 'subscription' && startKind !== 'llm' ? 'preset' : startMode,
   );
@@ -204,7 +205,8 @@ export function AddProviderDialog({
       testId="add-provider-dialog"
     >
       <form className="flex flex-col gap-3" onSubmit={submit}>
-        <fieldset className="flex flex-col gap-1">
+        {/* Once a subscription's sign-in has started, the choices above it are made. */}
+        <fieldset className="flex flex-col gap-1" hidden={signingIn}>
           <legend className="ch-label">{t('models.add.scope')}</legend>
           <Segmented
             className="self-start"
@@ -234,7 +236,7 @@ export function AddProviderDialog({
           </p>
         </fieldset>
 
-        <fieldset className="flex flex-col gap-1">
+        <fieldset className="flex flex-col gap-1" hidden={signingIn}>
           <legend className="ch-label">{t('models.add.type')}</legend>
           <Segmented
             className="self-start"
@@ -283,7 +285,12 @@ export function AddProviderDialog({
         </fieldset>
 
         {mode === 'subscription' ? (
-          <SubscriptionSignIn scope={scope} providers={providers} onClose={onClose} />
+          <SubscriptionSignIn
+            scope={scope}
+            providers={providers}
+            onClose={onClose}
+            onSigningIn={() => setSigningIn(true)}
+          />
         ) : (
           <>
             {mode === 'preset' ? (

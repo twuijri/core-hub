@@ -20,8 +20,11 @@ export function SubscriptionSignIn({
   scope,
   providers,
   onClose,
+  onSigningIn,
 }: {
   scope: 'all' | 'profile';
+  /** The sign-in itself has started (the dialog hides the choices above it). */
+  onSigningIn?(): void;
   /** The providers already added: a subscription added before is signed in to again. */
   providers: readonly Provider[];
   onClose(): void;
@@ -53,12 +56,18 @@ export function SubscriptionSignIn({
     );
     if (existing) {
       setSigningIn(existing);
+      onSigningIn?.();
       return;
     }
     create.mutate(
       // The address is the preset's own; an empty one tells the hub to use it.
       { preset: chosen.preset, label: chosen.label, kind: 'llm', base_url: '', scope },
-      { onSuccess: (provider) => setSigningIn(provider) },
+      {
+        onSuccess: (provider) => {
+          setSigningIn(provider);
+          onSigningIn?.();
+        },
+      },
     );
   };
 
