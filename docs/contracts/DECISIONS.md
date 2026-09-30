@@ -5210,3 +5210,54 @@ Status: the owner's choices on preview.38, 2026-09-30.
   `provider-list-ar-light.png`), `zz-design.spec.ts` (screenshots of the chat, models, settings
   with the new triggers), `zzzzzzzzzzz-design-family.spec.ts`, and the pseudo-locale width pass
   (`zzzzzzzzzzzzzzzzz-pseudo-locales.spec.ts`, en-XA, ar-XB, zh-XC, th-XD, desktop and phone).
+
+## 147. "Check now" reads usage as CLIProxyAPI's console does, and says why in words; a restart on its way stays on its way
+
+Status: fixes from the owner's first real sign-in, 2026-10-01 (v1.1.6, preview.39).
+
+- **The requests are CPAMC's.** "Check now" asks, in order, the requests CLIProxyAPI's own
+  management console (CPAMC, "Quota Management", MIT) makes for the same accounts — verified
+  against its source (main at `a7ec312f`) and CLIProxyAPI 8.0.4's, not guessed:
+  - **Google Antigravity**: `v1internal:retrieveUserQuotaSummary` on the daily, sandbox and
+    production hosts (`daily-cloudcode-pa`, `daily-cloudcode-pa.sandbox`, `cloudcode-pa`), with the
+    account's Google Cloud project in the body (`{"project": …}`, CLIProxyAPI's `project_id` for
+    the account; `{}` when it has none) and Antigravity's client name
+    (`antigravity/cli/1.0.13 (aidev_client; …)`); then `v1internal:fetchAvailableModels` on the daily
+    and production hosts, whose `models.<id>.quotaInfo` (`remainingFraction`, `resetTime`) is what
+    CPAMC read before the summary existed and what CLIProxyAPI's own model list asks for every
+    consumer account. The hub asked only the production host, with `{}` and no client name; that
+    is what Google answered 403 "no valid license". The summary's buckets become windows
+    ("Gemini · 5-hour"); the model list becomes one window per model with its own name, what is
+    left and when it resets (a model that says only its reset time has none left).
+  - **ChatGPT** `wham/usage` with Codex's client name and the account id: the plan's windows and,
+    new, the code-review windows; a spent window with no percentage is 100%.
+  - **Claude** `api/oauth/usage`: every window, Anthropic's code name for the weekly Fable limit
+    (`iguana_necktie`) read as "Weekly (Fable)".
+  - **xAI**: the weekly credits (`v1/billing?format=credits`) first, then the monthly bill, with the
+    Grok CLI's headers.
+  - **Kimi** `coding/v1/usages`: time units as Kimi sends them (`TIME_UNIT_MINUTE`), a reset as an
+    instant or seconds from now, a limit's own name.
+  The first answer that carries usage wins.
+- **No vendor's raw answer in the dialog.** When nothing can be read, `ProviderAccount.check_error`
+  is one sentence in the person's language: "Google doesn't share usage for this account type."
+  (403/404, ranked first as CPAMC does), a refused sign-in (401), a rate limit (429), a vendor
+  error with its status, the vendor unreachable, or an answer without usage. The vendor's own
+  words go to the hub's log only, redacted (Google's `ya29.` tokens are now redacted too). No
+  contract change: `check_error` was always a sentence for the client to show.
+- **A restart on its way stays on its way.** §145's state ended when the hub asked Hermes to
+  restart, not when Hermes had started again; for those seconds the report said "did not restart"
+  with the button, and the page stopped asking, so it stayed red although Hermes restarted (the
+  owner, 2026-10-01). A restart the hub asked for now reports `scheduled` until the new process
+  has started (up to three minutes, then the button as the way out); a runtime that is not the
+  hub's to restart reports nothing coming. The wait itself: a 1.5-second debounce, then — only
+  while a **Hermes** turn is in flight, no longer any agent's (a coding agent's turn is not touched
+  by the restart) — up to two minutes (80 × 1.5 s) before the change wins, said as "once the reply
+  in progress ends"; then the seconds Hermes takes to start. Every path that changes the model
+  defaults already propagates and schedules the restart (audited: `setDefaults`,
+  `ensureChatDefault`, `moveUses`); none was missing.
+- **Proven.** `gateway/subscription-usage.test.ts` with recorded answer shapes (Google's 403,
+  `fetchAvailableModels`, the quota summary, `wham/usage`, `oauth/usage`, xAI's credits and bill,
+  Kimi's usages; the sentences in English and Arabic; Google's words and token absent from the
+  dialog and the token absent from the log); `gateway/hermes-restart.test.ts` (on its way while
+  Hermes starts again; nothing coming for a runtime that is not the hub's);
+  `update-policy.test.ts` (`busyWith`).

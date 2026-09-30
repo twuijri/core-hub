@@ -216,7 +216,21 @@
         "seven_day_oauth_apps": "Weekly (apps)",
         "weekly": "Weekly",
         "monthly": "Monthly",
-        "total": "Plan total"
+        "total": "Plan total",
+        "seven_day_cowork": "Weekly (Cowork)",
+        "seven_day_fable": "Weekly (Fable)",
+        "code_review_primary": "Code review (5 hours)",
+        "code_review_secondary": "Code review (weekly)"
+      },
+      "check": {
+        "no_address": "{company} has no usage address Core Hub can ask.",
+        "no_index": "This account is not ready to be asked yet; try again in a minute.",
+        "not_shared": "{company} doesn't share usage for this account type.",
+        "signed_out": "{company} refused this account's sign-in. Renew the sign-in, then check again.",
+        "rate_limited": "{company} is limiting requests right now. Try again in a few minutes.",
+        "vendor_error": "{company} could not answer right now ({status}). Try again later.",
+        "unreachable": "Core Hub could not reach {company}. Check the hub's connection, then try again.",
+        "no_usage": "{company} answered, but without usage Core Hub can read."
       }
     }
   },

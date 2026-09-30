@@ -361,6 +361,9 @@ describe('update policy: a run asked for during an update waits for it', () => {
     await runner.start(request('r1'));
     expect(runner.busyFor('agent-1')).toBe(true);
     expect(runner.busyFor('agent-2')).toBe(false);
+    // A coding agent's turn does not hold back a restart of Hermes (§147).
+    expect(runner.busyWith('acp')).toBe(true);
+    expect(runner.busyWith('hermes')).toBe(false);
     for await (const event of runner.stream('r1')) void event;
     expect(runner.busyFor('agent-1')).toBe(false);
 
