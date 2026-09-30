@@ -30,7 +30,8 @@ memory, its control panel and its panel updater off. Everything else stays as AD
 The hub's `models` module wraps it (`gateway/cliproxy-management.ts`) and is the only caller.
 
 ### 2. A subscription is a provider row; its accounts are CLIProxyAPI's
-"Sign in with a subscription" adds a provider row from a gateway preset (`chatgpt-subscription`,
+A subscription picked in "Add a provider" (since DECISIONS §146 in the one provider list, tagged
+«Subscription»; first a tab of its own) adds a provider row from a gateway preset (`chatgpt-subscription`,
 `claude-subscription`, …). Its sign-in is CLIProxyAPI's own:
 - **a short code** where CLIProxyAPI has one — xAI, Kimi, Meta through the management API, and
   ChatGPT by running `cli-proxy-api -codex-device-login -no-browser` as a child process, the way

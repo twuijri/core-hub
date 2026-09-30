@@ -41,6 +41,27 @@ SST, Nous Research, Alibaba Cloud's Qwen team, Moonshot AI and Earendil. Core Hu
 what a trademark is for. Core Hub is not affiliated with, endorsed by, or a product of any
 of them. The ninth mark, for our own `direct` agent, is drawn by us.
 
+## lobe-icons and Simple Icons — the companies' logos in "Add a provider"
+
+Since 2026-09-30 (DECISIONS §146) the provider list in "Add a provider" shows each company's
+logo, one colour, tinted by the page. `packages/web/src/ui/brand/vendor-logos.generated.ts` holds
+the path data of twenty logos, written by `scripts/icons/vendor-logos.mjs` (verified 2026-09-30):
+
+- nineteen from [`@lobehub/icons-static-svg`](https://github.com/lobehub/lobe-icons) `1.95.1`, the
+  same MIT package the agents' marks above come from (Anthropic, Claude, OpenAI, OpenRouter,
+  Gemini, Groq, Mistral, DeepSeek, xAI, Grok, Ollama, LM Studio, ElevenLabs, Azure, MiniMax, Kimi,
+  Meta, Antigravity, Devin), under the MIT licence quoted above;
+- Deepgram's from [Simple Icons](https://github.com/simple-icons/simple-icons) `16.33.0`, which is
+  dedicated to the public domain under CC0 1.0 Universal
+  (https://creativecommons.org/publicdomain/zero/1.0/) — no notice is required; this line is
+  the record of where it came from.
+
+A company with no logo in either (LiteLLM, Nous Portal) shows a monogram of its name, drawn by us.
+
+**Trademarks.** The logos belong to their owners. Core Hub shows each one only to identify the
+company a provider is, is not affiliated with, endorsed by, or a product of any of them, and
+does not use them to suggest otherwise.
+
 ## Lucide — the icons of every client
 
 The web client, the desktop app (which shows the web client), and the iOS and Android apps draw

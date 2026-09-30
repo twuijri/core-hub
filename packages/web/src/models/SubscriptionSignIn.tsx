@@ -1,45 +1,60 @@
 /**
- * "Add provider → Sign in with a subscription" (DECISIONS §143): the subscriptions the hub's
- * gateway signs in to — ChatGPT, Claude, xAI, Kimi, Meta, Google Antigravity, Devin — with how
- * each one's sign-in goes (a short code, or a link whose landing address is pasted back), one
- * neutral sentence about the vendors' terms, and then the sign-in itself, in the same dialog.
+ * A subscription picked in "Add a provider" (DECISIONS §143, §146): what its sign-in is like —
+ * a short code, or a link whose landing address is pasted back — and whether its usage and reset
+ * times show, one neutral sentence about the vendors' terms, «Continue to sign in», and then the
+ * sign-in itself, in the same dialog.
  *
- * The sign-in adds an account to the provider; signing in again under the same provider adds
- * another account (or renews the same one). Its models then serve every agent through the
- * gateway. A hub older than this answers 404 and the choice is not offered at all.
+ * The subscriptions are listed in the dialog's one provider list, each with a «Subscription»
+ * tag (owner, 2026-09-30: one list, no tab of their own). The sign-in adds an account to the
+ * provider; signing in again under the same provider adds another account (or renews the same
+ * one). Its models then serve every agent through the gateway.
  */
-import { useMemo, useState } from 'react';
+import { useState } from 'react';
 import { describeError } from '../auth/client.js';
 import { useI18n } from '../i18n/context.js';
-import type { Provider } from '../types.js';
-import { Badge, Button, Notice, Radio, Spinner } from '../ui/index.js';
+import type { Provider, SubscriptionVendor } from '../types.js';
+import { Button, Notice } from '../ui/index.js';
 import { SignInPanel } from './SignInPanel.js';
-import { useCreateProvider, useSubscriptionVendors } from './queries.js';
+import { useCreateProvider } from './queries.js';
+
+/** The detail line of a subscription: how its sign-in goes, and whether usage shows. */
+export function subscriptionDetail(
+  vendor: Pick<SubscriptionVendor, 'flow' | 'usage_windows'>,
+  t: (key: string) => string,
+): string {
+  const how = t(
+    vendor.flow === 'device' ? 'models.subscription.flow_device' : 'models.subscription.flow_link',
+  );
+  return vendor.usage_windows ? `${how} · ${t('models.subscription.has_windows')}` : how;
+}
 
 export function SubscriptionSignIn({
+  vendor,
+  available,
+  reason,
+  note,
   scope,
   providers,
   onClose,
   onSigningIn,
 }: {
+  /** The subscription picked in the provider list. */
+  vendor: SubscriptionVendor;
+  /** Whether this hub's gateway can sign in at all, and why not. */
+  available: boolean;
+  reason: string | null;
+  /** The hub's one neutral sentence about the vendors' terms. */
+  note: string | null;
   scope: 'all' | 'profile';
-  /** The sign-in itself has started (the dialog hides the choices above it). */
-  onSigningIn?(): void;
   /** The providers already added: a subscription added before is signed in to again. */
   providers: readonly Provider[];
+  /** The sign-in itself has started (the dialog hides the choices above it). */
+  onSigningIn?(): void;
   onClose(): void;
 }) {
   const { t } = useI18n();
-  const vendors = useSubscriptionVendors();
   const create = useCreateProvider();
-  const items = useMemo(() => vendors.data?.items ?? [], [vendors.data]);
-  const [preset, setPreset] = useState<string>('');
-  const chosen = items.find((item) => item.preset === preset) ?? items[0];
   const [signingIn, setSigningIn] = useState<Pick<Provider, 'id' | 'label'> | null>(null);
-
-  if (vendors.isPending) return <Spinner label={t('common.loading')} />;
-  if (vendors.isError) return <Notice tone="danger">{describeError(vendors.error, t)}</Notice>;
-  const available = vendors.data.available;
 
   if (signingIn) {
     return (
@@ -50,9 +65,8 @@ export function SubscriptionSignIn({
   }
 
   const begin = () => {
-    if (!chosen) return;
     const existing = providers.find(
-      (provider) => provider.slug === chosen.preset && provider.scope === scope,
+      (provider) => provider.slug === vendor.preset && provider.scope === scope,
     );
     if (existing) {
       setSigningIn(existing);
@@ -61,7 +75,7 @@ export function SubscriptionSignIn({
     }
     create.mutate(
       // The address is the preset's own; an empty one tells the hub to use it.
-      { preset: chosen.preset, label: chosen.label, kind: 'llm', base_url: '', scope },
+      { preset: vendor.preset, label: vendor.label, kind: 'llm', base_url: '', scope },
       {
         onSuccess: (provider) => {
           setSigningIn(provider);
@@ -72,40 +86,25 @@ export function SubscriptionSignIn({
   };
 
   return (
-    <div className="flex flex-col gap-3" data-testid="subscription-vendors">
+    <div
+      className="flex flex-col gap-3"
+      data-testid="subscription-vendors"
+      data-vendor={vendor.vendor}
+    >
       <p className="text-sm text-muted">{t('models.subscription.intro')}</p>
+      <p className="text-sm" data-testid="subscription-detail">
+        {subscriptionDetail(vendor, t)}
+      </p>
       {!available && (
         <Notice tone="warning">
           <span data-testid="subscription-unavailable">
-            {t('models.subscription.unavailable', { reason: vendors.data.reason ?? '—' })}
+            {t('models.subscription.unavailable', { reason: reason ?? '—' })}
           </span>
         </Notice>
       )}
-      <Radio
-        label={t('models.subscription.pick')}
-        value={chosen?.preset ?? null}
-        onChange={setPreset}
-        testId="subscription-vendor-list"
-        options={items.map((item) => ({
-          value: item.preset,
-          label: (
-            <span className="flex flex-wrap items-center gap-2" data-vendor={item.vendor}>
-              <span dir="auto">{item.label}</span>
-              {item.usage_windows && (
-                <Badge tone="info">{t('models.subscription.has_windows')}</Badge>
-              )}
-            </span>
-          ),
-          hint: t(
-            item.flow === 'device'
-              ? 'models.subscription.flow_device'
-              : 'models.subscription.flow_link',
-          ),
-        }))}
-      />
-      {vendors.data.note && (
+      {note && (
         <p className="text-xs text-muted" data-testid="subscription-note">
-          {vendors.data.note}
+          {note}
         </p>
       )}
       {create.isError && <Notice tone="danger">{describeError(create.error, t)}</Notice>}
@@ -113,7 +112,7 @@ export function SubscriptionSignIn({
         <Button onClick={onClose}>{t('common.cancel')}</Button>
         <Button
           variant="primary"
-          disabled={!available || !chosen || create.isPending}
+          disabled={!available || create.isPending}
           loading={create.isPending}
           onClick={begin}
           data-testid="subscription-continue"

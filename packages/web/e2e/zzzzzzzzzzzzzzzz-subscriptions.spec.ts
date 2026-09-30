@@ -2,8 +2,9 @@
  * Subscriptions signed in to through the hub's model gateway (DECISIONS §143), against the real
  * hub with the gateway's translator stand-in (`e2e/hub.ts`): the owner's two journeys.
  *
- * 1. «إضافة مزوّد» → «الدخول باشتراك»: ChatGPT by a short code (the one CLIProxyAPI prints on its
- *    command line), then Claude by a link whose landing address is pasted back.
+ * 1. «إضافة مزوّد»: the subscriptions in the one provider list, tagged «اشتراك» with their company's
+ *    logo (DECISIONS §146); ChatGPT by a short code (the one CLIProxyAPI prints on its command
+ *    line), then Claude by a link whose landing address is pasted back.
  * 2. Clicking the ChatGPT card opens its dialog — not a page: the account, its status, its usage
  *    window with what is left and when it resets, its requests, «افحص الآن», turning it off.
  *
@@ -35,13 +36,23 @@ async function models(page: Page) {
   await expect(page.getByTestId('open-add-provider')).toBeVisible();
 }
 
-async function subscriptionChoice(page: Page, name: string) {
+const escape = (text: string) => text.replace(/[.*+?^${}()|[\]\\/]/g, '\\$&');
+
+async function subscriptionChoice(page: Page, name: string, shot?: string) {
   await page.getByTestId('open-add-provider').click();
   const dialog = page.getByTestId('add-provider-dialog');
-  await dialog.getByTestId('add-mode-subscription').click();
+  // Two tabs: the list (keys and subscriptions together) and Custom.
+  await expect(dialog.getByTestId('add-mode-subscription')).toHaveCount(0);
+  await dialog.getByTestId('add-preset').click();
+  const option = page.getByRole('option', { name: new RegExp(`^${escape(name)}`) });
+  await expect(option).toContainText('اشتراك');
+  if (shot) {
+    await page.waitForTimeout(200);
+    await page.screenshot({ path: path.join(shots, shot) });
+  }
+  await option.click();
   const vendors = dialog.getByTestId('subscription-vendors');
   await expect(vendors.getByTestId('subscription-note')).toContainText('بعض المزوّدين');
-  await vendors.getByText(name, { exact: true }).click();
   return dialog;
 }
 
@@ -56,7 +67,12 @@ test.describe('subscriptions through Core Hub’s gateway', () => {
     await expect(page.getByTestId('hermes-source-switch')).toHaveCount(0);
 
     // 1. ChatGPT by a short code.
-    let dialog = await subscriptionChoice(page, 'ChatGPT (Plus / Pro / Business)');
+    let dialog = await subscriptionChoice(
+      page,
+      'ChatGPT (Plus / Pro / Business)',
+      'provider-list-ar-light.png',
+    );
+    await expect(dialog.getByTestId('add-preset').locator('[data-logo="openai"]')).toBeVisible();
     await dialog.getByTestId('subscription-continue').click();
     const panel = dialog.getByTestId('sign-in-panel');
     await expect(panel.getByTestId('sign-in-code')).toHaveText('FAKE-CODEX1');

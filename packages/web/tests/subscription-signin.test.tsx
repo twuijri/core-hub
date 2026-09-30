@@ -1,5 +1,6 @@
 // Subscriptions signed in to through the hub's gateway (DECISIONS §143), on the Models screen:
-// "Add provider → Sign in with a subscription" with a link whose landing address is pasted back,
+// "Add provider": a subscription picked in the one provider list (tagged «Subscription», with its
+// company's logo, DECISIONS §146) and signed in to with a link whose landing address is pasted back,
 // a subscription card that opens its accounts dialog (usage windows, reset times, requests,
 // errors, check now, turn off), and an older hub that does not offer any of it.
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
@@ -13,6 +14,7 @@ import { ThemeProvider } from '../src/design/theme.js';
 import { I18nProvider } from '../src/i18n/context.js';
 import { RealtimeProvider } from '../src/realtime/context.js';
 import { ModelsScreen } from '../src/models/ModelsScreen.js';
+import { chooseOption, optionLabels, closeControl } from './helpers/ui.js';
 
 function memoryStorage(): Storage {
   const map = new Map<string, string>();
@@ -152,7 +154,24 @@ function hub(state: Partial<Hub> = {}) {
       });
     }
     if (url.includes('/models/provider-presets')) {
-      return json({ items: [], host: { containerized: false, loopback_alias: 'x' } });
+      return json({
+        items: [
+          {
+            id: 'anthropic',
+            label: 'Anthropic',
+            kind: 'llm',
+            api_mode: 'native',
+            base_url: 'https://api.anthropic.com',
+            base_url_required: false,
+            key: 'required',
+            local: false,
+            repeatable: false,
+            keys_url: null,
+            sign_in: false,
+          },
+        ],
+        host: { containerized: false, loopback_alias: 'x' },
+      });
     }
     if (url.endsWith('/models/providers') && method === 'POST') {
       const created = provider({
@@ -324,12 +343,33 @@ describe('subscriptions on the models screen', () => {
     const { state, fetchImpl } = hub({ providers: [] });
     renderScreen(fetchImpl);
     await userEvent.click(await screen.findByTestId('open-add-provider'));
-    await userEvent.click(await screen.findByTestId('add-mode-subscription'));
+    // Two tabs only: the list, and Custom.
+    expect(screen.queryByTestId('add-mode-subscription')).toBeNull();
+    await screen.findByTestId('add-mode-custom');
+    const trigger = await screen.findByTestId('add-preset');
+    // The subscriptions are in the same list, tagged, each with its logo and its detail line.
+    await waitFor(async () => {
+      const labels = await optionLabels(userEvent, trigger);
+      await closeControl(userEvent);
+      expect(labels.some((label) => label.startsWith('Claude (Pro / Max)Subscription'))).toBe(true);
+    });
+    await userEvent.click(trigger);
+    const listbox = await screen.findByRole('listbox');
+    const claude = within(listbox).getByRole('option', { name: /^Claude \(Pro \/ Max\)/ });
+    expect(claude.textContent).toContain('Sign in with a link, then paste the address back');
+    expect(claude.textContent).toContain('Shows usage and reset times');
+    expect(claude.querySelector('[data-logo="claude"]')).toBeTruthy();
+    await closeControl(userEvent);
+    await chooseOption(userEvent, trigger, /^Claude \(Pro \/ Max\)/);
     const list = await screen.findByTestId('subscription-vendors');
     expect(within(list).getByTestId('subscription-note').textContent).toMatch(
       /outside their own apps/,
     );
-    await userEvent.click(within(list).getByText('Claude (Pro / Max)'));
+    expect(within(list).getByTestId('subscription-detail').textContent).toBe(
+      'Sign in with a link, then paste the address back · Shows usage and reset times',
+    );
+    // No key or address to type for a subscription.
+    expect(screen.queryByTestId('add-api-key')).toBeNull();
     await userEvent.click(within(list).getByTestId('subscription-continue'));
 
     const panel = await screen.findByTestId('sign-in-panel');
@@ -363,6 +403,7 @@ describe('subscriptions on the models screen', () => {
     renderScreen(fetchImpl);
     await userEvent.click(await screen.findByTestId('open-add-provider'));
     await screen.findByTestId('add-mode-custom');
-    await waitFor(() => expect(screen.queryByTestId('add-mode-subscription')).toBeNull());
+    const labels = await optionLabels(userEvent, await screen.findByTestId('add-preset'));
+    expect(labels.some((label) => label.includes('Subscription'))).toBe(false);
   });
 });

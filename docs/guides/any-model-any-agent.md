@@ -87,9 +87,12 @@ wrote, the hub leaves it alone and the message fails, saying so; the hub's log s
 
 ## Subscriptions (sign in instead of a key)
 
-Settings → Models → **Add provider → Sign in with a subscription** lists every subscription the
-hub's gateway can sign in to (DECISIONS §143, ADR 0030): ChatGPT, Claude, xAI Grok, Kimi Code,
-Meta AI, Google Antigravity and Devin.
+Settings → Models → **Add provider** lists every subscription the hub's gateway can sign in to in
+the same provider list as the providers used with a key, each tagged **Subscription** (DECISIONS
+§143, §146, ADR 0030): ChatGPT, Claude, xAI Grok, Kimi Code, Meta AI, Google Antigravity and Devin.
+Pick one, read how its sign-in goes, and press **Continue to sign in**. MiniMax and Nous Portal
+are listed as subscriptions too; they sign in through Hermes and serve Hermes and Core Hub's own
+agent (the gateway cannot sign in to them, so coding agents cannot use them).
 
 - **By a short code** (ChatGPT, xAI, Kimi, Meta): open the page shown, type the code, done. It works
   from a phone and from a server with no browser.

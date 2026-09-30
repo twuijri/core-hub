@@ -6,6 +6,11 @@
  * show/hide eye, marked optional wherever it is), and a default-model select with a
  * Fetch button that asks the endpoint itself.
  *
+ * Since 2026-09-30 (DECISIONS §146, owner): the preset list is one list — keys and
+ * subscriptions together, a subscription tagged «Subscription» — drawn by our own `Select`
+ * with each company's logo; "Custom" stays a tab of its own. A Hermes sign-in that the
+ * gateway now does itself is not offered twice.
+ *
  * First question (contract decision §37, owner 2026-09-24): who is it for — every profile
  * (shared, the default) or only the profile selected at the top, whose own key then wins
  * there over a shared one. A provider never changes scope afterwards.
@@ -21,8 +26,9 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { describeError } from '../auth/client.js';
 import { useI18n } from '../i18n/context.js';
-import type { Provider, ProviderHost, ProviderPreset } from '../types.js';
+import type { Provider, ProviderHost, ProviderPreset, SubscriptionVendor } from '../types.js';
 import {
+  Badge,
   Button,
   Combobox,
   Dialog,
@@ -44,7 +50,11 @@ import {
   useSubscriptionVendors,
   type ProviderCreate,
 } from './queries.js';
-import { SubscriptionSignIn } from './SubscriptionSignIn.js';
+import { VendorLogo } from '../ui/brand/VendorLogo.js';
+import { SubscriptionSignIn, subscriptionDetail } from './SubscriptionSignIn.js';
+
+/** A subscription's value in the provider list, apart from the presets' own ids. */
+const SUBSCRIPTION = 'subscription:';
 
 export function AddProviderDialog({
   kind: startKind = 'llm',
@@ -69,7 +79,7 @@ export function AddProviderDialog({
   profileName: string;
   /** The providers already added (a subscription added before is signed in to again, §143). */
   providers?: readonly Provider[];
-  /** Open on "Sign in with a subscription" rather than on a preset. */
+  /** Open on "Custom", or on the first subscription in the list, rather than the first preset. */
   startMode?: 'preset' | 'custom' | 'subscription';
   onClose(): void;
 }) {
@@ -81,12 +91,18 @@ export function AddProviderDialog({
   const firstField = useRef<HTMLButtonElement>(null);
 
   const [scope, setScope] = useState<'all' | 'profile'>('all');
-  // "Sign in with a subscription" (DECISIONS §143), and only on a hub that offers it (an older one
-  // answers 404 and the choice is not shown). There, a sign-in through Hermes that the gateway now
-  // does itself is not offered again; rows already added keep working.
+  // The subscriptions the gateway signs in to (DECISIONS §143), listed with the presets, and only
+  // on a hub that offers them (an older one answers 404 and none is listed). There, a sign-in
+  // through Hermes that the gateway now does itself is not offered again; rows already added keep
+  // working.
   const vendors = useSubscriptionVendors();
-  const subscriptions =
-    startKind === 'llm' && !(vendors.isError && isUnsupported(vendors.error)) && !vendors.isPending;
+  const subscriptions = useMemo<readonly SubscriptionVendor[]>(
+    () =>
+      startKind === 'llm' && !(vendors.isError && isUnsupported(vendors.error))
+        ? (vendors.data?.items ?? [])
+        : [],
+    [startKind, vendors.isError, vendors.error, vendors.data],
+  );
   const offered = useMemo(
     () =>
       presets.filter(
@@ -97,14 +113,27 @@ export function AddProviderDialog({
     [presets, taken, scope, vendors.data?.available],
   );
   const [signingIn, setSigningIn] = useState(false);
-  const [mode, setMode] = useState<'preset' | 'custom' | 'subscription'>(
-    startMode === 'subscription' && startKind !== 'llm' ? 'preset' : startMode,
+  const [mode, setMode] = useState<'preset' | 'custom'>(
+    startMode === 'custom' ? 'custom' : 'preset',
   );
   // A custom endpoint may be a speech server (Whisper-style `audio/transcriptions`,
   // `audio/speech`): what it is for is asked, never guessed (DECISIONS §63).
   const [customKind, setCustomKind] = useState<'llm' | 'stt' | 'tts'>(startKind);
-  const [presetId, setPresetId] = useState<string>(offered[0]?.id ?? '');
+  // The one list: the subscriptions first, then the presets (keys, and Hermes's own sign-ins).
+  const choices = useMemo(
+    () => [
+      ...subscriptions.map((item) => `${SUBSCRIPTION}${item.preset}`),
+      ...offered.map((item) => item.id),
+    ],
+    [subscriptions, offered],
+  );
+  const [presetId, setPresetId] = useState<string>(
+    startMode === 'subscription' ? '' : (offered[0]?.id ?? ''),
+  );
   const preset = offered.find((item) => item.id === presetId);
+  const vendor = presetId.startsWith(SUBSCRIPTION)
+    ? subscriptions.find((item) => `${SUBSCRIPTION}${item.preset}` === presetId)
+    : undefined;
   const [label, setLabel] = useState('');
   const [baseUrl, setBaseUrl] = useState(preset?.base_url ?? '');
   const [apiKey, setApiKey] = useState('');
@@ -125,12 +154,54 @@ export function AddProviderDialog({
   useEffect(() => firstField.current?.focus(), []);
 
   // A preset already added in the chosen scope is not offered; move off it when the scope
-  // changes rather than submitting a 409.
+  // changes rather than submitting a 409. Opened on a subscription: the first one, once listed.
   useEffect(() => {
-    if (!offered.some((item) => item.id === presetId)) setPresetId(offered[0]?.id ?? '');
-  }, [offered, presetId]);
+    if (choices.includes(presetId)) return;
+    if (startMode === 'subscription' && presetId === '') {
+      if (subscriptions[0]) setPresetId(`${SUBSCRIPTION}${subscriptions[0].preset}`);
+      else if (!vendors.isPending) setPresetId(offered[0]?.id ?? '');
+      return;
+    }
+    setPresetId(offered[0]?.id ?? choices[0] ?? '');
+  }, [choices, offered, presetId, startMode, subscriptions, vendors.isPending]);
+
+  // Subscriptions first, under their heading — the gateway's, then Hermes's own sign-ins, which
+  // serve Hermes and Core Hub's own agent (the gateway cannot sign in to them, §146) — then the
+  // providers used with a key. Each with its company's logo.
+  const listOptions = useMemo(() => {
+    const tag = <Badge tone="info">{t('models.add.subscription_badge')}</Badge>;
+    const subscriptionsGroup = t('models.add.group_subscriptions');
+    const keysGroup = t('models.add.group_keys');
+    const signIns = offered.filter((item) => item.sign_in);
+    const keys = offered.filter((item) => !item.sign_in);
+    return [
+      ...subscriptions.map((item) => ({
+        value: `${SUBSCRIPTION}${item.preset}`,
+        label: item.label,
+        icon: <VendorLogo preset={item.preset} name={item.label} />,
+        badge: tag,
+        description: subscriptionDetail(item, t),
+        group: subscriptionsGroup,
+      })),
+      ...signIns.map((item) => ({
+        value: item.id,
+        label: item.label,
+        icon: <VendorLogo preset={item.id} name={item.label} />,
+        badge: tag,
+        description: t('models.add.hermes_sign_in_detail'),
+        group: subscriptionsGroup,
+      })),
+      ...keys.map((item) => ({
+        value: item.id,
+        label: item.label,
+        icon: <VendorLogo preset={item.id} name={item.label} />,
+        group: keysGroup,
+      })),
+    ];
+  }, [subscriptions, offered, t]);
 
   const usingPreset = mode === 'preset' && preset !== undefined;
+  const usingSubscription = mode === 'preset' && vendor !== undefined;
   // A family that already holds a key in the chosen scope lends it: Groq added for chat also
   // speaks, and adding its speech row asks for nothing (DECISIONS §94).
   const keyOnFile = usingPreset && (preset.key_on_file ?? []).includes(scope);
@@ -176,7 +247,7 @@ export function AddProviderDialog({
 
   const submit = (event: React.FormEvent) => {
     event.preventDefault();
-    if (mode === 'subscription') return;
+    if (usingSubscription) return;
     const body: ProviderCreate = {
       ...(usingPreset ? { preset: preset.id } : {}),
       label: usingPreset ? label.trim() || preset.label : label.trim(),
@@ -249,10 +320,6 @@ export function AddProviderDialog({
             label={t('models.add.type')}
             value={mode}
             onChange={(next) => {
-              if (next === 'subscription') {
-                setMode('subscription');
-                return;
-              }
               if (next === 'preset') {
                 setMode('preset');
                 setBaseUrl(preset?.base_url ?? '');
@@ -277,21 +344,42 @@ export function AddProviderDialog({
                 label: t('models.add.type_custom'),
                 itemProps: { 'data-testid': 'add-mode-custom' },
               },
-              ...(subscriptions || mode === 'subscription'
-                ? [
-                    {
-                      value: 'subscription',
-                      label: t('models.add.type_subscription'),
-                      itemProps: { 'data-testid': 'add-mode-subscription' },
-                    },
-                  ]
-                : []),
             ]}
           />
         </fieldset>
 
-        {mode === 'subscription' ? (
+        {mode === 'preset' && (
+          <div className="ch-field-row" hidden={signingIn}>
+            <Label>{t('models.add.select_provider')}</Label>
+            <Select
+              value={presetId === '' ? null : presetId}
+              onValueChange={(next) => next && setPresetId(next)}
+              label={t('models.add.select_provider')}
+              title={null}
+              block
+              testId="add-preset"
+              options={listOptions}
+            />
+            {!usingSubscription && preset?.keys_url && (
+              <a
+                className="link text-xs underline"
+                href={preset.keys_url}
+                target="_blank"
+                rel="noreferrer"
+              >
+                {t('models.add.where_key')}
+              </a>
+            )}
+          </div>
+        )}
+
+        {usingSubscription && vendor ? (
           <SubscriptionSignIn
+            key={vendor.preset}
+            vendor={vendor}
+            available={vendors.data?.available ?? false}
+            reason={vendors.data?.reason ?? null}
+            note={vendors.data?.note ?? null}
             scope={scope}
             providers={providers}
             onClose={onClose}
@@ -299,28 +387,7 @@ export function AddProviderDialog({
           />
         ) : (
           <>
-            {mode === 'preset' ? (
-              <div className="ch-field-row">
-                <Label>{t('models.add.select_provider')}</Label>
-                <Select
-                  value={presetId}
-                  onValueChange={(next) => next && setPresetId(next)}
-                  label={t('models.add.select_provider')}
-                  testId="add-preset"
-                  options={offered.map((item) => ({ value: item.id, label: item.label }))}
-                />
-                {preset?.keys_url && (
-                  <a
-                    className="link text-xs underline"
-                    href={preset.keys_url}
-                    target="_blank"
-                    rel="noreferrer"
-                  >
-                    {t('models.add.where_key')}
-                  </a>
-                )}
-              </div>
-            ) : (
+            {mode === 'custom' && (
               <>
                 <fieldset className="flex flex-col gap-1">
                   <legend className="ch-label">{t('models.add.kind')}</legend>

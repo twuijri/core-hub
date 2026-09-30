@@ -673,23 +673,40 @@
   }
 }
 
-/* The one dropdown shape (src/ui/Select.tsx over Radix Select): a chip that opens a
-   token-painted listbox. Radix owns the behaviour and the RTL arrows; this owns the look. */
+/* The one dropdown shape (src/ui/Select.tsx over Radix Select, and the searchable picker's
+   trigger below): a rounded rectangle with a thin border, like the header of the Runtime card
+   on Settings → Models — normal readable text, a comfortable height, the chevron at the far
+   inline end (owner, 2026-09-30, DECISIONS §146: no more pills, and no native-looking selects).
+   Radix owns the behaviour and the RTL arrows; this owns the look. */
 .ch-select {
   display: inline-flex;
   align-items: center;
-  gap: var(--ch-space-1);
-  padding-inline: var(--ch-space-2);
-  block-size: 2rem;
-  border-radius: var(--ch-radius-full);
-  border: 1px solid transparent;
-  background: var(--ch-color-surface-2);
-  color: var(--ch-color-text-muted);
-  font-size: var(--ch-font-size-xs);
-  max-inline-size: 14rem;
+  gap: var(--ch-space-2);
+  padding-inline: var(--ch-space-3);
+  block-size: var(--ch-control-height-lg);
+  border-radius: var(--ch-radius-md);
+  border: 1px solid var(--ch-color-border);
+  background: var(--ch-color-surface);
+  color: var(--ch-color-text);
+  font-size: var(--ch-font-size-sm);
+  max-inline-size: 100%;
+  min-inline-size: 0;
+  text-align: start;
   transition-duration: var(--ch-motion-fast);
   transition-timing-function: var(--ch-motion-ease);
-  transition-property: background-color, color;
+  transition-property: background-color, color, border-color;
+}
+/* The composer's toolbar (under the message box, and on the new-chat screen): the same shape,
+   compact — the size of the secondary buttons ("Test", "Edit" on a provider card). */
+.composer-tools .ch-select,
+.composer-tools .ch-combo-trigger {
+  gap: var(--ch-space-1);
+  padding-inline: var(--ch-control-pad-sm);
+  block-size: 2rem;
+  border-radius: var(--ch-control-item-radius);
+  font-size: var(--ch-font-size-xs);
+  color: var(--ch-color-text-muted);
+  max-inline-size: 14rem;
 }
 /* The chevron sits at the end of the trigger, not against the label: on a trigger wider than
    its text (a form field) it belongs at the far edge (owner, 2026-09-24). Logical, so it is the
@@ -699,8 +716,12 @@
   flex-shrink: 0;
   display: inline-flex;
 }
+.ch-select[data-block='true'] {
+  inline-size: 100%;
+}
 .ch-select:hover:not(:disabled) {
-  background: var(--ch-color-surface-3);
+  background: var(--ch-color-surface-2);
+  border-color: var(--ch-color-border-strong);
   color: var(--ch-color-text);
 }
 .ch-select:disabled {
@@ -763,6 +784,39 @@
 }
 .ch-select-item-check {
   padding-block-start: 2px;
+}
+/* A label with its tag ("Subscription"): the name, then the tag, wrapping as a unit. */
+.ch-select-item-title {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--ch-space-2);
+  min-inline-size: 0;
+}
+/* A company's logo (src/ui/brand/VendorLogo.tsx): one colour, the brand accent, only so people
+   recognise the company. A company with no logo here wears a monogram of the same size. */
+.vendor-logo {
+  display: inline-grid;
+  place-items: center;
+  flex: none;
+  color: var(--ch-color-accent);
+}
+.vendor-logo-monogram::before {
+  content: attr(data-letter);
+}
+.vendor-logo-monogram {
+  display: inline-grid;
+  place-items: center;
+  flex: none;
+  border: 1.5px solid currentColor;
+  border-radius: var(--ch-radius-sm);
+  color: var(--ch-color-accent);
+  font-weight: 600;
+  line-height: 1;
+}
+/* Beside a logo the list's icon column is the logo's own colour, not the muted one. */
+.ch-select-item-icon:has(.vendor-logo, .vendor-logo-monogram) {
+  color: var(--ch-color-accent);
 }
 /* A choice that gives something up says so in its colour, in the list and on the trigger. */
 .ch-select-item[data-tone='danger'],
@@ -1036,22 +1090,24 @@
    popup, and a virtualized list under it. Every size is a token; the rows are
    absolutely positioned by the virtualizer, so their height is fixed here and in
    the component (ROW / GROUP_ROW) and must stay in step. */
-/* The same soft pill as `.ch-select`, and the same height: the model and the approval
-   mode sit side by side in the composer, and two shapes there read as two kinds of
-   control (owner, 2026-09-22: «نفس نموذج الابروفل ناعم ونفس الحجم»). */
+/* The same shape as `.ch-select`, and the same height: the model and the approval mode sit
+   side by side in the composer, and two shapes there read as two kinds of control (owner,
+   2026-09-22: «نفس نموذج الابروفل ناعم ونفس الحجم»; since 2026-09-30 both are the bordered
+   rectangle, DECISIONS §146). */
 .ch-combo-trigger {
   display: inline-flex;
   align-items: center;
   justify-content: space-between;
-  gap: var(--ch-space-1);
-  max-inline-size: 14rem;
-  padding-inline: var(--ch-space-2);
-  block-size: 2rem;
-  border: 1px solid transparent;
-  border-radius: var(--ch-radius-full);
-  background: var(--ch-color-surface-2);
-  color: var(--ch-color-text-muted);
-  font-size: var(--ch-font-size-xs);
+  gap: var(--ch-space-2);
+  max-inline-size: 100%;
+  min-inline-size: 0;
+  padding-inline: var(--ch-space-3);
+  block-size: var(--ch-control-height-lg);
+  border: 1px solid var(--ch-color-border);
+  border-radius: var(--ch-radius-md);
+  background: var(--ch-color-surface);
+  color: var(--ch-color-text);
+  font-size: var(--ch-font-size-sm);
   text-align: start;
   cursor: pointer;
   transition-duration: var(--ch-motion-fast);
@@ -1059,7 +1115,8 @@
   transition-property: background-color, color, border-color;
 }
 .ch-combo-trigger:hover:not(:disabled) {
-  background: var(--ch-color-surface-3);
+  background: var(--ch-color-surface-2);
+  border-color: var(--ch-color-border-strong);
   color: var(--ch-color-text);
 }
 .ch-combo-trigger[data-state='open'] {

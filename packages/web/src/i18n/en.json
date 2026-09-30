@@ -1034,7 +1034,10 @@
       "kind_tts": "Text to speech",
       "sign_in_hint": "This provider is used by signing in to your account, not with a key. Add it, then sign in from its card.",
       "key_on_file": "This provider’s account already has a key saved here; it is used unless you type another.",
-      "type_subscription": "Sign in with a subscription"
+      "subscription_badge": "Subscription",
+      "group_subscriptions": "Subscriptions",
+      "group_keys": "With an API key",
+      "hermes_sign_in_detail": "Sign in with a short code, through Hermes · for Hermes and Core Hub’s own agent"
     },
     "runtime": {
       "title": "Runtime",
@@ -1154,7 +1157,6 @@
     "subscription": {
       "intro": "Use a subscription you already pay for. Core Hub signs in to it, and its models work with every agent.",
       "unavailable": "Subscriptions cannot be signed in to on this hub: {reason}",
-      "pick": "Subscription",
       "flow_device": "Sign in with a short code — works from a phone or a server",
       "flow_link": "Sign in with a link, then paste the address back",
       "has_windows": "Shows usage and reset times",

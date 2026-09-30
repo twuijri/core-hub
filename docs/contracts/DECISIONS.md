@@ -5160,3 +5160,52 @@ flow.
   to the restart operation and the check green after; and `scheduled` → `waiting_for_run` → green
   as a turn ends. Web `agent-restart.test.tsx`: no button while the restart is on its way, green
   by itself, the button only when none is coming.
+
+## 146. One provider list in "Add a provider"; one dropdown shape everywhere
+
+Status: the owner's choices on preview.38, 2026-09-30.
+
+- **One list, two tabs.** "Add a provider" has two tabs: the list (**Preset**) and **Custom**
+  (kept as it was, the owner's correction). The "Sign in with a subscription" tab is gone: the
+  subscriptions the gateway signs in to are in the same list, under a "Subscriptions" heading,
+  each with a «Subscription» tag and its own name ("ChatGPT (Plus / Pro / Business)", "Claude
+  (Pro / Max)", "xAI Grok (SuperGrok / Premium+)", "Kimi Code (kimi.com)" …). Picking one shows its
+  detail line (how its sign-in goes; "Shows usage and reset times" where it does), the neutral
+  note, and «Continue to sign in», which starts the sign-in in the same dialog. The providers used
+  with a key follow under "With an API key".
+- **No duplicates, no dead ends.** A Hermes sign-in preset that the gateway also signs in to
+  (`openai-codex`, `xai-oauth`) is not offered (`ProviderPreset.replaced_by`, §143); rows already
+  added keep working. MiniMax (sign-in) and Nous Portal have no CLIProxyAPI sign-in: they stay in
+  the list, tagged «Subscription», with the detail "Sign in with a short code, through Hermes · for
+  Hermes and Core Hub's own agent". Serving them to coding agents through the gateway would need
+  the hub to borrow Hermes's short-lived tokens into CLIProxyAPI per call (CLIProxyAPI takes a key
+  only from its file, and a new file restarts it) and to translate Nous's Chat Completions for
+  every agent's wire; that is not done here. So under §144 a coding agent pointed at one of them
+  fails, saying the gateway cannot serve that provider; Hermes uses them on its own route in the
+  hub's Hermes home, and the hub's own agent borrows them per turn (§118).
+- **The provider dropdown is our `Select`**, the one the composer's approval picker uses: a large
+  panel, readable text, a check on the chosen row, a highlighted row, and per option the company's
+  logo (a one-colour mark tinted in the brand accent), the name as the title with the tag beside
+  it, and the detail line under it. `SelectOption.badge` is new (typeahead still finds an option
+  by its name), and `Select.block` fills a form field's width. Radix's typeahead jumps to a name
+  as it is typed; a filter field inside the list is not added (the list is about thirty rows).
+  Logos: `@lobehub/icons-static-svg` 1.95.1 (MIT) and Simple Icons 16.33.0 (CC0) for Deepgram,
+  generated into the client by `scripts/icons/vendor-logos.mjs`; a monogram for a company with
+  none; THIRD-PARTY-NOTICES.md records both.
+- **One trigger shape** (the owner, 2026-09-30, with no exception for the composer): every
+  dropdown trigger — `Select` and the searchable picker's (`Combobox`) — is a rounded rectangle
+  with the Runtime card's radius (`--ch-radius-md`) and its thin 1px border (`--ch-color-border`),
+  a comfortable height (`--ch-control-height-lg`), normal text (`--ch-font-size-sm`) and the
+  chevron at the far inline end (the left in Arabic). It replaces the filled pill, the top bar's
+  profile switcher included. The composer's toolbar (under the message box, and on the new-chat
+  screen) keeps a compact size — 2rem, small text — in the same shape as the secondary buttons
+  ("Test", "Edit"): rounded rectangle, thin border, no pill. Done once in the shared styles, so it
+  applies to every settings form, dialog, filter and the switcher.
+- **Phones.** iOS and Android keep their own add-provider screens (a subscriptions section beside
+  the presets) for now; the single list with logos there is a follow-up.
+- **Proven.** Web `subscription-signin.test.tsx` (two tabs, the subscriptions tagged in the one
+  list with their logo and detail, the sign-in from it, none on an older hub), `models-screen
+  .test.tsx`; Playwright `zzzzzzzzzzzzzzzz-subscriptions.spec.ts` (the list photographed,
+  `provider-list-ar-light.png`), `zz-design.spec.ts` (screenshots of the chat, models, settings
+  with the new triggers), `zzzzzzzzzzz-design-family.spec.ts`, and the pseudo-locale width pass
+  (`zzzzzzzzzzzzzzzzz-pseudo-locales.spec.ts`, en-XA, ar-XB, zh-XC, th-XD, desktop and phone).
