@@ -51,6 +51,21 @@ ADR 0030 (قرار المالك) وDECISIONS §143 (التفاصيل مقترح�
 - **الجوال**: صفحة المزوّد على iOS وAndroid تعرض حسابات الاشتراك وحالتها واستهلاكها و«افحص الآن»؛ «إضافة مزوّد» تعرض
   الاشتراكات؛ وصفحة الدخول تأخذ العنوان الملصوق. الإيقاف والتجديد والخروج والنقل على الويب وحده حاليًا.
 
+**مراجعة القائمة مقابل CLIProxyAPI 8.0.4 (بعد ملاحظة المالك على preview.38)**: القائمة كاملة. واجهة الإدارة في 8.0.4
+تقبل في `GET /v8/management/oauth/auth-url?provider=` هذه فقط: `claude`، `codex`، `antigravity`، `kimi`، `kimi-ai`،
+`xai`، `devin`، `meta` (+ مزوّدي الإضافات، والإضافات مطفأة وبناء Linux هو `no-plugin`)؛ ومسارات v0 هي نفسها
+(`anthropic-`/`codex-`/`antigravity-`/`kimi-`/`kimi-ai-`/`xai-`/`devin-`/`meta-auth-url`)؛ وأعلام سطر الأوامر كذلك. غير متاح في
+8.0.4 مع السبب:
+- **Gemini CLI (حساب Google)** و`/v0/management/gemini-cli-auth-url`: أُزيل من CLIProxyAPI في 2026-06-18، يوم أنهت Google
+  دخول Gemini CLI للحسابات الشخصية؛ ومخزن الحسابات فيه يتجاهل ملفات `type: gemini`. حساب Google المتبقي هو Antigravity
+  (موجود عندنا).
+- **Qwen**: أُزيل في 2026-04-15. **iFlow**: أُزيل في 2026-04-17.
+- **Vertex**: ليس دخولًا بل رفع ملف حساب خدمة (`/oauth/import?provider=vertex`)، أي مفتاح؛ خارج «الدخول باشتراك».
+أثبتُّ ذلك في اختبار الملف الحقيقي: قائمة المركز تساوي الثمانية، و`auth-url` لـ`gemini-cli` و`gemini` و`qwen` و`iflow` يجيب 404.
+**لا تكرار باسمين**: دخولا Hermes لـChatGPT وxAI (`openai-codex`، `xai-oauth`) يحملان `replaced_by`، فلا تعرضهما قائمة الـPresets
+في الويب ولا في iOS وAndroid حين تتاح الاشتراكات (كان الجوال يعرضهما بجانب قسم الاشتراكات). MiniMax وNous عبر Hermes باقيان
+كما طلب المالك، ولا يعرضهما CLIProxyAPI فلا تكرار.
+
 قرارات جديدة بانتظار تأكيد المالك: عرض كل المزوّدين الذين يدعمهم CLIProxyAPI بما فيهم Claude وAntigravity وDevin
 وMeta (قراره: لا حكم)؛ Hermes على البوابة افتراضيًا للمراكز الجديدة فقط؛ «افحص الآن» على عناوين غير موثّقة (طلبه).
 
@@ -125,7 +140,7 @@ $ vitest run --project unit --maxWorkers=2 src/modules/agents      (packages/ser
       Tests  820 passed | 78 skipped (898)
 $ COREHUB_REAL_GATEWAY=1 vitest run --project unit --maxWorkers=1 src/modules/models/gateway/subscriptions.real.test.ts
  Test Files  1 passed (1)
-      Tests  3 passed (3)
+      Tests  4 passed (4)
 $ vitest run tests/subscription-signin.test.tsx tests/models-screen.test.tsx tests/model-fallback-signin.test.tsx tests/logical-css.test.ts tests/i18n.test.ts   (packages/web)
  Test Files  5 passed (5)
       Tests  392 passed (392)

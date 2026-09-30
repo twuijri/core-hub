@@ -13,6 +13,9 @@ struct AddProviderView: View {
     @Environment(AppModel.self) private var app
     @Environment(\.l10n) private var l10n
     @State private var scope: ProviderScope = .all
+    /// The hub signs in to subscriptions through its gateway (§143): a Hermes sign-in it replaces is
+    /// then not offered a second time under another name.
+    @State private var gatewaySubscriptions = false
 
     var body: some View {
         AsyncContent(key: app.currentProfile) {
@@ -20,6 +23,7 @@ struct AddProviderView: View {
             return try await app.api.call { try await ModelsAPI.modelsListProviderPresets(xHubProfile: profile, apiConfiguration: $0) }
         } content: { answer, _ in
             let presets = ModelLogic.offered(answer.items, added: added, scope: scope)
+                .filter { !(gatewaySubscriptions && $0.replacedBy != nil) }
             List {
                 Section {
                     Picker(l10n("models_page.for_whom"), selection: $scope) {
@@ -58,7 +62,7 @@ struct AddProviderView: View {
                     }
                 }
                 // Subscriptions signed in to through Core Hub's gateway (§143).
-                SubscriptionVendorsSection(scope: scope, added: added, done: done)
+                SubscriptionVendorsSection(scope: scope, added: added, done: done, available: $gatewaySubscriptions)
                 Section {
                     NavigationLink {
                         CustomProviderForm(scope: scope, host: answer.host, done: done)

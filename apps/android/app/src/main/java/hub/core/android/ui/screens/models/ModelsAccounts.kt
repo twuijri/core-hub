@@ -180,13 +180,22 @@ private fun statusTone(status: ProviderAccount.Status): BadgeTone = when (status
  * subscription added before in the same scope is signed in to again. Nothing on a hub without it.
  */
 @Composable
-internal fun SubscriptionVendorsGroup(ops: ModelOps, added: List<Provider>, shared: ProviderScope, onChosen: (Provider) -> Unit) {
+internal fun SubscriptionVendorsGroup(
+    ops: ModelOps,
+    added: List<Provider>,
+    shared: ProviderScope,
+    onChosen: (Provider) -> Unit,
+    onAvailable: (Boolean) -> Unit = {},
+) {
     val scope = rememberCoroutineScope()
     var vendors by remember(ops.profile) { mutableStateOf<SubscriptionVendors?>(null) }
     var error by remember { mutableStateOf<HubError?>(null) }
     var busy by remember { mutableStateOf(false) }
     // An older hub has no such list (404): nothing to offer, nothing to say.
-    LaunchedEffect(ops.profile) { vendors = ops.subscriptionVendors().getOrNull() }
+    LaunchedEffect(ops.profile) {
+        vendors = ops.subscriptionVendors().getOrNull()
+        onAvailable(vendors?.available == true)
+    }
     val list = vendors ?: return
     if (list.items.isEmpty()) return
     ErrorNotice(error)

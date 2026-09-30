@@ -156,6 +156,8 @@ struct SubscriptionVendorsSection: View {
     let scope: ProviderScope
     let added: [Provider]
     let done: (Provider?) -> Void
+    /// Set when the hub can sign in to subscriptions, so the page leaves out what they replace.
+    @Binding var available: Bool
     @Environment(AppModel.self) private var app
     @Environment(\.l10n) private var l10n
     @State private var vendors: SubscriptionVendors?
@@ -197,6 +199,7 @@ struct SubscriptionVendorsSection: View {
         let profile = app.currentProfile
         // An older hub has no such list (404): nothing to offer, nothing to say.
         vendors = try? await app.api.call { try await ModelsAPI.modelsListSubscriptionVendors(xHubProfile: profile, apiConfiguration: $0) }
+        available = vendors?.available == true
     }
 
     private func choose(_ vendor: SubscriptionVendor) async {

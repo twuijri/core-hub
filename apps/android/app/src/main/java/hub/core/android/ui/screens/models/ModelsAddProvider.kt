@@ -139,9 +139,11 @@ internal fun AddProviderSheet(ops: ModelOps, added: List<Provider>, profileName:
                         if (shared == ProviderScope.ALL) stringResource(R.string.models_scope_all_hint) else stringResource(R.string.models_scope_profile_hint, profileName),
                         fontSize = FontTokens.sizeXs.sp, color = t.textMuted,
                     )
-                    // Subscriptions signed in to through Core Hub's gateway (§143).
-                    SubscriptionVendorsGroup(ops, added, shared, onChosen = { onDone(it) })
-                    val offered = ModelRules.offered(answer.items, added, shared)
+                    // Subscriptions signed in to through Core Hub's gateway (§143); a Hermes sign-in
+                    // they replace is then not offered a second time under another name.
+                    var gatewaySubscriptions by remember { mutableStateOf(false) }
+                    SubscriptionVendorsGroup(ops, added, shared, onChosen = { onDone(it) }, onAvailable = { gatewaySubscriptions = it })
+                    val offered = ModelRules.offered(answer.items, added, shared).filter { !(gatewaySubscriptions && it.replacedBy != null) }
                     ProviderKind.entries.forEach { kind ->
                         val group = offered.filter { it.kind == kind }
                         if (group.isEmpty()) return@forEach

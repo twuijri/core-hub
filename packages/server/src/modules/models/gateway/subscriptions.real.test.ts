@@ -207,6 +207,28 @@ describe.skipIf(!enabled)('subscription sign-ins with the real CLIProxyAPI', () 
 
   const authDir = () => path.join(hub.dataDir, 'gateway', 'cliproxy-auth');
 
+  it('offers every vendor CLIProxyAPI 8.0.4 signs in to, and it has no Gemini CLI, Qwen or iFlow sign-in', async () => {
+    const vendors = await api('GET', '/api/v1/models/subscription-vendors');
+    const offered = (vendors.json() as { items: { vendor: string }[] }).items.map(
+      (item) => item.vendor,
+    );
+    expect(offered.sort()).toEqual(
+      ['antigravity', 'claude', 'codex', 'devin', 'kimi', 'kimi-ai', 'meta', 'xai'].sort(),
+    );
+    const lease = await modelGatewayFor(hub.app).subscriptions().open();
+    try {
+      for (const gone of ['gemini-cli', 'gemini', 'qwen', 'iflow']) {
+        const refused = await lease.client.startLogin(gone).then(
+          () => null,
+          (error: unknown) => error as { status: number | null; message: string },
+        );
+        expect(refused, gone).toMatchObject({ status: 404 });
+      }
+    } finally {
+      lease.done();
+    }
+  }, 60_000);
+
   it('signs in to xAI by a short code, and the account serves the row', async () => {
     const vendors = await api('GET', '/api/v1/models/subscription-vendors');
     expect((vendors.json() as { available: boolean }).available).toBe(true);
