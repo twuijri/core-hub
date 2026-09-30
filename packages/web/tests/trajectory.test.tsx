@@ -8,7 +8,7 @@
  */
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { AuthProvider } from '../src/auth/context.js';
 import { SessionStore } from '../src/auth/store.js';
 import { TrajectoryView } from '../src/chat/TrajectoryView.js';
@@ -286,6 +286,20 @@ describe('the Trajectory tab', () => {
       'first_token',
       'input_tokens',
     ]);
+  });
+
+  it('brings a picked step into view once, not on every tick while a step runs', async () => {
+    // Owner, 2026-09-30: while the agent worked, scrolling away from a picked step pulled
+    // the page straight back to it until the run ended.
+    const scroll = vi.spyOn(Element.prototype, 'scrollIntoView');
+    const running = { ...ANSWER, status: 'running' as const, ended_at: null, duration_ms: null };
+    mount(trajectory({ live: true, ended_at: null, steps: [INPUT, TURN, TOOL, running] }));
+    const tools = within(await screen.findByTestId('trajectory-lane-tools'));
+    fireEvent.click(tools.getByTestId('trajectory-bar'));
+    expect(scroll).toHaveBeenCalledTimes(1);
+    await new Promise((resolve) => setTimeout(resolve, 1300));
+    expect(scroll).toHaveBeenCalledTimes(1);
+    scroll.mockRestore();
   });
 
   it('lists an older conversation without a timeline, and says why', async () => {

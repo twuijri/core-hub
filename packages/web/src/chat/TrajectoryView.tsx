@@ -103,12 +103,16 @@ function TrajectoryBody({
   const numbers = useMemo(() => new Map(data.steps.map((step, i) => [step.id, i + 1])), [data]);
 
   // A bar clicked on the timeline brings its step into view — clearing the filters when
-  // they hide it — and flashes it.
+  // they hide it — and flashes it. Once per click: while a step runs the list re-renders on
+  // every tick, and scrolling back each time held the page on that step until the agent
+  // finished (owner, 2026-09-30).
   const list = useRef<HTMLOListElement>(null);
+  const scrolled = useRef<number | null>(null);
   useEffect(() => {
-    if (!focus) return;
+    if (!focus || scrolled.current === focus.at) return;
     const node = list.current?.querySelector<HTMLElement>(`[data-step-id="${focus.id}"]`);
     if (!node) return;
+    scrolled.current = focus.at;
     node.scrollIntoView({ block: 'center', behavior: 'smooth' });
     node.focus({ preventScroll: true });
   }, [focus, shown]);
