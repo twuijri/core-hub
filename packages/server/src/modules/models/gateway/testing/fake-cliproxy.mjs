@@ -45,6 +45,12 @@ createServer((request, response) => {
       return;
     }
     const body = JSON.parse(raw || '{}');
+    // The Gemini wire names its model in the path: `/v1beta/models/<model>:<method>`.
+    const gemini =
+      /^\/v1beta\/models\/(.+):(generateContent|streamGenerateContent|countTokens)$/.exec(
+        url.pathname,
+      );
+    if (gemini) body.model = gemini[1];
     if (!served.has(body.model)) {
       response.writeHead(400, { 'content-type': 'application/json' });
       response.end(
@@ -63,6 +69,7 @@ createServer((request, response) => {
     response.setHeader('x-fake-path', request.url);
     response.setHeader('x-fake-x-api-key', String(request.headers['x-api-key'] ?? ''));
     response.setHeader('x-fake-beta', String(request.headers['anthropic-beta'] ?? ''));
+    response.setHeader('x-fake-body-model', String(JSON.parse(raw || '{}').model ?? ''));
     if (body.model.endsWith('/broken')) {
       response.writeHead(429, { 'content-type': 'application/json', 'retry-after': '7' });
       response.end(
@@ -140,6 +147,42 @@ createServer((request, response) => {
                 input_tokens_details: { cached_tokens: 2 },
                 output_tokens_details: { reasoning_tokens: 1 },
               },
+            },
+          },
+        ],
+      ]);
+      return;
+    }
+    if (gemini && gemini[2] === 'countTokens') {
+      response.writeHead(200, { 'content-type': 'application/json' });
+      response.end('{"totalTokens":4}');
+      return;
+    }
+    if (gemini && gemini[2] === 'generateContent') {
+      response.writeHead(200, { 'content-type': 'application/json' });
+      response.end(
+        JSON.stringify({
+          candidates: [{ content: { role: 'model', parts: [{ text: 'hello' }] } }],
+          usageMetadata: { promptTokenCount: 9, candidatesTokenCount: 2, totalTokenCount: 11 },
+        }),
+      );
+      return;
+    }
+    if (gemini) {
+      sse(response, [
+        [null, { candidates: [{ content: { role: 'model', parts: [{ text: 'hel' }] } }] }],
+        [
+          null,
+          {
+            candidates: [
+              { content: { role: 'model', parts: [{ text: 'lo' }] }, finishReason: 'STOP' },
+            ],
+            usageMetadata: {
+              promptTokenCount: 40,
+              candidatesTokenCount: 5,
+              thoughtsTokenCount: 3,
+              cachedContentTokenCount: 10,
+              totalTokenCount: 48,
             },
           },
         ],

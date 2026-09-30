@@ -205,7 +205,7 @@ jobs:
   # OpenCode, Qwen Code and Kimi Code through Chat Completions, and no key reaches an agent. No
   # provider account, no secret. Required through `gate`.
   model-gateway-real:
-    name: Model gateway with the real CLIProxyAPI and six real coding agents
+    name: Model gateway with the real CLIProxyAPI and nine real coding agents
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:

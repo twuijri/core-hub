@@ -26601,8 +26601,9 @@ components:
         agent_gateway:
           type: boolean
           description: >-
-            Coding agents (Claude Code, Codex, Goose, OpenCode, Qwen Code, Kimi Code) can run this
-            model through the hub's model gateway (added 2026-09-30, DECISIONS §140, ADR 0029):
+            Coding agents (Claude Code, Codex, Gemini CLI, Goose, OpenCode, Qwen Code, Kimi Code,
+            Grok Build, Pi — the last three from DECISIONS §141) can run this model through the
+            hub's model gateway (added 2026-09-30, DECISIONS §140, ADR 0029):
             its provider has a key the hub holds and is not a subscription signed in to through
             Hermes, which the hub does not lend to other agents. The model picker of an agent
             whose `model_source` is `hub` lists these models only. Absent from an older hub,

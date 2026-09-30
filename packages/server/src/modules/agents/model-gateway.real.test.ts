@@ -10,8 +10,12 @@
  * - Claude Code answers through the gateway, and a tool call round-trips: the fake provider asks
  *   for `Write`, Claude Code writes the file, and the next request carries the tool's result;
  * - Codex answers through the Responses path;
- * - with `COREHUB_REAL_GATEWAY_ALL=1`, Goose, OpenCode, Qwen Code and Kimi Code answer through the
- *   Chat Completions path, each on nothing but its catalog wiring;
+ * - with `COREHUB_REAL_GATEWAY_ALL=1` (phase 2, DECISIONS §141), each of Gemini CLI (the Gemini
+ *   wire, translated by CLIProxyAPI to Chat Completions), Goose, OpenCode, Qwen Code, Kimi Code,
+ *   Grok Build and Pi round-trips a tool call the same way — the provider asks for the agent's own
+ *   file-writing tool (found in the tools the agent sent, its arguments read from the tool's
+ *   schema), the agent writes the file, and the next request carries the result — on nothing but
+ *   its catalog wiring and the block of its own settings the hub writes (`gateway-config.ts`);
  * - the gateway refuses a request without a session token, or with a revoked one;
  * - the provider's key reaches the provider and nothing else: not the agent's environment, not
  *   the hub's log; the session token never reaches the provider;
@@ -24,7 +28,7 @@
  *   COREHUB_REAL_GATEWAY=1 COREHUB_REAL_ACP_DATA=~/.cache/corehub-agent/acp-data \
  *     pnpm --filter @corehub/server exec vitest run src/modules/agents/model-gateway.real.test.ts
  */
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { createServer, type Server } from 'node:http';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
@@ -43,6 +47,7 @@ import { agentEnvironment, createAcpAdapter } from './adapters/acp.js';
 import { hostEnvNames } from './adapters/child-env.js';
 import type { AgentEvent, AgentSession, AgentTarget } from './adapters/types.js';
 import { catalogEntry, type CatalogEntry } from './catalog/index.js';
+import { applyGatewayConfig } from './gateway-config.js';
 import { agentBinDir, createNpmInstaller, installedVersion } from './installer.js';
 import type { AgentGatewayUsage } from './ports.js';
 
@@ -58,14 +63,85 @@ const PROVIDER_ID = '01KGATEWAYFAKEPROVIDER0001';
 const PROVIDER_KEY = 'sk-provider-secret-must-stay-in-the-hub';
 const HOST_KEY = 'sk-host-anthropic-key-must-not-reach-the-agent';
 const MODEL = 'fake-coder';
+/** Every real provider says when an answer was made; Grok Build refuses a chunk without it. */
+const CREATED = 1_790_000_000;
 const PROOF_FILE = 'gateway-proof.txt';
 const PROOF_TEXT = 'written through the Core Hub model gateway';
+/** A person's own Grok Build settings, a Pi provider and a Gemini CLI Google sign-in. */
+const PERSON_GROK = '# my own settings\n[models]\ndefault = "grok-4.5"\n';
+const PERSON_PI = JSON.stringify(
+  {
+    providers: {
+      ollama: {
+        baseUrl: 'http://127.0.0.1:9/v1',
+        api: 'openai-completions',
+        apiKey: 'ollama',
+        models: [{ id: 'mine:1b' }],
+      },
+    },
+  },
+  null,
+  2,
+);
+const PERSON_GEMINI = JSON.stringify({
+  security: { auth: { selectedType: 'oauth-personal' } },
+  ui: { theme: 'Default' },
+});
 /** The folder the agent under test works in. */
 let workingDir = '';
 
 interface Seen {
   authorization: string | undefined;
   body: Record<string, unknown>;
+}
+
+interface ChatTool {
+  function?: { name?: string; parameters?: { properties?: Record<string, JsonSchema> } };
+}
+interface JsonSchema {
+  type?: string | string[];
+  enum?: unknown[];
+}
+
+/** Tool names that write a file, most specific first (each agent's own: Claude Code's `Write`,
+ * Gemini CLI's and Qwen Code's `write_file`, OpenCode's and Pi's `write`, Kimi Code's
+ * `WriteFile`, Goose's text editor …). */
+const WRITE_TOOLS = [
+  /^Write$/,
+  /^write_file$/i,
+  /^write$/i,
+  /^WriteFile$/,
+  /write/i,
+  /text_editor/i,
+];
+
+/**
+ * The call a model would make to write the proof file with this agent's own tool: the tool is
+ * found by name among those the agent sent, its arguments by the names in its schema.
+ */
+function writeCall(
+  tools: ChatTool[],
+  file: string,
+  text: string,
+): { name: string; args: Record<string, unknown> } | null {
+  for (const pattern of WRITE_TOOLS) {
+    const tool = tools.find((candidate) => pattern.test(candidate.function?.name ?? ''));
+    const name = tool?.function?.name;
+    if (!tool || !name) continue;
+    const args: Record<string, unknown> = {};
+    for (const [key, schema] of Object.entries(tool.function?.parameters?.properties ?? {})) {
+      if (/^(file_?path|filepath|path|file|filename|absolute_?path|target_?file)$/i.test(key)) {
+        args[key] = file;
+      } else if (/^(content|contents|text|file_?text|data|body)$/i.test(key)) args[key] = text;
+      else if (schema.enum?.includes('write')) args[key] = 'write';
+      else if (schema.enum?.includes('create')) args[key] = 'create';
+      else if (/^(mode|operation)$/i.test(key) && schema.enum?.includes('overwrite')) {
+        args[key] = 'overwrite';
+      }
+    }
+    if (Object.values(args).includes(file)) return { name, args };
+  }
+  return null;
 }
 
 /** An OpenAI Chat Completions provider, and nothing else, scripted for the two agents. */
@@ -84,23 +160,18 @@ async function fakeChatProvider(): Promise<{ server: Server; url: string; seen: 
       seen.push({ authorization: request.headers.authorization, body });
       const messages = (body.messages ?? []) as { role: string; content: unknown }[];
       const text = JSON.stringify(messages);
-      const tools = ((body.tools ?? []) as { function?: { name?: string } }[]).map(
-        (tool) => tool.function?.name,
-      );
+      const tools = (body.tools ?? []) as ChatTool[];
       const toolResult = messages.some((message) => message.role === 'tool');
+      // The conversation's folder (a model would read it from the agent's system prompt).
+      const call = text.includes(PROOF_FILE)
+        ? writeCall(tools, path.join(workingDir, PROOF_FILE), PROOF_TEXT)
+        : null;
       let reply:
         | { kind: 'text'; text: string }
         | { kind: 'tool'; name: string; args: Record<string, unknown> };
       if (toolResult) reply = { kind: 'text', text: 'The proof file is written.' };
-      else if (text.includes(PROOF_FILE) && tools.includes('Write')) {
-        // The conversation's folder (a model would read it from Claude Code's system prompt).
-        const cwd = workingDir;
-        reply = {
-          kind: 'tool',
-          name: 'Write',
-          args: { file_path: path.join(cwd, PROOF_FILE), content: PROOF_TEXT },
-        };
-      } else reply = { kind: 'text', text: 'pong from the fake provider' };
+      else if (call) reply = { kind: 'tool', ...call };
+      else reply = { kind: 'text', text: 'pong from the fake provider' };
       const usage = { prompt_tokens: 1200, completion_tokens: 34, total_tokens: 1234 };
       if (!body.stream) {
         response.writeHead(200, { 'content-type': 'application/json' });
@@ -108,6 +179,7 @@ async function fakeChatProvider(): Promise<{ server: Server; url: string; seen: 
           JSON.stringify({
             id: 'chat_1',
             object: 'chat.completion',
+            created: CREATED,
             model: body.model,
             choices: [
               {
@@ -140,6 +212,7 @@ async function fakeChatProvider(): Promise<{ server: Server; url: string; seen: 
           `data: ${JSON.stringify({
             id: 'chat_1',
             object: 'chat.completion.chunk',
+            created: CREATED,
             model: body.model,
             choices: [{ index: 0, delta, finish_reason: finish }],
             ...extra,
@@ -175,7 +248,14 @@ async function fakeChatProvider(): Promise<{ server: Server; url: string; seen: 
         chunk({}, 'tool_calls');
       }
       response.write(
-        `data: ${JSON.stringify({ id: 'chat_1', object: 'chat.completion.chunk', model: body.model, choices: [], usage })}\n\n`,
+        `data: ${JSON.stringify({
+          id: 'chat_1',
+          object: 'chat.completion.chunk',
+          created: CREATED,
+          model: body.model,
+          choices: [],
+          usage,
+        })}\n\n`,
       );
       response.end('data: [DONE]\n\n');
     });
@@ -302,13 +382,21 @@ describe.skipIf(!enabled)('the model gateway, for real (COREHUB_REAL_GATEWAY=1)'
       dataDir,
       host: { pathValue: process.env.PATH, inherited: process.env },
     });
-    const pinned = entry.install.kind === 'npm' ? entry.install.version : '';
-    if (!pinned || installedVersion(dataDir, entry, { current: true }) !== pinned) {
-      await installer.install(entry, async () => {});
-    }
+    const present =
+      entry.install.kind === 'npm'
+        ? installedVersion(dataDir, entry, { current: true }) === entry.install.version
+        : installer.isPresent(entry);
+    if (!present) await installer.install(entry, async () => {});
     const home = mkdtempSync(path.join(tmpdir(), `corehub-gateway-home-${id}-`));
     mkdirSync(path.join(home, '.claude'), { recursive: true });
     mkdirSync(path.join(home, '.codex'), { recursive: true });
+    // A person's own settings that the hub's block must leave alone (Grok Build, Pi, Gemini CLI).
+    mkdirSync(path.join(home, '.grok'), { recursive: true });
+    writeFileSync(path.join(home, '.grok', 'config.toml'), PERSON_GROK);
+    mkdirSync(path.join(home, '.pi', 'agent'), { recursive: true });
+    writeFileSync(path.join(home, '.pi', 'agent', 'models.json'), PERSON_PI);
+    mkdirSync(path.join(home, '.gemini'), { recursive: true });
+    writeFileSync(path.join(home, '.gemini', 'settings.json'), PERSON_GEMINI);
     workingDir = home;
     const grant = await gateway.open({
       workspace: 'w',
@@ -325,15 +413,17 @@ describe.skipIf(!enabled)('the model gateway, for real (COREHUB_REAL_GATEWAY=1)'
       model: MODEL,
       report: (usage) => reports.push(usage),
     });
-    const wired = entry.gateway!.env({
+    const context = {
       anthropicBaseUrl: grant.anthropicBaseUrl,
       openaiBaseUrl: grant.openaiBaseUrl,
+      googleBaseUrl: grant.googleBaseUrl,
       origin: grant.origin,
       token: grant.token,
       mainModel: GATEWAY_MAIN_MODEL,
       smallModel: GATEWAY_SMALL_MODEL,
       contextWindow: 200_000,
-    });
+    };
+    const wired = entry.gateway!.env(context);
     // The host has keys of its own; on the gateway none of them may reach the agent.
     const inherited: NodeJS.ProcessEnv = {
       ...process.env,
@@ -342,7 +432,24 @@ describe.skipIf(!enabled)('the model gateway, for real (COREHUB_REAL_GATEWAY=1)'
       CODEX_HOME: path.join(home, '.codex'),
       ANTHROPIC_API_KEY: HOST_KEY,
       OPENAI_API_KEY: HOST_KEY,
+      // The key of each provider the agent reads (Gemini CLI's `GEMINI_API_KEY`, Grok Build's
+      // `XAI_API_KEY` …), set by the host all the same.
+      ...Object.fromEntries(Object.values(entry.credentials).map((name) => [name, HOST_KEY])),
     };
+    // The block of its own settings the hub keeps, exactly as the service writes it.
+    let sessionConfig: Record<string, string> | undefined;
+    if (entry.gateway!.config) {
+      const written = applyGatewayConfig({
+        kind: entry.gateway!.config,
+        context,
+        env: inherited,
+        home,
+        stateDir: path.join(home, 'hub-gateway-agents'),
+      });
+      if (!written.ok) throw new Error(written.reason);
+      Object.assign(wired, written.env);
+      sessionConfig = written.sessionConfig;
+    }
     const target: AgentTarget = {
       slug: id,
       name: entry.name,
@@ -354,6 +461,7 @@ describe.skipIf(!enabled)('the model gateway, for real (COREHUB_REAL_GATEWAY=1)'
       envRemove: [...entry.gateway!.clears, ...Object.values(entry.credentials)].filter(
         (name) => !(name in wired),
       ),
+      ...(sessionConfig ? { sessionConfig } : {}),
     };
     const env = agentEnvironment(inherited, target, hostEnvNames(entry));
     const adapter = createAcpAdapter({
@@ -455,24 +563,93 @@ describe.skipIf(!enabled)('the model gateway, for real (COREHUB_REAL_GATEWAY=1)'
     15 * 60_000,
   );
 
-  // The four Chat Completions agents (Goose, OpenCode, Qwen Code, Kimi Code), each a text turn with
-  // the environment its catalog wiring gives it (`COREHUB_REAL_GATEWAY_ALL=1`; CI sets it).
+  // Every other wired agent, each writing the proof file with its own tool on the provider's
+  // streamed tool call (`COREHUB_REAL_GATEWAY_ALL=1`; CI sets it). `COREHUB_REAL_GATEWAY_ONLY`
+  // (a comma-separated list) narrows the list when running it by hand.
+  const only = process.env.COREHUB_REAL_GATEWAY_ONLY?.split(',').filter(Boolean);
+  const roundTrips = [
+    'gemini-cli',
+    'goose',
+    'opencode',
+    'qwen-code',
+    'kimi-code',
+    'grok-build',
+    'pi',
+  ].filter((id) => !only || only.includes(id));
   it
-    .skipIf(process.env.COREHUB_REAL_GATEWAY_ALL !== '1')
-    .each(['goose', 'opencode', 'qwen-code', 'kimi-code'])(
-    '%s answers through the Chat Completions path',
+    .skipIf(process.env.COREHUB_REAL_GATEWAY_ALL !== '1' || roundTrips.length === 0)
+    .each(roundTrips)(
+    '%s round-trips a tool call through the gateway',
     async (id) => {
       const before = provider.seen.length;
-      const result = await runAgent(id, 'Say pong.');
-      expect(result.said).toContain('pong from the fake provider');
+      const result = await runAgent(
+        id,
+        `Create the file ${PROOF_FILE} in the working directory, containing exactly: ${PROOF_TEXT}`,
+      );
       const calls = provider.seen.slice(before);
-      expect(calls.length).toBeGreaterThan(0);
-      for (const call of calls) expect(call.authorization).toBe(`Bearer ${PROVIDER_KEY}`);
+      const offered = [
+        ...new Set(
+          calls.flatMap((call) =>
+            ((call.body.tools ?? []) as ChatTool[]).map((tool) => tool.function?.name),
+          ),
+        ),
+      ];
+      const proof = path.join(result.home, PROOF_FILE);
+      expect(existsSync(proof), `tools offered: ${offered.join(', ')}`).toBe(true);
+      expect(readFileSync(proof, 'utf8').trimEnd()).toBe(PROOF_TEXT);
+      // The stream showed the tool (Gemini CLI announces it in its permission request, then
+      // reports it done; the others start it first).
+      const kinds = result.events.map((event) => event.type);
+      expect(
+        kinds.some((kind) => kind === 'tool.started' || kind === 'tool.completed'),
+        kinds.join(', '),
+      ).toBe(true);
+      expect(result.said).toContain('The proof file is written.');
+      // The next request carried the tool's result, in Chat Completions' own shape.
+      expect(
+        calls.some((call) =>
+          ((call.body.messages ?? []) as { role: string }[]).some((m) => m.role === 'tool'),
+        ),
+      ).toBe(true);
+      for (const call of calls) {
+        expect(call.authorization).toBe(`Bearer ${PROVIDER_KEY}`);
+        expect(call.body.model).toBe(MODEL);
+      }
+      expect(result.reports.length).toBeGreaterThan(0);
       checkIsolation(result);
+      checkPersonSettings(id, result.home);
       rmSync(result.home, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 });
     },
     15 * 60_000,
   );
+
+  /** The person's own settings beside the hub's block came through unchanged. */
+  function checkPersonSettings(id: string, home: string): void {
+    if (id === 'grok-build') {
+      const text = readFileSync(path.join(home, '.grok', 'config.toml'), 'utf8');
+      expect(text.startsWith(PERSON_GROK)).toBe(true);
+      expect(text).toContain('[model.corehub-gateway]');
+      expect(text).not.toContain(PROVIDER_KEY);
+    }
+    if (id === 'pi') {
+      const models = JSON.parse(
+        readFileSync(path.join(home, '.pi', 'agent', 'models.json'), 'utf8'),
+      ) as { providers: Record<string, unknown> };
+      expect(models.providers.ollama).toEqual(
+        (JSON.parse(PERSON_PI) as { providers: Record<string, unknown> }).providers.ollama,
+      );
+      expect(JSON.stringify(models)).not.toContain(PROVIDER_KEY);
+      // Pi's saved default is the person's still: the session was switched, not the setting.
+      const settings = path.join(home, '.pi', 'agent', 'settings.json');
+      if (existsSync(settings)) {
+        expect(readFileSync(settings, 'utf8')).not.toContain('corehub-gateway');
+      }
+    }
+    if (id === 'gemini-cli') {
+      const settings = readFileSync(path.join(home, '.gemini', 'settings.json'), 'utf8');
+      expect(JSON.parse(settings)).toMatchObject(JSON.parse(PERSON_GEMINI) as object);
+    }
+  }
 
   function checkIsolation(result: { env: NodeJS.ProcessEnv; token: string }): void {
     // The agent had the token and the gateway's address, and no key of anyone's.

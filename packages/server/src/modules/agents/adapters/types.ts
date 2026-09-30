@@ -55,6 +55,12 @@ export interface AgentTarget {
    */
   envRemove?: readonly string[];
   /**
+   * ACP session options set right after the session opens (`session/set_config_option`, by id:
+   * `model` …) — how the model gateway points an agent whose default it cannot set by variable
+   * at the hub's model (Pi, DECISIONS §141). A failure is the start's failure.
+   */
+  sessionConfig?: Readonly<Record<string, string>>;
+  /**
    * The workspace's stored settings for this agent, exactly as the adapter's own
    * `settings()` form declared them. A process adapter has no use for them — its
    * configuration is its argv and its environment — but an adapter the hub *is* reads

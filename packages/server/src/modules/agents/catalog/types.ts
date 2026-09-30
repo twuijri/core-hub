@@ -266,6 +266,8 @@ export interface GatewayContext {
   anthropicBaseUrl: string;
   /** OpenAI Responses and Chat Completions (`…/gateway/openai/v1`). */
   openaiBaseUrl: string;
+  /** The Gemini API root (`…/gateway/google`; the client adds `/v1beta/models/…`). */
+  googleBaseUrl: string;
   /** `http://127.0.0.1:<port>`. */
   origin: string;
   /** The session token, in place of any key. */
@@ -278,9 +280,16 @@ export interface GatewayContext {
   contextWindow: number | null;
 }
 
+/**
+ * The piece of an agent's own configuration the gateway needs and no variable can say
+ * (`gateway-config.ts`, DECISIONS §141): Gemini CLI's settings when it is signed in another way (a
+ * home of the hub's own), Grok Build's `[model.corehub-gateway]` table, Pi's `corehub-gateway` provider.
+ */
+export type GatewayConfigKind = 'gemini-settings' | 'grok-model' | 'pi-models';
+
 export interface GatewayWiring {
   /** The wire the agent speaks to the gateway. */
-  wire: 'anthropic' | 'openai-responses' | 'openai-chat';
+  wire: 'anthropic' | 'openai-responses' | 'openai-chat' | 'google';
   /** What the agent is started with: the gateway's address, the token, the model alias. */
   env(context: GatewayContext): Record<string, string>;
   /**
@@ -289,4 +298,11 @@ export interface GatewayWiring {
    * agent's own settings, a key the hub would otherwise hand it).
    */
   clears: readonly string[];
+  /** A block of its own configuration the hub writes and keeps (`gateway-config.ts`). */
+  config?: GatewayConfigKind;
+  /**
+   * The oldest version the wiring works with; an older one (found on the computer, or not updated)
+   * keeps its own account. Absent: any.
+   */
+  minVersion?: string;
 }

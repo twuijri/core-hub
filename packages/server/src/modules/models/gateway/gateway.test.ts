@@ -25,7 +25,7 @@ import { CliproxySupervisor } from './cliproxy.js';
 import { NO_KEY, cliproxyConfig, upstreamPrefix, type GatewayUpstream } from './cliproxy-config.js';
 import { ModelGateway, isLoopback, type GatewaySource } from './gateway.js';
 import type { GatewayTurnUsage } from './tokens.js';
-import { UsageTap, readUsage } from './usage.js';
+import { UsageTap, readGeminiUsage, readUsage } from './usage.js';
 
 const FAKE = path.join(
   path.dirname(fileURLToPath(import.meta.url)),
@@ -48,6 +48,7 @@ function upstream(overrides: Partial<GatewayUpstream> = {}): GatewayUpstream {
       { id: 'coder', contextWindow: 128_000 },
       { id: 'vendor/slashed', contextWindow: null },
       { id: 'broken', contextWindow: null },
+      { id: 'qwen3:8b', contextWindow: null },
     ],
     ...overrides,
   };
@@ -178,6 +179,9 @@ describe('CLIProxyAPI configuration', () => {
       alias: 'coder',
       'max-context-length': 128_000,
     });
+    // The Gemini wire splits `models/<model>:<method>` on the colon: an id with one is served
+    // under an alias without it, and `name` keeps the id the provider knows.
+    expect(compat[0].models).toContainEqual({ name: 'qwen3:8b', alias: 'qwen3__8b' });
     // A provider that needs no key still gets a stand-in; a provider with no models is left out.
     expect(config['api-keys'].claude[0].keys).toEqual([{ 'api-key': NO_KEY }]);
     expect(JSON.stringify(config)).not.toContain('01KEMPTY'.toLowerCase());
@@ -417,6 +421,109 @@ describe('the gateway', () => {
     });
   });
 
+  it('serves the Gemini wire: the model in the path, the key as Gemini sends it, its usage', async () => {
+    const h = harness();
+    const grant = await grantOf(h);
+    const reports: GatewayTurnUsage[] = [];
+    grant.setTurn({
+      runId: 'run-g',
+      providerId: PROVIDER,
+      model: 'coder',
+      report: (u) => reports.push(u),
+    });
+    const body = { contents: [{ role: 'user', parts: [{ text: 'hi' }] }] };
+    // `@google/genai` under `GOOGLE_GEMINI_BASE_URL`: `x-goog-api-key`, `?alt=sse`.
+    const streamed = await post(
+      `${grant.googleBaseUrl}/v1beta/models/corehub-main:streamGenerateContent?alt=sse`,
+      null,
+      body,
+      { 'x-goog-api-key': grant.token },
+    );
+    expect(streamed.status).toBe(200);
+    expect(streamed.headers.get('x-fake-path')).toBe(
+      `/v1beta/models/${upstreamPrefix(PROVIDER)}/coder:streamGenerateContent?alt=sse`,
+    );
+    expect(streamed.headers.get('x-fake-authorization')).not.toContain(grant.token);
+    expect(await streamed.text()).toContain('"text":"lo"');
+    expect(reports.at(-1)).toMatchObject({
+      modelLabel: 'Label coder',
+      inputTokens: 40,
+      outputTokens: 8,
+      reasoningTokens: 3,
+      cacheReadTokens: 10,
+    });
+    // Its router and utility calls name Gemini models of their own: the turn's model all the
+    // same. The other way to send the key, `?key=`, is taken out before anything goes on.
+    const whole = await post(
+      `${grant.googleBaseUrl}/v1beta/models/gemini-2.5-flash-lite:generateContent?key=${grant.token}`,
+      null,
+      body,
+    );
+    expect(whole.status).toBe(200);
+    expect(whole.headers.get('x-fake-path')).toBe(
+      `/v1beta/models/${upstreamPrefix(PROVIDER)}/coder:generateContent`,
+    );
+    expect(reports.at(-1)).toMatchObject({ inputTokens: 49, outputTokens: 10 });
+    const counted = await post(
+      `${grant.googleBaseUrl}/v1beta/models/corehub-main:countTokens`,
+      grant.token,
+      body,
+    );
+    expect(await counted.json()).toEqual({ totalTokens: 4 });
+    // A model id with a colon (Ollama's) reaches CLIProxyAPI under its colon-free alias, which
+    // CLIProxyAPI maps back to the real id upstream.
+    grant.setTurn({ runId: 'run-g', providerId: PROVIDER, model: 'qwen3:8b', report: () => {} });
+    const colon = await post(
+      `${grant.googleBaseUrl}/v1beta/models/corehub-main:generateContent`,
+      grant.token,
+      body,
+    );
+    expect(colon.status).toBe(200);
+    expect(colon.headers.get('x-fake-path')).toBe(
+      `/v1beta/models/${upstreamPrefix(PROVIDER)}/qwen3__8b:generateContent`,
+    );
+  });
+
+  it('answers the Gemini wire in its own words: refusals, the model list, an unknown path', async () => {
+    const h = harness();
+    const grant = await grantOf(h);
+    const none = await post(
+      `${grant.googleBaseUrl}/v1beta/models/corehub-main:generateContent`,
+      null,
+      {},
+    );
+    expect(none.status).toBe(401);
+    expect(await none.json()).toMatchObject({ error: { code: 401, status: 'UNAUTHENTICATED' } });
+    const unchosen = await post(
+      `${grant.googleBaseUrl}/v1beta/models/corehub-main:generateContent`,
+      grant.token,
+      {},
+    );
+    expect(unchosen.status).toBe(400);
+    expect(await unchosen.json()).toMatchObject({
+      error: { status: 'INVALID_ARGUMENT', message: expect.stringMatching(/no model is chosen/) },
+    });
+    const list = await fetch(`${grant.googleBaseUrl}/v1beta/models`, {
+      headers: { 'x-goog-api-key': grant.token },
+    });
+    expect((await list.json()).models.map((m: { name: string }) => m.name)).toEqual([
+      'models/corehub-main',
+      'models/corehub-small',
+      'models/example/coder',
+    ]);
+    const one = await fetch(`${grant.googleBaseUrl}/v1beta/models/corehub-main`, {
+      headers: { 'x-goog-api-key': grant.token },
+    });
+    expect(await one.json()).toMatchObject({ name: 'models/corehub-main' });
+    const unknown = await post(
+      `${grant.googleBaseUrl}/v1beta/models/x:embedContent`,
+      grant.token,
+      {},
+    );
+    expect(unknown.status).toBe(404);
+    expect(await unknown.json()).toMatchObject({ error: { status: 'NOT_FOUND' } });
+  });
+
   it('starts a new CLIProxyAPI when the providers change, and stops the old one', async () => {
     const h = harness();
     const grant = await grantOf(h);
@@ -472,6 +579,24 @@ describe('usage and addresses', () => {
     split.push('tokens":5,"output_tokens":2}}}\n\n');
     expect(split.result()).toMatchObject({ inputTokens: 5, outputTokens: 2 });
     expect(new UsageTap('text/event-stream').result()).toBeNull();
+    // Gemini: thinking is output too; a stream without `alt=sse` is one JSON array.
+    expect(
+      readGeminiUsage({
+        promptTokenCount: 12,
+        candidatesTokenCount: 4,
+        thoughtsTokenCount: 6,
+        cachedContentTokenCount: 2,
+      }),
+    ).toEqual({ inputTokens: 12, outputTokens: 10, reasoningTokens: 6, cacheReadTokens: 2 });
+    const array = new UsageTap('application/json');
+    array.push('[{"usageMetadata":{"promptTokenCount":1}},');
+    array.push('{"usageMetadata":{"promptTokenCount":3,"candidatesTokenCount":2}}]');
+    expect(array.result()).toMatchObject({ inputTokens: 3, outputTokens: 2 });
+    const sse = new UsageTap('text/event-stream');
+    sse.push(
+      'data: {"candidates":[],"usageMetadata":{"promptTokenCount":8,"candidatesTokenCount":1}}\n\n',
+    );
+    expect(sse.result()).toMatchObject({ inputTokens: 8, outputTokens: 1 });
   });
 
   it('knows a loopback address from any other', () => {

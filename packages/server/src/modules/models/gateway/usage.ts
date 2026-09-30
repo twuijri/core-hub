@@ -9,7 +9,11 @@
  * - OpenAI Responses: `response.completed.response.usage`;
  * - OpenAI Chat Completions: the chunk that carries `usage` (the translator asks for it with
  *   `stream_options.include_usage`);
- * - a whole JSON answer (no stream): its top-level `usage`, in the same three shapes.
+ * - Google Gemini: `usageMetadata`, on the stream's chunks (the last one is the total) or the
+ *   whole answer — `candidatesTokenCount` leaves thinking out, so the output is it plus
+ *   `thoughtsTokenCount`;
+ * - a whole JSON answer (no stream): its top-level `usage` (or `usageMetadata`), in the same
+ *   shapes; a Gemini stream sent without `alt=sse` is one JSON array of chunks.
  */
 export interface CallUsage {
   inputTokens: number;
@@ -29,6 +33,24 @@ export const NO_USAGE: CallUsage = {
 
 const num = (value: unknown): number | undefined =>
   typeof value === 'number' && Number.isFinite(value) && value >= 0 ? value : undefined;
+
+/** Gemini's `usageMetadata`, as far as it says anything. */
+export function readGeminiUsage(metadata: unknown): Partial<CallUsage> | null {
+  if (!metadata || typeof metadata !== 'object') return null;
+  const m = metadata as Record<string, unknown>;
+  const out: Partial<CallUsage> = {};
+  const prompt = num(m.promptTokenCount);
+  const candidates = num(m.candidatesTokenCount);
+  const thoughts = num(m.thoughtsTokenCount);
+  const cached = num(m.cachedContentTokenCount);
+  if (prompt !== undefined) out.inputTokens = prompt;
+  if (candidates !== undefined || thoughts !== undefined) {
+    out.outputTokens = (candidates ?? 0) + (thoughts ?? 0);
+  }
+  if (thoughts !== undefined) out.reasoningTokens = thoughts;
+  if (cached !== undefined) out.cacheReadTokens = cached;
+  return Object.keys(out).length > 0 ? out : null;
+}
 
 /** A `usage` object of any of the three wires, as far as it says anything. */
 export function readUsage(usage: unknown): Partial<CallUsage> | null {
@@ -116,6 +138,7 @@ export class UsageTap {
       return;
     }
     if (event.usage) this.merge(readUsage(event.usage), true);
+    else if (event.usageMetadata) this.merge(readGeminiUsage(event.usageMetadata), true);
   }
 
   /** Later numbers win: a stream's last word on a count is its final one. */
@@ -127,8 +150,16 @@ export class UsageTap {
   result(): CallUsage | null {
     if (this.sse !== true && this.json) {
       try {
-        const body = JSON.parse(this.json) as Record<string, unknown>;
-        this.merge(readUsage(body.usage), true);
+        const parsed = JSON.parse(this.json) as unknown;
+        // A Gemini stream without `alt=sse` is an array of chunks; the last word is the total.
+        for (const body of (Array.isArray(parsed) ? parsed : [parsed]) as Record<
+          string,
+          unknown
+        >[]) {
+          if (!body || typeof body !== 'object') continue;
+          if (body.usage) this.merge(readUsage(body.usage), true);
+          else if (body.usageMetadata) this.merge(readGeminiUsage(body.usageMetadata), true);
+        }
       } catch {
         // Not JSON after all: nothing to read.
       }

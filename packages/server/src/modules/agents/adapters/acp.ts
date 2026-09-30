@@ -182,6 +182,11 @@ export class AcpSession implements AgentSession {
        * (`agentCapabilities.mcpCapabilities.http`); ACP requires every agent to take stdio.
        */
       mcpServers?: readonly AcpMcpServer[];
+      /**
+       * Session options set once the session exists (`session/set_config_option`): the model
+       * gateway's model for an agent that has no variable for it (Pi, DECISIONS §141).
+       */
+      sessionConfig?: Readonly<Record<string, string>>;
     },
   ): Promise<{ session: AcpSession; agentCapabilities: Record<string, unknown> }> {
     const client = new AcpSession(transport, '');
@@ -215,6 +220,13 @@ export class AcpSession implements AgentSession {
     )) as { sessionId?: string };
     if (!created.sessionId) throw new Error('agent returned no sessionId');
     client.sessionId = created.sessionId;
+    for (const [configId, value] of Object.entries(options.sessionConfig ?? {})) {
+      await client.request(
+        'session/set_config_option',
+        { sessionId: created.sessionId, configId, value },
+        options.timeoutMs,
+      );
+    }
     return { session: client, agentCapabilities: initialize.agentCapabilities ?? {} };
   }
 
@@ -726,13 +738,20 @@ export function createAcpAdapter(options: AcpAdapterOptions): AgentAdapter {
 
     async start(target: AgentTarget): Promise<AgentSession> {
       const transport = await openTransport(target);
-      const { session } = await AcpSession.connect(transport, {
-        cwd: target.cwd ?? process.cwd(),
-        clientName,
-        clientVersion,
-        mcpServers: options.mcpServers?.(target) ?? [],
-      });
-      return session;
+      try {
+        const { session } = await AcpSession.connect(transport, {
+          cwd: target.cwd ?? process.cwd(),
+          clientName,
+          clientVersion,
+          mcpServers: options.mcpServers?.(target) ?? [],
+          ...(target.sessionConfig ? { sessionConfig: target.sessionConfig } : {}),
+        });
+        return session;
+      } catch (error) {
+        // A session that could not be opened (or pointed at its model) leaves no process behind.
+        transport.close();
+        throw error;
+      }
     },
   };
 }

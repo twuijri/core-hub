@@ -27,6 +27,8 @@ import {
 } from './agent-credentials.js';
 import { agentOwnModel } from './agent-own-model.js';
 import { GATEWAY_MAIN_MODEL, GATEWAY_SMALL_MODEL } from './gateway-models.js';
+import { applyGatewayConfig } from './gateway-config.js';
+import { homedir } from 'node:os';
 import { and, eq, inArray, isNull } from 'drizzle-orm';
 import type { FastifyBaseLogger } from 'fastify';
 import type { ModuleDb } from '../../lib/db.js';
@@ -131,6 +133,12 @@ export interface AgentsServiceOptions {
    * container image); `auto` — the gateway unless the agent has its own sign-in (a computer).
    */
   modelSourceDefault?: () => 'hub' | 'auto';
+  /**
+   * Where the hub writes files of its own for agents on the model gateway (Gemini CLI's home when
+   * it is signed in another way; `gateway-config.ts`): `<DATA_DIR>/gateway/agents`. Absent: an agent that needs one
+   * keeps its own account.
+   */
+  gatewayStateDir?: string;
   /**
    * Where `check-update` and the periodic check ask for a newer version
    * (`update-policy.ts`). Absent: the hub knows only the catalog's pins.
@@ -1119,6 +1127,7 @@ export class AgentsService implements UpdatePolicyStore {
       ...this.targetOf(row),
       ...(Object.keys(env).length > 0 ? { env } : {}),
       ...(onGateway ? { envRemove: onGateway.remove } : {}),
+      ...(onGateway?.sessionConfig ? { sessionConfig: onGateway.sessionConfig } : {}),
       ...(cwd ? { cwd } : {}),
       // The hub's own adapter has no process to hand an environment to: it resolves the
       // workspace's provider at the moment of each turn (`adapters/direct.ts`).
@@ -1271,6 +1280,18 @@ export class AgentsService implements UpdatePolicyStore {
     if (!entry?.gateway) return null;
     const gateway = this.options.models?.()?.gateway;
     if (!gateway?.available()) return null;
+    // An agent whose wiring needs a file of the hub's, where the hub has nowhere to write it.
+    if (entry.gateway.config === 'gemini-settings' && !this.options.gatewayStateDir) {
+      return null;
+    }
+    // Older than its wiring works with (one found on the computer, or never updated): as before.
+    if (
+      entry.gateway.minVersion &&
+      row.version &&
+      compareVersions(row.version, entry.gateway.minVersion) < 0
+    ) {
+      return 'agent';
+    }
     const chosen = this.settingsRow(workspaceId, row.id)?.settings?.model_source;
     if (chosen === 'agent') return 'agent';
     if (!selection.providerId || !selection.model) return 'agent';
@@ -1317,7 +1338,11 @@ export class AgentsService implements UpdatePolicyStore {
     settings: AgentSettingsRow | undefined,
     selection: AgentSelection,
     grant: AgentGatewayGrant,
-  ): { env: Record<string, string>; remove: string[] } {
+  ): {
+    env: Record<string, string>;
+    remove: string[];
+    sessionConfig?: Record<string, string>;
+  } | null {
     const entry = this.catalog.find((candidate) => candidate.id === row.slug)!;
     const wiring = entry.gateway!;
     const port = this.options.models?.() ?? null;
@@ -1350,15 +1375,40 @@ export class AgentsService implements UpdatePolicyStore {
     } catch {
       contextWindow = null;
     }
-    const wired = wiring.env({
+    const context = {
       anthropicBaseUrl: grant.anthropicBaseUrl,
       openaiBaseUrl: grant.openaiBaseUrl,
+      googleBaseUrl: grant.googleBaseUrl,
       origin: grant.origin,
       token: grant.token,
       mainModel: GATEWAY_MAIN_MODEL,
       smallModel: GATEWAY_SMALL_MODEL,
       contextWindow,
-    });
+    };
+    const wired = wiring.env(context);
+    // The piece of its own configuration no variable can say (Gemini CLI, Grok Build, Pi).
+    let sessionConfig: Record<string, string> | undefined;
+    if (wiring.config) {
+      const hostEnv = this.options.credentialProbe?.env ?? process.env;
+      const seen = { ...hostEnv, ...own };
+      const written = applyGatewayConfig({
+        kind: wiring.config,
+        context,
+        env: seen,
+        home: this.options.credentialProbe?.home ?? seen.HOME ?? homedir(),
+        stateDir: this.options.gatewayStateDir ?? '',
+      });
+      if (!written.ok) {
+        // Its own account, as before the gateway: nothing half-wired.
+        this.options.log.warn(
+          { agent: row.slug, reason: written.reason },
+          'agents: could not write the model gateway into the agent’s own settings; it runs on its own account',
+        );
+        return null;
+      }
+      Object.assign(wired, written.env);
+      sessionConfig = written.sessionConfig;
+    }
     const remove = [...new Set([...wiring.clears, ...Object.values(entry.credentials)])].filter(
       (name) => !(name in wired),
     );
@@ -1378,7 +1428,7 @@ export class AgentsService implements UpdatePolicyStore {
         .filter(Boolean);
       env[name] = [...listed, ...loopback.filter((host) => !listed.includes(host))].join(',');
     }
-    return { env, remove };
+    return { env, remove, ...(sessionConfig ? { sessionConfig } : {}) };
   }
 
   /**

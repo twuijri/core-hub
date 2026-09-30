@@ -118,6 +118,8 @@ export interface AgentGatewayGrant {
   anthropicBaseUrl: string;
   /** OpenAI Responses and Chat Completions (`…/gateway/openai/v1`). */
   openaiBaseUrl: string;
+  /** The Gemini API root (`…/gateway/google`), as `GOOGLE_GEMINI_BASE_URL` takes it. */
+  googleBaseUrl: string;
   /** `http://127.0.0.1:<port>`, for an agent that takes a host and a path separately. */
   origin: string;
   token: string;

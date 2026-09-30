@@ -21,6 +21,7 @@ function fakeGrant(n: number): FakeGrant {
   const grant: FakeGrant = {
     anthropicBaseUrl: 'http://127.0.0.1:1/gateway/anthropic',
     openaiBaseUrl: 'http://127.0.0.1:1/gateway/openai/v1',
+    googleBaseUrl: 'http://127.0.0.1:1/gateway/google',
     origin: 'http://127.0.0.1:1',
     token: `chgw_token_${n}`,
     turns: [],

@@ -44,6 +44,11 @@ function fakeAgent(
         });
       } else if (method === 'session/new') {
         reply({ jsonrpc: '2.0', id, result: { sessionId: 'sess-1' } });
+      } else if (method === 'session/set_config_option') {
+        const value = (record.params as { value?: string }).value;
+        if (value === 'nope/none') {
+          reply({ jsonrpc: '2.0', id, error: { code: -32602, message: 'Unknown modelId' } });
+        } else reply({ jsonrpc: '2.0', id, result: { configOptions: [] } });
       } else if (method === 'session/prompt') {
         for (const update of options.updates ?? [
           { sessionUpdate: 'agent_thought_chunk', content: { type: 'text', text: 'thinking' } },
@@ -162,6 +167,38 @@ describe('ACP adapter: the handshake', () => {
       mcpServers: [hub],
     });
     expect(unable.sent[1]).toMatchObject({ method: 'session/new', params: { mcpServers: [] } });
+  });
+
+  it('sets the session options it is given once the session exists (the gateway’s model for Pi)', async () => {
+    const agent = fakeAgent();
+    await AcpSession.connect(agent.transport, {
+      cwd: '/work',
+      clientName: 'corehub',
+      clientVersion: '1.0.0',
+      sessionConfig: { model: 'corehub-gateway/corehub-main' },
+    });
+    expect(agent.sent[2]).toMatchObject({
+      method: 'session/set_config_option',
+      params: { sessionId: 'sess-1', configId: 'model', value: 'corehub-gateway/corehub-main' },
+    });
+    // An agent that refuses it does not start on some other model.
+    const refusing = fakeAgent();
+    await expect(
+      AcpSession.connect(refusing.transport, {
+        cwd: '/work',
+        clientName: 'corehub',
+        clientVersion: '1.0.0',
+        sessionConfig: { model: 'nope/none' },
+      }),
+    ).rejects.toThrow(/Unknown modelId/);
+    // Without options, nothing more than the session is asked.
+    const plain = fakeAgent();
+    await AcpSession.connect(plain.transport, {
+      cwd: '/work',
+      clientName: 'corehub',
+      clientVersion: '1.0.0',
+    });
+    expect(plain.sent).toHaveLength(2);
   });
 
   it('refuses an agent that speaks a different major protocol version', async () => {

@@ -41,9 +41,19 @@ export function upstreamPrefix(providerId: string): string {
   return `h${providerId.toLowerCase()}`;
 }
 
+/**
+ * The name CLIProxyAPI knows a row's model by, before the prefix: the model's own id, except that
+ * a `:` (Ollama's `qwen3:8b`) becomes `__`. The Gemini wire carries the model in the path, where
+ * CLIProxyAPI splits `models/<model>:<method>` on the colon (8.0.4 `GeminiHandler`); the alias
+ * maps back to the real id upstream (`name`), so the provider sees the id it listed.
+ */
+export function upstreamAlias(model: string): string {
+  return model.replaceAll(':', '__');
+}
+
 /** The model name CLIProxyAPI serves a row's model under. */
 export function upstreamModel(providerId: string, model: string): string {
-  return `${upstreamPrefix(providerId)}/${model}`;
+  return `${upstreamPrefix(providerId)}/${upstreamAlias(model)}`;
 }
 
 export interface CliproxyConfigInput {
@@ -73,7 +83,7 @@ export function cliproxyConfig(input: CliproxyConfigInput): string {
       keys: [{ 'api-key': upstream.apiKey ?? NO_KEY }],
       models: upstream.models.map((model) => ({
         name: model.id,
-        alias: model.id,
+        alias: upstreamAlias(model.id),
         ...(model.contextWindow ? { 'max-context-length': model.contextWindow } : {}),
       })),
     });

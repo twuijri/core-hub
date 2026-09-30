@@ -769,6 +769,8 @@ function contextOf(app: FastifyInstance): AgentsContext {
     models: () => modelsPorts.get(hub.io) ?? null,
     // The container image says `hub` (ADR 0029); a computer's hub decides per agent.
     modelSourceDefault: () => hub.config.modelGateway?.defaultSource ?? 'auto',
+    // Files the hub writes for agents on the gateway (Gemini CLI's own home, §141).
+    gatewayStateDir: path.join(hub.config.dataDir, 'gateway', 'agents'),
     // A workspace is a Hermes profile (ADR 0014): its slug, or `default` for the hub's
     // default workspace whatever it is called. An archived or unknown one has none.
     profileOf: (workspaceId: string) => {

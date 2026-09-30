@@ -56,6 +56,18 @@ export const grokBuild: CatalogEntry = {
   credentials: { xai: 'XAI_API_KEY' },
   // Grok Build's own settings and xAI's.
   hostEnv: ['XAI_*', 'GROK_*'],
+  // On the hub's model gateway (ADR 0029, DECISIONS §141): a model with its own address is only
+  // a `[model.<id>]` table of `$GROK_HOME/config.toml` (1.0.41: its `GROK_CONFIG` overlay does not
+  // define models), so the hub keeps one there (`gateway-config.ts`) — Chat Completions, keyed by
+  // `env_key = "COREHUB_GATEWAY_TOKEN"` — and picks it with `GROK_DEFAULT_MODEL`, leaving the
+  // person's own default alone. A model's own key wins over a `grok login`.
+  gateway: {
+    wire: 'openai-chat',
+    env: (gw) => ({ COREHUB_GATEWAY_TOKEN: gw.token }),
+    // Another default or endpoint for its models would move it off the table the hub wrote.
+    clears: ['GROK_MODELS_BASE_URL', 'GROK_MODELS_LIST_URL', 'GROK_CONFIG', 'GROK_CONFIG_PATH'],
+    config: 'grok-model',
+  },
   health: { kind: 'command', args: ['--version'] },
   capabilities: ['streaming', 'tools', 'approvals', 'mcp', 'resume'],
   sections: ['mcp', 'settings'],

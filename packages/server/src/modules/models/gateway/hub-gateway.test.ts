@@ -285,6 +285,131 @@ describe('the model gateway in the hub', () => {
     ).toBe('agent');
   });
 
+  it('wires Gemini CLI, Grok Build and Pi, writing only the hub’s block of their own settings', async () => {
+    const home = mkdtempSync(path.join(tmpdir(), 'corehub-gw-home-'));
+    cleanup.push(() => rmSync(home, { recursive: true, force: true }));
+    const h = await hub('hub', home);
+    const groq = await addProvider(h, 'groq', GROQ_KEY);
+    await drainJobs(h.app);
+    const workspace = workspaceOf(h);
+    const agents = agentsServiceFor(h.app);
+    const model = 'groq/llama-3.3-70b-versatile';
+    const start = async (slug: string, onGateway = true) => {
+      const row = agents.loadAgentBySlug(slug);
+      const selection = agents.selectionFor(row, workspace, { model });
+      expect(agents.modelSourceFor(row, workspace, selection)).toBe('hub');
+      const grant = await agents.openGateway(row, workspace, {
+        sessionId: `s-${slug}`,
+        userId: h.userId,
+        alive: () => true,
+      });
+      cleanup.push(() => grant.revoke());
+      const target = agents.targetFor(row, workspace, {
+        sessionRef: null,
+        cwd: null,
+        model,
+        reasoningEffort: null,
+        gateway: grant,
+      });
+      if (onGateway) expect(JSON.stringify(target.env)).not.toContain(GROQ_KEY);
+      return { row, selection, grant, target, env: target.env ?? {} };
+    };
+
+    // Gemini CLI: the Gemini wire, by variables alone while it has no sign-in of its own.
+    const gemini = await start('gemini-cli');
+    expect(gemini.env).toMatchObject({
+      GOOGLE_GEMINI_BASE_URL: gemini.grant.googleBaseUrl,
+      GEMINI_API_KEY: gemini.grant.token,
+      GEMINI_MODEL: 'corehub-main',
+    });
+    expect(gemini.env.GEMINI_CLI_HOME).toBeUndefined();
+    expect(gemini.target.envRemove).toEqual(
+      expect.arrayContaining(['GOOGLE_API_KEY', 'GOOGLE_GENAI_USE_VERTEXAI']),
+    );
+    gemini.grant.setTurn({
+      runId: 'run-g',
+      providerId: groq.id,
+      model: gemini.selection.model!,
+      report: () => {},
+    });
+    const answer = await fetch(
+      `${gemini.grant.googleBaseUrl}/v1beta/models/corehub-main:streamGenerateContent?alt=sse`,
+      {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', 'x-goog-api-key': gemini.grant.token },
+        body: JSON.stringify({ contents: [{ role: 'user', parts: [{ text: 'hi' }] }] }),
+      },
+    );
+    expect(answer.status).toBe(200);
+    expect(answer.headers.get('x-fake-path')).toBe(
+      `/v1beta/models/${upstreamPrefix(groq.id)}/llama-3.3-70b-versatile:streamGenerateContent?alt=sse`,
+    );
+    // Signed in with Google: a home of the hub's own whose settings say `gateway`.
+    mkdirSync(path.join(home, '.gemini'), { recursive: true });
+    const theirs = JSON.stringify({ security: { auth: { selectedType: 'oauth-personal' } } });
+    writeFileSync(path.join(home, '.gemini', 'settings.json'), theirs);
+    agents.updateSettings(
+      { id: workspace, slug: 'default', name: 'default', isDefault: true },
+      gemini.row.id,
+      { section: 'models', values: { model_source: 'hub' } },
+    );
+    const signedIn = await start('gemini-cli');
+    expect(signedIn.env.GEMINI_CLI_HOME).toBe(
+      path.join(h.dataDir, 'gateway', 'agents', 'gemini-cli', 'home'),
+    );
+    expect(
+      JSON.parse(
+        readFileSync(path.join(signedIn.env.GEMINI_CLI_HOME!, '.gemini', 'settings.json'), 'utf8'),
+      ),
+    ).toMatchObject({ security: { auth: { selectedType: 'gateway' } } });
+    expect(readFileSync(path.join(home, '.gemini', 'settings.json'), 'utf8')).toBe(theirs);
+
+    // Grok Build: the hub's table in its own file, chosen by variable.
+    const grok = await start('grok-build');
+    expect(grok.env).toMatchObject({
+      COREHUB_GATEWAY_TOKEN: grok.grant.token,
+      GROK_DEFAULT_MODEL: 'corehub-gateway',
+    });
+    expect(grok.target.envRemove).toContain('XAI_API_KEY');
+    const toml = readFileSync(path.join(home, '.grok', 'config.toml'), 'utf8');
+    expect(toml).toContain(`base_url = "${grok.grant.openaiBaseUrl}"`);
+    expect(toml).not.toContain(grok.grant.token);
+
+    // Pi: the hub's provider in its `models.json`, and the session switched to it.
+    const pi = await start('pi');
+    expect(pi.env.COREHUB_GATEWAY_TOKEN).toBe(pi.grant.token);
+    expect(pi.target.sessionConfig).toEqual({ model: 'corehub-gateway/corehub-main' });
+    const models = JSON.parse(readFileSync(path.join(home, '.pi', 'agent', 'models.json'), 'utf8'));
+    expect(models.providers['corehub-gateway'].baseUrl).toBe(pi.grant.openaiBaseUrl);
+
+    // A file the hub may not change: the agent keeps its own account, nothing half-wired.
+    writeFileSync(path.join(home, '.pi', 'agent', 'models.json'), '{ broken');
+    const refused = await start('pi', false);
+    expect(refused.env.COREHUB_GATEWAY_TOKEN).toBeUndefined();
+    expect(refused.target.sessionConfig).toBeUndefined();
+    expect(refused.target.envRemove).toBeUndefined();
+    // …which is what it had before the gateway: the profile's key under its own name.
+    expect(refused.env.GROQ_API_KEY).toBe(GROQ_KEY);
+  });
+
+  it('keeps a Gemini CLI older than the gateway sign-in type on its own account', async () => {
+    const h = await hub('hub');
+    await addProvider(h, 'groq', GROQ_KEY);
+    await drainJobs(h.app);
+    const workspace = workspaceOf(h);
+    requireSqlite(h.app.hub.database)
+      .update(agentRows)
+      .set({ version: '0.45.0' })
+      .where(eq(agentRows.slug, 'gemini-cli'))
+      .run();
+    const agents = agentsServiceFor(h.app);
+    const row = agents.loadAgentBySlug('gemini-cli');
+    const selection = agents.selectionFor(row, workspace, {
+      model: 'groq/llama-3.3-70b-versatile',
+    });
+    expect(agents.modelSourceFor(row, workspace, selection)).toBe('agent');
+  });
+
   it('is off when the operator switched it off', async () => {
     const made = await signedInHub(
       { COREHUB_MODEL_GATEWAY: 'off' },

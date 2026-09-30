@@ -8,7 +8,8 @@
  *              └─ CLIProxyAPI (127.0.0.1, the hub's key only) ──(the row's real key)──▶ provider
  *
  * The agent speaks its own wire — Anthropic Messages (Claude Code), OpenAI Responses (Codex),
- * OpenAI Chat Completions (Goose, OpenCode, Qwen Code, Kimi Code) — and CLIProxyAPI translates it
+ * OpenAI Chat Completions (Goose, OpenCode, Qwen Code, Kimi Code, Grok Build, Pi), Google Gemini
+ * `generateContent` (Gemini CLI) — and CLIProxyAPI translates it
  * to whatever the provider speaks, tools, streaming and thinking included. The answer comes back
  * byte for byte; the gateway only reads the usage out of it for the run's ledger.
  *
@@ -44,13 +45,23 @@ export const GATEWAY_SMALL_MODEL = 'corehub-small';
 
 const MAX_BODY_BYTES = 64 * 1024 * 1024;
 
-type Wire = 'anthropic' | 'openai';
+type Wire = 'anthropic' | 'openai' | 'google';
 
 interface Route {
   wire: Wire;
   /** The path CLIProxyAPI serves it on. */
   upstream: string;
 }
+
+/**
+ * The Gemini wire's one route shape: the model and the method in the path
+ * (`/v1beta/models/<model>:streamGenerateContent?alt=sse`), as `@google/genai` sends it under
+ * `GOOGLE_GEMINI_BASE_URL`. CLIProxyAPI 8.0.4 serves the same three methods on `/v1beta` and
+ * translates them to whatever the provider speaks (`translator/openai/gemini`, tools included).
+ */
+const GEMINI_ACTION =
+  /^\/gateway\/google\/(v1beta|v1alpha|v1)\/models\/(.+):(generateContent|streamGenerateContent|countTokens)$/;
+const GEMINI_MODELS = /^\/gateway\/google\/(v1beta|v1alpha|v1)\/models(?:\/([^:]+))?$/;
 
 const ROUTES: Record<string, Route> = {
   '/gateway/anthropic/v1/messages': { wire: 'anthropic', upstream: '/v1/messages' },
@@ -99,6 +110,8 @@ export interface ModelGatewayOptions {
 export interface GatewayGrant {
   anthropicBaseUrl: string;
   openaiBaseUrl: string;
+  /** The Gemini API root (`…/gateway/google`; the client adds `/v1beta/models/…`). */
+  googleBaseUrl: string;
   /** `http://127.0.0.1:<port>`, for an agent that takes a host and a path separately. */
   origin: string;
   token: string;
@@ -167,6 +180,7 @@ export class ModelGateway {
     return {
       anthropicBaseUrl: `${origin}/gateway/anthropic`,
       openaiBaseUrl: `${origin}/gateway/openai/v1`,
+      googleBaseUrl: `${origin}/gateway/google`,
       origin,
       token: record.token,
       setTurn: (turn) => this.tokens.setTurn(record, turn),
@@ -198,7 +212,11 @@ export class ModelGateway {
 
   private async handle(request: IncomingMessage, response: ServerResponse): Promise<void> {
     const url = new URL(request.url ?? '/', 'http://127.0.0.1');
-    const wire: Wire = url.pathname.startsWith('/gateway/anthropic') ? 'anthropic' : 'openai';
+    const wire: Wire = url.pathname.startsWith('/gateway/anthropic')
+      ? 'anthropic'
+      : url.pathname.startsWith('/gateway/google/')
+        ? 'google'
+        : 'openai';
     if (!isLoopback(request.socket.remoteAddress)) {
       fail(response, wire, 403, 'permission_error', 'the model gateway serves this computer only');
       return;
@@ -209,7 +227,7 @@ export class ModelGateway {
       response.end('{}');
       return;
     }
-    const grant = this.tokens.resolve(presentedToken(request));
+    const grant = this.tokens.resolve(presentedToken(request, url));
     if (!grant) {
       request.resume();
       fail(
@@ -227,6 +245,10 @@ export class ModelGateway {
         url.pathname === '/gateway/openai/v1/models')
     ) {
       this.models(response, wire, grant);
+      return;
+    }
+    if (wire === 'google') {
+      await this.handleGemini(request, response, url, grant);
       return;
     }
     const route = ROUTES[url.pathname];
@@ -276,8 +298,103 @@ export class ModelGateway {
     await this.forward(
       request,
       response,
-      route,
-      url.search,
+      route.wire,
+      `${route.upstream}${url.search}`,
+      body,
+      grant,
+      resolved.target,
+      upstreams,
+    );
+  }
+
+  /**
+   * The Gemini wire (Gemini CLI): the model is in the path, not the body, so the path is what is
+   * rewritten — `models/corehub-main:streamGenerateContent` becomes
+   * `models/h<row>/<model>:streamGenerateContent` on CLIProxyAPI's `/v1beta`. The key a client may
+   * put in the query (`?key=`) is taken out before anything is forwarded.
+   */
+  private async handleGemini(
+    request: IncomingMessage,
+    response: ServerResponse,
+    url: URL,
+    grant: GatewayGrantRecord,
+  ): Promise<void> {
+    if (request.method === 'GET') {
+      const listing = GEMINI_MODELS.exec(url.pathname);
+      request.resume();
+      if (listing) {
+        const ids = this.modelIds(grant);
+        const one = listing[2] ? safeDecode(listing[2]).replace(/^models\//, '') : null;
+        if (one && !ids.includes(one)) {
+          fail(response, 'google', 404, 'NOT_FOUND', `models/${one} is not found`);
+          return;
+        }
+        const describe = (id: string) => ({
+          name: `models/${id}`,
+          displayName: id,
+          description: id,
+          supportedGenerationMethods: ['generateContent', 'streamGenerateContent', 'countTokens'],
+        });
+        response.writeHead(200, { 'content-type': 'application/json' });
+        response.end(JSON.stringify(one ? describe(one) : { models: ids.map(describe) }));
+        return;
+      }
+    }
+    const action = GEMINI_ACTION.exec(url.pathname);
+    if (!action || request.method !== 'POST') {
+      request.resume();
+      fail(
+        response,
+        'google',
+        404,
+        'NOT_FOUND',
+        `the model gateway has no ${request.method} ${url.pathname}`,
+      );
+      return;
+    }
+    let body: Record<string, unknown>;
+    try {
+      body = JSON.parse((await readBody(request)).toString('utf8') || '{}') as Record<
+        string,
+        unknown
+      >;
+      if (!body || typeof body !== 'object' || Array.isArray(body))
+        throw new Error('not an object');
+    } catch (error) {
+      fail(
+        response,
+        'google',
+        400,
+        'INVALID_ARGUMENT',
+        `the request body is not JSON: ${String(error instanceof Error ? error.message : error)}`,
+      );
+      return;
+    }
+    const resolved = this.resolveModel(grant, safeDecode(action[2]!));
+    if ('refusal' in resolved) {
+      fail(response, 'google', 400, 'INVALID_ARGUMENT', resolved.refusal);
+      return;
+    }
+    const upstreams = this.upstreams();
+    if (!upstreams.some((upstream) => upstream.providerId === resolved.target.providerId)) {
+      fail(
+        response,
+        'google',
+        400,
+        'INVALID_ARGUMENT',
+        `${resolved.target.modelLabel} is not available to coding agents through Core Hub: its provider has no key the hub can use, or it is a signed-in subscription, which the hub does not lend to other agents`,
+      );
+      return;
+    }
+    const query = new URLSearchParams(url.search);
+    query.delete('key');
+    const search = query.size > 0 ? `?${query.toString()}` : '';
+    const model = upstreamModel(resolved.target.providerId, resolved.target.model);
+    await this.forward(
+      request,
+      response,
+      'google',
+      `/v1beta/models/${model}:${action[3]}${search}`,
       body,
       grant,
       resolved.target,
@@ -311,8 +428,13 @@ export class ModelGateway {
     return 'refusal' in target ? target : { target };
   }
 
+  /** The ids a profile's agents may ask for: the aliases, then the catalogue keys. */
+  private modelIds(grant: GatewayGrantRecord): string[] {
+    return [...GATEWAY_MODEL_ALIASES, ...this.options.source.modelKeys(grant.workspace)];
+  }
+
   private models(response: ServerResponse, wire: Wire, grant: GatewayGrantRecord): void {
-    const ids = [...GATEWAY_MODEL_ALIASES, ...this.options.source.modelKeys(grant.workspace)];
+    const ids = this.modelIds(grant);
     response.writeHead(200, { 'content-type': 'application/json' });
     if (wire === 'anthropic') {
       response.end(
@@ -341,8 +463,9 @@ export class ModelGateway {
   private async forward(
     request: IncomingMessage,
     response: ServerResponse,
-    route: Route,
-    search: string,
+    wire: Wire,
+    /** CLIProxyAPI's path, query included. */
+    upstreamPath: string,
     body: Record<string, unknown>,
     grant: GatewayGrantRecord,
     target: GatewayTarget,
@@ -356,7 +479,7 @@ export class ModelGateway {
         error instanceof CliproxyUnavailable
           ? error.message
           : 'the model gateway could not start its translator';
-      fail(response, route.wire, 503, 'api_error', message);
+      fail(response, wire, 503, 'api_error', message);
       return;
     }
     // A call belongs to the turn it started in, even if it ends after the turn.
@@ -367,7 +490,7 @@ export class ModelGateway {
       host: '127.0.0.1',
       port: lease.port,
       method: 'POST',
-      path: `${route.upstream}${search}`,
+      path: upstreamPath,
       headers: {
         ...forwardHeaders(request.headers),
         authorization: `Bearer ${lease.key}`,
@@ -390,7 +513,7 @@ export class ModelGateway {
       if (!response.headersSent) {
         fail(
           response,
-          route.wire,
+          wire,
           502,
           'api_error',
           `the model gateway's translator did not answer: ${error.message}`,
@@ -463,8 +586,11 @@ export function isLoopback(address: string | undefined): boolean {
   return address === '::1' || address.startsWith('127.') || address.startsWith('::ffff:127.');
 }
 
-/** The token as each wire sends its key: `Authorization: Bearer`, `x-api-key`, `x-goog-api-key`. */
-function presentedToken(request: IncomingMessage): string | null {
+/**
+ * The token as each wire sends its key: `Authorization: Bearer`, `x-api-key`, `x-goog-api-key`,
+ * or — the Gemini API's other way — `?key=` in the query.
+ */
+function presentedToken(request: IncomingMessage, url: URL): string | null {
   const authorization = request.headers.authorization;
   if (typeof authorization === 'string' && /^bearer\s+/i.test(authorization)) {
     return authorization.replace(/^bearer\s+/i, '').trim();
@@ -473,7 +599,16 @@ function presentedToken(request: IncomingMessage): string | null {
     const value = request.headers[name];
     if (typeof value === 'string' && value.trim()) return value.trim();
   }
-  return null;
+  const key = url.searchParams.get('key');
+  return key?.trim() ? key.trim() : null;
+}
+
+function safeDecode(value: string): string {
+  try {
+    return decodeURIComponent(value);
+  } catch {
+    return value;
+  }
 }
 
 const HOP_BY_HOP = new Set([
@@ -562,7 +697,30 @@ function fail(
   const body =
     wire === 'anthropic'
       ? { type: 'error', error: { type, message } }
-      : { error: { message, type, code: type } };
+      : wire === 'google'
+        ? { error: { code: status, message, status: googleStatus(status, type) } }
+        : { error: { message, type, code: type } };
   response.writeHead(status, { 'content-type': 'application/json' });
   response.end(JSON.stringify(body));
+}
+
+/** The Gemini API's `status` word for an error (its `google.rpc.Code` names). */
+function googleStatus(status: number, type: string): string {
+  if (/^[A-Z_]+$/.test(type)) return type;
+  switch (status) {
+    case 400:
+      return 'INVALID_ARGUMENT';
+    case 401:
+      return 'UNAUTHENTICATED';
+    case 403:
+      return 'PERMISSION_DENIED';
+    case 404:
+      return 'NOT_FOUND';
+    case 429:
+      return 'RESOURCE_EXHAUSTED';
+    case 503:
+      return 'UNAVAILABLE';
+    default:
+      return 'INTERNAL';
+  }
 }
