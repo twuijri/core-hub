@@ -143,6 +143,20 @@ $ pnpm lint        # All matched files use Prettier code style!
 $ pnpm i18n:check  # ios: 2734 keys, ar/en in parity · android: 2593 keys, ar/en in parity · OK
 ```
 
+نتيجة CI على PR ‏#231 (الالتزام `f1e7bc6d`، التشغيل 36706776411) — كلها خضراء:
+
+```
+Model gateway with the real CLIProxyAPI and nine real coding agents: success
+Lint, typecheck, contracts, client tests, build: success
+Server unit tests (shard 1/3, 2/3, 3/3): success
+Web smoke journeys (Playwright against the real hub): success
+Docker image builds and answers /health: success
+Desktop app smoke (Electron under Xvfb against the real hub): success
+Real Hermes suites (floor, pinned): success
+db:generate + db:migrate (SQLite and PostgreSQL): success
+Android: success · iOS: success · Change record: success
+```
+
 ## المخاطر والرجوع
 - رمي الأحداث المخزّنة عند بدء دور ACP: لا يقول وكيل ACP شيئًا لدور لم يبدأ بعد؛ الوكلاء الفرعيون على قناتهم الخاصة.
 - بلا تبريد يصل كل طلب إلى المزوّد (كما لو كلّمه الوكيل مباشرة)؛ البوابة هي من يقرر الفشل السريع.
