@@ -650,15 +650,16 @@ export const modelsModule = defineModule({
       // tokens only while it runs, and the provider cards show their accounts, so a hub that has
       // any starts it now and reads them every minute — in the background, never holding boot.
       const gateway = modelGatewayFor(app);
+      if (!gateway.available()) return;
       if (gateway.hasSubscriptionAccounts()) {
         void service.subscriptions.refresh(true).then((read) => {
           if (!read.ok) app.log.warn({ reason: read.reason }, 'gateway: subscriptions not read');
         });
-        subscriptionTimer = setInterval(() => {
-          if (gateway.hasSubscriptionAccounts()) void service.subscriptions.refresh(true);
-        }, 60_000);
-        subscriptionTimer.unref?.();
       }
+      subscriptionTimer = setInterval(() => {
+        if (gateway.hasSubscriptionAccounts()) void service.subscriptions.refresh(true);
+      }, 60_000);
+      subscriptionTimer.unref?.();
     });
 
     // --------------------------------------------------------------- providers

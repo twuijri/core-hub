@@ -2120,7 +2120,9 @@ export class ModelsService {
     errors: ContractProviderAccountError[];
   }> {
     const { row, signIn } = this.subscriptionRow(scope, providerId);
-    const read = await this.subscriptions.refresh();
+    // The dialog asks CLIProxyAPI every time it is opened or refreshed: its counts move by the
+    // minute, and its queue of failed calls is read only here and by the minute's timer.
+    const read = await this.subscriptions.refresh(true);
     this.syncSignedIn(row);
     return {
       provider_id: row.id,

@@ -145,9 +145,11 @@ describe('CLIProxyAPI configuration', () => {
     const text = cliproxyConfig({
       port: 4321,
       internalKey: 'internal',
+      managementKey: 'management-secret',
       authDir: '/data/gateway/cliproxy-auth',
       upstreams: [
         upstream(),
+        upstream({ providerId: '01KSUBSCRIPTION', kind: 'subscription', baseUrl: '', apiKey: null }),
         upstream({
           providerId: OTHER,
           kind: 'claude',
@@ -163,12 +165,15 @@ describe('CLIProxyAPI configuration', () => {
       port: 4321,
       discovery: { enabled: false },
     });
-    // The management API is off (an empty key), and so is everything else a person could reach.
+    // The management API answers the hub's own secret from loopback only (DECISIONS §143); its
+    // panel is off, and so is everything else a person could reach.
     expect(config.management).toMatchObject({
-      'secret-key': '',
+      'secret-key': 'management-secret',
       'allow-remote': false,
       'disable-control-panel': true,
     });
+    // A subscription row is no key group: its accounts are in the store.
+    expect(JSON.stringify(config['api-keys'])).not.toContain('01KSUBSCRIPTION');
     expect(config.access['api-keys']).toEqual(['internal']);
     expect(config.routing['force-model-prefix']).toBe(true);
     expect(config.plugins.enabled).toBe(false);
@@ -360,7 +365,7 @@ describe('the gateway', () => {
       model: 'corehub-main',
     });
     expect(missing.status).toBe(400);
-    expect((await missing.json()).error.message).toMatch(/not available to coding agents/);
+    expect((await missing.json()).error.message).toMatch(/not available to agents/);
   });
 
   it('passes a provider error through as it came, and counts nothing for it', async () => {

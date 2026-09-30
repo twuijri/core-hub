@@ -9,13 +9,23 @@
 // A model whose id ends in `spent` answers as CLIProxyAPI does once a provider said its quota is
 // spent (429, its own name for the model in the words); `GET /fake/calls` counts the calls each
 // model was sent.
+//
+// Its management API and ChatGPT device sign-in (the subscriptions signed in to through the
+// gateway, DECISIONS §143) are in `fake-cliproxy-accounts.mjs`.
 import { readFileSync } from 'node:fs';
 import { createServer } from 'node:http';
 import { parse } from 'yaml';
+import { accountModels, codexDeviceLogin, managementApi } from './fake-cliproxy-accounts.mjs';
 
 const configPath = process.argv[process.argv.indexOf('-config') + 1];
 const config = parse(readFileSync(configPath, 'utf8'));
+if (process.argv.includes('-codex-device-login')) {
+  await codexDeviceLogin(config.oauth['auth-dir']);
+  process.exit(0);
+}
 const key = config.access['api-keys'][0];
+const authDir = config.oauth?.['auth-dir'] ?? '';
+const management = managementApi(config);
 const served = new Set();
 for (const groups of Object.values(config['api-keys'] ?? {})) {
   for (const group of groups) {
@@ -39,12 +49,13 @@ createServer((request, response) => {
   let raw = '';
   request.on('data', (chunk) => (raw += chunk));
   request.on('end', () => {
+    const url = new URL(request.url, 'http://x');
+    if (management(request, response, url, raw)) return;
     if (request.headers.authorization !== `Bearer ${key}`) {
       response.writeHead(401, { 'content-type': 'application/json' });
       response.end('{"error":"Missing API key"}');
       return;
     }
-    const url = new URL(request.url, 'http://x');
     if (request.method === 'GET' && url.pathname === '/fake/calls') {
       response.writeHead(200, { 'content-type': 'application/json' });
       response.end(JSON.stringify(calls));
@@ -52,7 +63,20 @@ createServer((request, response) => {
     }
     if (request.method === 'GET' && url.pathname === '/v1/models') {
       response.writeHead(200, { 'content-type': 'application/json' });
-      response.end(JSON.stringify({ object: 'list', data: [...served].map((id) => ({ id })) }));
+      response.end(
+        JSON.stringify({
+          object: 'list',
+          data: [
+            ...[...served].map((id) => ({ id })),
+            ...accountModels(authDir).map((model) => ({
+              id: model.id,
+              object: 'model',
+              owned_by: model.vendor,
+              context_length: model.context_length,
+            })),
+          ],
+        }),
+      );
       return;
     }
     const body = JSON.parse(raw || '{}');
@@ -62,7 +86,7 @@ createServer((request, response) => {
         url.pathname,
       );
     if (gemini) body.model = gemini[1];
-    if (!served.has(body.model)) {
+    if (!served.has(body.model) && !accountModels(authDir).some((model) => model.id === body.model)) {
       response.writeHead(400, { 'content-type': 'application/json' });
       response.end(
         JSON.stringify({
