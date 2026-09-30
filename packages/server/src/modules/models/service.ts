@@ -398,6 +398,13 @@ export function parseProviderBundle(value: unknown): ProviderBundle {
  */
 const RESTART_BUSY_ATTEMPTS = 80;
 
+/**
+ * How long a restart the hub asked for counts as "on its way" before the new process has started
+ * (it stops the gateways, then starts them again; a slow start is seconds). Past this the report
+ * says it did not restart, and the button is the way out.
+ */
+const RESTART_START_GRACE_MS = 3 * 60_000;
+
 export interface ProviderCreateInput {
   /** A `ProviderPreset.id`; absent for a bare OpenAI-compatible endpoint. */
   preset?: string | null;
@@ -576,6 +583,11 @@ export class ModelsService {
   private lastWriteAt = 0;
   private restartTimer: ReturnType<typeof setTimeout> | null = null;
   private restartPending = false;
+  /**
+   * When the hub last asked Hermes to restart and it said it would (`drainRestart`): until the
+   * new process has started, that restart is still on its way (DECISIONS §147).
+   */
+  private restartRequestedAt: number | null = null;
   private readonly restartDelayMs: number;
   /** Sign-ins in flight (contract decision §55); process memory, as Hermes's own are. */
   private readonly signIns = new Map<string, SignInRecord>();
@@ -593,6 +605,7 @@ export class ModelsService {
     this.subscriptions = new Subscriptions({
       backend: () => options.subscriptions?.() ?? null,
       now: () => this.now().getTime(),
+      log: options.log,
     });
   }
 
@@ -2984,11 +2997,27 @@ export class ModelsService {
     return `${chosen.provider} · ${chosen.model}`;
   }
 
-  /** Whether a restart of Hermes is on its way (`scheduleRestart`), for the runtime report. */
+  /**
+   * Whether a restart of Hermes is on its way, for the runtime report: debouncing, waiting for a
+   * Hermes turn to end, or asked for and not yet started again. The last was missing (the owner,
+   * 2026-10-01): between the hub asking and the new process starting, the report said "did not
+   * restart" with the button, and the page stopped asking again, so it stayed red although
+   * Hermes restarted a moment later (DECISIONS §147).
+   */
   private restartState(): 'scheduled' | 'waiting_for_run' | null {
-    if (!this.restartPending) return null;
-    if (this.restartTimer) return 'scheduled';
-    return (this.options.hermes.busy?.() ?? false) ? 'waiting_for_run' : 'scheduled';
+    if (this.restartPending) {
+      if (this.restartTimer) return 'scheduled';
+      return (this.options.hermes.busy?.() ?? false) ? 'waiting_for_run' : 'scheduled';
+    }
+    const asked = this.restartRequestedAt;
+    if (
+      asked !== null &&
+      asked >= this.lastWriteAt &&
+      this.now().getTime() - asked < RESTART_START_GRACE_MS
+    ) {
+      return 'scheduled';
+    }
+    return null;
   }
 
   /**
@@ -4054,9 +4083,13 @@ export class ModelsService {
       );
     }
     this.restartPending = false;
+    const asked = this.now().getTime();
+    this.restartRequestedAt = asked;
     try {
-      await this.options.hermes.restart();
+      // `false`: not the hub's to restart (an external Hermes); nothing is on its way.
+      if (!(await this.options.hermes.restart())) this.restartRequestedAt = null;
     } catch (error) {
+      this.restartRequestedAt = null;
       this.options.log.warn({ err: error }, 'models: the Hermes gateway did not restart');
     }
   }

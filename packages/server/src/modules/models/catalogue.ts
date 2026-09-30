@@ -142,14 +142,40 @@ export interface GatewaySignIn {
   callbackHint?: string;
   /** The vendor's answers carry usage windows with reset times (Claude, ChatGPT). */
   usageWindows: boolean;
+  /** The company whose usage "Check now" reads, for its sentences ("Google doesn't share …"). */
+  company: string;
   /**
-   * "Check now": the vendor's own usage address, asked through CLIProxyAPI with the account's
-   * token (`$TOKEN$`), which never leaves it. These are the addresses CLIProxyAPI's own panel
-   * uses; the vendors do not document them, so a reading that fails says so and changes
-   * nothing.
+   * "Check now": the vendor's own usage addresses, asked in order through CLIProxyAPI with the
+   * account's token (`$TOKEN$`), which never leaves it; the first answer that carries usage wins.
+   * They are the requests CLIProxyAPI's own management console (CPAMC, "Quota Management", MIT)
+   * makes for the same accounts, verified against its source on 2026-10-01; the vendors do not
+   * document them, so a reading that fails says so, in the hub's words, and changes nothing.
+   * `$PROJECT$` in a body is the account's Google Cloud project (`project_id`), when it has one.
    */
-  check?: { method: 'GET' | 'POST'; url: string; headers?: Record<string, string>; body?: string };
+  check?: readonly UsageRequest[];
 }
+
+/** One "Check now" request (see `GatewaySignIn.check`). */
+export interface UsageRequest {
+  method: 'GET' | 'POST';
+  url: string;
+  headers?: Record<string, string>;
+  body?: string;
+}
+
+/** Antigravity's own client, as CPAMC presents it to Google's usage addresses. */
+const ANTIGRAVITY_USAGE_HEADERS = {
+  'content-type': 'application/json',
+  'user-agent': 'antigravity/cli/1.0.13 (aidev_client; os_type=darwin; arch=arm64)',
+};
+
+/** The Grok CLI's own headers; without them xAI answers 401 (CPAMC `XAI_REQUEST_HEADERS`). */
+const XAI_USAGE_HEADERS = {
+  'x-xai-token-auth': 'xai-grok-cli',
+  'x-grok-client-version': '0.2.91',
+  accept: '*/*',
+  'user-agent': 'grok-pager/0.2.91 grok-shell/0.2.91 (macos; aarch64)',
+};
 
 export interface ProviderCatalogueEntry {
   slug: string;
@@ -284,7 +310,18 @@ export const GATEWAY_SUBSCRIPTIONS: readonly GatewaySubscription[] = [
       vendor: 'codex',
       flow: 'codex-device',
       usageWindows: true,
-      check: { method: 'GET', url: 'https://chatgpt.com/backend-api/wham/usage' },
+      company: 'OpenAI',
+      check: [
+        {
+          method: 'GET',
+          url: 'https://chatgpt.com/backend-api/wham/usage',
+          headers: {
+            'content-type': 'application/json',
+            'user-agent':
+              'codex-tui/0.149.1 (Mac OS 26.5.2; arm64) iTerm.app/3.6.11 (codex-tui; 0.149.1)',
+          },
+        },
+      ],
     },
   },
   {
@@ -297,11 +334,14 @@ export const GATEWAY_SUBSCRIPTIONS: readonly GatewaySubscription[] = [
       flow: 'link',
       callbackHint: 'http://localhost:54545/callback',
       usageWindows: true,
-      check: {
-        method: 'GET',
-        url: 'https://api.anthropic.com/api/oauth/usage',
-        headers: { 'anthropic-beta': 'oauth-2025-04-20' },
-      },
+      company: 'Anthropic',
+      check: [
+        {
+          method: 'GET',
+          url: 'https://api.anthropic.com/api/oauth/usage',
+          headers: { 'content-type': 'application/json', 'anthropic-beta': 'oauth-2025-04-20' },
+        },
+      ],
     },
   },
   {
@@ -313,12 +353,20 @@ export const GATEWAY_SUBSCRIPTIONS: readonly GatewaySubscription[] = [
       vendor: 'xai',
       flow: 'device',
       usageWindows: false,
-      // The headers the Grok CLI's own billing call carries; without them xAI answers 401.
-      check: {
-        method: 'GET',
-        url: 'https://cli-chat-proxy.grok.com/v1/billing',
-        headers: { 'x-xai-token-auth': 'xai-grok-cli', 'x-grok-client-version': '0.2.91' },
-      },
+      company: 'xAI',
+      // The weekly credits first (a SuperGrok plan counts by the week), then the monthly bill.
+      check: [
+        {
+          method: 'GET',
+          url: 'https://cli-chat-proxy.grok.com/v1/billing?format=credits',
+          headers: XAI_USAGE_HEADERS,
+        },
+        {
+          method: 'GET',
+          url: 'https://cli-chat-proxy.grok.com/v1/billing',
+          headers: XAI_USAGE_HEADERS,
+        },
+      ],
     },
   },
   {
@@ -330,7 +378,8 @@ export const GATEWAY_SUBSCRIPTIONS: readonly GatewaySubscription[] = [
       vendor: 'kimi',
       flow: 'device',
       usageWindows: false,
-      check: { method: 'GET', url: 'https://api.kimi.com/coding/v1/usages' },
+      company: 'Moonshot AI',
+      check: [{ method: 'GET', url: 'https://api.kimi.com/coding/v1/usages' }],
     },
   },
   {
@@ -342,7 +391,8 @@ export const GATEWAY_SUBSCRIPTIONS: readonly GatewaySubscription[] = [
       vendor: 'kimi-ai',
       flow: 'device',
       usageWindows: false,
-      check: { method: 'GET', url: 'https://api.kimi.ai/coding/v1/usages' },
+      company: 'Moonshot AI',
+      check: [{ method: 'GET', url: 'https://api.kimi.ai/coding/v1/usages' }],
     },
   },
   {
@@ -350,7 +400,7 @@ export const GATEWAY_SUBSCRIPTIONS: readonly GatewaySubscription[] = [
     label: 'Meta AI',
     baseUrl: 'https://api.meta.ai/v1',
     keysUrl: 'https://www.meta.ai',
-    signIn: { vendor: 'meta', flow: 'device', usageWindows: false },
+    signIn: { vendor: 'meta', flow: 'device', usageWindows: false, company: 'Meta' },
   },
   {
     slug: 'antigravity-subscription',
@@ -362,12 +412,33 @@ export const GATEWAY_SUBSCRIPTIONS: readonly GatewaySubscription[] = [
       flow: 'link',
       callbackHint: 'http://localhost:51121/oauth-callback',
       usageWindows: false,
-      check: {
-        method: 'POST',
-        url: 'https://cloudcode-pa.googleapis.com/v1internal:retrieveUserQuotaSummary',
-        headers: { 'content-type': 'application/json' },
-        body: '{}',
-      },
+      company: 'Google',
+      // CPAMC's order: the quota summary (grouped buckets) on the daily, sandbox and production
+      // hosts, with the account's project — the production host alone, with no project and no
+      // client name, answered a consumer account 403 "no valid license" (the owner, 2026-10-01).
+      // Then the per-model quota that CLIProxyAPI's own model list reads for every consumer
+      // account (`v1internal:fetchAvailableModels`, `models.<id>.quotaInfo`), which CPAMC read
+      // before its summary existed.
+      check: [
+        ...[
+          'https://daily-cloudcode-pa.googleapis.com',
+          'https://daily-cloudcode-pa.sandbox.googleapis.com',
+          'https://cloudcode-pa.googleapis.com',
+        ].map((host) => ({
+          method: 'POST' as const,
+          url: `${host}/v1internal:retrieveUserQuotaSummary`,
+          headers: ANTIGRAVITY_USAGE_HEADERS,
+          body: '{"project":"$PROJECT$"}',
+        })),
+        ...['https://daily-cloudcode-pa.googleapis.com', 'https://cloudcode-pa.googleapis.com'].map(
+          (host) => ({
+            method: 'POST' as const,
+            url: `${host}/v1internal:fetchAvailableModels`,
+            headers: ANTIGRAVITY_USAGE_HEADERS,
+            body: '{"project":"$PROJECT$"}',
+          }),
+        ),
+      ],
     },
   },
   {
@@ -380,6 +451,7 @@ export const GATEWAY_SUBSCRIPTIONS: readonly GatewaySubscription[] = [
       flow: 'link',
       callbackHint: 'http://127.0.0.1',
       usageWindows: false,
+      company: 'Devin',
     },
   },
 ];

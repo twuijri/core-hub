@@ -18,6 +18,8 @@ const PATTERNS: readonly [RegExp, string][] = [
   [/\bxai-[A-Za-z0-9]{12,}/g, '[redacted]'],
   // The model gateway's own tokens (ADR 0029; a Hermes profile's, DECISIONS §143).
   [/\bchgwh?_[A-Za-z0-9_.-]{16,}/g, '[redacted]'],
+  // Google OAuth access tokens (an Antigravity account's, in a vendor's echo).
+  [/\bya29\.[A-Za-z0-9_.-]{16,}/g, '[redacted]'],
   [/\bAIza[0-9A-Za-z_-]{20,}/g, '[redacted]'],
   [/\beyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}/g, '[redacted]'],
   [/\b[A-Za-z0-9]{40,}\b/g, '[redacted]'],

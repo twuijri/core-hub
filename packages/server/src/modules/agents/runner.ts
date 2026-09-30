@@ -460,6 +460,17 @@ export class AgentRunner implements AgentRunnerPort {
   }
 
   /**
+   * Whether a turn of this kind of agent is in flight (`hermes`): recycling Hermes after a change
+   * waits for Hermes's own turns, not for a coding agent's, which the restart does not touch.
+   */
+  busyWith(adapterKind: string): boolean {
+    for (const run of this.runs.values()) {
+      if (run.live.adapterKind === adapterKind) return true;
+    }
+    return false;
+  }
+
+  /**
    * Whether a turn of this agent is in flight. The update policy asks before an
    * auto-update: it never replaces an agent's CLI under a running turn
    * (`update-policy.ts`).
