@@ -599,6 +599,22 @@ describe('usage and addresses', () => {
     expect(sse.result()).toMatchObject({ inputTokens: 8, outputTokens: 1 });
   });
 
+  it('reads the usage of a chunk that also carries Arabic text, cut at every byte', () => {
+    // Some providers put the last words and the usage in one chunk; a chunk boundary inside a
+    // letter must not cost the usage (each piece is decoded across chunks).
+    const event = `data: ${JSON.stringify({
+      choices: [{ index: 0, delta: { content: 'أساعد؟' }, finish_reason: 'stop' }],
+      usage: { prompt_tokens: 11, completion_tokens: 4 },
+    })}\n\n`;
+    const bytes = Buffer.from(event, 'utf8');
+    for (let cut = 1; cut < bytes.length; cut += 1) {
+      const tap = new UsageTap('text/event-stream');
+      tap.push(bytes.subarray(0, cut));
+      tap.push(bytes.subarray(cut));
+      expect(tap.result(), `cut at ${cut}`).toMatchObject({ inputTokens: 11, outputTokens: 4 });
+    }
+  });
+
   it('knows a loopback address from any other', () => {
     for (const address of ['127.0.0.1', '127.1.2.3', '::1', '::ffff:127.0.0.1']) {
       expect(isLoopback(address)).toBe(true);

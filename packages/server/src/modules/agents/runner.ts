@@ -111,6 +111,8 @@ interface LiveRun {
   outputDir: string | null;
   /** The copies `handOver` made into `outputDir` this turn, settled as the turn ends. */
   handedOver: string[];
+  /** Stops this turn's reading of the session's events (`pump`), once the turn has ended. */
+  release?: () => void;
 }
 
 export interface AgentRunnerDeps {
@@ -183,6 +185,8 @@ export class AgentRunner implements AgentRunnerPort {
       });
     }
 
+    // Anything the agent said after its last turn ended is that turn's, not this one's.
+    live.session.discardStale?.();
     // The turn: events are pumped from the session stream while `send()` drives the agent.
     // Neither is awaited here — the engine consumes `stream()` and `send()` resolves on the
     // agent's own terms.
@@ -625,13 +629,27 @@ export class AgentRunner implements AgentRunnerPort {
 
   // -------------------------------------------------------------- internals
 
+  /**
+   * This turn's reader of the session's events. The session's stream outlives the turn, so the
+   * reader is let go when the turn ends however it ended (`end` → `release`): a turn failed by the
+   * runner itself (the agent refused the prompt) left one waiting, and the next turn's events were
+   * then dealt out between the two (owner, 2026-09-30: every other word lost, and the turn never
+   * ended when its `run.completed` went to the stale reader).
+   */
   private async pump(run: LiveRun): Promise<void> {
+    const events = run.live.session.stream()[Symbol.asyncIterator]();
+    run.release = () => {
+      void events.return?.();
+    };
     try {
-      for await (const event of run.live.session.stream()) {
-        const mapped = this.translate(run, event);
+      while (!run.ended) {
+        const next = await events.next();
+        if (next.done) break;
+        const mapped = this.translate(run, next.value);
         for (const out of mapped) this.push(run, out);
         if (mapped.some((out) => out.type === 'completed' || out.type === 'failed')) break;
       }
+      void events.return?.();
       if (!run.ended) {
         // The session closed under the run (agent exited): the engine reads a silent
         // end as `agent_error` on its own; say why when the adapter told us.
@@ -722,6 +740,7 @@ export class AgentRunner implements AgentRunnerPort {
   private end(run: LiveRun): void {
     if (run.ended) return;
     run.ended = true;
+    run.release?.();
     // A call still streaming after the turn is added to this run's ledger row by the gateway.
     run.live.gateway?.setTurn(null);
     for (const waiter of run.waiting.splice(0)) waiter({ value: undefined as never, done: true });

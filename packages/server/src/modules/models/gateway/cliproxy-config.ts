@@ -110,6 +110,14 @@ export function cliproxyConfig(input: CliproxyConfigInput): string {
       strategy: 'round-robin',
       'session-affinity': false,
       'force-model-prefix': true,
+      // Each provider row is one key, so there is no other credential to rotate to: a provider's
+      // 429 goes straight back to the gateway, which decides (a quota answered at once, a
+      // passing rate limit left to the agent's own retries). Cooling would refuse the row for
+      // a growing while after one 429 — every turn, even after the provider has recovered, told
+      // "All credentials for model h<row>/… are cooling down" (owner, 2026-09-30) — and a
+      // retry round would hold the request while nothing is said.
+      retry: { 'request-retry': 0, 'max-retry-interval': 0 },
+      cooldown: { 'disable-cooling': true },
     },
     requests: {
       'proxy-url': '',

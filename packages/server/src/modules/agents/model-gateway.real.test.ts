@@ -49,7 +49,10 @@ import type { AgentEvent, AgentSession, AgentTarget } from './adapters/types.js'
 import { catalogEntry, type CatalogEntry } from './catalog/index.js';
 import { applyGatewayConfig } from './gateway-config.js';
 import { agentBinDir, createNpmInstaller, installedVersion } from './installer.js';
-import type { AgentGatewayUsage } from './ports.js';
+import type { AdapterSet } from './adapters/index.js';
+import type { AgentGatewayUsage, RunnerEvent } from './ports.js';
+import { AgentRunner } from './runner.js';
+import type { AgentsService } from './service.js';
 
 const enabled = process.env.COREHUB_REAL_GATEWAY === '1';
 const binary = process.env.COREHUB_CLIPROXY_BIN
@@ -66,6 +69,9 @@ const MODEL = 'fake-coder';
 /** Every real provider says when an answer was made; Grok Build refuses a chunk without it. */
 const CREATED = 1_790_000_000;
 const PROOF_FILE = 'gateway-proof.txt';
+/** An Arabic greeting, streamed a token at a time and cut inside its characters' bytes. */
+const ARABIC_PROMPT = 'هلا';
+const ARABIC_TOKENS = ['ه', 'لا', '!', ' كيف', ' أ', 'قدر', ' أ', 'ساعد', '؟'];
 const PROOF_TEXT = 'written through the Core Hub model gateway';
 /** A person's own Grok Build settings, a Pi provider and a Gemini CLI Google sign-in. */
 const PERSON_GROK = '# my own settings\n[models]\ndefault = "grok-4.5"\n';
@@ -86,6 +92,15 @@ const PERSON_PI = JSON.stringify(
 const PERSON_GEMINI = JSON.stringify({
   security: { auth: { selectedType: 'oauth-personal' } },
   ui: { theme: 'Default' },
+});
+/** While true the provider answers every call as a provider out of quota does (Google's words). */
+let exhausted = false;
+const EXHAUSTED_BODY = JSON.stringify({
+  error: {
+    code: 429,
+    message: 'Resource has been exhausted (e.g. check quota).',
+    status: 'RESOURCE_EXHAUSTED',
+  },
 });
 /** The folder the agent under test works in. */
 let workingDir = '';
@@ -158,6 +173,11 @@ async function fakeChatProvider(): Promise<{ server: Server; url: string; seen: 
       }
       const body = JSON.parse(raw || '{}') as Record<string, unknown>;
       seen.push({ authorization: request.headers.authorization, body });
+      if (exhausted) {
+        response.writeHead(429, { 'content-type': 'application/json' });
+        response.end(EXHAUSTED_BODY);
+        return;
+      }
       const messages = (body.messages ?? []) as { role: string; content: unknown }[];
       const text = JSON.stringify(messages);
       const tools = (body.tools ?? []) as ChatTool[];
@@ -167,9 +187,11 @@ async function fakeChatProvider(): Promise<{ server: Server; url: string; seen: 
         ? writeCall(tools, path.join(workingDir, PROOF_FILE), PROOF_TEXT)
         : null;
       let reply:
-        | { kind: 'text'; text: string }
+        | { kind: 'text'; text: string; tokens?: string[] }
         | { kind: 'tool'; name: string; args: Record<string, unknown> };
-      if (toolResult) reply = { kind: 'text', text: 'The proof file is written.' };
+      if (text.includes(ARABIC_PROMPT) && !toolResult) {
+        reply = { kind: 'text', text: ARABIC_TOKENS.join(''), tokens: ARABIC_TOKENS };
+      } else if (toolResult) reply = { kind: 'text', text: 'The proof file is written.' };
       else if (call) reply = { kind: 'tool', ...call };
       else reply = { kind: 'text', text: 'pong from the fake provider' };
       const usage = { prompt_tokens: 1200, completion_tokens: 34, total_tokens: 1234 };
@@ -207,6 +229,51 @@ async function fakeChatProvider(): Promise<{ server: Server; url: string; seen: 
         return;
       }
       response.writeHead(200, { 'content-type': 'text/event-stream' });
+      if (reply.kind === 'text' && reply.tokens) {
+        // Every token its own chunk, and the bytes cut every 5 — inside the letters' two-byte
+        // sequences — each piece a write of its own.
+        const shape = process.env.PROBE_SHAPE ?? '';
+        const events = [
+          { role: 'assistant', content: '' },
+          ...reply.tokens.flatMap((content) =>
+            shape === 'reasoning'
+              ? [{ reasoning_content: 'hmm ' }, { content }]
+              : shape === 'both'
+                ? [{ reasoning_content: 'r', content }]
+                : [{ content }],
+          ),
+        ].map((delta) => ({
+          delta: delta as Record<string, unknown>,
+          finish: null as string | null,
+        }));
+        events.push({ delta: {}, finish: 'stop' });
+        const text =
+          events
+            .map(
+              ({ delta, finish }) =>
+                `data: ${JSON.stringify({ id: 'chat_ar', object: 'chat.completion.chunk', created: CREATED, model: body.model, choices: [{ index: 0, delta, finish_reason: finish }] })}\n\n`,
+            )
+            .join('') +
+          `data: ${JSON.stringify({ id: 'chat_ar', object: 'chat.completion.chunk', created: CREATED, model: body.model, choices: [], usage })}\n\ndata: [DONE]\n\n`;
+        const owner = (delta: Record<string, unknown>, finish: string | null, extra = {}) =>
+          `data: ${JSON.stringify({ id: 'resp_1', object: 'chat.completion.chunk', created: CREATED, model: body.model, choices: [{ index: 0, delta, finish_reason: finish, native_finish_reason: finish }], ...extra })}\n\n`;
+        const ownerText =
+          ['**Greeting**', ' the user', '\n\n']
+            .map((r) => owner({ role: 'assistant', reasoning_content: r }, null))
+            .join('') +
+          reply.tokens.map((c) => owner({ role: 'assistant', content: c }, null)).join('') +
+          owner({}, 'stop', { usage }) +
+          'data: [DONE]\n\n';
+        const bytes = Buffer.from(shape === 'owner' ? ownerText : text, 'utf8');
+        void (async () => {
+          for (let at = 0; at < bytes.length; at += 5) {
+            response.write(bytes.subarray(at, at + 5));
+            await new Promise((resolve) => setTimeout(resolve, 1));
+          }
+          response.end();
+        })();
+        return;
+      }
       const chunk = (delta: Record<string, unknown>, finish: string | null, extra = {}) =>
         response.write(
           `data: ${JSON.stringify({
@@ -366,17 +433,8 @@ describe.skipIf(!enabled)('the model gateway, for real (COREHUB_REAL_GATEWAY=1)'
     });
   });
 
-  async function runAgent(
-    id: string,
-    prompt: string,
-  ): Promise<{
-    said: string;
-    events: AgentEvent[];
-    reports: AgentGatewayUsage[];
-    env: NodeJS.ProcessEnv;
-    home: string;
-    token: string;
-  }> {
+  /** An agent installed, its home and its gateway grant, and the target the hub would start. */
+  async function prepareAgent(id: string) {
     const entry = entryOf(id);
     const installer = createNpmInstaller({
       dataDir,
@@ -470,6 +528,21 @@ describe.skipIf(!enabled)('the model gateway, for real (COREHUB_REAL_GATEWAY=1)'
         inherited,
       },
     });
+    return { target, adapter, grant, reports, env, home };
+  }
+
+  async function runAgent(
+    id: string,
+    prompt: string,
+  ): Promise<{
+    said: string;
+    events: AgentEvent[];
+    reports: AgentGatewayUsage[];
+    env: NodeJS.ProcessEnv;
+    home: string;
+    token: string;
+  }> {
+    const { target, adapter, grant, reports, env, home } = await prepareAgent(id);
     const session: AgentSession = await adapter.start(target);
     const events: AgentEvent[] = [];
     const reading = (async () => {
@@ -538,6 +611,86 @@ describe.skipIf(!enabled)('the model gateway, for real (COREHUB_REAL_GATEWAY=1)'
       rmSync(result.home, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 });
     },
     15 * 60_000,
+  );
+
+  it(
+    'Claude Code streams Arabic intact, cut inside its letters, and ends the turn',
+    async () => {
+      const result = await runAgent('claude-code', ARABIC_PROMPT);
+      expect(result.said).toBe(ARABIC_TOKENS.join(''));
+      rmSync(result.home, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 });
+    },
+    5 * 60_000,
+  );
+
+  it(
+    'after a turn the provider refused, the next turn streams Arabic intact and ends (the runner)',
+    async () => {
+      const { target, adapter, grant, home } = await prepareAgent('claude-code');
+      // Claude Code's own retries would only make this slow; the refusal is what matters here.
+      target.env = { ...target.env, CLAUDE_CODE_MAX_RETRIES: '0' };
+      const service = {
+        loadAgent: () => ({
+          id: 'agent-cc',
+          slug: 'claude-code',
+          installState: 'installed',
+          adapterKind: 'acp',
+        }),
+        settled: async () => {},
+        selectionFor: () => ({ model: MODEL, provider: null, providerId: PROVIDER_ID }),
+        fallbacksFor: () => [],
+        providerSlugOf: () => 'fake',
+        modelSourceFor: () => 'agent',
+        targetFor: () => target,
+      };
+      const runner = new AgentRunner({
+        service: service as unknown as AgentsService,
+        adapters: { byKind: () => adapter } as unknown as AdapterSet,
+        log: pino({ level: 'silent' }) as never,
+      });
+      const turn = async (runId: string, text: string) => {
+        await runner.start({
+          runId,
+          sessionId: 'S-runner',
+          workspace: 'w',
+          agentId: 'agent-cc',
+          agentSessionRef: null,
+          workingDir: home,
+          model: null,
+          provider: null,
+          reasoningEffort: null,
+          userId: 'u1',
+          prompt: [{ type: 'text' as const, text }],
+          files: null,
+          allowedTools: [],
+        });
+        const out: RunnerEvent[] = [];
+        for await (const event of runner.stream(runId)) out.push(event);
+        return out;
+      };
+      try {
+        exhausted = true;
+        const refused = await turn('run-refused', 'Say hello.');
+        exhausted = false;
+        expect(refused.at(-1)).toMatchObject({ type: 'failed' });
+        const answered = await turn('run-arabic', ARABIC_PROMPT);
+        const said = answered
+          .filter(
+            (event): event is Extract<RunnerEvent, { type: 'message_delta' }> =>
+              event.type === 'message_delta',
+          )
+          .map((event) => event.text)
+          .join('');
+        expect(said).toBe(ARABIC_TOKENS.join(''));
+        expect(answered.at(-1)).toMatchObject({ type: 'completed' });
+      } finally {
+        exhausted = false;
+        await runner.closeAll();
+        grant.revoke();
+        rmSync(home, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 });
+      }
+    },
+    5 * 60_000,
   );
 
   it(

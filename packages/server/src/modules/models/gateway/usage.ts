@@ -15,6 +15,8 @@
  * - a whole JSON answer (no stream): its top-level `usage` (or `usageMetadata`), in the same
  *   shapes; a Gemini stream sent without `alt=sse` is one JSON array of chunks.
  */
+import { StringDecoder } from 'node:string_decoder';
+
 export interface CallUsage {
   inputTokens: number;
   outputTokens: number;
@@ -87,6 +89,8 @@ export class UsageTap {
   private json = '';
   private sse: boolean | null = null;
   private found: Partial<CallUsage> | null = null;
+  /** A chunk may end inside a character (Arabic is two bytes a letter): decoded across chunks. */
+  private readonly decoder = new StringDecoder('utf8');
   /** Bounds what is kept of a non-streamed answer (a large body is not parsed). */
   private static readonly MAX_JSON = 4 * 1024 * 1024;
 
@@ -95,7 +99,7 @@ export class UsageTap {
   }
 
   push(chunk: Buffer | string): void {
-    const text = typeof chunk === 'string' ? chunk : chunk.toString('utf8');
+    const text = typeof chunk === 'string' ? chunk : this.decoder.write(chunk);
     if (this.sse === false) {
       if (this.json.length < UsageTap.MAX_JSON) this.json += text;
       return;
@@ -148,6 +152,11 @@ export class UsageTap {
   }
 
   result(): CallUsage | null {
+    const rest = this.decoder.end();
+    if (rest) {
+      if (this.sse === false) this.json += rest;
+      else this.buffer += rest;
+    }
     if (this.sse !== true && this.json) {
       try {
         const parsed = JSON.parse(this.json) as unknown;

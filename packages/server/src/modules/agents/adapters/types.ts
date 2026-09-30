@@ -367,6 +367,11 @@ export interface AgentSession {
   send(prompt: PromptInput): Promise<{ stopReason: string }>;
   /** Everything the agent emits, in order, until the session closes. */
   stream(): AsyncIterable<AgentEvent>;
+  /**
+   * A new turn is about to start reading `stream()`: drop what the agent emitted after the last
+   * turn ended (a late answer to a prompt the hub already failed). Absent: nothing to drop.
+   */
+  discardStale?(): void;
   /** Answer an `approval.requested` the agent is blocked on. */
   respond(approvalId: string, optionId: string): Promise<void>;
   /** Answer a `question.asked`: the person's words, or `null` when they skipped it. */

@@ -28,13 +28,48 @@ export class EventQueue {
     }
   }
 
+  /**
+   * Drops what is buffered and nobody has read yet. A new turn calls it before it starts
+   * reading: whatever the agent said after the last turn ended belongs to that turn.
+   */
+  discardBuffered(): number {
+    return this.buffer.splice(0).length;
+  }
+
+  /**
+   * One reader. `return()` (a `for await` that breaks, or the runner when the turn it reads
+   * for has ended) takes its pending wait off the queue: a reader left waiting would be
+   * handed the next event, and with two readers the queue deals events out in turns — the
+   * owner's «لا كيفقدرساعد؟» for «هلا! كيف أقدر أساعد؟» (2026-09-30).
+   */
   iterator(): AsyncIterable<AgentEvent> {
+    const done: IteratorResult<AgentEvent> = { value: undefined as never, done: true };
+    let finished = false;
+    let pending: ((value: IteratorResult<AgentEvent>) => void) | null = null;
     const next = (): Promise<IteratorResult<AgentEvent>> => {
+      if (finished) return Promise.resolve(done);
       const buffered = this.buffer.shift();
       if (buffered) return Promise.resolve({ value: buffered, done: false });
-      if (this.done) return Promise.resolve({ value: undefined as never, done: true });
-      return new Promise((resolve) => this.waiting.push(resolve));
+      if (this.done) return Promise.resolve(done);
+      return new Promise((resolve) => {
+        const waiter = (value: IteratorResult<AgentEvent>) => {
+          pending = null;
+          resolve(value);
+        };
+        pending = waiter;
+        this.waiting.push(waiter);
+      });
     };
-    return { [Symbol.asyncIterator]: () => ({ next }) };
+    const stop = (): Promise<IteratorResult<AgentEvent>> => {
+      finished = true;
+      const waiter = pending;
+      if (waiter) {
+        const at = this.waiting.indexOf(waiter);
+        if (at >= 0) this.waiting.splice(at, 1);
+        waiter(done);
+      }
+      return Promise.resolve(done);
+    };
+    return { [Symbol.asyncIterator]: () => ({ next, return: stop }) };
   }
 }

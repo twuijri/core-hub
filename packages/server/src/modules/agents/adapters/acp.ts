@@ -461,6 +461,12 @@ export class AcpSession implements AgentSession {
     return this.queue.iterator();
   }
 
+  discardStale(): void {
+    // Between turns an ACP agent has nothing to say to the next one: a buffered event is the
+    // tail of a turn that already ended (its prompt refused, or a cancel answered late).
+    this.queue.discardBuffered();
+  }
+
   async interrupt(): Promise<void> {
     this.notify('session/cancel', { sessionId: this.sessionId });
   }

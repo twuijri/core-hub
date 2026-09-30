@@ -225,7 +225,7 @@ jobs:
           COREHUB_REAL_GATEWAY: '1'
           COREHUB_REAL_GATEWAY_ALL: '1'
           COREHUB_REAL_ACP_DATA: ${{ runner.temp }}/acp-data
-        run: pnpm --filter @corehub/server exec vitest run --project unit --maxWorkers=1 src/modules/agents/model-gateway.real.test.ts
+        run: pnpm --filter @corehub/server exec vitest run --project unit --maxWorkers=1 src/modules/agents/model-gateway.real.test.ts src/modules/models/gateway/gateway-stream.real.test.ts
 
   gate:
     name: Lint, typecheck, contracts, tests, build
