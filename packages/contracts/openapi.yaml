@@ -13583,11 +13583,16 @@ paths:
       summary: Start a browser/device-code sign-in for providers that use OAuth (admin)
       description: >-
         Only for a provider whose `auth.kind` is `oauth` (its preset says `sign_in: true`);
-        any other is `409 state_invalid` with `details.reason = sign_in_unsupported`. The agent
-        runtime performs the sign-in and keeps the credential (decision §55), so where the hub
-        does not supervise Hermes this is `409 state_invalid` with
-        `details.reason = hermes_not_supervised`, and `503` while Hermes's server cannot be
-        reached. A sign-in is kept for as long as its code is valid.
+        any other is `409 state_invalid` with `details.reason = sign_in_unsupported`. For a
+        provider signed in to through Hermes, the agent runtime performs the sign-in and keeps
+        the credential (decision §55), so where the hub does not supervise Hermes this is
+        `409 state_invalid` with `details.reason = hermes_not_supervised`, and `503` while
+        Hermes's server cannot be reached. For a subscription signed in to through the gateway
+        (`Provider.subscription`, DECISIONS §143) the gateway's translator performs it and each
+        approved sign-in adds an account to the provider (or renews one signed in before); a
+        hub whose gateway cannot hold sign-ins is `409 state_invalid` with
+        `details.reason = gateway_unavailable`. A sign-in is kept for as long as its code is
+        valid.
       x-roles: [owner, admin]
       x-rt-events: []
       responses:
@@ -13656,9 +13661,12 @@ paths:
       tags: [models]
       summary: Submit a pasted code for providers that hand one back (admin)
       description: >-
-        Only while `accepts_code` is true. Every sign-in the hub offers today is a device code,
-        which the person enters on the provider's page, so this is `409 state_invalid`
-        (`details.reason = code_not_accepted`) for all of them.
+        Only while `accepts_code` is true: a gateway sign-in by link (DECISIONS §143), where
+        `code` is the whole address the browser landed on after signing in (or just its
+        `code`). The answer is the sign-in as it stands — usually still `pending` for a moment
+        while the token is exchanged; poll `models.getProviderSignIn`. A device-code sign-in,
+        which the person enters on the provider's page, is `409 state_invalid`
+        (`details.reason = code_not_accepted`).
       x-roles: [owner, admin]
       requestBody:
         required: true
@@ -13688,6 +13696,482 @@ paths:
                 accepts_code: true
                 expires_at: '2026-09-21T13:25:00Z'
                 error: null
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+  /models/subscription-vendors:
+    get:
+      operationId: models.listSubscriptionVendors
+      tags: [models]
+      summary: The subscriptions a person can sign in to through Core Hub's model gateway
+      description: >-
+        "Add provider → Sign in with a subscription" (DECISIONS §143). Each item is a preset a
+        client passes to `models.createProvider`, then `models.startProviderSignIn` on the new
+        row. The sign-in is done and kept by the CLIProxyAPI the hub bundles (ADR 0030), and the
+        row's models are served to every agent through the gateway. `flow` says what the person
+        does: `device` — open a link and type a short code; `link` — open a link, then paste the
+        address the browser lands on back (`models.completeProviderSignIn`). These presets are
+        not in `models.listProviderPresets`, so an older client never offers a link it cannot
+        finish. `available` is false — with `reason` — on a hub whose gateway is off or has no
+        CLIProxyAPI; an older hub answers 404, and a client hides the choice.
+      parameters:
+        - $ref: '#/components/parameters/Profile'
+      x-rt-events: []
+      responses:
+        '200':
+          description: The vendors (not paged).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SubscriptionVendors'
+              example:
+                available: true
+                reason: null
+                note: 'Some vendors limit using a subscription outside their own apps.'
+                items:
+                  - preset: xai-subscription
+                    vendor: xai
+                    label: xAI Grok (SuperGrok / Premium+)
+                    flow: device
+                    usage_windows: false
+                    checkable: true
+                  - preset: chatgpt-subscription
+                    vendor: codex
+                    label: ChatGPT (Plus / Pro / Business)
+                    flow: device
+                    usage_windows: true
+                    checkable: true
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /models/providers/{provider_id}/accounts:
+    parameters:
+      - $ref: '#/components/parameters/Profile'
+      - $ref: '#/components/parameters/ProviderId'
+    get:
+      operationId: models.getProviderAccounts
+      tags: [models]
+      summary: The accounts signed in under a subscription provider, their health and usage (admin)
+      description: >-
+        What the provider's dialog shows (DECISIONS §143): every account signed in under this
+        provider through the gateway, with its status, its last error and when it is tried
+        again, its request counts (totals and 10-minute buckets of the last 3 h 20 min), and —
+        for Claude and ChatGPT — its usage windows with their reset times, read passively from
+        the vendor's answers (`source: observed`) or asked with `models.checkProviderAccount`
+        (`source: checked`). `errors` are the provider's recent failed calls, newest first.
+        Counts and buckets are kept in memory by the gateway's translator and start again when
+        it restarts. A provider that is not a gateway sign-in is `409 state_invalid`
+        (`details.reason = not_a_subscription`). `available: false`, with `reason`, when the
+        translator could not be asked; the accounts are then empty.
+      x-roles: [owner, admin]
+      x-rt-events: []
+      responses:
+        '200':
+          description: The accounts.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProviderAccounts'
+              example:
+                provider_id: 01J8QK3ZR2W7M5N4P6T8V9X0PV
+                vendor: codex
+                flow: device
+                available: true
+                reason: null
+                observed_at: '2026-09-30T10:00:00Z'
+                accounts:
+                  - id: codex-person@example.com-plus.json
+                    label: person@example.com
+                    email: person@example.com
+                    plan: plus
+                    status: active
+                    status_message: null
+                    disabled: false
+                    next_retry_at: null
+                    last_refresh_at: '2026-09-30T08:00:00Z'
+                    created_at: '2026-09-29T20:00:00Z'
+                    requests:
+                      success: 42
+                      failed: 1
+                      recent:
+                        - at: '2026-09-30T09:50:00Z'
+                          success: 3
+                          failed: 0
+                    windows:
+                      - id: primary
+                        label: 5 hours
+                        window_minutes: 300
+                        used_percent: 12.5
+                        resets_at: '2026-09-30T13:00:00Z'
+                        source: observed
+                    limit_reached: false
+                    quota_observed_at: '2026-09-30T09:58:00Z'
+                    checked_at: null
+                    check_error: null
+                errors:
+                  - at: '2026-09-30T09:40:00Z'
+                    account_id: codex-person@example.com-plus.json
+                    model: gpt-5.5
+                    status: 429
+                    message: 'The usage limit has been reached'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+  /models/providers/{provider_id}/accounts/{account_id}:
+    parameters:
+      - $ref: '#/components/parameters/Profile'
+      - $ref: '#/components/parameters/ProviderId'
+      - $ref: '#/components/parameters/ProviderAccountId'
+    patch:
+      operationId: models.updateProviderAccount
+      tags: [models]
+      summary: Turn one signed-in account off or on (admin)
+      description: >-
+        A turned-off account keeps its sign-in and is skipped when a model of the provider is
+        asked; the others still answer. A provider that is not a gateway sign-in is
+        `409 state_invalid` (`details.reason = not_a_subscription`).
+      x-roles: [owner, admin]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ProviderAccountPatch'
+            example:
+              disabled: true
+      x-rt-events: []
+      responses:
+        '200':
+          description: The account.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProviderAccount'
+              example:
+                id: codex-person@example.com-plus.json
+                label: person@example.com
+                email: person@example.com
+                plan: plus
+                status: disabled
+                status_message: null
+                disabled: true
+                next_retry_at: null
+                last_refresh_at: '2026-09-30T08:00:00Z'
+                created_at: '2026-09-29T20:00:00Z'
+                requests:
+                  success: 42
+                  failed: 1
+                  recent: []
+                windows: []
+                limit_reached: null
+                quota_observed_at: null
+                checked_at: null
+                check_error: null
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
+    delete:
+      operationId: models.removeProviderAccount
+      tags: [models]
+      summary: Sign one account out and forget it (admin)
+      description: >-
+        The account's sign-in is deleted from the gateway's store; the vendor's own session is
+        not revoked (the person can do that on the vendor's site). The provider stays, with its
+        other accounts; with none left it reads as not signed in.
+      x-roles: [owner, admin]
+      x-rt-events: []
+      responses:
+        '204':
+          description: Signed out.
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
+  /models/providers/{provider_id}/accounts/{account_id}/refresh:
+    parameters:
+      - $ref: '#/components/parameters/Profile'
+      - $ref: '#/components/parameters/ProviderId'
+      - $ref: '#/components/parameters/ProviderAccountId'
+    post:
+      operationId: models.refreshProviderAccount
+      tags: [models]
+      summary: Renew the account's token now and clear its wait (admin)
+      description: >-
+        Asks the vendor for a new token for this account and lets it be tried again at once
+        (a cooling account's wait is cleared). A sign-in the vendor no longer accepts stays in
+        `error` with the vendor's words; sign in again with `models.startProviderSignIn`.
+      x-roles: [owner, admin]
+      x-rt-events: []
+      responses:
+        '200':
+          description: The account after the renewal.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProviderAccount'
+              example:
+                id: xai-person@example.com.json
+                label: person@example.com
+                email: person@example.com
+                plan: null
+                status: active
+                status_message: null
+                disabled: false
+                next_retry_at: null
+                last_refresh_at: '2026-09-30T10:01:00Z'
+                created_at: '2026-09-29T20:00:00Z'
+                requests:
+                  success: 3
+                  failed: 0
+                  recent: []
+                windows: []
+                limit_reached: null
+                quota_observed_at: null
+                checked_at: null
+                check_error: null
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
+  /models/providers/{provider_id}/accounts/{account_id}/check:
+    parameters:
+      - $ref: '#/components/parameters/Profile'
+      - $ref: '#/components/parameters/ProviderId'
+      - $ref: '#/components/parameters/ProviderAccountId'
+    post:
+      operationId: models.checkProviderAccount
+      tags: [models]
+      summary: Ask the vendor now how much of the account's usage is left (admin)
+      description: >-
+        "Check now" (the owner's choice, DECISIONS §143): the gateway's translator calls the
+        vendor's own usage address with the account's token, which never leaves it, and the
+        answer is read into `windows` (`source: checked`). Those addresses are the vendors'
+        undocumented ones and may change without notice: a vendor with none, or an answer that
+        cannot be read, leaves `windows` as they were and says why in `check_error` — still
+        `200`.
+      x-roles: [owner, admin]
+      x-rt-events: []
+      responses:
+        '200':
+          description: The account with what the vendor said.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProviderAccount'
+              example:
+                id: codex-person@example.com-plus.json
+                label: person@example.com
+                email: person@example.com
+                plan: plus
+                status: active
+                status_message: null
+                disabled: false
+                next_retry_at: null
+                last_refresh_at: '2026-09-30T08:00:00Z'
+                created_at: '2026-09-29T20:00:00Z'
+                requests:
+                  success: 42
+                  failed: 1
+                  recent: []
+                windows:
+                  - id: secondary
+                    label: Weekly
+                    window_minutes: 10080
+                    used_percent: 40
+                    resets_at: '2026-10-03T00:00:00Z'
+                    source: checked
+                limit_reached: false
+                quota_observed_at: null
+                checked_at: '2026-09-30T10:02:00Z'
+                check_error: null
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
+  /models/providers/{provider_id}/move-to-gateway:
+    parameters:
+      - $ref: '#/components/parameters/Profile'
+      - $ref: '#/components/parameters/ProviderId'
+    post:
+      operationId: models.moveProviderToGateway
+      tags: [models]
+      summary: Sign in again through Core Hub's gateway instead of Hermes (admin)
+      description: >-
+        For a provider signed in to through Hermes whose `gateway_move` is set (ChatGPT, xAI):
+        adds — or reuses — the gateway's subscription provider of the same vendor in the same
+        scope and starts its sign-in. A sign-in cannot be copied from Hermes (the vendors
+        rotate their tokens, and two holders would log each other out), so the person signs in
+        once more. When that sign-in is approved, the profile's model choices that named this
+        provider's models name the new provider's same models; this provider is left as it is,
+        signed in and working, until the person removes it. Any other provider is
+        `409 state_invalid` (`details.reason = not_movable`); a hub whose gateway cannot hold
+        sign-ins, `409 state_invalid` (`details.reason = gateway_unavailable`).
+      x-roles: [owner, admin]
+      x-rt-events: []
+      responses:
+        '201':
+          description: The gateway's provider and its pending sign-in.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProviderMove'
+              example:
+                provider:
+                  id: 01J8QK3ZR2W7M5N4P6T8V9X0PW
+                  profile: default
+                  owner_id: 01J8QK3ZR2W7M5N4P6T8V9X0HM
+                  created_at: '2026-09-30T10:00:00Z'
+                  updated_at: '2026-09-30T10:00:00Z'
+                  slug: chatgpt-subscription
+                  label: ChatGPT (Plus / Pro / Business)
+                  kind: llm
+                  scope: all
+                  builtin: false
+                  enabled: true
+                  api_key: null
+                  base_url: null
+                  api_mode: native
+                  auth:
+                    kind: oauth
+                    signed_in: false
+                  catalogue:
+                    status: loading
+                    refreshed_at: null
+                    error: null
+                    refreshable: true
+                  visibility:
+                    mode: all
+                    models: []
+                  models: []
+                sign_in:
+                  id: 01J8QK3ZR2W7M5N4P6T8V9X0SN
+                  status: pending
+                  user_code: HXKQ-9P2M
+                  verification_url: https://auth.openai.com/codex/device
+                  accepts_code: false
+                  expires_at: '2026-09-30T10:15:00Z'
+                  error: null
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
+  /models/hermes-source:
+    get:
+      operationId: models.getHermesModelSource
+      tags: [models]
+      summary: Whether Hermes reaches its models through Core Hub's gateway
+      description: >-
+        "Hermes uses Core Hub's models" (DECISIONS §143), one choice per hub. With `hub`, the
+        model Hermes answers with, its cron model and its fallbacks are served by the hub's
+        gateway whenever the gateway can serve them — every subscription signed in through the
+        gateway included — and each call is counted by the gateway; a model the gateway cannot
+        serve (a Nous or MiniMax sign-in through Hermes) stays Hermes's own. Speech, embeddings
+        and the ChatGPT images of a Hermes sign-in stay as they are. `native` is Hermes as
+        before. `effective` is what Hermes was last given: `native` whenever the gateway is
+        off or missing (`available: false`, with `reason`). An older hub answers 404.
+      parameters:
+        - $ref: '#/components/parameters/Profile'
+      x-rt-events: []
+      responses:
+        '200':
+          description: The choice.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HermesModelSource'
+              example:
+                source: hub
+                effective: hub
+                available: true
+                reason: null
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    put:
+      operationId: models.setHermesModelSource
+      tags: [models]
+      summary: Switch Hermes to Core Hub's gateway or back (owner/admin)
+      description: >-
+        Rewrites every Hermes profile's model blocks and restarts Hermes when idle, like saving a
+        provider. Switching back to `native` removes only the blocks the hub wrote and gives
+        Hermes its own providers again: rollback is one switch. `hub` on a hub whose gateway is
+        not available is `409 state_invalid` (`details.reason = gateway_unavailable`).
+      x-roles: [owner, admin]
+      parameters:
+        - $ref: '#/components/parameters/Profile'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [source]
+              properties:
+                source:
+                  type: string
+                  enum: [native, hub]
+            example:
+              source: hub
+      x-rt-events: []
+      responses:
+        '200':
+          description: The choice.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HermesModelSource'
+              example:
+                source: hub
+                effective: hub
+                available: true
+                reason: null
         '400':
           $ref: '#/components/responses/BadRequest'
         '401':
@@ -18336,6 +18820,15 @@ components:
       required: true
       schema:
         $ref: '#/components/schemas/Ulid'
+    ProviderAccountId:
+      name: account_id
+      in: path
+      required: true
+      description: '`ProviderAccount.id`, URL-encoded (it may carry `@` and dots).'
+      schema:
+        type: string
+        minLength: 1
+        maxLength: 255
     DeviceId:
       name: device_id
       in: path
@@ -26740,6 +27233,10 @@ components:
                 fallback_reason:
                   type: [string, 'null']
                   description: Why the provider could not be asked, when `source` is `fallback`.
+            subscription:
+              $ref: '#/components/schemas/ProviderSubscription'
+            gateway_move:
+              $ref: '#/components/schemas/ProviderGatewayMove'
             draws_images:
               type: boolean
               description: >-
@@ -26954,12 +27451,306 @@ components:
           type: string
         accepts_code:
           type: boolean
-          description: Whether the provider hands the user a code to paste back.
+          description: >-
+            Whether the person pastes something back (`models.completeProviderSignIn`): for a
+            gateway sign-in by link (DECISIONS §143), the address the browser lands on after
+            signing in.
+        callback_hint:
+          type: [string, 'null']
+          description: >-
+            When `accepts_code` is true: how the address to paste back begins
+            (`http://localhost:1455/auth/callback`), so a client can say what to look for. The
+            page itself may not load; its address is all that is needed. Absent or `null`
+            otherwise.
         expires_at:
           $ref: '#/components/schemas/Timestamp'
         error:
           type: [string, 'null']
           description: Why a `failed` or `denied` sign-in stopped, in the runtime's own words.
+    SubscriptionVendors:
+      type: object
+      description: What `models.listSubscriptionVendors` answers (DECISIONS §143).
+      required: [available, reason, note, items]
+      properties:
+        available:
+          type: boolean
+          description: >-
+            The hub can hold subscription sign-ins: its model gateway is on and its CLIProxyAPI
+            is present. When false the items are still listed, and a client says `reason`.
+        reason:
+          type: [string, 'null']
+        note:
+          type: [string, 'null']
+          description: >-
+            One short, neutral sentence a client may show beside the list: some vendors limit
+            using a subscription outside their own apps. The hub does not judge or block any
+            vendor (the owner, 2026-09-30); people decide.
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/SubscriptionVendor'
+    SubscriptionVendor:
+      type: object
+      description: One subscription the gateway can sign in to.
+      required: [preset, vendor, label, flow, usage_windows, checkable]
+      properties:
+        preset:
+          type: string
+          description: 'The `ProviderCreate.preset` that adds a provider for it.'
+        vendor:
+          type: string
+          description: >-
+            The vendor's name in the gateway's translator (`claude`, `codex`, `antigravity`,
+            `kimi`, `kimi-ai`, `xai`, `meta`, `devin`); more may come with a newer translator.
+        label:
+          type: string
+        flow:
+          type: string
+          enum: [device, link]
+          description: >-
+            `device` — the person opens `verification_url` and types `user_code`; `link` — the
+            person opens `verification_url`, signs in, and pastes the address the browser then
+            lands on (it may say the page cannot be reached) into
+            `models.completeProviderSignIn`.
+        usage_windows:
+          type: boolean
+          description: The vendor reports usage windows with reset times (Claude, ChatGPT).
+        checkable:
+          type: boolean
+          description: '"Check now" (`models.checkProviderAccount`) can ask this vendor.'
+    ProviderSubscription:
+      type: object
+      description: >-
+        On a provider signed in to through the gateway (DECISIONS §143): the vendor, how its
+        sign-in goes, and its accounts as the hub last saw them. Absent on every other
+        provider and on older hubs.
+      required: [vendor, flow, accounts, accounts_ready]
+      properties:
+        vendor:
+          type: string
+        flow:
+          type: string
+          enum: [device, link]
+        accounts:
+          type: integer
+          minimum: 0
+          description: Accounts signed in under this provider.
+        accounts_ready:
+          type: integer
+          minimum: 0
+          description: Of those, the ones that answer now (not turned off, not failing, not waiting).
+    ProviderGatewayMove:
+      type: object
+      description: >-
+        On a provider signed in to through Hermes that the gateway can also sign in to: the
+        preset `models.moveProviderToGateway` would add. Absent otherwise.
+      required: [preset]
+      properties:
+        preset:
+          type: string
+    ProviderMove:
+      type: object
+      required: [provider, sign_in]
+      properties:
+        provider:
+          $ref: '#/components/schemas/Provider'
+        sign_in:
+          $ref: '#/components/schemas/ProviderSignIn'
+    ProviderAccounts:
+      type: object
+      description: What `models.getProviderAccounts` answers.
+      required: [provider_id, vendor, flow, available, reason, observed_at, accounts, errors]
+      properties:
+        provider_id:
+          $ref: '#/components/schemas/Ulid'
+        vendor:
+          type: string
+        flow:
+          type: string
+          enum: [device, link]
+        available:
+          type: boolean
+        reason:
+          type: [string, 'null']
+        observed_at:
+          $ref: '#/components/schemas/Timestamp'
+        accounts:
+          type: array
+          items:
+            $ref: '#/components/schemas/ProviderAccount'
+        errors:
+          type: array
+          description: The provider's recent failed calls, newest first (at most 20).
+          items:
+            $ref: '#/components/schemas/ProviderAccountError'
+    ProviderAccount:
+      type: object
+      description: One account signed in under a subscription provider.
+      required:
+        [
+          id,
+          label,
+          email,
+          plan,
+          status,
+          status_message,
+          disabled,
+          next_retry_at,
+          last_refresh_at,
+          created_at,
+          requests,
+          windows,
+          limit_reached,
+          quota_observed_at,
+          checked_at,
+          check_error,
+        ]
+      properties:
+        id:
+          type: string
+          description: The account's name in the gateway's store; used in the account paths.
+        label:
+          type: string
+        email:
+          type: [string, 'null']
+        plan:
+          type: [string, 'null']
+          description: The plan the vendor reports (`plus`, `pro`, …), when it does.
+        status:
+          type: string
+          enum: [active, cooling, error, disabled, refreshing, unknown]
+          description: >-
+            `active` answers; `cooling` hit a limit and is tried again at `next_retry_at`;
+            `error` failed (`status_message` says how — a sign-in the vendor no longer accepts
+            needs signing in again); `disabled` was turned off; `refreshing` is renewing its
+            token.
+        status_message:
+          type: [string, 'null']
+        disabled:
+          type: boolean
+        next_retry_at:
+          oneOf:
+            - $ref: '#/components/schemas/Timestamp'
+            - type: 'null'
+        last_refresh_at:
+          oneOf:
+            - $ref: '#/components/schemas/Timestamp'
+            - type: 'null'
+        created_at:
+          oneOf:
+            - $ref: '#/components/schemas/Timestamp'
+            - type: 'null'
+        requests:
+          type: object
+          required: [success, failed, recent]
+          properties:
+            success:
+              type: integer
+              minimum: 0
+            failed:
+              type: integer
+              minimum: 0
+            recent:
+              type: array
+              description: 10-minute buckets, oldest first (the last 3 h 20 min).
+              items:
+                type: object
+                required: [at, success, failed]
+                properties:
+                  at:
+                    $ref: '#/components/schemas/Timestamp'
+                  success:
+                    type: integer
+                    minimum: 0
+                  failed:
+                    type: integer
+                    minimum: 0
+        windows:
+          type: array
+          items:
+            $ref: '#/components/schemas/UsageWindow'
+        limit_reached:
+          type: [boolean, 'null']
+          description: The vendor said this account's limit is reached; `null` when it said nothing.
+        quota_observed_at:
+          oneOf:
+            - $ref: '#/components/schemas/Timestamp'
+            - type: 'null'
+          description: When the vendor's last answer carried the usage windows.
+        checked_at:
+          oneOf:
+            - $ref: '#/components/schemas/Timestamp'
+            - type: 'null'
+          description: When "check now" last asked the vendor.
+        check_error:
+          type: [string, 'null']
+          description: Why the last "check now" read nothing.
+    UsageWindow:
+      type: object
+      description: One of a subscription's usage windows (a 5-hour window, a week).
+      required: [id, label, window_minutes, used_percent, resets_at, source]
+      properties:
+        id:
+          type: string
+          description: >-
+            The vendor's name for the window: `five_hour`, `seven_day`, `seven_day_opus` …
+            (Claude), `primary`, `secondary` (ChatGPT); others may follow.
+        label:
+          type: [string, 'null']
+          description: The window in the request's language ("5 hours", "Weekly").
+        window_minutes:
+          type: [integer, 'null']
+        used_percent:
+          type: [number, 'null']
+          minimum: 0
+        resets_at:
+          oneOf:
+            - $ref: '#/components/schemas/Timestamp'
+            - type: 'null'
+        source:
+          type: string
+          enum: [observed, checked]
+          description: >-
+            `observed` — read from the headers of the vendor's last answer (passive);
+            `checked` — asked with "check now".
+    ProviderAccountError:
+      type: object
+      required: [at, account_id, model, status, message]
+      properties:
+        at:
+          $ref: '#/components/schemas/Timestamp'
+        account_id:
+          type: [string, 'null']
+        model:
+          type: [string, 'null']
+        status:
+          type: [integer, 'null']
+        message:
+          type: string
+          description: The vendor's words, with anything that looks like a token taken out.
+    ProviderAccountPatch:
+      type: object
+      required: [disabled]
+      properties:
+        disabled:
+          type: boolean
+    HermesModelSource:
+      type: object
+      required: [source, effective, available, reason]
+      properties:
+        source:
+          type: string
+          enum: [native, hub]
+          description: The choice.
+        effective:
+          type: string
+          enum: [native, hub]
+          description: What Hermes was given.
+        available:
+          type: boolean
+          description: The hub's gateway can serve Hermes (on, and CLIProxyAPI present).
+        reason:
+          type: [string, 'null']
     RuntimeReport:
       type: object
       description: >-

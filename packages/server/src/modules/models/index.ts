@@ -351,6 +351,10 @@ function contextOf(app: FastifyInstance): ModelsService {
     catalog: own.catalog ?? catalog,
     hostEnv,
     gatewayAvailable: () => modelGatewayFor(app).available(),
+    // The subscriptions signed in to through the gateway (DECISIONS §143).
+    // Loopback calls to its own translator: never a test's scripted provider fetch.
+    subscriptions: () => modelGatewayFor(app).subscriptions(),
+    gatewayDirect: () => modelGatewayFor(app).direct(),
     ...(own.restartDelayMs === undefined ? {} : { restartDelayMs: own.restartDelayMs }),
     // Hermes signs in to a provider account through its own server (ADR 0015), which only a
     // hub that supervises Hermes runs (decision §55).
@@ -413,6 +417,16 @@ const actorOf = (request: FastifyRequest): { userId: string } => {
   if (!principal) throw new HubError('internal', { message: 'route has no principal' });
   return { userId: principal.user.id };
 };
+
+/** A `ProviderAccount.id` from the path; Fastify decoded it, unless something left `%` codes. */
+function accountIdOf(value: unknown): string {
+  const text = String(value ?? '');
+  try {
+    return /%[0-9a-f]{2}/i.test(text) ? decodeURIComponent(text) : text;
+  } catch {
+    return text;
+  }
+}
 
 /** The service, the workspace and the acting user in one step. */
 function enter(request: FastifyRequest): {
@@ -590,8 +604,11 @@ export const modelsModule = defineModule({
       },
     };
     registerAgentModelsPort(app.hub.io, port);
+    // Reads the gateway's subscriptions every minute while any are signed in (§143).
+    let subscriptionTimer: NodeJS.Timeout | null = null;
     // The gateway's listener and CLIProxyAPI stop with the hub.
     app.addHook('onClose', async () => {
+      if (subscriptionTimer) clearInterval(subscriptionTimer);
       await gateways.get(app.hub.io)?.close();
     });
 
@@ -628,6 +645,19 @@ export const modelsModule = defineModule({
           { err: error, workspace: row.slug },
           'models: could not reconcile the Hermes configuration at boot',
         );
+      }
+      // Subscriptions signed in to through the gateway (DECISIONS §143): CLIProxyAPI renews their
+      // tokens only while it runs, and the provider cards show their accounts, so a hub that has
+      // any starts it now and reads them every minute — in the background, never holding boot.
+      const gateway = modelGatewayFor(app);
+      if (gateway.hasSubscriptionAccounts()) {
+        void service.subscriptions.refresh(true).then((read) => {
+          if (!read.ok) app.log.warn({ reason: read.reason }, 'gateway: subscriptions not read');
+        });
+        subscriptionTimer = setInterval(() => {
+          if (gateway.hasSubscriptionAccounts()) void service.subscriptions.refresh(true);
+        }, 60_000);
+        subscriptionTimer.unref?.();
       }
     });
 
@@ -945,13 +975,106 @@ export const modelsModule = defineModule({
 
     defineRoute(app, deps, {
       operationId: 'models.completeProviderSignIn',
-      handler: (request, { params }) => {
+      handler: async (request, { params, body }) => {
         const { service, scope } = enter(request);
         return service.completeSignIn(
           scope,
           params.provider_id as string,
           params.sign_in_id as string,
+          String((body as { code?: unknown } | null)?.code ?? ''),
         );
+      },
+    });
+
+    // ------------------------ subscriptions through the gateway (DECISIONS §143)
+
+    defineRoute(app, deps, {
+      operationId: 'models.listSubscriptionVendors',
+      handler: (request) => {
+        const { service } = enter(request);
+        return service.listSubscriptionVendors(request.language);
+      },
+    });
+
+    defineRoute(app, deps, {
+      operationId: 'models.getProviderAccounts',
+      handler: async (request, { params }) => {
+        const { service, scope } = enter(request);
+        return service.getProviderAccounts(
+          scope,
+          params.provider_id as string,
+          request.language,
+        );
+      },
+    });
+
+    defineRoute(app, deps, {
+      operationId: 'models.updateProviderAccount',
+      handler: async (request, { params, body }) => {
+        const { service, scope, actor } = enter(request);
+        return service.updateProviderAccount(
+          scope,
+          actor,
+          params.provider_id as string,
+          accountIdOf(params.account_id),
+          body as { disabled: boolean },
+          request.language,
+        );
+      },
+    });
+
+    defineRoute(app, deps, {
+      operationId: 'models.removeProviderAccount',
+      status: 204,
+      handler: async (request, { params }) => {
+        const { service, scope, actor } = enter(request);
+        await service.removeProviderAccount(
+          scope,
+          actor,
+          params.provider_id as string,
+          accountIdOf(params.account_id),
+        );
+        return null;
+      },
+    });
+
+    defineRoute(app, deps, {
+      operationId: 'models.refreshProviderAccount',
+      handler: async (request, { params }) => {
+        const { service, scope, actor } = enter(request);
+        return service.refreshProviderAccount(
+          scope,
+          actor,
+          params.provider_id as string,
+          accountIdOf(params.account_id),
+          request.language,
+        );
+      },
+    });
+
+    defineRoute(app, deps, {
+      operationId: 'models.checkProviderAccount',
+      handler: async (request, { params }) => {
+        const { service, scope } = enter(request);
+        return service.checkProviderAccount(
+          scope,
+          params.provider_id as string,
+          accountIdOf(params.account_id),
+          request.language,
+        );
+      },
+    });
+
+    defineRoute(app, deps, {
+      operationId: 'models.moveProviderToGateway',
+      handler: async (request, { params }, reply: FastifyReply) => {
+        const { service, scope, actor } = enter(request);
+        const moved = await service.moveProviderToGateway(
+          scope,
+          actor,
+          params.provider_id as string,
+        );
+        return reply.code(201).send(moved);
       },
     });
 

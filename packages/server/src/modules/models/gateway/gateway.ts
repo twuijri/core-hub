@@ -29,6 +29,9 @@ import type { FastifyBaseLogger } from 'fastify';
 import type { GatewayUpstream } from './cliproxy-config.js';
 import { upstreamModel } from './cliproxy-config.js';
 import { CliproxyUnavailable, type CliproxySupervisor } from './cliproxy.js';
+import { CodexDeviceLogin } from './cliproxy-login.js';
+import { ManagementClient } from './cliproxy-management.js';
+import type { SubscriptionBackend, SubscriptionModel } from '../subscriptions.js';
 import {
   GatewayTokens,
   type GatewayGrantInput,
@@ -193,6 +196,88 @@ export class ModelGateway {
     };
   }
 
+  /**
+   * What the models module needs to hold subscription sign-ins (DECISIONS §143): CLIProxyAPI's
+   * management API on a running process, its ChatGPT device sign-in, and the models it serves
+   * under a row's prefix.
+   */
+  subscriptions(fetchImpl: typeof fetch = fetch): SubscriptionBackend {
+    const cliproxy = this.options.cliproxy;
+    const lease = () => cliproxy.lease(this.upstreams(true));
+    return {
+      unavailable: () => {
+        if (!this.options.enabled) return 'the model gateway is switched off on this hub';
+        if (cliproxy.status().state === 'absent') return 'this hub has no CLIProxyAPI';
+        return null;
+      },
+      open: async () => {
+        const held = await lease();
+        return {
+          client: new ManagementClient({
+            port: held.port,
+            secret: held.managementKey,
+            fetchImpl,
+          }),
+          done: () => held.done(),
+        };
+      },
+      codexDeviceLogin: () => {
+        const binary = cliproxy.binary();
+        if (!binary) return null;
+        return new CodexDeviceLogin({
+          binary,
+          stateDir: cliproxy.stateDir(),
+          authDir: cliproxy.authDir(),
+          env: cliproxy.env(),
+        });
+      },
+      models: async (prefix) => {
+        const held = await lease();
+        try {
+          const response = await fetchImpl(`http://127.0.0.1:${held.port}/v1/models`, {
+            headers: { authorization: `Bearer ${held.key}` },
+            signal: AbortSignal.timeout(15_000),
+          });
+          if (!response.ok) throw new Error(`the translator answered ${response.status}`);
+          const body = (await response.json()) as { data?: Record<string, unknown>[] };
+          const lead = `${prefix}/`;
+          const out: SubscriptionModel[] = [];
+          for (const entry of body.data ?? []) {
+            const id = typeof entry.id === 'string' ? entry.id : '';
+            if (!id.toLowerCase().startsWith(lead)) continue;
+            const count = (value: unknown) =>
+              typeof value === 'number' && value > 0 ? value : null;
+            out.push({
+              id: id.slice(lead.length),
+              label: typeof entry.display_name === 'string' ? entry.display_name : null,
+              contextWindow: count(entry.context_length) ?? count(entry.max_context_length),
+              maxOutputTokens: count(entry.max_completion_tokens),
+            });
+          }
+          return out;
+        } finally {
+          held.done();
+        }
+      },
+    };
+  }
+
+  /** Whether any subscription is signed in through the gateway (an account in its store). */
+  hasSubscriptionAccounts(): boolean {
+    return this.available() && this.options.cliproxy.hasAccounts();
+  }
+
+  /**
+   * The translator's own OpenAI address and key, held for one `direct` turn on a subscription
+   * (DECISIONS §143): the hub's own agent reaches a signed-in account the way every other agent
+   * does, through CLIProxyAPI, with no token of the account ever in the hub.
+   */
+  async direct(): Promise<{ baseUrl: string; key: string; done(): void }> {
+    if (!this.available()) throw new ModelGatewayUnavailable('the model gateway is off on this hub');
+    const held = await this.options.cliproxy.lease(this.upstreams(true));
+    return { baseUrl: `http://127.0.0.1:${held.port}/v1`, key: held.key, done: () => held.done() };
+  }
+
   async close(): Promise<void> {
     const server = this.server;
     this.server = null;
@@ -295,7 +380,7 @@ export class ModelGateway {
         route.wire,
         400,
         'invalid_request_error',
-        `${resolved.target.modelLabel} is not available to coding agents through Core Hub: its provider has no key the hub can use, or it is a signed-in subscription, which the hub does not lend to other agents`,
+        `${resolved.target.modelLabel} is not available to agents through Core Hub: its provider has no key or signed-in account the hub can use, or it is a subscription signed in to through Hermes (move it to Core Hub's gateway in Settings → Models)`,
       );
       return;
     }
@@ -390,7 +475,7 @@ export class ModelGateway {
         'google',
         400,
         'INVALID_ARGUMENT',
-        `${resolved.target.modelLabel} is not available to coding agents through Core Hub: its provider has no key the hub can use, or it is a signed-in subscription, which the hub does not lend to other agents`,
+        `${resolved.target.modelLabel} is not available to agents through Core Hub: its provider has no key or signed-in account the hub can use, or it is a subscription signed in to through Hermes (move it to Core Hub's gateway in Settings → Models)`,
       );
       return;
     }

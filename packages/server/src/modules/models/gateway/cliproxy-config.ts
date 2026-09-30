@@ -3,8 +3,9 @@
  * gateway (ADR 0029).
  *
  * CLIProxyAPI (router-for-me/CLIProxyAPI, MIT) is run as the hub's own helper, never as the
- * person's: loopback only, its management API and control panel off, no OAuth credential, no
- * plugins, no LAN discovery, no request logs. The only client key it accepts is one the hub made
+ * person's: loopback only, its control panel off, no plugins, no LAN discovery, no request logs.
+ * Its management API answers the hub alone (a random secret, loopback) for the subscription
+ * sign-ins it holds (DECISIONS §143). The only client key it accepts is one the hub made
  * (`internalKey`), so the only way in is through the hub's own gateway, which checks a session
  * token first. The provider keys it needs are the hub's — this file is the one place outside the
  * encrypted `secrets` table they are written to, readable by the hub's user only (0600,
@@ -17,8 +18,15 @@
  */
 import { stringify } from 'yaml';
 
-/** How CLIProxyAPI reaches one provider: its native Anthropic or Gemini surface, or OpenAI's. */
-export type UpstreamKind = 'claude' | 'gemini' | 'openai-compatibility';
+/**
+ * How CLIProxyAPI reaches one provider: its native Anthropic or Gemini surface, or OpenAI's — or,
+ * for a subscription signed in to through the gateway (DECISIONS §143), the accounts in its own
+ * store that carry the row's prefix. Such a row is in no group of the file: its accounts are.
+ */
+export type UpstreamKind = 'claude' | 'gemini' | 'openai-compatibility' | 'subscription';
+
+/** Key groups of the file: every kind but `subscription`. */
+type KeyGroupKind = Exclude<UpstreamKind, 'subscription'>;
 
 /** One provider row, as the gateway hands it to CLIProxyAPI. */
 export interface GatewayUpstream {
@@ -60,19 +68,29 @@ export interface CliproxyConfigInput {
   port: number;
   /** The one client key CLIProxyAPI accepts: the hub's own. */
   internalKey: string;
-  /** An empty folder of the hub's: CLIProxyAPI's OAuth store, which the hub never fills. */
+  /**
+   * The management API's secret (DECISIONS §143): random, made by the hub, known to the hub only,
+   * accepted from loopback only. The subscription sign-ins, their accounts and their health are
+   * read and changed through it. Its control panel stays off.
+   */
+  managementKey: string;
+  /**
+   * CLIProxyAPI's account store: the subscriptions signed in to through the gateway, one `0600`
+   * file per account, in a `0700` folder of the hub's.
+   */
   authDir: string;
   upstreams: readonly GatewayUpstream[];
 }
 
 /** The YAML text of CLIProxyAPI's config file (its v8 layout). */
 export function cliproxyConfig(input: CliproxyConfigInput): string {
-  const groups: Record<UpstreamKind, unknown[]> = {
+  const groups: Record<KeyGroupKind, unknown[]> = {
     claude: [],
     gemini: [],
     'openai-compatibility': [],
   };
   for (const upstream of input.upstreams) {
+    if (upstream.kind === 'subscription') continue;
     if (upstream.models.length === 0) continue;
     const prefix = upstreamPrefix(upstream.providerId);
     groups[upstream.kind].push({
@@ -98,10 +116,11 @@ export function cliproxyConfig(input: CliproxyConfigInput): string {
       tls: { enable: false },
       discovery: { enabled: false },
     },
-    // An empty secret key turns the management API off entirely (404), panel included.
+    // The management API, for the subscription sign-ins (DECISIONS §143): loopback only, a
+    // secret only the hub knows (CLIProxyAPI hashes it into this file at start), no panel.
     management: {
       'allow-remote': false,
-      'secret-key': '',
+      'secret-key': input.managementKey,
       'disable-control-panel': true,
       'disable-auto-update-panel': true,
     },
@@ -131,7 +150,8 @@ export function cliproxyConfig(input: CliproxyConfigInput): string {
     multimedia: { 'disable-image-generation': true },
     observability: {
       logs: { debug: false, 'logging-to-file': false, 'request-log': false },
-      usage: { 'usage-statistics-enabled': false },
+      // Kept in memory only: the failed calls the provider's dialog lists come from its queue.
+      usage: { 'usage-statistics-enabled': true, 'redis-usage-queue-retention-seconds': 300 },
       pprof: { enable: false },
     },
     plugins: { enabled: false },

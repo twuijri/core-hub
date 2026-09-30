@@ -196,10 +196,26 @@
       "required": "Sign in to this provider first.",
       "unsupported": "This provider is used with an API key; it has no account to sign in to.",
       "hermes_not_supervised": "Signing in is done by Hermes, and this hub does not run Hermes itself.",
-      "code_not_accepted": "This sign-in takes no pasted code: enter the code on the provider's page."
+      "code_not_accepted": "This sign-in takes no pasted code: enter the code on the provider's page.",
+      "gateway_unavailable": "Subscriptions are signed in to through Core Hub's model gateway, which is not available on this hub."
     },
     "probe": {
       "failed": "The endpoint did not return a model list."
+    },
+    "subscription": {
+      "note": "Some vendors limit using a subscription outside their own apps.",
+      "not_a_subscription": "This provider is not a subscription signed in to through Core Hub's gateway.",
+      "not_movable": "This sign-in cannot be moved to Core Hub's gateway.",
+      "window": {
+        "five_hour": "5 hours",
+        "seven_day": "Weekly",
+        "seven_day_opus": "Weekly (Opus)",
+        "seven_day_sonnet": "Weekly (Sonnet)",
+        "seven_day_oauth_apps": "Weekly (apps)",
+        "weekly": "Weekly",
+        "monthly": "Monthly",
+        "total": "Plan total"
+      }
     }
   },
   "knowledge": {

@@ -14,7 +14,7 @@
  */
 import { createHash, randomBytes } from 'node:crypto';
 import { spawn, type ChildProcess } from 'node:child_process';
-import { chmodSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
+import { chmodSync, mkdirSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { createServer } from 'node:net';
 import path from 'node:path';
 import { createInterface } from 'node:readline';
@@ -58,6 +58,8 @@ interface Instance {
 export interface CliproxyLease {
   port: number;
   key: string;
+  /** The management API's secret (DECISIONS §143); loopback only, the hub's alone. */
+  managementKey: string;
   done(): void;
 }
 
@@ -72,6 +74,7 @@ export class CliproxySupervisor {
   private current: Instance | null = null;
   private readonly draining = new Set<Instance>();
   private readonly key = randomBytes(32).toString('base64url');
+  private readonly managementKey = randomBytes(32).toString('base64url');
   private state: CliproxyState;
   private lastError: string | null = null;
   private generation = 0;
@@ -101,6 +104,7 @@ export class CliproxySupervisor {
     return {
       port: instance.port,
       key: this.key,
+      managementKey: this.managementKey,
       done: () => {
         if (released) return;
         released = true;
@@ -153,15 +157,24 @@ export class CliproxySupervisor {
     const dir = this.options.stateDir;
     mkdirSync(dir, { recursive: true, mode: 0o700 });
     chmodSync(dir, 0o700);
-    const authDir = path.join(dir, 'cliproxy-auth');
+    const authDir = this.authDir();
     mkdirSync(authDir, { recursive: true, mode: 0o700 });
+    chmodSync(authDir, 0o700);
     const port = await freePort();
     this.generation += 1;
     const configPath = path.join(dir, `cliproxy-${this.generation}.yaml`);
     // Created 0600 before a byte of it is written: the provider keys are never readable by others.
-    writeFileSync(configPath, cliproxyConfig({ port, internalKey: this.key, authDir, upstreams }), {
-      mode: 0o600,
-    });
+    writeFileSync(
+      configPath,
+      cliproxyConfig({
+        port,
+        internalKey: this.key,
+        managementKey: this.managementKey,
+        authDir,
+        upstreams,
+      }),
+      { mode: 0o600 },
+    );
     chmodSync(configPath, 0o600);
     if (this.state !== 'running') this.setState('starting', this.lastError);
     const child = spawn(this.options.binary!, ['-config', configPath, '-local-model'], {
@@ -200,6 +213,39 @@ export class CliproxySupervisor {
       throw new Error(`no answer on 127.0.0.1:${port} within ${this.readyTimeout()} ms`);
     }
     return instance;
+  }
+
+  /**
+   * CLIProxyAPI's account store: the subscriptions signed in to through the gateway (DECISIONS
+   * §143). It outlives each process — a new one started for a change of providers reads the
+   * same accounts.
+   */
+  authDir(): string {
+    return path.join(this.options.stateDir, 'cliproxy-auth');
+  }
+
+  /** Whether any subscription is signed in (an account file in the store). */
+  hasAccounts(): boolean {
+    try {
+      return readdirSync(this.authDir()).some((name) => name.endsWith('.json'));
+    } catch {
+      return false;
+    }
+  }
+
+  /** The hub's folder for it (`<DATA_DIR>/gateway`). */
+  stateDir(): string {
+    return this.options.stateDir;
+  }
+
+  /** The executable, for a sign-in CLIProxyAPI offers only as a flag (`-codex-device-login`). */
+  binary(): string | null {
+    return this.options.binary;
+  }
+
+  /** The environment it runs with. */
+  env(): NodeJS.ProcessEnv {
+    return this.options.env ?? {};
   }
 
   private readyTimeout(): number {
@@ -307,9 +353,14 @@ export class CliproxySupervisor {
   }
 }
 
-/** What changes the configuration apart from its port: a new one is needed only when it differs. */
+/**
+ * What changes the configuration apart from its port: a new one is needed only when it differs.
+ * A subscription row is not in the file (its accounts are in the store, which the running
+ * process watches), so signing in to one, or its models changing, starts no new process.
+ */
 function fingerprintOf(upstreams: readonly GatewayUpstream[]): string {
-  return createHash('sha256').update(JSON.stringify(upstreams)).digest('hex');
+  const keyed = upstreams.filter((upstream) => upstream.kind !== 'subscription');
+  return createHash('sha256').update(JSON.stringify(keyed)).digest('hex');
 }
 
 function freePort(): Promise<number> {
