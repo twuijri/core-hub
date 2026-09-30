@@ -20,10 +20,35 @@ import { useI18n } from '../i18n/context.js';
 import { useElapsedSeconds } from './useElapsed.js';
 import type { RunProgress } from './turns.js';
 
+/**
+ * What the hub's model gateway is doing, in words (DECISIONS §148): waiting out a provider's
+ * refusal, or trying the chain's next model. `null` when it is doing nothing to tell.
+ */
+export function modelStatusWords(
+  progress: Pick<RunProgress, 'modelStatus'>,
+  t: (key: string, values?: Record<string, string | number>) => string,
+  nowMs: number,
+): string | null {
+  const status = progress.modelStatus;
+  if (!status) return null;
+  const model = status.provider ? `${status.provider} · ${status.model}` : status.model;
+  if (status.phase === 'trying') return t('chat.model_status.trying', { model });
+  const left =
+    status.seconds === null
+      ? null
+      : Math.max(0, Math.ceil(status.seconds - (nowMs - status.atMs) / 1000));
+  const key = status.reason === 'no_capacity' ? 'waiting_capacity' : 'waiting_limit';
+  return left === null || left === 0
+    ? t(`chat.model_status.${key}_now`, { model })
+    : t(`chat.model_status.${key}`, { model, seconds: left });
+}
+
 export function RunStatus({ progress }: { progress: RunProgress }) {
   const { t } = useI18n();
   const seconds = useElapsedSeconds(progress.startedAtMs, true);
   const word = progress.queued ? t('chat.queued') : t('chat.thinking');
+  // Re-read each second with the clock above, so a wait counts down.
+  const gateway = modelStatusWords(progress, t, Date.now());
   return (
     <div className="run-status" data-testid="run-status" data-step={progress.step ?? undefined}>
       <span className="run-dots" aria-hidden>
@@ -39,6 +64,11 @@ export function RunStatus({ progress }: { progress: RunProgress }) {
       <span className="run-status-time" data-testid="run-elapsed" aria-hidden>
         {t('chat.seconds', { seconds })}
       </span>
+      {gateway !== null && progress.step === null && (
+        <span className="run-status-step" data-testid="run-model-status" dir="auto" role="status">
+          {gateway}
+        </span>
+      )}
       {progress.step !== null && (
         <span
           className="run-status-step"

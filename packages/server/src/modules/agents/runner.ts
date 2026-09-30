@@ -222,14 +222,15 @@ export class AgentRunner implements AgentRunnerPort {
           const slug = (providerId: string, model: string) =>
             service.providerSlugOf(workspace, { providerId, model, provider: null });
           // Every model the turn went past, in order: the chosen one first (a second move
-          // reported alone read as if the turn had started on the chain's first model).
+          // reported alone read as if the turn had started on the chain's first model). Its
+          // "why" is the hub's sentence and the provider's own words after it.
           run.fallenBack = [
             ...(run.fallenBack ?? []),
             {
               model: move.failed.model,
               provider: slug(move.failed.providerId, move.failed.model),
               code: 'rate_limited',
-              error: quotaSentence(move.failed),
+              error: `${limitWords(move.failed)} — ${move.failed.said}`,
             },
           ];
           this.push(run, {
@@ -239,6 +240,25 @@ export class AgentRunner implements AgentRunnerPort {
               model: move.answered.model,
               provider: slug(move.answered.providerId, move.answered.model),
             },
+          });
+          // While the next model thinks, the chat says which one it is.
+          this.push(run, {
+            type: 'model_status',
+            phase: 'trying',
+            provider: move.answered.providerLabel ?? move.failed.providerLabel,
+            model: move.answered.modelLabel,
+            seconds: null,
+            reason: move.failed.reason ?? 'quota_exhausted',
+          });
+        },
+        waiting: (wait) => {
+          this.push(run, {
+            type: 'model_status',
+            phase: 'waiting',
+            provider: wait.providerLabel,
+            model: wait.modelLabel,
+            seconds: wait.seconds,
+            reason: wait.reason,
           });
         },
       });
@@ -801,11 +821,13 @@ export class AgentRunner implements AgentRunnerPort {
         code: 'rate_limited',
         message: quotaSentence(run.quota),
         details: {
-          reason: 'quota_exhausted',
+          reason: run.quota.reason ?? 'quota_exhausted',
           provider: run.quota.providerLabel,
           model: run.quota.modelLabel,
           provider_id: run.quota.providerId,
           model_id: run.quota.model,
+          // The provider's own words, with nothing of the hub's or anyone's secrets in them.
+          said: run.quota.said,
         },
       };
     }
@@ -850,9 +872,23 @@ export class AgentRunner implements AgentRunnerPort {
 
 /** A spent quota, in English; the sessions module says it in the person's language (`Run.error`). */
 export function quotaSentence(
-  failure: Pick<AgentGatewayQuotaFailure, 'providerLabel' | 'modelLabel'>,
+  failure: Pick<AgentGatewayQuotaFailure, 'providerLabel' | 'modelLabel' | 'reason'>,
 ): string {
-  return `${failure.providerLabel} ran out of quota for ${failure.modelLabel}. Pick another model for this chat.`;
+  return `${limitWords(failure)}. Pick another model for this chat.`;
+}
+
+/** Why a provider refused a model, in English (the sessions module says it localised). */
+export function limitWords(
+  failure: Pick<AgentGatewayQuotaFailure, 'providerLabel' | 'modelLabel' | 'reason'>,
+): string {
+  switch (failure.reason) {
+    case 'no_capacity':
+      return `${failure.providerLabel} has no capacity for ${failure.modelLabel} right now`;
+    case 'rate_limited':
+      return `${failure.providerLabel} is limiting requests to ${failure.modelLabel} right now`;
+    default:
+      return `${failure.providerLabel} ran out of quota for ${failure.modelLabel}`;
+  }
 }
 
 /** The agent has no such command (decision §57): `409 state_invalid`, said plainly. */
@@ -941,6 +977,10 @@ export function failureCode(message: string | null | undefined): string {
   return 'agent_error';
 }
 
+/** Marks the hub's note around a turn's words as context from Core Hub, not the person's. */
+export const DOWNLOADS_NOTE_OPEN = '<corehub-context>';
+export const DOWNLOADS_NOTE_CLOSE = '</corehub-context>';
+
 export function promptText(blocks: RunnerPromptBlock[], files?: RunnerFileExchange | null): string {
   const parts: string[] = [];
   const attachments: string[] = [];
@@ -957,11 +997,18 @@ export function promptText(blocks: RunnerPromptBlock[], files?: RunnerFileExchan
     parts.push(`Attached files (read them from these paths):\n${attachments.join('\n')}`);
   }
   if (files) {
+    // Context, not a request (owner, 2026-10-01): worded as an order ("Write any file … into")
+    // a model answering «هلا» took it for the task and wrote a file. It stays in the turn — the
+    // folder is this run's own, so no system prompt set when the agent started can carry it.
     parts.push(
-      `Write any file the user should be able to download into: ${files.outputDir}\n` +
-        'Files left there when the turn ends are attached to your reply automatically, and the ' +
-        'user sees them under it. Refer to such a file by its name only (for example ' +
-        '`chart.png`), never by this folder or any other path on this machine.',
+      `${DOWNLOADS_NOTE_OPEN}\n` +
+        'Only if the user asks for a file they can download (a document, an image, an export), ' +
+        `save it in this folder: ${files.outputDir}\n` +
+        'Files left there when the turn ends are attached to your reply, and the user sees them ' +
+        'under it; refer to such a file by its name only (for example `chart.png`), never by ' +
+        'this folder or any other path on this machine. When the user asks for no file, ignore ' +
+        'this note: do not create one.\n' +
+        DOWNLOADS_NOTE_CLOSE,
     );
   }
   return parts.join('\n\n');

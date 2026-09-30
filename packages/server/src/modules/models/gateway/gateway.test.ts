@@ -58,6 +58,7 @@ function upstream(overrides: Partial<GatewayUpstream> = {}): GatewayUpstream {
       { id: 'flash-spent', contextWindow: null },
       { id: 'flash-per-minute', contextWindow: null },
       { id: 'flash-per-day', contextWindow: null },
+      { id: 'flash-busy', contextWindow: null },
     ],
     ...overrides,
   };
@@ -445,7 +446,11 @@ describe('the gateway', () => {
       expect(anthropic.headers.get('x-should-retry')).toBe('false');
       const said = (await anthropic.json()) as { error: { type: string; message: string } };
       expect(said.error.type).toBe('rate_limit_error');
-      expect(said.error.message).toMatch(/^The provider ran out of quota for Label flash-spent/);
+      // Google's bare RESOURCE_EXHAUSTED, waited out once and refused again: a limit for now,
+      // not a spent quota (owner, 2026-10-01: the account had just been signed in).
+      expect(said.error.message).toMatch(
+        /^The provider is limiting requests to Label flash-spent right now/,
+      );
       expect(said.error.message).toContain('Resource has been exhausted');
       // Never the hub's internal name for the provider row.
       expect(said.error.message).not.toMatch(/h01k/i);
@@ -476,8 +481,9 @@ describe('the gateway', () => {
           details: [expect.objectContaining({ reason: 'MODEL_CAPACITY_EXHAUSTED' })],
         },
       });
-      // Asked once more after a wait (it might have been a passing limit), then never again.
-      expect((await calls(h))[spentModel]).toBe(2);
+      // Refused, asked on the Chat route what the refusal really is (CLIProxyAPI keeps only the
+      // message on Claude Code's wire), asked once more after a wait, then never again.
+      expect((await calls(h))[spentModel]).toBe(3);
       // A new turn asks the provider again: the quota may be back.
       grant.setTurn({
         runId: 'run-q2',
@@ -486,7 +492,7 @@ describe('the gateway', () => {
         report: () => {},
       });
       await post(`${grant.anthropicBaseUrl}/v1/messages`, grant.token, { model: 'corehub-main' });
-      expect((await calls(h))[spentModel]).toBe(4);
+      expect((await calls(h))[spentModel]).toBe(6);
     });
 
     it('moves the turn down the profile’s fallback chain, and keeps it there', async () => {
@@ -523,7 +529,7 @@ describe('the gateway', () => {
         model: 'corehub-main',
       });
       expect(next.headers.get('x-fake-model')).toBe(`${upstreamPrefix(PROVIDER)}/coder`);
-      expect((await calls(h))[spentModel]).toBe(2);
+      expect((await calls(h))[spentModel]).toBe(3);
     });
 
     it('waits out a per-minute limit once and answers; a per-day quota is spent at once', async () => {
@@ -564,6 +570,33 @@ describe('the gateway', () => {
       expect((await calls(h))[`${upstreamPrefix(PROVIDER)}/flash-per-day`]).toBe(1);
     });
 
+    it('reads the provider’s own reason where CLIProxyAPI keeps only the message: no capacity is not a spent quota', async () => {
+      const h = harness();
+      const grant = await grantOf(h);
+      const waits: unknown[] = [];
+      const moves: { failed: { reason: string; said: string } }[] = [];
+      grant.setTurn({
+        runId: 'run-busy',
+        providerId: PROVIDER,
+        model: 'flash-busy',
+        report: () => {},
+        fallbacks: [{ providerId: PROVIDER, model: 'coder' }],
+        waiting: (wait) => waits.push(wait),
+        fellBack: (move) => moves.push(move),
+      });
+      const answer = await post(`${grant.anthropicBaseUrl}/v1/messages`, grant.token, {
+        model: 'corehub-main',
+      });
+      expect(answer.status).toBe(200);
+      expect(answer.headers.get('x-fake-model')).toBe(`${upstreamPrefix(PROVIDER)}/coder`);
+      expect(waits).toEqual([expect.objectContaining({ reason: 'no_capacity' })]);
+      expect(moves[0]!.failed.reason).toBe('no_capacity');
+      // Google's own reason, in the words the chat shows.
+      expect(moves[0]!.failed.said).toContain('No capacity available for model');
+      expect(moves[0]!.failed.said).toContain('MODEL_CAPACITY_EXHAUSTED');
+      expect(moves[0]!.failed.said).not.toMatch(/h01k/i);
+    });
+
     it('takes the hub’s internal names out of any other error it passes on', () => {
       const text = `unknown model ${upstreamPrefix(PROVIDER)}/coder, nor ${upstreamPrefix(OTHER)}/x`;
       expect(
@@ -584,21 +617,51 @@ describe('the gateway', () => {
       expect(classifyLimit(500, 'quota')).toEqual({ kind: 'pass' });
       // Google's words are the same for both; its details and the headers tell them apart.
       const exhaustedWords = '{"error":{"status":"RESOURCE_EXHAUSTED","message":"check quota"}}';
-      expect(classifyLimit(429, exhaustedWords, {}, wait)).toEqual({ kind: 'wait', ms: 20_000 });
+      const limited = { kind: 'wait', reason: 'rate_limited' };
+      expect(classifyLimit(429, exhaustedWords, {}, wait)).toEqual({ ...limited, ms: 20_000 });
       expect(classifyLimit(429, exhaustedWords, { 'retry-after': '7' }, wait)).toEqual({
-        kind: 'wait',
+        ...limited,
         ms: 7_000,
       });
       expect(
         classifyLimit(429, `${exhaustedWords} "retryDelay": "12.5s" PerMinute`, {}, wait),
-      ).toEqual({ kind: 'wait', ms: 12_500 });
+      ).toEqual({ ...limited, ms: 12_500 });
       expect(classifyLimit(429, `${exhaustedWords} GenerateRequestsPerDay`, {}, wait)).toEqual({
         kind: 'spent',
       });
       expect(classifyLimit(429, 'Quota exceeded. Please retry in 3.2s.', {}, wait)).toEqual({
-        kind: 'wait',
+        ...limited,
         ms: 3_200,
       });
+      // Antigravity (2026-10-01): the server's capacity is not the account's quota.
+      const capacity = { kind: 'wait', reason: 'no_capacity' };
+      expect(
+        classifyLimit(
+          429,
+          '{"error":{"code":429,"message":"No capacity available for model gemini-3.8-flash-high on the server","status":"RESOURCE_EXHAUSTED","details":[{"reason":"MODEL_CAPACITY_EXHAUSTED"}]}}',
+          {},
+          wait,
+        ),
+      ).toEqual({ ...capacity, ms: 5_000 });
+      expect(
+        classifyLimit(503, 'The model is overloaded. Please try again later.', {}, wait),
+      ).toEqual({
+        ...capacity,
+        ms: 5_000,
+      });
+      expect(classifyLimit(503, 'upstream connect error', {}, wait)).toEqual({ kind: 'pass' });
+      // The account's own quota for the model, with when it comes back: spent for this turn.
+      expect(
+        classifyLimit(
+          429,
+          'You have exhausted your capacity on this model. Your quota will reset after 2h10m.',
+          {},
+          wait,
+        ),
+      ).toEqual({ kind: 'spent' });
+      expect(
+        classifyLimit(429, '{"error":{"details":[{"reason":"QUOTA_EXHAUSTED"}]}}', {}, wait),
+      ).toEqual({ kind: 'spent' });
     });
   });
 

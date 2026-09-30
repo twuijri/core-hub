@@ -127,7 +127,7 @@ message.
 ## Catalogue
 
 
-### `/rt/sessions` — 21 events
+### `/rt/sessions` — 22 events
 
 | Event | Emitted by | Payload | Notes |
 |---|---|---|---|
@@ -152,6 +152,7 @@ message.
 | `subagent.updated` | sessions module from the agent's delegation reports | `subagent`: `Subagent` | A running subagent called a tool or stopped taking guidance; `subagent` is its whole state. Profile-wide. |
 | `subagent.completed` | sessions module from the agent's delegation reports, `sessions.interruptSubagent`, `background.stop` | `subagent`: `Subagent` | A subagent ended: `completed`, `failed` or `interrupted`. Profile-wide. |
 | `context.compression` | sessions module: `sessions.compress`, or the agent compressing on its own during a run | `session_id`: `Ulid`, `run_id`: `Ulid | null`, `phase`: `started` / `finished` / `failed`, `trigger`: `manual` / `auto`, `before_tokens`, `after_tokens`: `integer | null`, `message`: `string | null` | The agent is compressing (or finished compressing) the conversation's context; `context.updated` follows with the new window (decision §57). |
+| `run.status` | sessions module, from the model gateway during a run | `session_id`, `run_id`: `Ulid`, `phase`: `waiting` / `trying`, `provider`, `model`: `string`, `seconds`: `integer | null`, `reason`: `no_capacity` / `rate_limited` / `quota_exhausted` / `null` | What the gateway is doing while the agent says nothing: waiting out a provider's refusal once, or trying the chain's next model (DECISIONS §148). Never stored; the move itself is `Run.fallback`. |
 
 ### `/rt/rooms` — 25 events
 

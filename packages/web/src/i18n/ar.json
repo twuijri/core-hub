@@ -346,6 +346,16 @@
     "no_key_action": "‏افتح الإعدادات ← النماذج",
     "quota_exhausted": "نفدت حصة «{provider}» من «{model}». اختر نموذجًا آخر لهذه المحادثة.",
     "quota_pick_model": "اختر نموذجًا آخر",
+    "no_capacity": "لا تتوفر لدى «{provider}» سعة لـ«{model}» الآن. أعد المحاولة بعد قليل، أو اختر نموذجًا آخر لهذه المحادثة.",
+    "rate_limited": "«{provider}» يحدّ الطلبات على «{model}» الآن. أعد المحاولة بعد دقيقة، أو اختر نموذجًا آخر لهذه المحادثة.",
+    "quota_said": "قال «{provider}»: {said}",
+    "model_status": {
+      "trying": "يجرّب {model}…",
+      "waiting_capacity": "لا سعة الآن لدى {model} — يعيد السؤال بعد {seconds} ث",
+      "waiting_capacity_now": "لا سعة الآن لدى {model} — يعيد السؤال",
+      "waiting_limit": "{model} يحدّ الطلبات — يعيد السؤال بعد {seconds} ث",
+      "waiting_limit_now": "{model} يحدّ الطلبات — يعيد السؤال"
+    },
     "you": "أنت",
     "queued": "في الانتظار",
     "seconds": "{seconds} ث",

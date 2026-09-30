@@ -33,10 +33,18 @@ export interface GatewayTurnUsage {
   costSource: 'estimated' | 'unknown';
 }
 
-/** A provider said a model's quota is spent (or every credential for it is cooling down). */
+/**
+ * Why a provider refused a model for now: its quota or credit is spent, it has no capacity for the
+ * model right now (Antigravity's `MODEL_CAPACITY_EXHAUSTED`, "No capacity available"), or it is
+ * limiting requests for a while (a per-minute limit, Google's bare `RESOURCE_EXHAUSTED`).
+ */
+export type GatewayLimitReason = 'quota_exhausted' | 'no_capacity' | 'rate_limited';
+
+/** A provider refused a model, and a wait did not get past it. */
 export interface GatewayQuotaFailure {
   providerId: string;
   model: string;
+  reason: GatewayLimitReason;
   /** The provider's name as the person gave it, and the model's: never the hub's internal ids. */
   providerLabel: string;
   modelLabel: string;
@@ -47,7 +55,7 @@ export interface GatewayQuotaFailure {
 /** The turn moved on to the next model of the profile's fallback chain (contract §54). */
 export interface GatewayFallback {
   failed: GatewayQuotaFailure;
-  answered: { providerId: string; model: string; modelLabel: string };
+  answered: { providerId: string; model: string; modelLabel: string; providerLabel: string };
 }
 
 /** The turn a token serves right now. */
@@ -63,7 +71,12 @@ export interface GatewayTurn {
    */
   fallbacks?: readonly { providerId: string; model: string }[];
   /** The provider is limiting for now: the gateway waits this long once, then asks again. */
-  waiting?(wait: { providerLabel: string; modelLabel: string; seconds: number }): void;
+  waiting?(wait: {
+    providerLabel: string;
+    modelLabel: string;
+    seconds: number;
+    reason: Exclude<GatewayLimitReason, 'quota_exhausted'>;
+  }): void;
   /** The turn's model is out of quota and nothing of the chain could take over. */
   exhausted?(failure: GatewayQuotaFailure): void;
   /** The turn moved on down the chain. */
@@ -97,6 +110,8 @@ export interface GatewayGrantRecord extends GatewayGrantInput {
   redirect: { providerId: string; model: string } | null;
   /** This turn's models the gateway already waited once for (a passing limit). */
   waited: Set<string>;
+  /** Why each of `exhausted` was refused, for the answer to the agent's next call. */
+  refusals: Map<string, GatewayQuotaFailure>;
 }
 
 export class GatewayTokens {
@@ -119,6 +134,7 @@ export class GatewayTokens {
       exhausted: new Set(),
       redirect: null,
       waited: new Set(),
+      refusals: new Map(),
     };
     this.records.set(token, record);
     return record;
@@ -163,6 +179,7 @@ export class GatewayTokens {
       revoked: false,
       exhausted: new Set(),
       waited: new Set(),
+      refusals: new Map(),
       redirect: null,
     };
     this.records.set(presented, record);
@@ -198,6 +215,7 @@ export class GatewayTokens {
         if (record.lastRunId !== turn.runId) {
           record.exhausted.clear();
           record.waited.clear();
+          record.refusals.clear();
           record.redirect = null;
         }
       }

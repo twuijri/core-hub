@@ -107,6 +107,8 @@
     "approval_choice_deny": "Deny",
     "produced_refused": "{files} — too many or too large to attach here; they are still in the run folder.",
     "quota_exhausted": "{provider} ran out of quota for {model}. Pick another model for this chat.",
+    "no_capacity": "{provider} has no capacity for {model} right now. Try again in a moment, or pick another model for this chat.",
+    "rate_limited": "{provider} is limiting requests to {model} right now. Try again in a minute, or pick another model for this chat.",
     "category_name_taken": "This profile already has a category with that name.",
     "category_limit": "This profile already has 100 categories; delete one first.",
     "continue": {

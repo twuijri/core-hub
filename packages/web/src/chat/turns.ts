@@ -5,7 +5,7 @@
  * agent on the left, grouped while the speaker does not change — is unit-tested without a
  * DOM (tests/turns.test.ts).
  */
-import { textOf, type ChatState } from './transcript.js';
+import { textOf, type ChatState, type ModelStatus } from './transcript.js';
 import type { Message, Run, ToolCall } from '../types.js';
 
 /** The physical side a message is drawn on. Never derived from the content's language. */
@@ -79,6 +79,8 @@ export interface RunProgress {
   stepIsIdentifier: boolean;
   /** Queued behind another run: it is alive, but it is not thinking yet. */
   queued: boolean;
+  /** What the hub's model gateway is doing for this run, while the agent says nothing. */
+  modelStatus: ModelStatus | null;
 }
 
 function msOf(timestamp: string | null): number | null {
@@ -108,6 +110,7 @@ export function runProgress(state: ChatState, run: Run | null): RunProgress | nu
     step: tool?.name ?? null,
     stepIsIdentifier: tool !== null,
     queued: run.status === 'queued',
+    modelStatus: state.modelStatus?.runId === run.id ? state.modelStatus : null,
   };
 }
 

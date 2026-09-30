@@ -145,6 +145,36 @@ createServer((request, response) => {
       );
       return;
     }
+    if (body.model.endsWith('busy')) {
+      // As CLIProxyAPI answers an Antigravity "no capacity" refusal: the message alone on the
+      // Anthropic route, the provider's whole answer on the Chat route.
+      response.writeHead(429, { 'content-type': 'application/json' });
+      response.end(
+        url.pathname === '/v1/chat/completions'
+          ? JSON.stringify({
+              error: {
+                code: 429,
+                message: `No capacity available for model ${body.model} on the server`,
+                status: 'RESOURCE_EXHAUSTED',
+                details: [
+                  {
+                    '@type': 'type.googleapis.com/google.rpc.ErrorInfo',
+                    reason: 'MODEL_CAPACITY_EXHAUSTED',
+                    domain: 'cloudcode-pa.googleapis.com',
+                  },
+                ],
+              },
+            })
+          : JSON.stringify({
+              type: 'error',
+              error: {
+                type: 'rate_limit_error',
+                message: 'Resource has been exhausted (e.g. check quota).',
+              },
+            }),
+      );
+      return;
+    }
     if (body.model.endsWith('spent')) {
       response.writeHead(429, { 'content-type': 'application/json' });
       response.end(

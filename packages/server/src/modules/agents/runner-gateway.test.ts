@@ -252,7 +252,68 @@ describe('agent runner: the model gateway (ADR 0029)', () => {
         model: 'Gemini 3.8 Flash High',
         provider_id: 'p1',
         model_id: 'coder',
+        said: 'Resource has been exhausted (e.g. check quota).',
       },
+    });
+    await h.runner.closeAll();
+  });
+
+  it('says what the gateway is doing while it waits and moves down the chain (run.status)', async () => {
+    const h = setup({
+      source: () => 'hub',
+      play: async (turn, finish) => {
+        turn?.waiting?.({
+          providerLabel: 'Google Antigravity',
+          modelLabel: 'gemini-3.8-flash-high',
+          seconds: 5,
+          reason: 'no_capacity',
+        });
+        turn?.fellBack?.({
+          failed: {
+            providerId: 'p1',
+            model: 'coder',
+            reason: 'no_capacity',
+            providerLabel: 'Google Antigravity',
+            modelLabel: 'gemini-3.8-flash-high',
+            said: 'No capacity available for model gemini-3.8-flash-high on the server',
+          },
+          answered: {
+            providerId: 'p2',
+            model: 'spare',
+            modelLabel: 'gpt-6-sol',
+            providerLabel: 'ChatGPT',
+          },
+        });
+        finish();
+        return { stopReason: 'end_turn' };
+      },
+    });
+    const events = await h.turn('r1');
+    expect(events.filter((event) => event.type === 'model_status')).toEqual([
+      {
+        type: 'model_status',
+        phase: 'waiting',
+        provider: 'Google Antigravity',
+        model: 'gemini-3.8-flash-high',
+        seconds: 5,
+        reason: 'no_capacity',
+      },
+      {
+        type: 'model_status',
+        phase: 'trying',
+        provider: 'ChatGPT',
+        model: 'gpt-6-sol',
+        seconds: null,
+        reason: 'no_capacity',
+      },
+    ]);
+    expect(events.find((event) => event.type === 'model_fallback')).toMatchObject({
+      failed: [
+        {
+          error:
+            'Google Antigravity has no capacity for gemini-3.8-flash-high right now — No capacity available for model gemini-3.8-flash-high on the server',
+        },
+      ],
     });
     await h.runner.closeAll();
   });
@@ -276,9 +337,10 @@ describe('agent runner: the model gateway (ADR 0029)', () => {
           failed: {
             providerId: 'p2',
             model: 'spare',
+            reason: 'no_capacity',
             providerLabel: 'Backup',
             modelLabel: 'Spare',
-            said: 'quota',
+            said: 'No capacity available',
           },
           answered: { providerId: 'p2', model: 'last', modelLabel: 'Last' },
         });
@@ -294,13 +356,13 @@ describe('agent runner: the model gateway (ADR 0029)', () => {
           model: 'coder',
           provider: 'example',
           code: 'rate_limited',
-          error: 'CLI Proxy ran out of quota for Coder. Pick another model for this chat.',
+          error: 'CLI Proxy ran out of quota for Coder — quota',
         },
         {
           model: 'spare',
           provider: 'backup',
           code: 'rate_limited',
-          error: 'Backup ran out of quota for Spare. Pick another model for this chat.',
+          error: 'Backup has no capacity for Spare right now — No capacity available',
         },
       ],
       answered: { model: 'last', provider: 'backup' },

@@ -184,6 +184,14 @@ export type RunAction =
   | { type: 'approval_resolved'; approvalId: string }
   | { type: 'usage'; modelLabel: string }
   | { type: 'fallback' }
+  | {
+      type: 'model_status';
+      phase: 'waiting' | 'trying';
+      provider: string;
+      model: string;
+      seconds: number | null;
+      reason: 'no_capacity' | 'rate_limited' | 'quota_exhausted' | null;
+    }
   | { type: 'context' }
   | { type: 'compression'; phase: 'started' | 'finished' }
   | { type: 'finished'; status: TerminalRunStatus };
@@ -564,6 +572,20 @@ export function reduceRun(state: RunState, input: RunInput, ctx: ReduceContext):
           // Adapters report cumulative totals for a turn, so replace, never add.
           next.usage = index >= 0 ? next.usage.with(index, merged) : [...next.usage, merged];
           actions.push({ type: 'usage', modelLabel });
+          break;
+        }
+
+        case 'model_status': {
+          // Said as it happens, never kept: the run's own record is `Run.fallback`.
+          liven();
+          actions.push({
+            type: 'model_status',
+            phase: event.phase,
+            provider: event.provider,
+            model: event.model,
+            seconds: event.seconds,
+            reason: event.reason,
+          });
           break;
         }
 

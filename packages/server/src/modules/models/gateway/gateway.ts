@@ -39,11 +39,13 @@ import {
   GatewayTokens,
   type GatewayGrantInput,
   type GatewayGrantRecord,
+  type GatewayLimitReason,
   type GatewayQuotaFailure,
   type GatewayTurn,
   type GatewayTurnUsage,
 } from './tokens.js';
 import { NO_USAGE, UsageTap, addUsage, type CallUsage } from './usage.js';
+import { redactSecrets } from '../../../lib/redact-text.js';
 
 /** The model names an agent is started with; each resolves to the model its turn chose. */
 export const GATEWAY_MODEL_ALIASES = ['corehub-main', 'corehub-small'] as const;
@@ -152,6 +154,11 @@ export class ModelGateway {
   private upstreamCache: { at: number; value: GatewayUpstream[] } | null = null;
 
   private readonly limitWait: { defaultMs: number; maxMs: number };
+  /** What CLIProxyAPI's Chat route said of a refused model, per grant, turn and model. */
+  private readonly probed = new WeakMap<
+    GatewayGrantRecord,
+    Map<string, { ok: boolean; text: string }>
+  >();
 
   constructor(private readonly options: ModelGatewayOptions) {
     this.limitWait = options.limitWait ?? LIMIT_WAIT;
@@ -723,7 +730,9 @@ export class ModelGateway {
     // A model this turn was already told is out of quota is not asked again: the agent's own
     // retries get the answer at once, or the chain's next model.
     if (grant.exhausted.has(exhaustedKey(target))) {
-      const failure = this.quotaFailure(target, 'the provider said the quota is spent');
+      const failure =
+        grant.refusals.get(exhaustedKey(target)) ??
+        this.quotaFailure(target, 'quota_exhausted', 'the provider said the quota is spent');
       const next = this.fallBack(grant, failure, upstreams);
       if (next) {
         await this.forward(request, response, route, grant, next, upstreams);
@@ -794,34 +803,79 @@ export class ModelGateway {
           .then(async (raw) => {
             finish();
             response.off('close', onClose);
-            const text = raw.toString('utf8');
-            const verdict = classifyLimit(status, text, answer.headers, this.limitWait);
+            let text = raw.toString('utf8');
             const key = exhaustedKey(target);
+            // CLIProxyAPI answers Claude Code, Codex and Gemini CLI with the provider's message
+            // alone, so Google's own reason (QUOTA_EXHAUSTED, MODEL_CAPACITY_EXHAUSTED, an
+            // account restriction) and its retry delay are lost there. The Chat route keeps the
+            // provider's whole answer: one small request on it says which it is (owner,
+            // 2026-10-01: "ran out of quota" on an account signed in minutes earlier).
+            const asked = `${grant.turn?.runId ?? grant.lastRunId ?? ''}\n${key}`;
+            if (
+              !call.path.startsWith('/v1/chat/completions') &&
+              LIMIT_HINT.test(`${status} ${text}`) &&
+              !/"(?:reason|details|retryDelay)"/.test(text)
+            ) {
+              // Once per model and turn: a second refusal is read with what the first one said.
+              const known = this.probed.get(grant)?.get(asked);
+              const probed = known ?? (await this.probeLimit(target, upstreams));
+              if (!known && probed) {
+                const seen =
+                  this.probed.get(grant) ?? new Map<string, { ok: boolean; text: string }>();
+                seen.set(asked, probed);
+                this.probed.set(grant, seen);
+              }
+              if (!known && probed?.ok && !grant.waited.has(key)) {
+                // It answers now: the limit has passed; ask again at once.
+                grant.waited.add(key);
+                if (response.destroyed || response.writableEnded) return;
+                await this.forward(request, response, route, grant, target, upstreams);
+                return;
+              }
+              if (probed && !probed.ok && probed.text) text = probed.text;
+            }
+            const verdict = classifyLimit(status, text, answer.headers, this.limitWait);
             if (
               verdict.kind === 'wait' &&
               verdict.ms <= this.limitWait.maxMs &&
               !grant.waited.has(key)
             ) {
               // A limit that passes (Google says RESOURCE_EXHAUSTED for a per-minute limit as
-              // for a spent quota; owner, 2026-09-30): wait the provider's time once, then ask
-              // again within the same turn. A second refusal is taken as spent.
+              // for a spent quota; owner, 2026-09-30), or no capacity for the model right now
+              // (Antigravity, 2026-10-01): wait the provider's time once, then ask again within
+              // the same turn. A second refusal ends the model's part in the turn.
               grant.waited.add(key);
               this.options.log.info(
-                { providerId: target.providerId, model: target.model, waitMs: verdict.ms },
-                'gateway: the provider is limiting for now; waiting once before asking again',
+                {
+                  providerId: target.providerId,
+                  model: target.model,
+                  waitMs: verdict.ms,
+                  reason: verdict.reason,
+                },
+                'gateway: the provider refuses the model for now; waiting once before asking again',
               );
-              this.tellWaiting(grant, target, verdict.ms);
+              this.tellWaiting(grant, target, verdict.ms, verdict.reason);
               await new Promise((resolve) => setTimeout(resolve, verdict.ms));
               if (response.destroyed || response.writableEnded) return;
               await this.forward(request, response, route, grant, target, upstreams);
               return;
             }
             if (verdict.kind !== 'pass') {
-              const failure = this.quotaFailure(target, providerWords(text, target));
+              const failure = this.quotaFailure(
+                target,
+                verdict.kind === 'spent' ? 'quota_exhausted' : verdict.reason,
+                providerWords(text, target),
+              );
               grant.exhausted.add(exhaustedKey(target));
+              grant.refusals.set(exhaustedKey(target), failure);
               this.options.log.info(
-                { providerId: target.providerId, model: target.model, status },
-                'gateway: the provider says the quota is spent',
+                {
+                  providerId: target.providerId,
+                  model: target.model,
+                  status,
+                  reason: failure.reason,
+                },
+                'gateway: the provider refuses the model for this turn',
               );
               const next = this.fallBack(grant, failure, upstreams);
               if (next) {
@@ -871,10 +925,70 @@ export class ModelGateway {
     upstream.end(payload);
   }
 
-  private quotaFailure(target: GatewayTarget, said: string): GatewayQuotaFailure {
+  /**
+   * One small Chat Completions request for the model, on CLIProxyAPI's Chat route, which passes
+   * the provider's whole error on: `ok` when the model answers now, else the provider's answer.
+   * `null` when it could not be asked.
+   */
+  private async probeLimit(
+    target: GatewayTarget,
+    upstreams: GatewayUpstream[],
+  ): Promise<{ ok: boolean; text: string } | null> {
+    let lease;
+    try {
+      lease = await this.options.cliproxy.lease(upstreams);
+    } catch {
+      return null;
+    }
+    const payload = Buffer.from(
+      JSON.stringify({
+        model: upstreamModel(target.providerId, target.model),
+        messages: [{ role: 'user', content: 'ok' }],
+        max_tokens: 1,
+        stream: false,
+      }),
+    );
+    try {
+      return await new Promise((resolve) => {
+        const probe = httpRequest(
+          {
+            host: '127.0.0.1',
+            port: lease.port,
+            method: 'POST',
+            path: '/v1/chat/completions',
+            headers: {
+              authorization: `Bearer ${lease.key}`,
+              'content-type': 'application/json',
+              'content-length': String(payload.length),
+            },
+            timeout: 20_000,
+          },
+          (answer) => {
+            void readBody(answer, MAX_ERROR_BYTES)
+              .catch(() => Buffer.alloc(0))
+              .then((body) =>
+                resolve({ ok: (answer.statusCode ?? 500) < 400, text: body.toString('utf8') }),
+              );
+          },
+        );
+        probe.on('timeout', () => probe.destroy());
+        probe.on('error', () => resolve(null));
+        probe.end(payload);
+      });
+    } finally {
+      lease.done();
+    }
+  }
+
+  private quotaFailure(
+    target: GatewayTarget,
+    reason: GatewayLimitReason,
+    said: string,
+  ): GatewayQuotaFailure {
     return {
       providerId: target.providerId,
       model: target.model,
+      reason,
       providerLabel: target.providerLabel ?? 'The provider',
       modelLabel: target.modelLabel,
       said,
@@ -910,6 +1024,7 @@ export class ModelGateway {
             providerId: target.providerId,
             model: target.model,
             modelLabel: target.modelLabel,
+            providerLabel: target.providerLabel ?? 'The provider',
           },
         });
       } catch (error) {
@@ -920,12 +1035,18 @@ export class ModelGateway {
     return null;
   }
 
-  private tellWaiting(grant: GatewayGrantRecord, target: GatewayTarget, ms: number): void {
+  private tellWaiting(
+    grant: GatewayGrantRecord,
+    target: GatewayTarget,
+    ms: number,
+    reason: Exclude<GatewayLimitReason, 'quota_exhausted'>,
+  ): void {
     try {
       grant.turn?.waiting?.({
         providerLabel: target.providerLabel ?? 'The provider',
         modelLabel: target.modelLabel,
         seconds: Math.ceil(ms / 1000),
+        reason,
       });
     } catch (error) {
       this.options.log.warn({ err: error }, 'gateway: the turn refused a wait report');
@@ -1130,39 +1251,74 @@ function exhaustedKey(target: { providerId: string; model: string }): string {
 /** How long to wait for a provider's passing limit: its own word, else this; never longer. */
 const LIMIT_WAIT = { defaultMs: 20_000, maxMs: 30_000 };
 
-/** Words that say a quota is spent for longer than a turn can wait, or money is. */
-const SPENT =
-  /insufficient[_ ]?(?:quota|balance|credits?)|exceeded your current|billing|payment|out of credits|credit balance|usage[_ ]limit|per[_ ]?day|perday|daily|per[_ ]?month|permonth|monthly/i;
 /**
- * Words that say a quota, spent or passing. A plain rate limit ("slow down", `rate_limit_error`
- * alone) is not one: the agent's own retries are for it, as before.
+ * Words that say a quota is spent for longer than a turn can wait, or money is. Antigravity's
+ * "You have exhausted your capacity on this model. Your quota will reset after 2h10m" is the
+ * account's own quota for that model (its `QUOTA_EXHAUSTED`), not the server's capacity.
  */
-const LIMITED = /quota|resource[_ ]?exhausted|model_cooldown|cooling down/i;
+const SPENT =
+  /insufficient[_ ]?(?:quota|balance|credits?)|exceeded your current|billing|payment|out of credits|credit balance|usage[_ ]limit|per[_ ]?day|perday|daily|per[_ ]?month|permonth|monthly|"?QUOTA_EXHAUSTED"?|quota exhausted|exhausted your capacity|quota will reset/i;
+/**
+ * Words that say the provider has no capacity for the model right now — nothing about the
+ * account: Antigravity's `MODEL_CAPACITY_EXHAUSTED`, "No capacity available for model … on the
+ * server", an overloaded model. Worth a short wait, or another model.
+ */
+const NO_CAPACITY =
+  /MODEL_CAPACITY_EXHAUSTED|no capacity available|capacity (?:is )?(?:exceeded|unavailable)|model (?:is )?overloaded|overloaded_error|server (?:is )?(?:busy|overloaded)/i;
+/**
+ * Words that say a limit that passes: a quota word without a spent one ("Resource has been
+ * exhausted (e.g. check quota)", a per-minute metric, `RATE_LIMIT_EXCEEDED`), or CLIProxyAPI's
+ * cooling down. A plain rate limit ("slow down", `rate_limit_error` alone) is not one: the
+ * agent's own retries are for it, as before.
+ */
+const LIMITED =
+  /quota|resource[_ ]?exhausted|rate_limit_exceeded|per[_ ]?minute|model_cooldown|cooling down/i;
+
+/** An error that may be a limit, worth asking CLIProxyAPI's Chat route what it really is. */
+const LIMIT_HINT =
+  /^(?:429|503|529)\b|quota|resource[_ ]?exhausted|capacity|overloaded|rate[_ ]?limit|cooling down/i;
+
+/** How long a model with no capacity is waited for, when the provider does not say. */
+const CAPACITY_WAIT_MS = 5_000;
 
 /**
  * What a provider's error says of its limits:
- * - `spent` — the money or a daily/monthly quota is gone (402, `insufficient_quota`, billing,
- *   credit, a `…PerDay` quota): answered at once, no retry will get past it this turn;
- * - `wait` — a limit that passes (a per-minute rate or token limit: Google says
- *   `RESOURCE_EXHAUSTED` for both, owner 2026-09-30), with how long to wait: the provider's
+ * - `spent` — the money or the account's quota for the model is gone (402, `insufficient_quota`,
+ *   billing, credit, a daily/monthly quota, Antigravity's `QUOTA_EXHAUSTED` / "exhausted your
+ *   capacity … quota will reset"): answered at once, no retry will get past it this turn;
+ * - `wait` — refused for now, with why (`no_capacity`: the provider has no capacity for the
+ *   model; `rate_limited`: a limit that passes — Google says `RESOURCE_EXHAUSTED` for a per-minute
+ *   limit as for a spent quota, owner 2026-09-30) and how long to wait: the provider's
  *   `retry-after(-ms)`, Google's `RetryInfo.retryDelay`, "Please retry in …", CLIProxyAPI's
  *   `reset_seconds` — else a default;
- * - `pass` — anything else, passed on as it came (a plain 429 without those words is the agent's
- *   to retry, as before).
+ * - `pass` — anything else, passed on as it came.
  */
 export function classifyLimit(
   status: number,
   text: string,
   headers: IncomingMessage['headers'] = {},
   wait: { defaultMs: number; maxMs: number } = LIMIT_WAIT,
-): { kind: 'spent' } | { kind: 'wait'; ms: number } | { kind: 'pass' } {
+):
+  | { kind: 'spent' }
+  | { kind: 'wait'; ms: number; reason: 'no_capacity' | 'rate_limited' }
+  | { kind: 'pass' } {
   if (status === 402) return { kind: 'spent' };
-  if (status !== 429 && status !== 403) return { kind: 'pass' };
-  if (SPENT.test(text)) return { kind: 'spent' };
+  if (status !== 429 && status !== 403 && status !== 503 && status !== 529) {
+    return { kind: 'pass' };
+  }
+  if (status !== 503 && status !== 529 && SPENT.test(text)) return { kind: 'spent' };
+  const ms = retryDelayMs(text, headers);
+  if (NO_CAPACITY.test(text)) {
+    return {
+      kind: 'wait',
+      ms: ms ?? Math.min(wait.defaultMs, CAPACITY_WAIT_MS),
+      reason: 'no_capacity',
+    };
+  }
+  if (status === 503 || status === 529) return { kind: 'pass' };
   if (!LIMITED.test(text)) return { kind: 'pass' };
   if (status === 403 && !/quota|resource[_ ]?exhausted/i.test(text)) return { kind: 'pass' };
-  const ms = retryDelayMs(text, headers);
-  return { kind: 'wait', ms: ms ?? wait.defaultMs };
+  return { kind: 'wait', ms: ms ?? wait.defaultMs, reason: 'rate_limited' };
 }
 
 /** How long the provider asks to wait, in milliseconds, or null when it does not say. */
@@ -1225,11 +1381,43 @@ function providerWords(text: string, target: GatewayTarget): string {
           ? error
           : parsed.message;
     if (typeof message === 'string' && message.trim()) said = message;
+    // Google's own reason and quota names, which tell a spent quota from no capacity or an
+    // account restriction.
+    const details =
+      error && typeof error === 'object' ? (error as { details?: unknown }).details : undefined;
+    const codes = new Set<string>();
+    for (const detail of Array.isArray(details) ? details : []) {
+      const entry = (detail ?? {}) as {
+        reason?: unknown;
+        retryDelay?: unknown;
+        violations?: { quotaId?: unknown }[];
+      };
+      if (typeof entry.reason === 'string') codes.add(entry.reason);
+      for (const violation of Array.isArray(entry.violations) ? entry.violations : []) {
+        if (typeof violation?.quotaId === 'string') codes.add(violation.quotaId);
+      }
+      if (typeof entry.retryDelay === 'string') codes.add(`retry in ${entry.retryDelay}`);
+    }
+    if (codes.size > 0) said = `${said} (${[...codes].join(', ')})`;
   } catch {
     // Not JSON: its text as it came.
   }
-  said = scrubInternalNames(said, target).replace(/\s+/g, ' ').trim();
-  return said.length > 400 ? `${said.slice(0, 399)}…` : said || 'the quota is spent';
+  said = redactSecrets(scrubInternalNames(said, target)).replace(/\s+/g, ' ').trim();
+  return said.length > 400 ? `${said.slice(0, 399)}…` : said || 'the provider gave no reason';
+}
+
+/** Why a provider refused a model, as a person reads it (English; the chat says it localised). */
+export function limitSentence(
+  failure: Pick<GatewayQuotaFailure, 'reason' | 'providerLabel' | 'modelLabel'>,
+): string {
+  switch (failure.reason) {
+    case 'no_capacity':
+      return `${failure.providerLabel} has no capacity for ${failure.modelLabel} right now`;
+    case 'rate_limited':
+      return `${failure.providerLabel} is limiting requests to ${failure.modelLabel} right now`;
+    default:
+      return `${failure.providerLabel} ran out of quota for ${failure.modelLabel}`;
+  }
 }
 
 /**
@@ -1242,7 +1430,7 @@ function answerQuota(response: ServerResponse, wire: Wire, failure: GatewayQuota
     response.destroy();
     return;
   }
-  const message = `${failure.providerLabel} ran out of quota for ${failure.modelLabel}: pick another model for this chat in Core Hub. The provider said: ${failure.said}`;
+  const message = `${limitSentence(failure)}: pick another model for this chat in Core Hub. The provider said: ${failure.said}`;
   const body =
     wire === 'anthropic'
       ? { type: 'error', error: { type: 'rate_limit_error', message } }

@@ -42,11 +42,24 @@ export interface RunFailure {
  * A spent quota the hub's model gateway recognised (ADR 0029): which provider and which model,
  * as people know them. `null` for anything else, or an older hub's run that says only the words.
  */
-export function quotaOf(failure: RunFailure): { provider: string; model: string } | null {
+export function quotaOf(failure: RunFailure): {
+  provider: string;
+  model: string;
+  reason: 'quota_exhausted' | 'no_capacity' | 'rate_limited';
+  said: string | null;
+} | null {
   const details = failure.details;
-  if (failure.code !== 'rate_limited' || details?.reason !== 'quota_exhausted') return null;
-  const { provider, model } = details;
-  return typeof provider === 'string' && typeof model === 'string' ? { provider, model } : null;
+  const reason = details?.reason;
+  if (
+    failure.code !== 'rate_limited' ||
+    (reason !== 'quota_exhausted' && reason !== 'no_capacity' && reason !== 'rate_limited')
+  ) {
+    return null;
+  }
+  const { provider, model, said } = details ?? {};
+  return typeof provider === 'string' && typeof model === 'string'
+    ? { provider, model, reason, said: typeof said === 'string' && said ? said : null }
+    : null;
 }
 
 /** The Defaults tab of the Models screen, by name — no client invents a path. */
@@ -191,8 +204,13 @@ export function RunFailureNotice({
       <Notice tone="danger" className="run-failure space-y-1" testId="run-failed-quota">
         {dismiss}
         <p data-testid="run-failed-reason" dir="auto">
-          {t('chat.quota_exhausted', { provider: quota.provider, model: quota.model })}
+          {t(`chat.${quota.reason}`, { provider: quota.provider, model: quota.model })}
         </p>
+        {quota.said && (
+          <p className="text-xs opacity-80" data-testid="run-failed-detail" dir="auto">
+            {t('chat.quota_said', { provider: quota.provider, said: quota.said })}
+          </p>
+        )}
         {onPickModel && (
           <p>
             <Button

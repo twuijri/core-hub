@@ -210,7 +210,8 @@ function copyTurn(messages, said) {
       ? m.tool_calls.map((call) => call?.function?.name ?? '')
       : [],
   );
-  const folder = /download into: (\S+)/.exec(allUserText(messages))?.[1] ?? null;
+  const folder =
+    /(?:download into|save it in this folder): (\S+)/.exec(allUserText(messages))?.[1] ?? null;
   const target = folder ? `${folder.replace(/\/$/, '')}/flying_cat.png` : null;
   if (!asked.includes('execute_code')) {
     const drawn = /"image":\s*"(\/[^"]+)"/.exec(said)?.[1] ?? null;
