@@ -125,26 +125,30 @@ export class GatewayTokens {
   }
 
   /**
-   * The Hermes token of a profile: `chgwh_<workspace>.<signature>`. Null without a secret (a hub
+   * The Hermes token of a profile: `chgwh_<workspace, base64url>.<signature>`. Null without a secret (a hub
    * whose gateway cannot serve Hermes).
    */
   hermesToken(workspace: string, secret: Buffer | null): string | null {
-    if (!secret || !/^[0-9A-Za-z_-]{1,64}$/.test(workspace)) return null;
-    return `${HERMES_PREFIX}${workspace}.${hermesSignature(workspace, secret)}`;
+    if (!secret || !workspace || workspace.length > 200) return null;
+    // The workspace in base64url: a Hermes profile the hub has no workspace for is
+    // `hermes-profile:<name>`, and a token is one word.
+    const named = Buffer.from(workspace, 'utf8').toString('base64url');
+    return `${HERMES_PREFIX}${named}.${hermesSignature(workspace, secret)}`;
   }
 
   /** The grant of a Hermes profile's token, made when first presented (stateless, signed). */
   private hermesGrant(presented: string, secret: Buffer | null): GatewayGrantRecord | null {
     if (!secret) return null;
-    const match = /^chgwh_([0-9A-Za-z_-]{1,64})\.([A-Za-z0-9_-]+)$/.exec(presented);
+    const match = /^chgwh_([A-Za-z0-9_-]{1,280})\.([A-Za-z0-9_-]+)$/.exec(presented);
     if (!match) return null;
-    const expected = Buffer.from(hermesSignature(match[1]!, secret));
+    const workspace = Buffer.from(match[1]!, 'base64url').toString('utf8');
+    const expected = Buffer.from(hermesSignature(workspace, secret));
     const given = Buffer.from(match[2]!);
     if (expected.length !== given.length || !timingSafeEqual(expected, given)) return null;
     const known = this.records.get(presented);
     if (known) return known;
     const record: GatewayGrantRecord = {
-      workspace: match[1]!,
+      workspace,
       agentId: 'hermes',
       agentSlug: 'hermes',
       sessionId: '',
