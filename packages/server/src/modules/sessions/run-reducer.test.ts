@@ -351,3 +351,38 @@ describe('run reducer: the unhappy arrows', () => {
     ]);
   });
 });
+
+describe('run reducer: words around the tools', () => {
+  it('puts the words after the tools in a paragraph of their own (owner, 2026-09-30)', () => {
+    const { state, actions } = run([
+      { type: 'accepted' },
+      agent({ type: 'message_delta', text: 'سأقرأه الآن للتحقق من المحتوى.' }),
+      agent({ type: 'tool_started', ref: 't1', name: 'read_file' }),
+      agent({ type: 'tool_completed', ref: 't1', output: 'ok' }),
+      agent({ type: 'message_delta', text: 'أنشأت test.md' }),
+      agent({ type: 'message_delta', text: ' بسطر واحد.' }),
+      agent({ type: 'completed' }),
+    ]);
+    expect(state.text).toBe('سأقرأه الآن للتحقق من المحتوى.\n\nأنشأت test.md بسطر واحد.');
+    // What streams is what is stored.
+    const streamed = actions
+      .filter((a): a is Extract<RunAction, { type: 'message_delta' }> => a.type === 'message_delta')
+      .map((a) => a.delta)
+      .join('');
+    expect(streamed).toBe(state.text);
+    // The second turn's text starts after the break.
+    expect(state.text.slice(state.turns[1]!.textStart)).toBe('أنشأت test.md بسطر واحد.');
+  });
+
+  it('adds nothing when the words already end or start a line', () => {
+    const { state } = run([
+      { type: 'accepted' },
+      agent({ type: 'message_delta', text: 'Reading it.\n' }),
+      agent({ type: 'tool_started', ref: 't1', name: 'read_file' }),
+      agent({ type: 'tool_completed', ref: 't1', output: 'ok' }),
+      agent({ type: 'message_delta', text: 'Done.' }),
+      agent({ type: 'completed' }),
+    ]);
+    expect(state.text).toBe('Reading it.\nDone.');
+  });
+});
