@@ -31,7 +31,7 @@ ADR 0029 (معتمد من المالك 2026-09-29) وDECISIONS §140 (تفاصي
   وإلا الافتراضي)، ويُمرَّر الطلب إلى CLIProxyAPI بالمفتاح الداخلي والاسم `h<صف>/<نموذج>`. الإجابة تمر كما هي (تدفقًا)، وأخطاء المزوّد
   تمر كما جاءت، والاستهلاك يُقرأ منها ويُضاف لتشغيل الدور بسعر صف النموذج (`estimated`)؛ ونداء ينتهي بعد دوره يُضاف لصف ذلك التشغيل
   (`recordUsage` صار يقبل `accumulate`).
-- **ربط الوكلاء عند التشغيل** (بيانات في ملف كل وكيل في الكتالوج، `gateway`): Claude Code (`ANTHROPIC_BASE_URL` و`ANTHROPIC_AUTH_TOKEN`
+- **ربط الوكلاء عند التشغيل** (بيانات في ملف كل وكيل في الكتالوج، `gateway`؛ الستة مجرّبة حقيقيًا): Claude Code (`ANTHROPIC_BASE_URL` و`ANTHROPIC_AUTH_TOKEN`
   و`ANTHROPIC_MODEL=corehub-main` و`ANTHROPIC_DEFAULT_HAIKU_MODEL=corehub-small` و`CLAUDE_CODE_DISABLE_EXPERIMENTAL_BETAS=1` …)،
   Codex (`CODEX_CONFIG` بمزوّد `corehub` على Responses، و`DEFAULT_AUTH_REQUEST` بطريقة `gateway` في codex-acp — لا `api-key` لأنها
   تكتب الرمز في `auth.json` فوق تسجيل ChatGPT)، وGoose وOpenCode وQwen Code وKimi Code بالأسماء الموثّقة في البحث.
@@ -72,16 +72,22 @@ ADR 0029 (معتمد من المالك 2026-09-29) وDECISIONS §140 (تفاصي
 ## الفحوص (الأوامر ونواتجها الفعلية)
 الاختبار الحقيقي: CLIProxyAPI 8.0.4 الحقيقي + بوابة المركز + جسرا ACP الحقيقيان (`claude-agent-acp` 0.84.0 و`codex-acp` 2.0.0)
 مقابل مزوّد وهمي محلي لا يتكلم إلا Chat Completions. Claude Code كتب ملفًا بأداة `Write` بطلب من المزوّد ورجعت النتيجة في الطلب التالي،
-وCodex أجاب عبر Responses، والنداء بلا رمز أو برمز مسحوب رُفض، ومفتاح المزوّد لم يظهر في بيئة الوكيل ولا في سجل المركز:
+وCodex أجاب عبر Responses، وGoose وOpenCode وQwen Code وKimi Code أجاب كل منها عبر Chat Completions بإعداد الكتالوج وحده،
+والنداء بلا رمز أو برمز مسحوب رُفض، ومفتاح المزوّد لم يظهر في بيئة الوكيل ولا في سجل المركز. (أول تشغيل للأربعة فشل لأن الاختبار
+نسي وسائط البروتوكول (`acp` و`--acp`) في الأمر — خطأ في الاختبار لا في الربط؛ صُحّح):
 
 ```
-$ COREHUB_REAL_GATEWAY=1 COREHUB_REAL_ACP_DATA=~/.cache/corehub-agent/acp-data \
+$ COREHUB_REAL_GATEWAY=1 COREHUB_REAL_GATEWAY_ALL=1 COREHUB_REAL_ACP_DATA=~/.cache/corehub-agent/acp-data \
     pnpm exec vitest run --project unit --maxWorkers=1 --reporter=verbose src/modules/agents/model-gateway.real.test.ts
-✓ |unit| src/modules/agents/model-gateway.real.test.ts > the model gateway, for real (COREHUB_REAL_GATEWAY=1) > refuses a call with no session token, and with a revoked one 132ms
- ✓ |unit| src/modules/agents/model-gateway.real.test.ts > the model gateway, for real (COREHUB_REAL_GATEWAY=1) > Claude Code answers through an OpenAI-compatible provider and round-trips a tool call 1140ms
- ✓ |unit| src/modules/agents/model-gateway.real.test.ts > the model gateway, for real (COREHUB_REAL_GATEWAY=1) > Codex answers through the Responses path 539ms
- Test Files  1 passed (1)
-      Tests  3 passed (3)
+✓ |unit| src/modules/agents/model-gateway.real.test.ts > the model gateway, for real (COREHUB_REAL_GATEWAY=1) > refuses a call with no session token, and with a revoked one 126ms
+✓ |unit| src/modules/agents/model-gateway.real.test.ts > the model gateway, for real (COREHUB_REAL_GATEWAY=1) > Claude Code answers through an OpenAI-compatible provider and round-trips a tool call 519ms
+✓ |unit| src/modules/agents/model-gateway.real.test.ts > the model gateway, for real (COREHUB_REAL_GATEWAY=1) > Codex answers through the Responses path 295ms
+✓ |unit| src/modules/agents/model-gateway.real.test.ts > the model gateway, for real (COREHUB_REAL_GATEWAY=1) > goose answers through the Chat Completions path 4692ms
+✓ |unit| src/modules/agents/model-gateway.real.test.ts > the model gateway, for real (COREHUB_REAL_GATEWAY=1) > opencode answers through the Chat Completions path 1499ms
+✓ |unit| src/modules/agents/model-gateway.real.test.ts > the model gateway, for real (COREHUB_REAL_GATEWAY=1) > qwen-code answers through the Chat Completions path 944ms
+✓ |unit| src/modules/agents/model-gateway.real.test.ts > the model gateway, for real (COREHUB_REAL_GATEWAY=1) > kimi-code answers through the Chat Completions path 698ms
+Test Files  1 passed (1)
+Tests  7 passed (7)
 ```
 
 قبل ذلك جرّبت CLIProxyAPI يدويًا: ترجمة Anthropic→Chat وResponses→Chat، ونماذج بأسماء فيها «/»، وتمرير خطأ 401 من المزوّد بصيغة
@@ -156,14 +162,14 @@ CI: يُستكمل بعد الدفع.
   تتبع قدرة النموذج على الأدوات. الدليل يقول ذلك.
 - CLIProxyAPI برنامج خارجي يشغّله المركز: مثبّت بالبصمة، على loopback، لا يُعطى إلا ما يكتبه المركز. معروف أنه يسأل GitHub عن نسخة
   Antigravity كل ثلاث ساعات ولا مفتاح لإطفائه.
-- Goose وOpenCode وQwen Code وKimi Code مربوطة من الوثائق ولم تُشغَّل حقيقيًا بعد؛ إن فشل أحدها فالرجوع لحسابه من إعداداته.
+- Goose وOpenCode وQwen Code وKimi Code جُرّبت حقيقيًا بدور نصي فقط؛ نداءات الأدوات مثبتة مع Claude Code وحده. إن فشل أحدها فالرجوع لحسابه من إعداداته.
 - توقيع macOS: الملف داخل الحزمة يُوقَّع مع التطبيق (electron-builder)؛ لم أتحقق من التوثيق (notarization) بعد — يظهر في أول بناء موقَّع.
 - **الرجوع**: `COREHUB_MODEL_GATEWAY=off` يعيد السلوك السابق كاملًا (المفاتيح للوكلاء كما كانت)، أو «حساب الوكيل نفسه» لوكيل واحد.
   لا ترحيل قاعدة بيانات؛ الحقول إضافية.
 
 ## التسليم والخطوة التالية
 - PR #229 (مسودة) فوق #227؛ ينتقل إلى `main` بعد دمج #227.
-- بعد الدمج: تجربة على مركز المالك بمزوّد حقيقي (OpenRouter/DeepSeek/Groq) لكل من Claude Code وCodex، ثم تشغيل Goose وOpenCode وQwen
-  وKimi حقيقيًا.
+- بعد الدمج: تجربة على مركز المالك بمزوّد حقيقي (OpenRouter/DeepSeek/Groq) لكل الوكلاء الستة، ونداء أداة حقيقي مع Goose وOpenCode
+  وQwen وKimi (مثبت اليوم مع Claude Code وحده).
 - المرحلة 2: Grok Build وPi (ملف إعداد يملكه المركز)، وقراءة `model_source` في تطبيقي الجوال، وحد أدنى للسياق والأدوات في المنتقي.
   المرحلة 3: Gemini CLI (لغة Gemini الواردة، يدعمها CLIProxyAPI أصلًا).

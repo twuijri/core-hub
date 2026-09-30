@@ -4790,8 +4790,7 @@ does them, proposed here — owner to confirm:
   Goose (its OpenAI provider at the gateway's Chat Completions path), OpenCode (an OpenAI-compatible
   provider in `OPENCODE_CONFIG_CONTENT`, models.dev not asked), Qwen Code (`OPENAI_BASE_URL`,
   `OPENAI_API_KEY`, `OPENAI_MODEL`) and Kimi Code (its env-only temporary model), all from the
-  research's verified names; Claude Code and Codex are proven with the real bridges, the other four are
-  wired but not yet run for real. Each entry's wiring is data in its catalog file (`gateway`). Gemini
+  research's verified names; all six are proven with the real agents (below). Each entry's wiring is data in its catalog file (`gateway`). Gemini
   CLI, Grok Build and Pi keep their own account (phases 2–3).
 - **What an agent on the gateway is given.** Its own settings `env` and `secret_refs` as before; none
   of the profile's provider keys; the wiring's variables; `NO_PROXY` with the loopback addresses added.
@@ -4830,7 +4829,8 @@ does them, proposed here — owner to confirm:
   on the provider's tool call and the next request carries the result; Codex answers through Responses;
   a call without a token, with a forged one or a revoked one is refused; the provider's key reaches the
   provider only — not the agent's environment, not the hub's log — and the token never reaches the
-  provider.
+  provider; and Goose 1.52.0, OpenCode 1.18.31, Qwen Code 0.24.5 and Kimi Code 2.1.1 each answer a
+  turn through the Chat Completions path on nothing but their catalog wiring.
 
 Rejected: an agent pointed at CLIProxyAPI directly (static shared keys, no profile, turn or ledger); a
 download of CLIProxyAPI on first use in the desktop app (a runtime download-and-run path for 16–24 MB

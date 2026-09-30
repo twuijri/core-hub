@@ -21,7 +21,7 @@ hub. What each conversation used shows in its run, with an estimated cost when t
 |---|---|
 | Claude Code | yes (tested with the real agent, tool calls included) |
 | Codex CLI | yes (tested with the real agent) |
-| Goose, OpenCode, Qwen Code, Kimi Code | yes (wired from their documentation; not yet run for real) |
+| Goose, OpenCode, Qwen Code, Kimi Code | yes (tested with the real agents: a text turn each) |
 | Gemini CLI, Grok Build, Pi | not yet — they use their own account (later phases) |
 | Hermes, Core Hub (Direct) | they already run on every provider you add |
 

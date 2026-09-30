@@ -10,6 +10,8 @@
  * - Claude Code answers through the gateway, and a tool call round-trips: the fake provider asks
  *   for `Write`, Claude Code writes the file, and the next request carries the tool's result;
  * - Codex answers through the Responses path;
+ * - with `COREHUB_REAL_GATEWAY_ALL=1`, Goose, OpenCode, Qwen Code and Kimi Code answer through the
+ *   Chat Completions path, each on nothing but its catalog wiring;
  * - the gateway refuses a request without a session token, or with a revoked one;
  * - the provider's key reaches the provider and nothing else: not the agent's environment, not
  *   the hub's log; the session token never reaches the provider;
@@ -285,7 +287,7 @@ describe.skipIf(!enabled)('the model gateway, for real (COREHUB_REAL_GATEWAY=1)'
   });
 
   async function runAgent(
-    id: 'claude-code' | 'codex',
+    id: string,
     prompt: string,
   ): Promise<{
     said: string;
@@ -301,7 +303,7 @@ describe.skipIf(!enabled)('the model gateway, for real (COREHUB_REAL_GATEWAY=1)'
       host: { pathValue: process.env.PATH, inherited: process.env },
     });
     const pinned = entry.install.kind === 'npm' ? entry.install.version : '';
-    if (installedVersion(dataDir, entry, { current: true }) !== pinned) {
+    if (!pinned || installedVersion(dataDir, entry, { current: true }) !== pinned) {
       await installer.install(entry, async () => {});
     }
     const home = mkdtempSync(path.join(tmpdir(), `corehub-gateway-home-${id}-`));
@@ -344,7 +346,7 @@ describe.skipIf(!enabled)('the model gateway, for real (COREHUB_REAL_GATEWAY=1)'
     const target: AgentTarget = {
       slug: id,
       name: entry.name,
-      command: [entry.binary],
+      command: [entry.binary, ...entry.protocolArgs],
       executablePath: path.join(agentBinDir(dataDir, id), entry.binary),
       endpoint: null,
       cwd: home,
@@ -449,6 +451,25 @@ describe.skipIf(!enabled)('the model gateway, for real (COREHUB_REAL_GATEWAY=1)'
       } catch {
         // Codex may still be writing its session files as it exits.
       }
+    },
+    15 * 60_000,
+  );
+
+  // The four Chat Completions agents (Goose, OpenCode, Qwen Code, Kimi Code), each a text turn with
+  // the environment its catalog wiring gives it (`COREHUB_REAL_GATEWAY_ALL=1`; CI sets it).
+  it
+    .skipIf(process.env.COREHUB_REAL_GATEWAY_ALL !== '1')
+    .each(['goose', 'opencode', 'qwen-code', 'kimi-code'])(
+    '%s answers through the Chat Completions path',
+    async (id) => {
+      const before = provider.seen.length;
+      const result = await runAgent(id, 'Say pong.');
+      expect(result.said).toContain('pong from the fake provider');
+      const calls = provider.seen.slice(before);
+      expect(calls.length).toBeGreaterThan(0);
+      for (const call of calls) expect(call.authorization).toBe(`Bearer ${PROVIDER_KEY}`);
+      checkIsolation(result);
+      rmSync(result.home, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 });
     },
     15 * 60_000,
   );

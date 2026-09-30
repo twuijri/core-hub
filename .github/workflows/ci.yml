@@ -201,8 +201,9 @@ jobs:
   # The model gateway (ADR 0029) with the real pieces: CLIProxyAPI's pinned release (SHA-256
   # checked), the hub's gateway, and the real ACP bridges of Claude Code and Codex from npm, against
   # a local provider that speaks only OpenAI Chat Completions — Claude Code's tool call round-trips
-  # through the Anthropic → Chat translation, Codex answers through the Responses path, and no key
-  # reaches an agent. No provider account, no secret. Required through `gate`.
+  # through the Anthropic → Chat translation, Codex answers through the Responses path, Goose,
+  # OpenCode, Qwen Code and Kimi Code through Chat Completions, and no key reaches an agent. No
+  # provider account, no secret. Required through `gate`.
   model-gateway-real:
     name: Model gateway with the real CLIProxyAPI, Claude Code and Codex
     runs-on: ubuntu-latest
@@ -222,6 +223,7 @@ jobs:
       - name: The real gateway suite
         env:
           COREHUB_REAL_GATEWAY: '1'
+          COREHUB_REAL_GATEWAY_ALL: '1'
           COREHUB_REAL_ACP_DATA: ${{ runner.temp }}/acp-data
         run: pnpm --filter @corehub/server exec vitest run --project unit --maxWorkers=1 src/modules/agents/model-gateway.real.test.ts
 
