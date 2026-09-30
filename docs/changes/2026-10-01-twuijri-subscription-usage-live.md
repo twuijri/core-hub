@@ -1,4 +1,4 @@
-# «افحص الآن» كما يقرؤه CLIProxyAPI، وجملة بدل ردّ المزوّد الخام، وحالة إعادة التشغيل الصحيحة
+# «افحص الآن» كما يقرؤه CLIProxyAPI، وجملة بدل ردّ المزوّد الخام، وحالة إعادة التشغيل الصحيحة، ولا تنبيه لرد تشاهده
 المسؤول: twuijri · الفرع: fix/subscription-usage-live (PR مسودة إلى main) · الحالة: review
 
 ## المشكلة والهدف
@@ -63,9 +63,20 @@ DECISIONS §147 (إصلاح لملاحظات المالك الحية). باخت�
 RunStatus,RunFailureNotice}.ts(x)` و`realtime/envelope.ts` واختبارات `model-status.test.ts` و`run-quota-notice.test.tsx`،
 `tests/container/fake-provider.mjs` و`proof/attachments/hermes-stub.mjs` (يقرآن المجلد بالصيغة الجديدة).
 
+### لا تنبيه على الجوال لرد تشاهده (DECISIONS §149)
+(المالك: «اي رد يوصلني تنبيه على جوالي… اني انا فاتح
+  الصفحة المفروض ما يرسلي تنبيه»): العميل يقول على `/rt/sessions` أمرًا جديدًا `viewing { session_id }` ما دامت المحادثة
+  مفتوحة والصفحة أو التطبيق في الواجهة (الويب: التبويب ظاهر ومركّز؛ iOS: المشهد نشط؛ Android: النشاط مستأنف)، ويكرّره كل
+  20 ثانية، و`null` حين يتوقف. المركز يحفظه في الذاكرة لكل مقبس 45 ثانية ويمسحه عند انقطاع المقبس. لانتهاء الرد أو فشله
+  أو طلب موافقة في محادثة يشاهدها: يُكتب التنبيه داخل التطبيق كما هو (العدّاد والصندوق) ولا يُرسل للجوال. المحادثات
+  الأخرى والتطبيقات القديمة كما كانت. نُفّذ على الويب وiOS وAndroid.
+
+
 ## العقد (ما تغيّر في packages/contracts، أو «لا شيء»)
 حدث جديد `run.status` على `/rt/sessions` (إضافة؛ `contracts:compat` OK مقابل v1.1.6) وإضافته إلى `x-rt-events` لـ`sessions.createRun`.
 `Run.error.details` يحمل `reason` بثلاث قيم و`said` (الحقل موجود في غلاف `Error`). وقبل ذلك: لا شيء. `check_error` كان دائمًا جملة يعرضها العميل؛ الآن بلغة الطلب.
+- أمر جديد من العميل إلى المركز `viewing` على `/rt/sessions`، موثّق في `events/README.md` (إضافة فقط؛ لا عملية HTTP ولا
+  مخطط حدث؛ §149).
 
 ## الملفات والتأثير
 - الخادم: `models/catalogue.ts` (طلبات «افحص الآن» لكل مزوّد، `company`)، `models/subscriptions.ts` (الطلبات بالترتيب،
@@ -73,11 +84,26 @@ RunStatus,RunFailureNotice}.ts(x)` و`realtime/envelope.ts` واختبارات `
   `models/index.ts` و`agents/runner.ts` (`busyWith('hermes')`)، `lib/redact-text.ts`، ونصوص `i18n/ar.json` و`en.json`.
 - الاختبارات: `models/gateway/subscription-usage.test.ts` (جديد، بأشكال ردود مسجّلة)، `models/gateway/hermes-restart.test.ts`،
   `agents/update-policy.test.ts`.
-- التوثيق: DECISIONS §147.
+- §149: الخادم `sessions/viewing.ts` (جديد) و`sessions/realtime.ts` (الأمر) و`sessions/index.ts`، `notify/index.ts`
+  (`push: false`)، `modules/index.ts` (المشاهدة قبل الإرسال)؛ الويب `realtime/useViewing.ts` (جديد) و`chat/ChatScreen.tsx`؛
+  iOS `Chat/ChatModel.swift` و`Chat/ChatScreen.swift`؛ Android `realtime/Realtime.kt` و`ui/screens/ChatScreen.kt`؛
+  الاختبارات `tests/unit/push-viewing.test.ts` و`web/tests/viewing.test.tsx`؛ `contracts/events/README.md`.
+- التوثيق: DECISIONS §147 و§149.
 
 ## الفحوص (الأوامر ونواتجها الفعلية)
 ```
-(تُملأ بعد تشغيلها)
+$ tsc --noEmit -p tsconfig.json   (packages/server، packages/web) → (exit 0)
+$ vitest run --maxWorkers=2 src/modules/models src/modules/agents/update-policy.test.ts src/modules/agents/runner.test.ts tests/unit
+  (packages/server) → كل ملفات models وagents ناجحة؛ 3 اختبارات في tests/unit/terminal.test.ts تفشل على هذا الجهاز وحده
+  (bash: cannot set terminal process group — بيئة الطرفية، لا علاقة لها بالتغيير؛ CI أخضر)
+$ COREHUB_REAL_GATEWAY=1 vitest run src/modules/models/gateway/subscriptions.real.test.ts → 4 passed
+$ vitest run src/modules/models/gateway/subscription-usage.test.ts src/modules/models/gateway/subscriptions.test.ts → 16 passed
+$ vitest run src/modules/models/gateway/hermes-restart.test.ts src/modules/agents/update-policy.test.ts → 28 passed
+$ vitest run tests/unit/push-viewing.test.ts → 3 passed
+$ vitest run tests/viewing.test.tsx   (packages/web) → 2 passed
+$ node scripts/i18n-check.mjs → OK · node scripts/i18n/limits.mjs → OK
+$ ./gradlew --no-daemon :app:compileDebugKotlin (apps/android) → نجح
+CI على أول دفعة (aed9835a): 15 ناجحًا.
 ```
 
 ## المخاطر والرجوع

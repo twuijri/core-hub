@@ -39,6 +39,10 @@ final class ChatModel {
     @ObservationIgnored private var firstSubscription: CheckedContinuation<Void, Never>?
     @ObservationIgnored private var pendingFirstMessage: OutgoingMessage?
     @ObservationIgnored private var started = false
+    /// Whether the person is looking at this conversation (it is open, the app in front): the
+    /// hub then skips the phone push for a reply here (DECISIONS §149).
+    @ObservationIgnored private var viewing = false
+    @ObservationIgnored private var viewingHeartbeat: Task<Void, Never>?
 
     init(app: AppModel, sessionID: String, profile: String, firstMessage: OutgoingMessage? = nil) {
         self.app = app
@@ -60,6 +64,8 @@ final class ChatModel {
             })
             listeners.append(namespace.onConnect { [weak self] in
                 self?.subscribe()
+                // After a reconnect the hub knows nothing of this screen: say it again.
+                if self?.viewing == true { self?.sayViewing() }
             })
         }
         Task { await open() }
@@ -67,6 +73,7 @@ final class ChatModel {
 
     func stop() {
         guard started else { return }
+        setViewing(false)
         started = false
         if let namespace = app?.sessions {
             for id in listeners { namespace.remove(id) }
@@ -78,6 +85,35 @@ final class ChatModel {
         listeners.removeAll()
         firstSubscription?.resume()
         firstSubscription = nil
+    }
+
+    // MARK: - Viewing (DECISIONS §149)
+
+    /// The conversation is on screen with the app in front (`true`), or not. While it is, the
+    /// hub hears `viewing { session_id }` every 20 s (it forgets it after 45 s); when it stops,
+    /// `viewing { session_id: null }`. A hub older than this ignores it and pushes as before.
+    func setViewing(_ wanted: Bool) {
+        // A screen that is not open (the app came to the front on another page) views nothing.
+        let on = wanted && started
+        guard on != viewing else { return }
+        viewing = on
+        viewingHeartbeat?.cancel()
+        viewingHeartbeat = nil
+        sayViewing()
+        guard on else { return }
+        viewingHeartbeat = Task { [weak self] in
+            while !Task.isCancelled {
+                try? await Task.sleep(nanoseconds: 20_000_000_000)
+                guard !Task.isCancelled else { return }
+                self?.sayViewing()
+            }
+        }
+    }
+
+    private func sayViewing() {
+        guard let namespace = app?.sessions, namespace.isConnected else { return }
+        let payload: [String: Any] = ["session_id": viewing ? sessionID : NSNull()]
+        Task { _ = try? await namespace.emit("viewing", payload, timeout: 5) }
     }
 
     // MARK: - Opening

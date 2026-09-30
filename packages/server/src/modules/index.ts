@@ -76,6 +76,7 @@ import {
   workflowApprovalsFor,
   workflowMessagesFor,
   type ChannelSource,
+  viewingFor,
 } from './sessions/index.js';
 import { registerRoomPorts, roomOfSeatFor, roomsModule, roomsServiceFor } from './rooms/index.js';
 import { t as translate } from '../i18n/index.js';
@@ -206,8 +207,15 @@ export const notifierPort = (app: FastifyInstance): SessionsNotifier => {
     () => app.hub.io,
     noticePushPort(app),
   );
+  // Whether the person is looking at the conversation right now (DECISIONS §149): then a
+  // finished reply, a failure or an approval there goes to the inbox but not to their phones.
+  const viewing = (userId: string, sessionId: string) => {
+    const io = app.hub.io;
+    return io ? viewingFor(io).isViewing(userId, sessionId) : false;
+  };
   return {
     runFinished(input) {
+      const watching = viewing(input.userId, input.sessionId);
       notifier.announce(
         { userId: input.userId, workspace: input.workspace, profile: input.profile },
         input.outcome === 'succeeded'
@@ -224,14 +232,19 @@ export const notifierPort = (app: FastifyInstance): SessionsNotifier => {
               reason: input.reason,
             },
         { kind: 'session', id: input.sessionId },
+        { push: !watching },
       );
     },
     approvalRequested(input) {
+      const resource = input.resource ?? { kind: 'session', id: input.sessionId };
+      // A workflow's approval is not the chat the person is looking at.
+      const watching = resource.kind === 'session' && viewing(input.userId, resource.id);
       notifier.announce(
         { userId: input.userId, workspace: input.workspace, profile: input.profile },
         { kind: 'approval_requested', agent: input.agentName, session: '', what: input.what },
         // A workflow waiting at a step opens its run; an agent waiting opens its chat.
-        input.resource ?? { kind: 'session', id: input.sessionId },
+        resource,
+        { push: !watching },
       );
     },
   };

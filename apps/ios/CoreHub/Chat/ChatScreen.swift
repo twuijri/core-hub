@@ -16,6 +16,7 @@ struct ChatScreen: View {
     @Environment(AppModel.self) private var app
     @Environment(\.l10n) private var l10n
     @Environment(\.openBackground) private var openBackground
+    @Environment(\.scenePhase) private var scenePhase
     @State private var draft = ""
     @State private var tray: AttachmentTray?
     /// The latest message is on screen (the list's bottom marker is laid out).
@@ -115,8 +116,11 @@ struct ChatScreen: View {
             if let tray { app.handOff.take(model.profile).forEach { tray.addReady($0) } }
             if controls == nil { controls = ChatControlsModel(app: app) }
             model.start()
+            model.setViewing(scenePhase == .active)
             LocalNotices.shared.openSessionID = model.sessionID
         }
+        // The app in front or not: no phone push for a reply the person is watching (§149).
+        .onChange(of: scenePhase) { _, phase in model.setViewing(phase == .active) }
         .onDisappear {
             model.stop()
             insight?.stop()

@@ -116,6 +116,8 @@ class Realtime(private val http: OkHttpClient) {
 
     /** Rooms this phone is in now (`join`): joined again on every (re)connect. */
     private val joinedRooms = mutableSetOf<String>()
+    /** The conversation on screen with the app in front (DECISIONS §149), said again after a reconnect. */
+    private var viewingSession: String? = null
     private val _roomReconnects = MutableStateFlow(0)
 
     /** Ticks when `/rt/rooms` comes back: an open room reads what it missed (rooms have no replay). */
@@ -167,6 +169,8 @@ class Realtime(private val http: OkHttpClient) {
                 roomsEverConnected = true
             }
             if (namespace == SESSIONS_NAMESPACE) {
+                // After a reconnect the hub knows nothing of this screen: say it again.
+                synchronized(this) { viewingSession }?.let { socket.emit("viewing", JSONObject().put("session_id", it)) }
                 _connected.value = true
                 if (everConnected) _reconnects.value += 1
                 everConnected = true
@@ -196,6 +200,22 @@ class Realtime(private val http: OkHttpClient) {
                     if (cont.isActive) cont.resume(SubscribeAck.parse(args.firstOrNull()?.toString()))
                 })
             }
+        }
+    }
+
+    /**
+     * `viewing { session_id }` on `/rt/sessions`: the person is looking at this conversation (the
+     * chat on screen, the app resumed), so the hub skips the phone push for a reply there; null
+     * when they stop (DECISIONS §149). Repeated by the chat every 20 s; the hub forgets it after
+     * 45 s. A hub older than this ignores it and pushes as before.
+     */
+    fun viewing(sessionId: String?) {
+        val socket = synchronized(this) {
+            viewingSession = sessionId
+            sockets[SESSIONS_NAMESPACE]
+        }
+        if (socket?.connected() == true) {
+            socket.emit("viewing", JSONObject().put("session_id", sessionId ?: JSONObject.NULL))
         }
     }
 

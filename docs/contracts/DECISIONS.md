@@ -5300,3 +5300,29 @@ Hermes on the same account answered. Proposed here — owner to confirm:
 - Checked and left as they are: CLIProxyAPI retries nothing itself (`request-retry: 0`,
   `max-retry-interval: 0`, cooling off); a plain Claude Code turn makes one call, so parallel calls do
   not explain the refusals.
+
+## 149. No phone push for a reply the person is watching
+
+Status: the owner's request, 2026-10-01 — «اي رد يوصلني تنبيه على جوالي… اني انا فاتح الصفحة
+المفروض ما يرسلي تنبيه» ("every reply sends me a phone notification… when I have the page open it
+should not"). Each push also costs a request on the push relay.
+
+- **Clients say what they are looking at.** A new command on `/rt/sessions`, `viewing
+  { session_id }` (or `null`), sent while a conversation is open and its page or app is in front —
+  the web: the tab visible (`document.visibilityState`) and focused; iOS: the chat on screen with
+  the scene `active`; Android: the chat on screen with the activity resumed — repeated every 20 s,
+  and `null` the moment that stops (hidden, blurred, another screen). The hub keeps it per socket
+  in memory for 45 s unless repeated, and drops it when the socket closes. Additive: no HTTP
+  operation, no event schema (commands are documented in `events/README.md`); an older hub never
+  acks it and pushes as before; an older app never says it and is pushed to as before.
+- **The hub skips only the push.** For `run_completed`, `run_failed` and `approval_requested` on a
+  session any of the person's clients is viewing, the notice is still written and announced in the
+  app (unread count and inbox unchanged); only the push to phones and browsers is skipped. Another
+  session's events, a workflow's approval, and everything when no client is viewing, push as
+  before. After a hub restart nobody is viewing until the clients say it again, which errs toward a
+  push.
+- **Proven.** `tests/unit/push-viewing.test.ts` (a real socket: viewing suppresses the push but
+  not the notice; another session, `null`, a closed socket and an older client push; 45 s expiry;
+  two screens), web `tests/viewing.test.tsx` (visible and focused says it and repeats it; blur,
+  hidden, another conversation, unmount say `null`; a reconnect says it again). iOS and Android
+  send it from their chat screens (Android compiled locally; iOS built by CI).

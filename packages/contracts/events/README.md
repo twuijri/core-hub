@@ -59,6 +59,7 @@ same token cannot bring it back.
 |---|---|---|---|
 | `/rt/sessions` | `subscribe` | `{ session_id, after_seq? }` | receive the session's message/run/tool events (profile-wide events need no subscription); with `after_seq`, resume — see below |
 | `/rt/sessions` | `unsubscribe` | `{ session_id }` | stop |
+| `/rt/sessions` | `viewing` | `{ session_id }` or `{ session_id: null }` | the person is looking at this conversation (open, page or app in front), or at none; repeat every 20 s while it holds, the hub forgets it after 45 s or when the socket closes. A finished run, a failed one or an approval in that conversation is still a notice but is not pushed to the person's phones (DECISIONS §149). Ack `{ ok: true }`; `bad_request` for anything but an id or null. An older hub has no handler and never acks |
 | `/rt/rooms` | `join` | `{ room_id }` | become present in the room (`member.joined` if not yet a member is **not** implied — join via HTTP first) and receive its events |
 | `/rt/rooms` | `leave` | `{ room_id }` | stop; presence goes offline |
 | `/rt/rooms` | `typing` | `{ room_id, typing: true|false }` | broadcast `member.typing` |
