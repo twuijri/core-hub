@@ -111,7 +111,11 @@ export async function codexDeviceLogin(authDir) {
     process.stdout.write('Codex device authentication failed: access_denied by the user\n');
     return;
   }
-  const saved = writeAccount(authDir, 'codex', process.env.FAKE_CLIPROXY_EMAIL ?? 'person@example.com');
+  const saved = writeAccount(
+    authDir,
+    'codex',
+    process.env.FAKE_CLIPROXY_EMAIL ?? 'person@example.com',
+  );
   process.stdout.write(`Authentication saved to ${path.join(authDir, saved)}\n`);
   process.stdout.write('Codex device authentication successful!\n');
 }
@@ -209,7 +213,8 @@ export function managementApi(config) {
         logins.set(state, login);
         const mode = process.env.FAKE_CLIPROXY_LOGIN ?? 'auto';
         if (mode === 'auto') setTimeout(() => approve(login), 1200);
-        if (mode === 'deny') setTimeout(() => (login.status = 'error', login.error = 'access_denied'), 400);
+        if (mode === 'deny')
+          setTimeout(() => ((login.status = 'error'), (login.error = 'access_denied')), 400);
         json(response, 200, {
           status: 'ok',
           url: `https://login.example.test/${vendor}/device?user_code=FAKE-1234`,
@@ -234,9 +239,11 @@ export function managementApi(config) {
     }
     if (method === 'GET' && route === '/oauth/status') {
       const login = logins.get(url.searchParams.get('state'));
-      if (!login) return json(response, 200, { status: 'error', error: 'unknown or expired state' }), true;
-      if (login.status === 'ok') return json(response, 200, { status: 'ok' }), true;
-      if (login.status === 'error') return json(response, 200, { status: 'error', error: login.error }), true;
+      if (!login)
+        return (json(response, 200, { status: 'error', error: 'unknown or expired state' }), true);
+      if (login.status === 'ok') return (json(response, 200, { status: 'ok' }), true);
+      if (login.status === 'error')
+        return (json(response, 200, { status: 'error', error: login.error }), true);
       json(response, 200, { status: 'wait' });
       return true;
     }
@@ -249,7 +256,7 @@ export function managementApi(config) {
         code = landed.searchParams.get('code');
       }
       const login = logins.get(state);
-      if (!login) return json(response, 400, { status: 'error', error: 'invalid state' }), true;
+      if (!login) return (json(response, 400, { status: 'error', error: 'invalid state' }), true);
       if (!code || code === 'bad') {
         login.status = 'error';
         login.error = 'Bad request';
@@ -295,7 +302,8 @@ export function managementApi(config) {
     if (method === 'DELETE' && route === '/credentials') {
       const name = url.searchParams.get('name');
       const full = path.join(authDir, name ?? '');
-      if (!name || !existsSync(full)) return json(response, 404, { error: 'auth file not found' }), true;
+      if (!name || !existsSync(full))
+        return (json(response, 404, { error: 'auth file not found' }), true);
       rmSync(full);
       json(response, 200, { status: 'ok' });
       return true;
@@ -314,9 +322,9 @@ export function managementApi(config) {
     }
     if (method === 'POST' && route === '/requests/api-call') {
       const account = readAccounts(authDir).find((each) => indexOf(each.name) === body.auth_index);
-      if (!account) return json(response, 400, { error: 'auth not found' }), true;
+      if (!account) return (json(response, 400, { error: 'auth not found' }), true);
       if (!String(body.header?.authorization ?? '').includes('$TOKEN$')) {
-        return json(response, 400, { error: 'no $TOKEN$' }), true;
+        return (json(response, 400, { error: 'no $TOKEN$' }), true);
       }
       const reset = Math.floor(Date.now() / 1000) + 5 * 86400;
       if (body.url === 'https://chatgpt.com/backend-api/wham/usage') {
@@ -328,7 +336,11 @@ export function managementApi(config) {
             rate_limit: {
               allowed: true,
               limit_reached: false,
-              primary_window: { used_percent: 20, limit_window_seconds: 18000, reset_after_seconds: 3600 },
+              primary_window: {
+                used_percent: 20,
+                limit_window_seconds: 18000,
+                reset_after_seconds: 3600,
+              },
               secondary_window: { used_percent: 55, limit_window_seconds: 604800, reset_at: reset },
             },
           }),
@@ -340,7 +352,10 @@ export function managementApi(config) {
           status_code: 200,
           header: {},
           body: JSON.stringify({
-            five_hour: { utilization: 30, resets_at: new Date(Date.now() + 7200_000).toISOString() },
+            five_hour: {
+              utilization: 30,
+              resets_at: new Date(Date.now() + 7200_000).toISOString(),
+            },
             seven_day: { utilization: 61, resets_at: new Date(reset * 1000).toISOString() },
           }),
         });

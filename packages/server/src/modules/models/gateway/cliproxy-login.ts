@@ -35,9 +35,7 @@ export function parseCodexDevicePrompt(output: string): CodexDevicePrompt | null
 }
 
 export type CodexDeviceOutcome =
-  | { status: 'pending' }
-  | { status: 'approved' }
-  | { status: 'failed'; error: string };
+  { status: 'pending' } | { status: 'approved' } | { status: 'failed'; error: string };
 
 /** How a finished run's words say it went. */
 export function codexDeviceOutcome(output: string, exited: boolean): CodexDeviceOutcome {
@@ -135,9 +133,7 @@ export class CodexDeviceLogin {
       const timer = setTimeout(
         () =>
           done(
-            new Error(
-              `ChatGPT's sign-in printed no code within ${Math.round(timeoutMs / 1000)} s`,
-            ),
+            new Error(`ChatGPT's sign-in printed no code within ${Math.round(timeoutMs / 1000)} s`),
           ),
         timeoutMs,
       );

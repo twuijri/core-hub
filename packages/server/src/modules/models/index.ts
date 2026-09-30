@@ -73,6 +73,7 @@ import type { SpeechFormat } from './adapters/types.js';
 import { CliproxySupervisor } from './gateway/cliproxy.js';
 import { ModelGateway } from './gateway/gateway.js';
 import { locateCliproxy } from './gateway/locate.js';
+import { readHermesSource, writeHermesSource } from './hermes-source.js';
 
 export { ModelsService } from './service.js';
 export type {
@@ -218,6 +219,7 @@ export function modelGatewayFor(app: FastifyInstance): ModelGateway {
     cliproxy,
     enabled: settings.enabled,
     log: app.log,
+    stateDir: path.join(hub.config.dataDir, 'gateway'),
     source: {
       upstreams: () => contextOf(app).gatewayUpstreams(),
       resolveKey: (workspace, key) => {
@@ -355,6 +357,20 @@ function contextOf(app: FastifyInstance): ModelsService {
     // Loopback calls to its own translator: never a test's scripted provider fetch.
     subscriptions: () => modelGatewayFor(app).subscriptions(),
     gatewayDirect: () => modelGatewayFor(app).direct(),
+    // "Hermes uses Core Hub's models" (DECISIONS §143).
+    hermesGateway: {
+      unavailable: () => {
+        const gateway = modelGatewayFor(app);
+        return gateway.available()
+          ? null
+          : 'the model gateway is off on this hub, or it has no CLIProxyAPI';
+      },
+      source: () => readHermesSource(gatewayDir(app)) ?? 'native',
+      setSource: (source) => writeHermesSource(gatewayDir(app), source, 'chosen'),
+      token: (workspace) => modelGatewayFor(app).hermesToken(workspace),
+      rowAddress: (providerId, wire) => modelGatewayFor(app).rowAddress(providerId, wire),
+      listening: () => modelGatewayFor(app).port() !== null,
+    },
     ...(own.restartDelayMs === undefined ? {} : { restartDelayMs: own.restartDelayMs }),
     // Hermes signs in to a provider account through its own server (ADR 0015), which only a
     // hub that supervises Hermes runs (decision §55).
@@ -417,6 +433,11 @@ const actorOf = (request: FastifyRequest): { userId: string } => {
   if (!principal) throw new HubError('internal', { message: 'route has no principal' });
   return { userId: principal.user.id };
 };
+
+/** The gateway's folder: CLIProxyAPI's files, its account store, and Hermes's choice (§143). */
+function gatewayDir(app: FastifyInstance): string {
+  return path.join(app.hub.config.dataDir, 'gateway');
+}
 
 /** A `ProviderAccount.id` from the path; Fastify decoded it, unless something left `%` codes. */
 function accountIdOf(value: unknown): string {
@@ -628,9 +649,30 @@ export const modelsModule = defineModule({
      */
     app.addHook('onReady', async () => {
       const db = requireSqlite(app.hub.database);
+      const service = contextOf(app);
+      // Hermes on the hub's models (§143): decided once per hub — a new hub (no provider yet)
+      // with a gateway starts on it, a hub that already has providers stays as it was — and,
+      // when chosen, the gateway listens before Hermes's files are written, so they carry its
+      // address (the same port as last time whenever it is free).
+      const gateway = modelGatewayFor(app);
+      const dir = gatewayDir(app);
+      let hermesSource = readHermesSource(dir);
+      if (hermesSource === null) {
+        const fresh = service.providerCount() === 0;
+        hermesSource = fresh && gateway.available() ? 'hub' : 'native';
+        try {
+          writeHermesSource(dir, hermesSource, fresh ? 'default_new_hub' : 'default_existing_hub');
+        } catch (error) {
+          app.log.warn({ err: error }, 'gateway: could not keep the Hermes model choice');
+        }
+      }
+      if (hermesSource === 'hub' && gateway.available()) {
+        await gateway.listen().catch((error: unknown) => {
+          app.log.warn({ err: error }, 'gateway: could not listen; Hermes keeps its own providers');
+        });
+      }
       const owner = ownerUser(db);
       if (!owner) return;
-      const service = contextOf(app);
       // Once: the root is the default profile's, whoever saved (decision §37). Reconciling per
       // profile used to leave Hermes with whichever profile came last.
       const row = defaultWorkspace(db);
@@ -649,9 +691,8 @@ export const modelsModule = defineModule({
       // Subscriptions signed in to through the gateway (DECISIONS §143): CLIProxyAPI renews their
       // tokens only while it runs, and the provider cards show their accounts, so a hub that has
       // any starts it now and reads them every minute — in the background, never holding boot.
-      const gateway = modelGatewayFor(app);
       if (!gateway.available()) return;
-      if (gateway.hasSubscriptionAccounts()) {
+      if (gateway.hasSubscriptionAccounts() || hermesSource === 'hub') {
         void service.subscriptions.refresh(true).then((read) => {
           if (!read.ok) app.log.warn({ reason: read.reason }, 'gateway: subscriptions not read');
         });
@@ -990,6 +1031,27 @@ export const modelsModule = defineModule({
     // ------------------------ subscriptions through the gateway (DECISIONS §143)
 
     defineRoute(app, deps, {
+      operationId: 'models.getHermesModelSource',
+      handler: (request) => {
+        const { service } = enter(request);
+        return service.hermesModelSource();
+      },
+    });
+
+    defineRoute(app, deps, {
+      operationId: 'models.setHermesModelSource',
+      handler: async (request, { body }) => {
+        const { service, scope, actor } = enter(request);
+        const source = (body as { source?: unknown } | null)?.source;
+        if (source === 'hub') {
+          const gateway = modelGatewayFor(app);
+          if (gateway.available()) await gateway.listen();
+        }
+        return service.setHermesModelSource(scope, actor, source as 'native' | 'hub');
+      },
+    });
+
+    defineRoute(app, deps, {
       operationId: 'models.listSubscriptionVendors',
       handler: (request) => {
         const { service } = enter(request);
@@ -1001,11 +1063,7 @@ export const modelsModule = defineModule({
       operationId: 'models.getProviderAccounts',
       handler: async (request, { params }) => {
         const { service, scope } = enter(request);
-        return service.getProviderAccounts(
-          scope,
-          params.provider_id as string,
-          request.language,
-        );
+        return service.getProviderAccounts(scope, params.provider_id as string, request.language);
       },
     });
 

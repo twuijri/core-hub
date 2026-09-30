@@ -202,8 +202,10 @@ jobs:
   # checked), the hub's gateway, and the real ACP bridges of Claude Code and Codex from npm, against
   # a local provider that speaks only OpenAI Chat Completions — Claude Code's tool call round-trips
   # through the Anthropic → Chat translation, Codex answers through the Responses path, Goose,
-  # OpenCode, Qwen Code and Kimi Code through Chat Completions, and no key reaches an agent. No
-  # provider account, no secret. Required through `gate`.
+  # OpenCode, Qwen Code and Kimi Code through Chat Completions, and no key reaches an agent. And the
+  # subscription sign-ins through CLIProxyAPI's management API (DECISIONS §143), against stand-ins
+  # of the vendors' sign-in servers behind a test proxy. No provider account, no secret. Required
+  # through `gate`.
   model-gateway-real:
     name: Model gateway with the real CLIProxyAPI and nine real coding agents
     runs-on: ubuntu-latest
@@ -225,7 +227,7 @@ jobs:
           COREHUB_REAL_GATEWAY: '1'
           COREHUB_REAL_GATEWAY_ALL: '1'
           COREHUB_REAL_ACP_DATA: ${{ runner.temp }}/acp-data
-        run: pnpm --filter @corehub/server exec vitest run --project unit --maxWorkers=1 src/modules/agents/model-gateway.real.test.ts src/modules/models/gateway/gateway-stream.real.test.ts
+        run: pnpm --filter @corehub/server exec vitest run --project unit --maxWorkers=1 src/modules/agents/model-gateway.real.test.ts src/modules/models/gateway/gateway-stream.real.test.ts src/modules/models/gateway/subscriptions.real.test.ts
 
   gate:
     name: Lint, typecheck, contracts, tests, build

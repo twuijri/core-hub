@@ -145,7 +145,11 @@ describe('subscriptions through the gateway', () => {
     const h = await hub();
     const provider = await add(h, 'xai-subscription');
     const signIn = await start(h, provider.id);
-    expect(signIn).toMatchObject({ status: 'pending', user_code: 'FAKE-1234', accepts_code: false });
+    expect(signIn).toMatchObject({
+      status: 'pending',
+      user_code: 'FAKE-1234',
+      accepts_code: false,
+    });
     expect(signIn.verification_url).toContain('user_code=FAKE-1234');
     const done = await settle(h, provider.id, signIn);
     expect(done.status).toBe('approved');
@@ -268,7 +272,13 @@ describe('subscriptions through the gateway', () => {
         plan: string;
         status: string;
         requests: { success: number; recent: { at: string }[] };
-        windows: { id: string; used_percent: number; resets_at: string; source: string; label: string }[];
+        windows: {
+          id: string;
+          used_percent: number;
+          resets_at: string;
+          source: string;
+          label: string;
+        }[];
         limit_reached: boolean;
       }[];
       errors: { account_id: string; status: number; message: string; model: string }[];

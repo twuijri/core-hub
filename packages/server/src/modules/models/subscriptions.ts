@@ -160,7 +160,12 @@ export class Subscriptions {
   private readonly errors: ManagementErrorEvent[] = [];
   private readonly checks = new Map<
     string,
-    { at: string; windows: ContractUsageWindow[]; limitReached: boolean | null; error: string | null }
+    {
+      at: string;
+      windows: ContractUsageWindow[];
+      limitReached: boolean | null;
+      error: string | null;
+    }
   >();
   private readonly now: () => number;
 
@@ -288,7 +293,7 @@ export class Subscriptions {
       });
     }
     try {
-      await login.client.submitCallback(login.vendor, login.state, text);
+      await login.client.submitCallback(login.state, text);
     } catch (error) {
       if (error instanceof ManagementError && error.status !== null && error.status < 500) {
         throw new HubError('state_invalid', {
@@ -468,8 +473,11 @@ export class Subscriptions {
     await this.refresh(true);
     const account = this.accountOf(providerId, name);
     const at = new Date(this.now()).toISOString();
-    const reading = (error: string | null, windows: ContractUsageWindow[] = [], limit: boolean | null = null) =>
-      this.checks.set(name, { at, windows, limitReached: limit, error });
+    const reading = (
+      error: string | null,
+      windows: ContractUsageWindow[] = [],
+      limit: boolean | null = null,
+    ) => this.checks.set(name, { at, windows, limitReached: limit, error });
     if (!signIn.check) return void reading('this vendor has no usage address to ask');
     if (!account.authIndex) return void reading('the account has no index to ask with');
     const header: Record<string, string> = { ...(signIn.check.headers ?? {}) };
@@ -741,12 +749,7 @@ export function readUsage(vendor: string, body: unknown, now: number): Windows {
   const object = (body && typeof body === 'object' ? body : {}) as Record<string, unknown>;
   const windows: ContractUsageWindow[] = [];
   let limitReached: boolean | null = null;
-  const push = (
-    id: string,
-    minutes: number | null,
-    used: number | null,
-    resets: string | null,
-  ) =>
+  const push = (id: string, minutes: number | null, used: number | null, resets: string | null) =>
     windows.push({
       id,
       label: null,
@@ -796,7 +799,8 @@ export function readUsage(vendor: string, body: unknown, now: number): Windows {
       if (remaining !== null) return ((limit - remaining) / limit) * 100;
       return null;
     };
-    if (usage) push('total', null, fraction(usage), resetAt(usage.resetTime ?? usage.reset_time, now));
+    if (usage)
+      push('total', null, fraction(usage), resetAt(usage.resetTime ?? usage.reset_time, now));
     const limits = Array.isArray(object.limits) ? object.limits : [];
     limits.forEach((raw, index) => {
       const item = record(raw);
@@ -845,7 +849,9 @@ export function readUsage(vendor: string, body: unknown, now: number): Windows {
   } else if (vendor === 'antigravity') {
     const groups = Array.isArray(object.groups) ? object.groups : [];
     for (const rawGroup of groups) {
-      const buckets = Array.isArray(record(rawGroup)?.buckets) ? (record(rawGroup)!.buckets as unknown[]) : [];
+      const buckets = Array.isArray(record(rawGroup)?.buckets)
+        ? (record(rawGroup)!.buckets as unknown[])
+        : [];
       for (const rawBucket of buckets) {
         const bucket = record(rawBucket);
         if (!bucket) continue;

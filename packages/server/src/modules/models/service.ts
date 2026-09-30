@@ -37,6 +37,7 @@ import type {
   TranscribeResult,
 } from './adapters/types.js';
 import {
+  HERMES_PROVIDER_PREFIX,
   PROVIDER_CATALOGUE,
   authKindOf,
   catalogueEntry,
@@ -112,6 +113,10 @@ import {
 } from './subscriptions.js';
 import { upstreamModel, upstreamPrefix } from './gateway/cliproxy-config.js';
 import { t, type UiLanguage } from '../../i18n/index.js';
+import type { HermesModelSource } from './hermes-source.js';
+
+/** The variable a Hermes profile's gateway token is in (DECISIONS §143). */
+export const HERMES_GATEWAY_TOKEN_ENV = 'COREHUB_GATEWAY_TOKEN';
 import {
   modelKeyOf,
   serializeEnsemble,
@@ -259,6 +264,25 @@ export interface ModelsServiceOptions {
    * address and the hub's key, held until `done()`.
    */
   gatewayDirect?: () => Promise<{ baseUrl: string; key: string; done(): void }>;
+  /**
+   * "Hermes uses Core Hub's models" (DECISIONS §143): the choice, and what the gateway gives
+   * Hermes — a row's address on its listener and a profile's long-lived token. Absent: native.
+   */
+  hermesGateway?: HermesGatewayPort;
+}
+
+/** What the models module needs of the gateway to route Hermes through it (§143). */
+export interface HermesGatewayPort {
+  /** Why the gateway cannot serve Hermes (off, no CLIProxyAPI), or null. */
+  unavailable(): string | null;
+  source(): HermesModelSource;
+  setSource(source: HermesModelSource): void;
+  /** A profile's token, or null when there can be none. */
+  token(workspace: string): string | null;
+  /** A provider row's address on the listener, or null before the listener is up. */
+  rowAddress(providerId: string, wire: 'anthropic' | 'openai'): string | null;
+  /** Whether the listener is up. */
+  listening(): boolean;
 }
 
 /** A sign-in the hub started and still answers polls for (contract `ProviderSignIn`). */
@@ -3053,8 +3077,42 @@ export class ModelsService {
       for (const name of hermesEnvVars) named.add(name);
       credentials.push({ family: row.family, envVar, hermesEnvVars, value });
     }
+    // Hermes on the hub's models (§143): each row the gateway serves is one more block, at its own
+    // gateway address, with this profile's token — in the file whichever model is chosen, as every
+    // other block is, so a turn may name any of them.
+    const viaGateway = this.hermesViaGateway();
+    const gatewayToken = viaGateway ? this.options.hermesGateway!.token(workspace) : null;
+    if (viaGateway && gatewayToken) {
+      hermesProviders.push(...this.gatewayBlocks(ordered));
+      credentials.push({
+        family: 'corehub-gateway',
+        envVar: HERMES_GATEWAY_TOKEN_ENV,
+        hermesEnvVars: [HERMES_GATEWAY_TOKEN_ENV],
+        value: gatewayToken,
+      });
+    }
     const chat = this.hermesModelChoice(workspace);
     const image = this.imageChoice(workspace);
+    const fallbacks = chat.choice
+      ? this.fallbackChain(workspace).flatMap((member) =>
+          member.provider ? [{ provider: member.provider, model: member.model }] : [],
+        )
+      : null;
+    // The escape hatch: a chat model the gateway serves from a key Hermes can also use by itself
+    // ends the chain on Hermes's own route to it, so Hermes still answers if the gateway is down.
+    if (viaGateway && gatewayToken && chat.choice && fallbacks) {
+      const ref = this.refOfRole(workspace, 'chat');
+      const row = ref ? this.store.providerById(ref.provider_id) : undefined;
+      const own =
+        row && row.authKind !== 'oauth' ? hermesProviderNameOf(row.slug, this.entryOf(row)) : null;
+      if (
+        own &&
+        ref &&
+        !fallbacks.some((each) => each.provider === own && each.model === ref.model)
+      ) {
+        fallbacks.push({ provider: own, model: ref.model });
+      }
+    }
     return {
       credentials,
       hermesProviders,
@@ -3067,11 +3125,7 @@ export class ModelsService {
       hermesModel: chat.choice,
       hermesModelBlocked: chat.blocked,
       // Owned where the model selection is (contract decision §54).
-      hermesFallbacks: chat.choice
-        ? this.fallbackChain(workspace).flatMap((member) =>
-            member.provider ? [{ provider: member.provider, model: member.model }] : [],
-          )
-        : null,
+      hermesFallbacks: fallbacks,
       ownedEnv: this.ownedEnvNames(),
     };
   }
@@ -3102,6 +3156,8 @@ export class ModelsService {
     }
     // The image model's variables are the hub's in every `.env` it writes (decision §72).
     for (const name of IMAGE_ENV_NAMES) names.add(name);
+    // The gateway token (§143): the hub's, so switching Hermes back takes it out of the files.
+    names.add(HERMES_GATEWAY_TOKEN_ENV);
     return [...names].sort();
   }
 
@@ -4175,6 +4231,10 @@ export class ModelsService {
   private requireExpressible(scope: WorkspaceScope, providerId: string): void {
     const row = this.loadProvider(scope, providerId);
     if (this.hermesNameOfProvider(row)) return;
+    // A subscription signed in to through the gateway (§143) serves every agent; Hermes reaches
+    // it once it uses the hub's models, and keeps its own model until then (the runtime report
+    // says so).
+    if (this.entryOf(row)?.gatewaySignIn) return;
     throw validationFailed({
       field: 'default',
       reason: 'the agent runtime cannot be told about this provider, so it cannot be the default',
@@ -4185,7 +4245,113 @@ export class ModelsService {
   private hermesNameOfProvider(row: ProviderRow): string | null {
     const entry = this.entryOf(row);
     if (hermesRouteOf(entry) === 'openai-compatible' && row.kind !== 'llm') return null;
+    // Hermes on the hub's models (§143): a row the gateway serves is its block at the gateway.
+    if (this.hermesViaGateway() && this.gatewayRoute(row)) return this.gatewayBlockName(row);
     return hermesProviderNameOf(row.slug, entry);
+  }
+
+  // ------------------------------------------- Hermes on the hub's models (§143)
+
+  /** How many providers any profile has added (removed ones not counted): 0 on a new hub. */
+  providerCount(): number {
+    return this.store.everyProviderRow().filter((row) => !row.archivedAt).length;
+  }
+
+  /** Whether Hermes is given the gateway now: chosen, available, and the listener up. */
+  private hermesViaGateway(): boolean {
+    const port = this.options.hermesGateway;
+    if (!port || port.source() !== 'hub' || port.unavailable()) return false;
+    return port.listening();
+  }
+
+  /** The name of a row's block at the gateway in Hermes's `providers:`. */
+  private gatewayBlockName(row: ProviderRow): string {
+    return `${HERMES_PROVIDER_PREFIX}gw-${row.slug}`;
+  }
+
+  /**
+   * The wire Hermes speaks to a row through the gateway: a model's own, so Claude models keep
+   * Anthropic Messages (and Hermes's prompt caching), OpenAI's and ChatGPT's keep Responses, and
+   * everything else is Chat Completions, which CLIProxyAPI translates.
+   */
+  private gatewayWire(row: ProviderRow): 'anthropic_messages' | 'responses' | 'chat_completions' {
+    const entry = this.entryOf(row);
+    const vendor = entry?.gatewaySignIn?.vendor;
+    if (vendor === 'claude' || (!vendor && entry?.protocol === 'anthropic')) {
+      return 'anthropic_messages';
+    }
+    if (vendor === 'codex' || (!vendor && row.apiMode === 'responses')) return 'responses';
+    return 'chat_completions';
+  }
+
+  /** The profile's rows the gateway serves, as Hermes blocks at the gateway. */
+  private gatewayBlocks(rows: readonly ProviderRow[]): HermesProviderRoute[] {
+    const port = this.options.hermesGateway;
+    if (!port) return [];
+    const out: HermesProviderRoute[] = [];
+    for (const row of rows) {
+      if (!row.enabled || row.kind !== 'llm' || !this.gatewayRoute(row)) continue;
+      const wire = this.gatewayWire(row);
+      const baseUrl = port.rowAddress(
+        row.id,
+        wire === 'anthropic_messages' ? 'anthropic' : 'openai',
+      );
+      if (!baseUrl) continue;
+      out.push({
+        name: this.gatewayBlockName(row),
+        baseUrl,
+        apiMode: wire,
+        keyEnv: HERMES_GATEWAY_TOKEN_ENV,
+      });
+    }
+    return out;
+  }
+
+  /** `models.getHermesModelSource`. */
+  hermesModelSource(): {
+    source: HermesModelSource;
+    effective: HermesModelSource;
+    available: boolean;
+    reason: string | null;
+  } {
+    const port = this.options.hermesGateway;
+    const reason = port ? port.unavailable() : 'the model gateway is off on this hub';
+    return {
+      source: port?.source() ?? 'native',
+      effective: this.hermesViaGateway() ? 'hub' : 'native',
+      available: reason === null,
+      reason,
+    };
+  }
+
+  /** `models.setHermesModelSource`: rewrites every Hermes profile, and restarts Hermes when idle. */
+  setHermesModelSource(
+    scope: WorkspaceScope,
+    actor: Actor,
+    source: HermesModelSource,
+  ): ReturnType<ModelsService['hermesModelSource']> {
+    const port = this.options.hermesGateway;
+    if (source !== 'hub' && source !== 'native') {
+      throw validationFailed({ field: 'source', reason: 'native or hub' });
+    }
+    if (source === 'hub') {
+      const reason = port ? port.unavailable() : 'the model gateway is off on this hub';
+      if (!port || reason) throw gatewayUnavailable(reason ?? 'unavailable');
+    }
+    port?.setSource(source);
+    this.options.audit.record({
+      workspace: scope.id,
+      ownerId: actor.userId,
+      actorKind: 'user',
+      actorId: actor.userId,
+      action: 'agent.model_source_changed',
+      entityKind: 'agent',
+      entityId: 'hermes',
+      summary: `Hermes reaches its models ${source === 'hub' ? "through Core Hub's gateway" : 'by itself'}`,
+      data: { source },
+    });
+    this.propagate(scope, actor);
+    return this.hermesModelSource();
   }
 
   private requireModel(scope: WorkspaceScope, ref: ModelRefInput): ModelRow {

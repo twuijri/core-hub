@@ -149,7 +149,12 @@ describe('CLIProxyAPI configuration', () => {
       authDir: '/data/gateway/cliproxy-auth',
       upstreams: [
         upstream(),
-        upstream({ providerId: '01KSUBSCRIPTION', kind: 'subscription', baseUrl: '', apiKey: null }),
+        upstream({
+          providerId: '01KSUBSCRIPTION',
+          kind: 'subscription',
+          baseUrl: '',
+          apiKey: null,
+        }),
         upstream({
           providerId: OTHER,
           kind: 'claude',

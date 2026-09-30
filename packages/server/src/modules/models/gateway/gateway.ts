@@ -24,7 +24,10 @@ import {
   type Server,
   type ServerResponse,
 } from 'node:http';
+import { randomBytes } from 'node:crypto';
+import { chmodSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import type { AddressInfo } from 'node:net';
+import path from 'node:path';
 import type { FastifyBaseLogger } from 'fastify';
 import type { GatewayUpstream } from './cliproxy-config.js';
 import { upstreamModel } from './cliproxy-config.js';
@@ -112,6 +115,12 @@ export interface ModelGatewayOptions {
   enabled: boolean;
   /** Tests: the address it listens on (always a loopback one). */
   host?: string;
+  /**
+   * Where the gateway keeps what outlives a restart (DECISIONS §143): the port it listened on
+   * last (tried again first, so the address written into Hermes's files stays the same) and the
+   * secret Hermes's profile tokens are signed with. Absent in tests of the gateway alone.
+   */
+  stateDir?: string;
 }
 
 /** What an agent session is given: where the gateway is, its token, and the turn switch. */
@@ -147,10 +156,88 @@ export class ModelGateway {
     return this.options.enabled && this.options.cliproxy.status().state !== 'absent';
   }
 
+  /** The port it listens on now, or null before `listen()` has resolved. */
+  port(): number | null {
+    const address = this.server?.address();
+    return address && typeof address === 'object' ? address.port : null;
+  }
+
+  /**
+   * The secret Hermes's profile tokens are signed with (DECISIONS §143): 32 random bytes, made
+   * once, `0600` in the gateway's folder. Null without a folder.
+   */
+  private hermesSecret(): Buffer | null {
+    if (this.secretCache !== undefined) return this.secretCache;
+    const dir = this.options.stateDir;
+    if (!dir) return (this.secretCache = null);
+    const file = path.join(dir, 'hermes-token.key');
+    try {
+      if (existsSync(file)) {
+        const read = Buffer.from(readFileSync(file, 'utf8').trim(), 'base64url');
+        if (read.length >= 32) return (this.secretCache = read);
+      }
+      mkdirSync(dir, { recursive: true, mode: 0o700 });
+      const made = randomBytes(32);
+      writeFileSync(file, made.toString('base64url'), { mode: 0o600 });
+      chmodSync(file, 0o600);
+      return (this.secretCache = made);
+    } catch (error) {
+      this.options.log.warn({ err: error }, 'gateway: no secret for Hermes tokens');
+      return (this.secretCache = null);
+    }
+  }
+  private secretCache: Buffer | null | undefined = undefined;
+
+  /** A Hermes profile's long-lived token (DECISIONS §143), or null when there can be none. */
+  hermesToken(workspace: string): string | null {
+    if (!this.available()) return null;
+    return this.tokens.hermesToken(workspace, this.hermesSecret());
+  }
+
+  /**
+   * The address of one provider row through the gateway, for Hermes's per-row `providers:`
+   * blocks (DECISIONS §143): `…/gateway/row/<row>/anthropic` (Messages) or
+   * `…/gateway/row/<row>/openai/v1` (Responses, Chat Completions). Null before the listener is up.
+   */
+  rowAddress(providerId: string, wire: 'anthropic' | 'openai'): string | null {
+    const port = this.port();
+    if (!port) return null;
+    const base = `http://127.0.0.1:${port}/gateway/row/${providerId}`;
+    return wire === 'anthropic' ? `${base}/anthropic` : `${base}/openai/v1`;
+  }
+
+  /** The port the listener had last time, which it asks for again first. */
+  private lastPort(): number {
+    const dir = this.options.stateDir;
+    if (!dir) return 0;
+    try {
+      const port = Number(readFileSync(path.join(dir, 'gateway.port'), 'utf8').trim());
+      return Number.isInteger(port) && port > 1024 && port < 65536 ? port : 0;
+    } catch {
+      return 0;
+    }
+  }
+
+  private rememberPort(port: number): void {
+    const dir = this.options.stateDir;
+    if (!dir) return;
+    try {
+      mkdirSync(dir, { recursive: true, mode: 0o700 });
+      writeFileSync(path.join(dir, 'gateway.port'), String(port), { mode: 0o600 });
+    } catch {
+      // Only the next start's address is at stake.
+    }
+  }
+
   /** The loopback port it listens on, starting the listener the first time. */
   listen(): Promise<number> {
     if (this.listening) return this.listening;
-    this.listening = new Promise<number>((resolve, reject) => {
+    this.listening = this.listenOn(this.lastPort()).catch(() => this.listenOn(0));
+    return this.listening;
+  }
+
+  private listenOn(wanted: number): Promise<number> {
+    return new Promise<number>((resolve, reject) => {
       const server = createServer((request, response) => {
         void this.handle(request, response).catch((error: unknown) => {
           this.options.log.warn({ err: error }, 'gateway: request failed');
@@ -162,14 +249,14 @@ export class ModelGateway {
       server.keepAliveTimeout = 65_000;
       server.requestTimeout = 0;
       server.once('error', reject);
-      server.listen(0, this.options.host ?? '127.0.0.1', () => {
+      server.listen(wanted, this.options.host ?? '127.0.0.1', () => {
         this.server = server;
         const port = (server.address() as AddressInfo).port;
         this.options.log.info({ port }, 'gateway: listening on loopback');
+        this.rememberPort(port);
         resolve(port);
       });
     });
-    return this.listening;
   }
 
   /**
@@ -273,7 +360,8 @@ export class ModelGateway {
    * does, through CLIProxyAPI, with no token of the account ever in the hub.
    */
   async direct(): Promise<{ baseUrl: string; key: string; done(): void }> {
-    if (!this.available()) throw new ModelGatewayUnavailable('the model gateway is off on this hub');
+    if (!this.available())
+      throw new ModelGatewayUnavailable('the model gateway is off on this hub');
     const held = await this.options.cliproxy.lease(this.upstreams(true));
     return { baseUrl: `http://127.0.0.1:${held.port}/v1`, key: held.key, done: () => held.done() };
   }
@@ -302,6 +390,14 @@ export class ModelGateway {
 
   private async handle(request: IncomingMessage, response: ServerResponse): Promise<void> {
     const url = new URL(request.url ?? '/', 'http://127.0.0.1');
+    // One provider row's own address (Hermes's per-row blocks, DECISIONS §143):
+    // `/gateway/row/<row>/<wire>/…` is `/gateway/<wire>/…` for that row's models only.
+    let row: string | null = null;
+    const rowPath = /^\/gateway\/row\/([0-9A-Za-z]{10,40})(\/.*)$/.exec(url.pathname);
+    if (rowPath) {
+      row = rowPath[1]!;
+      url.pathname = `/gateway${rowPath[2]}`;
+    }
     const wire: Wire = url.pathname.startsWith('/gateway/anthropic')
       ? 'anthropic'
       : url.pathname.startsWith('/gateway/google/')
@@ -317,7 +413,7 @@ export class ModelGateway {
       response.end('{}');
       return;
     }
-    const grant = this.tokens.resolve(presentedToken(request, url));
+    const grant = this.tokens.resolve(presentedToken(request, url), this.hermesSecret());
     if (!grant) {
       request.resume();
       fail(
@@ -334,7 +430,7 @@ export class ModelGateway {
       (url.pathname === '/gateway/anthropic/v1/models' ||
         url.pathname === '/gateway/openai/v1/models')
     ) {
-      this.models(response, wire, grant);
+      this.models(response, wire, grant, row);
       return;
     }
     if (wire === 'google') {
@@ -368,7 +464,11 @@ export class ModelGateway {
       );
       return;
     }
-    const resolved = this.resolveModel(grant, typeof body.model === 'string' ? body.model : '');
+    const resolved = this.resolveModel(
+      grant,
+      typeof body.model === 'string' ? body.model : '',
+      row,
+    );
     if ('refusal' in resolved) {
       fail(response, route.wire, 400, 'invalid_request_error', resolved.refusal);
       return;
@@ -501,8 +601,16 @@ export class ModelGateway {
   private resolveModel(
     grant: GatewayGrantRecord,
     asked: string,
+    row: string | null = null,
   ): { target: GatewayTarget } | { refusal: string } {
     const { source } = this.options;
+    // A row's own address names the row; the model is that row's (a catalogue key of it is too).
+    if (row && asked && !(GATEWAY_MODEL_ALIASES as readonly string[]).includes(asked)) {
+      const keyed = asked.includes('/') ? source.resolveKey(grant.workspace, asked) : null;
+      const model = keyed && keyed.providerId === row ? keyed.model : asked;
+      const target = source.target(grant.workspace, row, model);
+      return 'refusal' in target ? target : { target };
+    }
     // A catalogue key the agent was given or typed (`/model openrouter/…`) names its own model.
     if (asked.includes('/') && !(GATEWAY_MODEL_ALIASES as readonly string[]).includes(asked)) {
       const key = source.resolveKey(grant.workspace, asked);
@@ -530,8 +638,19 @@ export class ModelGateway {
     return [...GATEWAY_MODEL_ALIASES, ...this.options.source.modelKeys(grant.workspace)];
   }
 
-  private models(response: ServerResponse, wire: Wire, grant: GatewayGrantRecord): void {
-    const ids = this.modelIds(grant);
+  private models(
+    response: ServerResponse,
+    wire: Wire,
+    grant: GatewayGrantRecord,
+    row: string | null = null,
+  ): void {
+    // A row's own address lists that row's models, by the ids its provider knows them by.
+    const ids = row
+      ? this.modelIds(grant).flatMap((id) => {
+          const key = id.includes('/') ? this.options.source.resolveKey(grant.workspace, id) : null;
+          return key && key.providerId === row ? [key.model] : [];
+        })
+      : this.modelIds(grant);
     response.writeHead(200, { 'content-type': 'application/json' });
     if (wire === 'anthropic') {
       response.end(

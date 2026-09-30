@@ -313,7 +313,12 @@ export const GATEWAY_SUBSCRIPTIONS: readonly GatewaySubscription[] = [
       vendor: 'xai',
       flow: 'device',
       usageWindows: false,
-      check: { method: 'GET', url: 'https://cli-chat-proxy.grok.com/v1/billing' },
+      // The headers the Grok CLI's own billing call carries; without them xAI answers 401.
+      check: {
+        method: 'GET',
+        url: 'https://cli-chat-proxy.grok.com/v1/billing',
+        headers: { 'x-xai-token-auth': 'xai-grok-cli', 'x-grok-client-version': '0.2.91' },
+      },
     },
   },
   {
@@ -1151,7 +1156,10 @@ export function assertCatalogueIsWellFormed(
       );
     }
     // "Move to the gateway" names a gateway sign-in (DECISIONS §143).
-    if (entry.gatewayMove && !catalogue.find((other) => other.slug === entry.gatewayMove)?.gatewaySignIn) {
+    if (
+      entry.gatewayMove &&
+      !catalogue.find((other) => other.slug === entry.gatewayMove)?.gatewaySignIn
+    ) {
       throw new Error(
         `provider catalogue: "${entry.slug}" moves to "${entry.gatewayMove}", which is no gateway sign-in`,
       );

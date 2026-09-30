@@ -25,9 +25,7 @@ export interface ManagementLoginStart {
 
 /** How a login stands: still waiting, done, or refused with CLIProxyAPI's words. */
 export type ManagementLoginStatus =
-  | { status: 'wait' }
-  | { status: 'ok' }
-  | { status: 'error'; error: string };
+  { status: 'wait' } | { status: 'ok' } | { status: 'error'; error: string };
 
 /** One account in CLIProxyAPI's store, as `GET /credentials` lists it. */
 export interface ManagementCredential {
@@ -177,7 +175,8 @@ export function errorEventOf(value: unknown): ManagementErrorEvent | null {
       : typeof fail.status_code === 'number'
         ? fail.status_code
         : null;
-  const failed = item.failed === true || (item.failed === undefined && status !== null && status >= 400);
+  const failed =
+    item.failed === true || (item.failed === undefined && status !== null && status >= 400);
   if (!failed) return null;
   const body =
     (typeof item.body === 'string' ? item.body : null) ??
@@ -263,7 +262,8 @@ export class ManagementClient {
       state,
       flow: body.flow === 'device' ? 'device' : null,
       userCode: str(body.user_code),
-      expiresIn: typeof body.expires_in === 'number' && body.expires_in > 0 ? body.expires_in : null,
+      expiresIn:
+        typeof body.expires_in === 'number' && body.expires_in > 0 ? body.expires_in : null,
     };
   }
 
@@ -281,14 +281,25 @@ export class ManagementClient {
   }
 
   /**
-   * The address a browser sign-in landed on, pasted back (`POST /oauth/callback`). A bare code is
-   * sent with the sign-in's state instead.
+   * The address a browser sign-in landed on, pasted back (`POST /oauth/callback`). The address's
+   * own `state` is what CLIProxyAPI checks — so an address from another, older sign-in is refused
+   * rather than taken for this one; only an address without one, or a bare code, is sent with this
+   * sign-in's state. The vendor is left for CLIProxyAPI to infer from the state.
    */
-  async submitCallback(vendor: string, state: string, pasted: string): Promise<void> {
+  async submitCallback(state: string, pasted: string): Promise<void> {
     const text = pasted.trim();
-    const body = /^https?:\/\//i.test(text)
-      ? { provider: vendor, state, redirect_url: text }
-      : { provider: vendor, state, code: text };
+    let body: Record<string, string>;
+    if (/^https?:\/\//i.test(text)) {
+      let own = false;
+      try {
+        own = new URL(text).searchParams.has('state');
+      } catch {
+        own = false;
+      }
+      body = own ? { redirect_url: text } : { redirect_url: text, state };
+    } else {
+      body = { state, code: text };
+    }
     await this.call('POST', '/oauth/callback', body);
   }
 

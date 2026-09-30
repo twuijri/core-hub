@@ -58,8 +58,12 @@ export interface HermesProviderRoute {
   /** The block's key and `name`, always prefixed (`catalogue.ts` §HERMES_PROVIDER_PREFIX). */
   name: string;
   baseUrl: string;
-  /** null leaves the transport to Hermes's own URL detection. */
-  apiMode: 'chat_completions' | 'responses' | null;
+  /**
+   * null leaves the transport to Hermes's own URL detection. `anthropic_messages` only for a
+   * block at the hub's gateway (DECISIONS §143): a Claude model keeps its own wire, and Hermes's
+   * prompt caching with it.
+   */
+  apiMode: 'chat_completions' | 'responses' | 'anthropic_messages' | null;
   /** The variable Hermes reads this endpoint's key from; the `.env` merge owns it. */
   keyEnv: string;
 }

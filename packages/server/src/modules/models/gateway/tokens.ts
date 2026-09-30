@@ -8,10 +8,17 @@
  * (`alive`), is revoked when the hub closes the session, and expires after `TOKEN_TTL_MS` in any
  * case. A token the hub does not hold is refused, whoever sends it.
  */
-import { randomBytes, timingSafeEqual } from 'node:crypto';
+import { createHmac, randomBytes, timingSafeEqual } from 'node:crypto';
 
 export const TOKEN_TTL_MS = 24 * 60 * 60_000;
 const PREFIX = 'chgw_';
+/**
+ * A Hermes profile's token (DECISIONS §143): long-lived, because Hermes is — its channels and cron
+ * run at night and read the token from its `.env`. It names the profile and is signed with a
+ * secret of the hub's (`<DATA_DIR>/gateway/hermes-token.key`), so it survives a hub restart without
+ * being stored anywhere but that profile's own `.env`; a new secret revokes every one.
+ */
+const HERMES_PREFIX = 'chgwh_';
 
 /** One call's usage, priced, as the gateway reports it to a turn. */
 export interface GatewayTurnUsage {
@@ -112,8 +119,52 @@ export class GatewayTokens {
     return record;
   }
 
+  /**
+   * The Hermes token of a profile: `chgwh_<workspace>.<signature>`. Null without a secret (a hub
+   * whose gateway cannot serve Hermes).
+   */
+  hermesToken(workspace: string, secret: Buffer | null): string | null {
+    if (!secret || !/^[0-9A-Za-z_-]{1,64}$/.test(workspace)) return null;
+    return `${HERMES_PREFIX}${workspace}.${hermesSignature(workspace, secret)}`;
+  }
+
+  /** The grant of a Hermes profile's token, made when first presented (stateless, signed). */
+  private hermesGrant(presented: string, secret: Buffer | null): GatewayGrantRecord | null {
+    if (!secret) return null;
+    const match = /^chgwh_([0-9A-Za-z_-]{1,64})\.([A-Za-z0-9_-]+)$/.exec(presented);
+    if (!match) return null;
+    const expected = Buffer.from(hermesSignature(match[1]!, secret));
+    const given = Buffer.from(match[2]!);
+    if (expected.length !== given.length || !timingSafeEqual(expected, given)) return null;
+    const known = this.records.get(presented);
+    if (known) return known;
+    const record: GatewayGrantRecord = {
+      workspace: match[1]!,
+      agentId: 'hermes',
+      agentSlug: 'hermes',
+      sessionId: '',
+      userId: null,
+      alive: () => true,
+      token: presented,
+      expiresAt: Number.POSITIVE_INFINITY,
+      turn: null,
+      lastRunId: null,
+      selection: null,
+      totals: new Map(),
+      revoked: false,
+      exhausted: new Set(),
+      redirect: null,
+    };
+    this.records.set(presented, record);
+    return record;
+  }
+
   /** The live record a presented token names, or null (unknown, revoked, expired, process gone). */
-  resolve(presented: string | null | undefined): GatewayGrantRecord | null {
+  resolve(
+    presented: string | null | undefined,
+    hermesSecret: Buffer | null = null,
+  ): GatewayGrantRecord | null {
+    if (presented?.startsWith(HERMES_PREFIX)) return this.hermesGrant(presented, hermesSecret);
     if (!presented || !presented.startsWith(PREFIX)) return null;
     const record = this.records.get(presented);
     if (!record) return null;
@@ -162,4 +213,8 @@ export class GatewayTokens {
       if (record.revoked || at > record.expiresAt || !record.alive()) this.records.delete(token);
     }
   }
+}
+
+function hermesSignature(workspace: string, secret: Buffer): string {
+  return createHmac('sha256', secret).update(`hermes:${workspace}`).digest('base64url');
 }

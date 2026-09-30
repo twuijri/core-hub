@@ -86,7 +86,10 @@ createServer((request, response) => {
         url.pathname,
       );
     if (gemini) body.model = gemini[1];
-    if (!served.has(body.model) && !accountModels(authDir).some((model) => model.id === body.model)) {
+    if (
+      !served.has(body.model) &&
+      !accountModels(authDir).some((model) => model.id === body.model)
+    ) {
       response.writeHead(400, { 'content-type': 'application/json' });
       response.end(
         JSON.stringify({
