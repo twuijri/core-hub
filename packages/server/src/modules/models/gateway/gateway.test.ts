@@ -26,7 +26,7 @@ import { NO_KEY, cliproxyConfig, upstreamPrefix, type GatewayUpstream } from './
 import {
   ModelGateway,
   isLoopback,
-  isQuotaExhausted,
+  classifyLimit,
   scrubInternalNames,
   type GatewaySource,
 } from './gateway.js';
@@ -56,6 +56,8 @@ function upstream(overrides: Partial<GatewayUpstream> = {}): GatewayUpstream {
       { id: 'broken', contextWindow: null },
       { id: 'qwen3:8b', contextWindow: null },
       { id: 'flash-spent', contextWindow: null },
+      { id: 'flash-per-minute', contextWindow: null },
+      { id: 'flash-per-day', contextWindow: null },
     ],
     ...overrides,
   };
@@ -100,7 +102,13 @@ function harness(
     env: { PATH: process.env.PATH ?? '', ...options.env },
     readyTimeoutMs: 10_000,
   });
-  const gateway = new ModelGateway({ cliproxy, source, log, enabled: options.enabled ?? true });
+  const gateway = new ModelGateway({
+    cliproxy,
+    source,
+    log,
+    enabled: options.enabled ?? true,
+    limitWait: { defaultMs: 20, maxMs: 1_000 },
+  });
   const made = { gateway, cliproxy, stateDir, late, upstreams };
   open.push(made);
   return made;
@@ -345,20 +353,29 @@ describe('the gateway', () => {
     expect(reports.at(-1)).toMatchObject({ inputTokens: 50, outputTokens: 14 });
   });
 
-  it('accepts a catalogue key for a model of its own, and refuses what it cannot serve', async () => {
+  it('serves the turn’s model whatever id the agent names, and refuses what it cannot serve', async () => {
     const h = harness();
     const grant = await grantOf(h);
-    // No turn yet, and no model named: nothing to run on.
-    const nothing = await post(`${grant.anthropicBaseUrl}/v1/messages`, grant.token, {
-      model: 'corehub-main',
+    // No turn yet: nothing to run on, even for an id the catalogue knows.
+    for (const model of ['corehub-main', 'example/coder']) {
+      const nothing = await post(`${grant.anthropicBaseUrl}/v1/messages`, grant.token, { model });
+      expect(nothing.status).toBe(400);
+      expect((await nothing.json()).error.message).toMatch(/no model is chosen/);
+    }
+    // The person chose `vendor/slashed`; an agent that names another model of the catalogue (a
+    // Claude "opus" its bridge picked from `/v1/models`), or a vendor id, still gets that one
+    // (owner, 2026-09-30).
+    grant.setTurn({
+      runId: 'run-2',
+      providerId: PROVIDER,
+      model: 'vendor/slashed',
+      report: () => {},
     });
-    expect(nothing.status).toBe(400);
-    expect((await nothing.json()).error.message).toMatch(/no model is chosen/);
-    const keyed = await post(`${grant.anthropicBaseUrl}/v1/messages`, grant.token, {
-      model: 'example/coder',
-    });
-    expect(keyed.status).toBe(200);
-    expect(keyed.headers.get('x-fake-model')).toBe(`${upstreamPrefix(PROVIDER)}/coder`);
+    for (const model of ['example/coder', 'claude-opus-4-6-thinking', 'corehub-small']) {
+      const keyed = await post(`${grant.anthropicBaseUrl}/v1/messages`, grant.token, { model });
+      expect(keyed.status).toBe(200);
+      expect(keyed.headers.get('x-fake-model')).toBe(`${upstreamPrefix(PROVIDER)}/vendor/slashed`);
+    }
     grant.setTurn({ runId: 'run-3', providerId: PROVIDER, model: 'refused', report: () => {} });
     const refused = await post(`${grant.openaiBaseUrl}/chat/completions`, grant.token, {
       model: 'corehub-main',
@@ -459,7 +476,8 @@ describe('the gateway', () => {
           details: [expect.objectContaining({ reason: 'MODEL_CAPACITY_EXHAUSTED' })],
         },
       });
-      expect((await calls(h))[spentModel]).toBe(1);
+      // Asked once more after a wait (it might have been a passing limit), then never again.
+      expect((await calls(h))[spentModel]).toBe(2);
       // A new turn asks the provider again: the quota may be back.
       grant.setTurn({
         runId: 'run-q2',
@@ -468,7 +486,7 @@ describe('the gateway', () => {
         report: () => {},
       });
       await post(`${grant.anthropicBaseUrl}/v1/messages`, grant.token, { model: 'corehub-main' });
-      expect((await calls(h))[spentModel]).toBe(2);
+      expect((await calls(h))[spentModel]).toBe(4);
     });
 
     it('moves the turn down the profile’s fallback chain, and keeps it there', async () => {
@@ -505,7 +523,45 @@ describe('the gateway', () => {
         model: 'corehub-main',
       });
       expect(next.headers.get('x-fake-model')).toBe(`${upstreamPrefix(PROVIDER)}/coder`);
-      expect((await calls(h))[spentModel]).toBe(1);
+      expect((await calls(h))[spentModel]).toBe(2);
+    });
+
+    it('waits out a per-minute limit once and answers; a per-day quota is spent at once', async () => {
+      const h = harness();
+      const grant = await grantOf(h);
+      const waits: unknown[] = [];
+      const exhausted: unknown[] = [];
+      grant.setTurn({
+        runId: 'run-m',
+        providerId: PROVIDER,
+        model: 'flash-per-minute',
+        report: () => {},
+        waiting: (wait) => waits.push(wait),
+        exhausted: (failure) => exhausted.push(failure),
+      });
+      const minute = await post(`${grant.anthropicBaseUrl}/v1/messages`, grant.token, {
+        model: 'corehub-main',
+      });
+      expect(minute.status).toBe(200);
+      expect(waits).toEqual([expect.objectContaining({ modelLabel: 'Label flash-per-minute' })]);
+      expect(exhausted).toEqual([]);
+      expect((await calls(h))[`${upstreamPrefix(PROVIDER)}/flash-per-minute`]).toBe(2);
+      grant.setTurn({
+        runId: 'run-d',
+        providerId: PROVIDER,
+        model: 'flash-per-day',
+        report: () => {},
+        waiting: (wait) => waits.push(wait),
+        exhausted: (failure) => exhausted.push(failure),
+      });
+      const day = await post(`${grant.anthropicBaseUrl}/v1/messages`, grant.token, {
+        model: 'corehub-main',
+      });
+      expect(day.status).toBe(429);
+      expect(day.headers.get('x-should-retry')).toBe('false');
+      expect(exhausted).toHaveLength(1);
+      expect(waits).toHaveLength(1);
+      expect((await calls(h))[`${upstreamPrefix(PROVIDER)}/flash-per-day`]).toBe(1);
     });
 
     it('takes the hub’s internal names out of any other error it passes on', () => {
@@ -518,11 +574,31 @@ describe('the gateway', () => {
           providerLabel: 'CLI Proxy',
         }),
       ).toBe('unknown model CLI Proxy / Coder, nor x');
-      expect(isQuotaExhausted(429, '{"error":{"message":"slow down"}}')).toBe(false);
-      expect(isQuotaExhausted(429, '{"error":{"code":"insufficient_quota"}}')).toBe(true);
-      expect(isQuotaExhausted(402, 'Payment Required')).toBe(true);
-      expect(isQuotaExhausted(403, 'invalid credentials')).toBe(false);
-      expect(isQuotaExhausted(500, 'quota')).toBe(false);
+      const wait = { defaultMs: 20_000, maxMs: 30_000 };
+      expect(classifyLimit(429, '{"error":{"message":"slow down"}}')).toEqual({ kind: 'pass' });
+      expect(classifyLimit(429, '{"error":{"code":"insufficient_quota"}}')).toEqual({
+        kind: 'spent',
+      });
+      expect(classifyLimit(402, 'Payment Required')).toEqual({ kind: 'spent' });
+      expect(classifyLimit(403, 'invalid credentials')).toEqual({ kind: 'pass' });
+      expect(classifyLimit(500, 'quota')).toEqual({ kind: 'pass' });
+      // Google's words are the same for both; its details and the headers tell them apart.
+      const exhaustedWords = '{"error":{"status":"RESOURCE_EXHAUSTED","message":"check quota"}}';
+      expect(classifyLimit(429, exhaustedWords, {}, wait)).toEqual({ kind: 'wait', ms: 20_000 });
+      expect(classifyLimit(429, exhaustedWords, { 'retry-after': '7' }, wait)).toEqual({
+        kind: 'wait',
+        ms: 7_000,
+      });
+      expect(
+        classifyLimit(429, `${exhaustedWords} "retryDelay": "12.5s" PerMinute`, {}, wait),
+      ).toEqual({ kind: 'wait', ms: 12_500 });
+      expect(classifyLimit(429, `${exhaustedWords} GenerateRequestsPerDay`, {}, wait)).toEqual({
+        kind: 'spent',
+      });
+      expect(classifyLimit(429, 'Quota exceeded. Please retry in 3.2s.', {}, wait)).toEqual({
+        kind: 'wait',
+        ms: 3_200,
+      });
     });
   });
 

@@ -66,6 +66,12 @@ const PROVIDER_ID = '01KGATEWAYFAKEPROVIDER0001';
 const PROVIDER_KEY = 'sk-provider-secret-must-stay-in-the-hub';
 const HOST_KEY = 'sk-host-anthropic-key-must-not-reach-the-agent';
 const MODEL = 'fake-coder';
+/**
+ * Other models of the same provider, listed in the catalogue the gateway serves on `/v1/models`,
+ * as the owner's own proxy lists a Claude model: an agent that picks one of them by itself (Claude
+ * Code's bridge matching "opus" in the list) must still be served the turn's model.
+ */
+const OTHER_MODELS = ['claude-opus-4-6-thinking', 'gemini-3-flash'];
 /** Every real provider says when an answer was made; Grok Build refuses a chunk without it. */
 const CREATED = 1_790_000_000;
 const PROOF_FILE = 'gateway-proof.txt';
@@ -100,6 +106,28 @@ const EXHAUSTED_BODY = JSON.stringify({
     code: 429,
     message: 'Resource has been exhausted (e.g. check quota).',
     status: 'RESOURCE_EXHAUSTED',
+    details: [
+      {
+        '@type': 'type.googleapis.com/google.rpc.QuotaFailure',
+        violations: [{ quotaId: 'GenerateRequestsPerDayPerProjectPerModel' }],
+      },
+    ],
+  },
+});
+/** Google's per-minute limit, the same words and a `RetryInfo`: refused this many more calls. */
+let perMinute = 0;
+const PER_MINUTE_BODY = JSON.stringify({
+  error: {
+    code: 429,
+    message: 'Resource has been exhausted (e.g. check quota).',
+    status: 'RESOURCE_EXHAUSTED',
+    details: [
+      {
+        '@type': 'type.googleapis.com/google.rpc.QuotaFailure',
+        violations: [{ quotaId: 'GenerateContentInputTokensPerModelPerMinute' }],
+      },
+      { '@type': 'type.googleapis.com/google.rpc.RetryInfo', retryDelay: '1s' },
+    ],
   },
 });
 /** The folder the agent under test works in. */
@@ -176,6 +204,12 @@ async function fakeChatProvider(): Promise<{ server: Server; url: string; seen: 
       if (exhausted) {
         response.writeHead(429, { 'content-type': 'application/json' });
         response.end(EXHAUSTED_BODY);
+        return;
+      }
+      if (perMinute > 0) {
+        perMinute -= 1;
+        response.writeHead(429, { 'content-type': 'application/json' });
+        response.end(PER_MINUTE_BODY);
         return;
       }
       const messages = (body.messages ?? []) as { role: string; content: unknown }[];
@@ -368,23 +402,25 @@ describe.skipIf(!enabled)('the model gateway, for real (COREHUB_REAL_GATEWAY=1)'
           baseUrl: `${provider.url}/v1`,
           apiKey: PROVIDER_KEY,
           headers: {},
-          models: [{ id: MODEL, contextWindow: 200_000 }],
+          models: [MODEL, ...OTHER_MODELS].map((id) => ({ id, contextWindow: 200_000 })),
         },
       ],
-      resolveKey: () => null,
+      resolveKey: (_workspace, key) =>
+        key.startsWith('fake/') ? { providerId: PROVIDER_ID, model: key.slice(5) } : null,
       target: (_workspace, providerId, model) =>
-        providerId === PROVIDER_ID && model === MODEL
+        providerId === PROVIDER_ID && (model === MODEL || OTHER_MODELS.includes(model))
           ? {
               providerId,
               model,
-              modelLabel: 'Fake Coder',
+              modelLabel: model === MODEL ? 'Fake Coder' : model,
+              providerLabel: 'Fake Proxy',
               price: (usage) => ({
                 costMicroUsd: usage.inputTokens + usage.outputTokens,
                 costSource: 'estimated',
               }),
             }
           : { refusal: `unknown model ${model}` },
-      modelKeys: () => [`fake/${MODEL}`],
+      modelKeys: () => [...OTHER_MODELS, MODEL].map((id) => `fake/${id}`),
       recordLate: (_grant, _runId, usage) => late.push(usage),
     };
     gateway = new ModelGateway({
@@ -397,6 +433,9 @@ describe.skipIf(!enabled)('the model gateway, for real (COREHUB_REAL_GATEWAY=1)'
       source,
       log: log as never,
       enabled: true,
+      // A limit whose wait CLIProxyAPI does not pass on (its Anthropic, Responses and Gemini
+      // answers keep only the message) is waited out this long, not the hub's 20 s.
+      limitWait: { defaultMs: 3_000, maxMs: 30_000 },
     });
   }, 60_000);
 
@@ -631,8 +670,15 @@ describe.skipIf(!enabled)('the model gateway, for real (COREHUB_REAL_GATEWAY=1)'
   async function withRunner(
     id: string,
     use: (turn: (runId: string, text: string) => Promise<RunnerEvent[]>) => Promise<void>,
+    options: {
+      /** The model picked for the next turn, as the chat's picker says it. */
+      selection?: () => { model: string; provider: string | null; providerId: string };
+      /** Variables over the agent's wiring (its own choice of model). */
+      env?: Record<string, string>;
+    } = {},
   ): Promise<void> {
     const { target, adapter, grant, home } = await prepareAgent(id);
+    if (options.env) target.env = { ...target.env, ...options.env };
     const service = {
       loadAgent: () => ({
         id: `agent-${id}`,
@@ -641,7 +687,8 @@ describe.skipIf(!enabled)('the model gateway, for real (COREHUB_REAL_GATEWAY=1)'
         adapterKind: 'acp',
       }),
       settled: async () => {},
-      selectionFor: () => ({ model: MODEL, provider: null, providerId: PROVIDER_ID }),
+      selectionFor: () =>
+        options.selection?.() ?? { model: MODEL, provider: null, providerId: PROVIDER_ID },
       fallbacksFor: () => [],
       providerSlugOf: () => 'fake',
       modelSourceFor: () => 'hub',
@@ -677,6 +724,7 @@ describe.skipIf(!enabled)('the model gateway, for real (COREHUB_REAL_GATEWAY=1)'
       await use(turn);
     } finally {
       exhausted = false;
+      perMinute = 0;
       await runner.closeAll();
       grant.revoke();
       rmSync(home, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 });
@@ -737,9 +785,13 @@ describe.skipIf(!enabled)('the model gateway, for real (COREHUB_REAL_GATEWAY=1)'
         expect(events.at(-1)).toMatchObject({
           type: 'failed',
           code: 'rate_limited',
-          message:
-            'The provider ran out of quota for Fake Coder. Pick another model for this chat.',
-          details: { reason: 'quota_exhausted', model: 'Fake Coder', model_id: MODEL },
+          message: 'Fake Proxy ran out of quota for Fake Coder. Pick another model for this chat.',
+          details: {
+            reason: 'quota_exhausted',
+            provider: 'Fake Proxy',
+            model: 'Fake Coder',
+            model_id: MODEL,
+          },
         });
         // No retries with backoff against a spent quota: one call reached the provider, at most
         // a side call (a title) too, and the turn was over in seconds, not minutes.
@@ -752,6 +804,54 @@ describe.skipIf(!enabled)('the model gateway, for real (COREHUB_REAL_GATEWAY=1)'
         expect(next.at(-1)).toMatchObject({ type: 'completed' });
         expect(saidIn(next)).toContain('pong from the fake provider');
       });
+    },
+    5 * 60_000,
+  );
+
+  it(
+    'Claude Code waits out a per-minute limit once and answers in the same turn',
+    async () => {
+      await withRunner('claude-code', async (turn) => {
+        const before = provider.seen.length;
+        perMinute = 1;
+        const events = await turn('run-per-minute', 'Say pong.');
+        perMinute = 0;
+        expect(events.at(-1)).toMatchObject({ type: 'completed' });
+        expect(saidIn(events)).toContain('pong from the fake provider');
+        // Refused once, asked again after the provider's second, answered.
+        expect(provider.seen.length - before).toBeGreaterThanOrEqual(2);
+      });
+    },
+    5 * 60_000,
+  );
+
+  it(
+    'serves the model picked for each turn, whatever model the agent names itself',
+    async () => {
+      // The owner's chat (2026-09-30): his proxy lists a Claude "opus" model too; Claude Code
+      // names its own ids, and the picker moved between turns. Every call is the turn's model.
+      const picked = [MODEL, 'gemini-3-flash', MODEL];
+      let at = 0;
+      await withRunner(
+        'claude-code',
+        async (turn) => {
+          for (const [index, model] of picked.entries()) {
+            at = index;
+            const before = provider.seen.length;
+            const events = await turn(`run-picked-${index}`, 'Say pong.');
+            expect(events.at(-1)).toMatchObject({ type: 'completed' });
+            const served = provider.seen.slice(before).map((call) => call.body.model);
+            expect(served.length).toBeGreaterThan(0);
+            expect(new Set(served)).toEqual(new Set([model]));
+          }
+        },
+        {
+          selection: () => ({ model: picked[at]!, provider: null, providerId: PROVIDER_ID }),
+          // The agent's own choice: an Opus model of the list, as a person's settings or its
+          // bridge would pick it.
+          env: { ANTHROPIC_MODEL: 'fake/claude-opus-4-6-thinking' },
+        },
+      );
     },
     5 * 60_000,
   );

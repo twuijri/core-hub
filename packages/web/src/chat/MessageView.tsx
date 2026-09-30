@@ -12,7 +12,7 @@
  * difference in spacing is what makes a turn read as one thing.
  */
 import { useQuery } from '@tanstack/react-query';
-import { useEffect, useMemo, useState, type ReactNode } from 'react';
+import { useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { useDownloadAttachment } from '../attachments/queries.js';
 import { useAuth } from '../auth/context.js';
 import { hideRunPaths } from '../files/run-paths.js';
@@ -35,7 +35,7 @@ import { HIT_CLASS } from './anchor.js';
 import { ToolCalls } from './ToolCallCard.js';
 import { textOf } from './transcript.js';
 import { reasoningWorthShowing, sideOf, thoughtSeconds, type Turn } from './turns.js';
-import { failedNames, failureReasons, fallbackOf } from './fallback.js';
+import { ModelNamesContext, failedNames, failureReasons, fallbackOf } from './fallback.js';
 
 /**
  * The turn moved down the fallback chain (contract decision §54): which model answered, which
@@ -43,14 +43,15 @@ import { failedNames, failureReasons, fallbackOf } from './fallback.js';
  */
 function FallbackNote({ run }: { run: Run | undefined }) {
   const { t, language } = useI18n();
+  const names = useContext(ModelNamesContext);
   const note = fallbackOf(run);
   if (!note) return null;
   const reasons = failureReasons(note.fallback);
   return (
     <p className="msg-usage" dir="auto" data-testid="fallback-note" role="note">
       {t('chat.fallback_note', {
-        failed: failedNames(note.fallback, language),
-        model: note.answered,
+        failed: failedNames(note.fallback, language, names),
+        model: names?.(note.answered) ?? note.answered,
       })}
       {reasons ? ` — ${t('chat.fallback_reason', { reason: reasons })}` : ''}
     </p>
@@ -291,6 +292,7 @@ export function MessageView({
   onFork?: ((message: Message) => void) | undefined;
 }) {
   const { t } = useI18n();
+  const modelNames = useContext(ModelNamesContext);
   // Every message says which it is, so an anchored open can find it in the page.
   const place = {
     'data-message-id': message.id,
@@ -408,7 +410,11 @@ export function MessageView({
         {message.usage && !streaming && (
           <p className="msg-usage" dir="auto">
             {message.run_id && runs[message.run_id]?.model
-              ? `${t('chat.answered_by', { model: runs[message.run_id]?.model ?? '' })} · `
+              ? `${t('chat.answered_by', {
+                  model: ((model) => modelNames?.(model) ?? model)(
+                    runs[message.run_id]?.model ?? '',
+                  ),
+                })} · `
               : ''}
             {t('chat.usage', {
               input: message.usage.input_tokens,

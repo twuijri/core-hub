@@ -7,8 +7,10 @@
 //   FAKE_CLIPROXY_EXIT_AFTER_MS  exit (code 3) this long after starting — a crash
 //
 // A model whose id ends in `spent` answers as CLIProxyAPI does once a provider said its quota is
-// spent (429, its own name for the model in the words); `GET /fake/calls` counts the calls each
-// model was sent.
+// spent (429, its own name for the model in the words); one ending in `per-minute` is refused the
+// first time with Google's per-minute `RetryInfo` and served after; one ending in `per-day` is
+// refused with Google's per-day `QuotaFailure`. `GET /fake/calls` counts the calls each model was
+// sent.
 //
 // Its management API and ChatGPT device sign-in (the subscriptions signed in to through the
 // gateway, DECISIONS §143) are in `fake-cliproxy-accounts.mjs`.
@@ -109,6 +111,40 @@ createServer((request, response) => {
     response.setHeader('x-fake-beta', String(request.headers['anthropic-beta'] ?? ''));
     response.setHeader('x-fake-body-model', String(JSON.parse(raw || '{}').model ?? ''));
     calls[body.model] = (calls[body.model] ?? 0) + 1;
+    const google = (details) =>
+      JSON.stringify({
+        error: {
+          code: 429,
+          message: 'Resource has been exhausted (e.g. check quota).',
+          status: 'RESOURCE_EXHAUSTED',
+          details,
+        },
+      });
+    if (body.model.endsWith('per-minute') && calls[body.model] === 1) {
+      response.writeHead(429, { 'content-type': 'application/json' });
+      response.end(
+        google([
+          {
+            '@type': 'type.googleapis.com/google.rpc.QuotaFailure',
+            violations: [{ quotaId: 'GenerateContentInputTokensPerModelPerMinute' }],
+          },
+          { '@type': 'type.googleapis.com/google.rpc.RetryInfo', retryDelay: '0.05s' },
+        ]),
+      );
+      return;
+    }
+    if (body.model.endsWith('per-day')) {
+      response.writeHead(429, { 'content-type': 'application/json' });
+      response.end(
+        google([
+          {
+            '@type': 'type.googleapis.com/google.rpc.QuotaFailure',
+            violations: [{ quotaId: 'GenerateRequestsPerDayPerProjectPerModel' }],
+          },
+        ]),
+      );
+      return;
+    }
     if (body.model.endsWith('spent')) {
       response.writeHead(429, { 'content-type': 'application/json' });
       response.end(

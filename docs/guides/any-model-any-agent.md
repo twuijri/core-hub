@@ -128,7 +128,8 @@ was until you switch.
   pick another model or switch the agent to its own account.
 - "no model is chosen for this conversation" — pick a model, or set a default in Settings → Models.
 - "<provider> ran out of quota for <model>. Pick another model for this chat." — the provider said the
-  model's quota (or credit) is spent. The chat says so within seconds instead of retrying for minutes,
+  model's quota (or credit) is spent. A limit that passes (Google's per-minute limits say "Resource
+  has been exhausted" too) is waited out once, up to 30 seconds, before the hub gives up on it. The chat says so within seconds instead of retrying for minutes,
   with a button that opens the model picker. If the profile has a fallback chain (Settings → Models →
   Defaults), the turn moves on to its next model by itself and the chat shows which one answered.
 - A provider's other errors (a passing rate limit, a bad key) are shown as the provider said them,

@@ -39,6 +39,8 @@ function fakeGrant(n: number): FakeGrant {
 function setup(options: {
   source: () => 'hub' | 'agent' | null;
   failGateway?: boolean;
+  /** Why the hub did not route the agent (`AgentsService.gatewayMiss`). */
+  miss?: string;
   /** The turn as the agent plays it; absent, two model calls and the end. */
   play?: (
     turn: AgentGatewayTurn | null | undefined,
@@ -114,6 +116,7 @@ function setup(options: {
     providerSlugOf: (_workspace: string, selection: { providerId: string | null }) =>
       selection.providerId === 'p2' ? 'backup' : 'example',
     modelSourceFor: () => options.source(),
+    gatewayMiss: () => options.miss ?? null,
     openGateway: async () => {
       if (options.failGateway) throw new Error('no CLIProxyAPI');
       const grant = fakeGrant(grants.length + 1);
@@ -266,12 +269,23 @@ describe('agent runner: the model gateway (ADR 0029)', () => {
           },
           answered: { providerId: 'p2', model: 'spare', modelLabel: 'Spare' },
         });
+        // The chain's first model ran out too: the next move names both.
+        turn?.fellBack?.({
+          failed: {
+            providerId: 'p2',
+            model: 'spare',
+            providerLabel: 'Backup',
+            modelLabel: 'Spare',
+            said: 'quota',
+          },
+          answered: { providerId: 'p2', model: 'last', modelLabel: 'Last' },
+        });
         finish();
         return { stopReason: 'end_turn' };
       },
     });
     const events = await h.turn('r1');
-    expect(events.find((event) => event.type === 'model_fallback')).toEqual({
+    expect(events.filter((event) => event.type === 'model_fallback').at(-1)).toEqual({
       type: 'model_fallback',
       failed: [
         {
@@ -280,10 +294,34 @@ describe('agent runner: the model gateway (ADR 0029)', () => {
           code: 'rate_limited',
           error: 'CLI Proxy ran out of quota for Coder. Pick another model for this chat.',
         },
+        {
+          model: 'spare',
+          provider: 'backup',
+          code: 'rate_limited',
+          error: 'Backup ran out of quota for Spare. Pick another model for this chat.',
+        },
       ],
-      answered: { model: 'spare', provider: 'backup' },
+      answered: { model: 'last', provider: 'backup' },
     });
     expect(events.at(-1)).toMatchObject({ type: 'completed' });
+    await h.runner.closeAll();
+  });
+
+  it('says why the hub did not route the agent when it then asks for its own sign-in', async () => {
+    const h = setup({
+      source: () => 'agent',
+      miss: "Core Hub did not run Codex CLI on its providers: «gemini» of proxy is not served by Core Hub's model gateway.",
+      play: async () => {
+        throw new Error('Authentication required');
+      },
+    });
+    const events = await h.turn('r1');
+    expect(events.at(-1)).toEqual({
+      type: 'failed',
+      code: 'provider_not_configured',
+      message:
+        "Core Hub did not run Codex CLI on its providers: «gemini» of proxy is not served by Core Hub's model gateway. (Authentication required)",
+    });
     await h.runner.closeAll();
   });
 });

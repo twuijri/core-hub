@@ -54,7 +54,10 @@ function providers(): typeof fetch {
         has_more: false,
       });
     }
-    if (url.startsWith('https://api.groq.com/openai/v1/models')) {
+    if (
+      url.startsWith('https://api.groq.com/openai/v1/models') ||
+      url.startsWith('https://proxy.example/v1/models')
+    ) {
       return json({ data: [{ id: 'llama-3.3-70b-versatile' }] });
     }
     return new Response('{}', { status: 503 });
@@ -211,6 +214,53 @@ describe('the model gateway in the hub', () => {
       `${upstreamPrefix(anthropic.id)}/claude-sonnet-4-5`,
     );
     grant.revoke();
+  });
+
+  it('a new chat on the default model runs on the gateway even when another provider lists the same model id', async () => {
+    // The owner, 2026-09-30: a new Codex chat on «Default · gemini-3.8-flash-high» ran on
+    // Codex's own account ("Authentication required"). A run on the default names the model by
+    // its bare id and the provider by its row; the bare id alone resolved to another provider
+    // with the same model — a subscription the gateway does not lend.
+    const h = await hub('hub');
+    const groq = await addProvider(h, 'groq', GROQ_KEY);
+    const proxy = await authed(h, h.token, {
+      method: 'POST',
+      url: '/api/v1/models/providers',
+      payload: {
+        preset: 'openai-compatible',
+        label: 'CLI Proxy',
+        kind: 'llm',
+        base_url: 'https://proxy.example/v1',
+        api_key: 'sk-proxy',
+        scope: 'all',
+      },
+    });
+    expect(proxy.statusCode).toBe(201);
+    const proxyId = (proxy.json() as { id: string }).id;
+    await drainJobs(h.app);
+    const workspace = workspaceOf(h);
+    const agents = agentsServiceFor(h.app);
+    const row = agents.loadAgentBySlug('codex');
+    const bare = 'llama-3.3-70b-versatile';
+    // Whichever provider the bare id finds first becomes a subscription signed in through Hermes.
+    const first = modelsServiceFor(h.app).resolveModelKey(workspace, bare)!.provider_id;
+    const served = first === groq.id ? proxyId : groq.id;
+    requireSqlite(h.app.hub.database)
+      .update(providerRows)
+      .set({ authKind: 'oauth' })
+      .where(eq(providerRows.id, first))
+      .run();
+    const selection = agents.selectionFor(row, workspace, { model: bare, provider: served });
+    expect(selection).toMatchObject({ model: bare, providerId: served });
+    expect(agents.modelSourceFor(row, workspace, selection)).toBe('hub');
+    // A model the gateway cannot serve says why it is not routed, instead of only the agent's
+    // "Authentication required".
+    const refused = agents.selectionFor(row, workspace, { model: bare, provider: first });
+    expect(agents.modelSourceFor(row, workspace, refused)).toBe('agent');
+    expect(agents.gatewayMiss(row, workspace, refused)).toMatch(
+      /not served by Core Hub's model gateway/,
+    );
+    expect(agents.gatewayMiss(row, workspace, selection)).toBeNull();
   });
 
   it('says which models cannot call tools, and each wired agent’s context floor (§141)', async () => {
