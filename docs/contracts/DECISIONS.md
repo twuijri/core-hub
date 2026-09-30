@@ -5261,3 +5261,42 @@ Status: fixes from the owner's first real sign-in, 2026-10-01 (v1.1.6, preview.3
   dialog and the token absent from the log); `gateway/hermes-restart.test.ts` (on its way while
   Hermes starts again; nothing coming for a runtime that is not the hub's);
   `update-policy.test.ts` (`busyWith`).
+
+## 148. A provider's refusal said for what it is: no capacity and a passing limit are not a spent quota; the chat hears what the gateway is doing
+
+The owner's Google Antigravity sign-in, 2026-10-01: Claude Code on a working account was told
+"ran out of quota" for two models and answered by `openrouter/free` after 88 s of "Thinking", while
+Hermes on the same account answered. Proposed here — owner to confirm:
+
+- **Google's reason is read, not guessed.** Google says `RESOURCE_EXHAUSTED` for a spent quota, for no
+  capacity and for a per-minute limit alike, and CLIProxyAPI 8.0.4 keeps only the message when it
+  answers the Anthropic, Responses and Gemini routes (checked in its source: the Claude handler builds
+  `{type, message}`; the OpenAI Chat handler returns the provider's JSON as it came). On such a refusal
+  the gateway asks the same model once per turn on CLIProxyAPI's Chat route (`max_tokens: 1`) and
+  classifies from that whole answer; if the model answers there, the limit has passed and the call is
+  asked again at once.
+- **Three reasons.** `quota_exhausted` — a 402, `insufficient_quota`, billing, payment, credit, a
+  usage limit, a daily/monthly quota, Antigravity's `QUOTA_EXHAUSTED` or "exhausted your capacity …
+  quota will reset": answered at once. `no_capacity` — `MODEL_CAPACITY_EXHAUSTED`, "No capacity
+  available for model … on the server", an overloaded model (429, 503, 529): waited once (the
+  provider's delay, else 5 s). `rate_limited` — any other quota word (a per-minute limit, Google's bare
+  "Resource has been exhausted (e.g. check quota)", `RATE_LIMIT_EXCEEDED`, CLIProxyAPI cooling down):
+  waited once (the provider's delay, else 20 s; at most 30 s). A second refusal ends that model's part
+  in the turn with its own reason; the chain moves on (§54, §142), else the run fails.
+- **Said plainly.** `Run.error` (`rate_limited`) carries `details.reason` — `quota_exhausted`,
+  `no_capacity` or `rate_limited` — and `details.said`, the provider's own words with Google's reason
+  codes, quota names and retry delay, redacted; the sentence is the reason's ("has no capacity for …
+  right now", "is limiting requests to … right now", "ran out of quota for …"). The fallback line's
+  "why" is the same sentence and the provider's words.
+- **`run.status`** (`/rt/sessions`, new and additive; an older client ignores it): while the gateway
+  waits (`phase: waiting`, `seconds`, `reason`) or tries the chain's next model (`phase: trying`), with
+  the provider's and model's names. Never stored. The web shows it in the live indicator and counts a
+  wait down; it clears with the model's first words or the run's end.
+- **The downloads-folder note is context, not a task.** A run's note of where files for the person go
+  was an order ("Write any file the user should be able to download into: …"), and a model answering
+  «هلا» wrote a file. It is now marked as Core Hub's (`<corehub-context>`), conditional ("Only if the
+  user asks for a file they can download …"), and says to create none otherwise. It stays in the turn:
+  the folder is the run's own, so no system prompt set when the agent started can carry it.
+- Checked and left as they are: CLIProxyAPI retries nothing itself (`request-retry: 0`,
+  `max-retry-interval: 0`, cooling off); a plain Claude Code turn makes one call, so parallel calls do
+  not explain the refusals.

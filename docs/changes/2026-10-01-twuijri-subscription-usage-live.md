@@ -28,8 +28,44 @@ DECISIONS §147 (إصلاح لملاحظات المالك الحية). باخت�
   «بعد انتهاء الرد الجاري»، ثم ثوانٍ لبدء هرمز. راجعت مسارات تغيير الافتراضي (`setDefaults`، `ensureChatDefault`،
   `moveUses`): كلها تعيد التشغيل؛ لا ثغرة، فلم أُضف إعادة تشغيل.
 
+### رفض المزوّد كما هو: لا سعة وحدّ عابر ليسا حصة منتهية؛ والمحادثة تسمع ما تفعله البوابة (DECISIONS §148، الفرع fix/gateway-gemini-claude-code)
+**ما رآه المالك** (Claude Code على اشتراك Google Antigravity يعمل): «هلا» بقيت «يفكر 88 ث» ثم أجاب `openrouter/free` بأدوات وملف
+`hello.txt`، وسطر البديل يقول إن حصة gemini-3.8-flash-high ثم gemini-3-flash نفدت. وهرمز على الحساب نفسه أجاب.
+
+**السبب الجذري**:
+1. Google يقول `RESOURCE_EXHAUSTED` للحصة المنتهية ولنقص السعة ولحدّ الدقيقة معًا، وCLIProxyAPI 8.0.4 لا يُبقي على مسار
+   Anthropic (Claude Code) وResponses وGemini إلا الرسالة («Resource has been exhausted (e.g. check quota)») بلا سبب Google ولا
+   مهلته (قرأت مصدره: معالج Claude يبني `{type, message}`، ومعالج Chat يعيد JSON المزوّد كما هو). والبوابة كانت تسمّي أي رفض ثانٍ
+   بعد الانتظار «نفدت الحصة». فلما رفضت Google النموذجين (غالبًا سعة أو حدّ دقيقة) نزل الدور في السلسلة إلى آخرها: نموذج مجاني ضعيف.
+2. الأدوات و`hello.txt` من ذلك النموذج الضعيف، ودفعها **نص المركز** في الدور: «Write any file the user should be able to download
+   into: …» — صيغة أمر قرأها النموذج مهمة (مسار الأحداث يُظهر «They've also instructed me to write any file…»).
+
+**الإصلاح**:
+- على رفض في مسار غير Chat تسأل البوابة النموذج نفسه مرة في الدور عبر مسار Chat في CLIProxyAPI (`max_tokens: 1`) فتقرأ جواب Google كاملًا؛
+  إن أجاب النموذج هناك فالحدّ زال ويُعاد الطلب فورًا.
+- ثلاثة أسباب: `quota_exhausted` (402، `insufficient_quota`، فوترة، رصيد، حصة يومية/شهرية، `QUOTA_EXHAUSTED`، «exhausted your
+  capacity … quota will reset») فورًا؛ `no_capacity` (`MODEL_CAPACITY_EXHAUSTED`، «No capacity available»، نموذج محمّل، 503/529)
+  انتظار مرة (مهلة المزوّد وإلا 5 ث)؛ `rate_limited` (بقية كلمات الحصة وحدّ الدقيقة) انتظار مرة (وإلا 20 ث، بحد 30). الرفض الثاني
+  بسببه هو؛ ثم السلسلة أو الفشل.
+- الخطأ وسطر البديل بسبب واضح («ليس لدى X سعة لـY الآن»، «X يحدّ الطلبات على Y الآن»، «نفدت حصة…») وكلام Google مع رموز السبب
+  وأسماء الحصص والمهلة (منقّحًا من الأسرار) في `details.said`.
+- حدث جديد `run.status` (إضافة): «ينتظر X — يعيد السؤال بعد N ث» أو «يجرّب X…» في مؤشر التفكير، يزول مع أول كلام أو نهاية الدور.
+- ملاحظة مجلد التنزيل صارت سياقًا: `<corehub-context>` وشرطية («فقط إن طلب المستخدم ملفًا…»، «وإلا فتجاهل هذه الملاحظة ولا تنشئ
+  ملفًا»). تبقى في الدور لأن المجلد خاص بكل دور (لا تحمله موجّهات النظام التي تُضبط عند بدء الوكيل).
+- فحصت ولم أغيّر: CLIProxyAPI لا يعيد المحاولة بنفسه (`request-retry: 0`، `max-retry-interval: 0`، التبريد مطفأ)؛ ودور Claude Code
+  البسيط يرسل طلبًا واحدًا (قِسته بالثنائي الحقيقي) فلا تفسّر الطلبات المتوازية الرفض. تأخّر أول دور لهرمز (69 ث ثم سريع) بداية باردة
+  على الأغلب (تحميل مشروع Antigravity أول مرة)؛ لم أتحقق منه من السجلات — متابعة.
+- أُسقط بطلب المالك: بقاء سطر البديل بعد إعادة الرسم (مسار الأحداث يحفظه).
+
+الملفات: `models/gateway/gateway.ts` و`tokens.ts` و`testing/fake-cliproxy.mjs` و`gateway.test.ts`، `agents/runner.ts` و`ports.ts`
+و`runner-gateway.test.ts` و`runner.test.ts`، `sessions/{engine,realtime,run-reducer,ports}.ts`، `i18n/{ar,en}.json` (الخادم والويب)،
+العقد `events/sessions/run.status.schema.json` و`events/README.md` و`x-rt-events` في `openapi.yaml`، الويب `chat/{transcript,turns,
+RunStatus,RunFailureNotice}.ts(x)` و`realtime/envelope.ts` واختبارات `model-status.test.ts` و`run-quota-notice.test.tsx`،
+`tests/container/fake-provider.mjs` و`proof/attachments/hermes-stub.mjs` (يقرآن المجلد بالصيغة الجديدة).
+
 ## العقد (ما تغيّر في packages/contracts، أو «لا شيء»)
-لا شيء. `check_error` كان دائمًا جملة يعرضها العميل؛ الآن بلغة الطلب.
+حدث جديد `run.status` على `/rt/sessions` (إضافة؛ `contracts:compat` OK مقابل v1.1.6) وإضافته إلى `x-rt-events` لـ`sessions.createRun`.
+`Run.error.details` يحمل `reason` بثلاث قيم و`said` (الحقل موجود في غلاف `Error`). وقبل ذلك: لا شيء. `check_error` كان دائمًا جملة يعرضها العميل؛ الآن بلغة الطلب.
 
 ## الملفات والتأثير
 - الخادم: `models/catalogue.ts` (طلبات «افحص الآن» لكل مزوّد، `company`)، `models/subscriptions.ts` (الطلبات بالترتيب،
