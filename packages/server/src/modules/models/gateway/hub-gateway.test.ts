@@ -253,12 +253,12 @@ describe('the model gateway in the hub', () => {
     const selection = agents.selectionFor(row, workspace, { model: bare, provider: served });
     expect(selection).toMatchObject({ model: bare, providerId: served });
     expect(agents.modelSourceFor(row, workspace, selection)).toBe('hub');
-    // A model the gateway cannot serve says why it is not routed, instead of only the agent's
-    // "Authentication required".
+    // A model the gateway cannot serve fails the turn, saying why, instead of the agent's own
+    // "Authentication required" (§144).
     const refused = agents.selectionFor(row, workspace, { model: bare, provider: first });
-    expect(agents.modelSourceFor(row, workspace, refused)).toBe('agent');
+    expect(agents.modelSourceFor(row, workspace, refused)).toBe('hub');
     expect(agents.gatewayMiss(row, workspace, refused)).toMatch(
-      /not served by Core Hub's model gateway/,
+      /Core Hub's model gateway cannot serve that provider/,
     );
     expect(agents.gatewayMiss(row, workspace, selection)).toBeNull();
   });
@@ -298,7 +298,7 @@ describe('the model gateway in the hub', () => {
     expect(items.find((a) => a.slug === 'hermes')?.gateway_min_context).toBeUndefined();
   });
 
-  it('shows the agent’s model source on its card and lets the person choose it', async () => {
+  it('shows `hub` on the agent’s card, offers no model source choice, and ignores an old app’s', async () => {
     const h = await hub('hub');
     await addProvider(h, 'anthropic', ANTHROPIC_KEY);
     await drainJobs(h.app);
@@ -326,15 +326,23 @@ describe('the model gateway in the hub', () => {
         }[];
       }
     ).sections.find((s) => s.key === 'models');
-    expect(section?.fields[0]).toMatchObject({ key: 'model_source', default: 'auto' });
-    expect(section?.fields[0]?.options.map((o) => o.value)).toEqual(['auto', 'hub', 'agent']);
+    // No choice to make (DECISIONS §144).
+    expect(section).toBeUndefined();
+    // An app from before §144 still sends it: accepted, and nothing changes.
     const saved = await authed(h, h.token, {
       method: 'PATCH',
       url: `/api/v1/agents/${first.id}/settings`,
       payload: { section: 'models', values: { model_source: 'agent' } },
     });
-    expect(saved.statusCode).toBe(200);
-    expect((await agent()).model_source).toBe('agent');
+    expect(saved.statusCode, saved.body).toBe(200);
+    expect((await agent()).model_source).toBe('hub');
+    // Anything else in that retired section is still refused, as an unknown section always was.
+    const other = await authed(h, h.token, {
+      method: 'PATCH',
+      url: `/api/v1/agents/${first.id}/settings`,
+      payload: { section: 'models', values: { something: 1 } },
+    });
+    expect(other.statusCode).toBe(404);
     // Hermes and the hub's own agent are not the gateway's.
     const list = await authed(h, h.token, { method: 'GET', url: '/api/v1/agents' });
     for (const item of (list.json() as { items: { slug: string; model_source?: string }[] })
@@ -344,9 +352,10 @@ describe('the model gateway in the hub', () => {
     }
   });
 
-  it('on a computer, keeps a signed-in agent on its own account unless switched', async () => {
+  it('on a computer, runs an agent signed in to its own account through the gateway all the same', async () => {
     const home = mkdtempSync(path.join(tmpdir(), 'corehub-gw-home-'));
     cleanup.push(() => rmSync(home, { recursive: true, force: true }));
+    // `COREHUB_AGENT_MODEL_SOURCE=auto` is what a computer's hub used to say: now ignored.
     const h = await hub('auto', home);
     await addProvider(h, 'anthropic', ANTHROPIC_KEY);
     await drainJobs(h.app);
@@ -354,23 +363,37 @@ describe('the model gateway in the hub', () => {
     const agents = agentsServiceFor(h.app);
     const row = agents.loadAgentBySlug('claude-code');
     const selection = agents.selectionFor(row, workspace, { model: 'anthropic/claude-sonnet-4-5' });
-    // Nothing of its own: the hub's models.
-    expect(agents.modelSourceFor(row, workspace, selection)).toBe('hub');
-    // `claude login` on this computer: its own account.
+    // `claude login` on this computer: its own account, which no longer counts (§144).
     mkdirSync(path.join(home, '.claude'), { recursive: true });
     writeFileSync(path.join(home, '.claude', '.credentials.json'), '{}');
-    expect(agents.modelSourceFor(row, workspace, selection)).toBe('agent');
-    // The person's choice wins.
+    expect(agents.modelSourceFor(row, workspace, selection)).toBe('hub');
+    expect(agents.gatewayMiss(row, workspace, selection)).toBeNull();
+    const grant = await agents.openGateway(row, workspace, {
+      sessionId: 's-own',
+      userId: h.userId,
+      alive: () => true,
+    });
+    cleanup.push(() => grant.revoke());
+    const target = agents.targetFor(row, workspace, {
+      sessionRef: null,
+      cwd: null,
+      model: 'anthropic/claude-sonnet-4-5',
+      reasoningEffort: null,
+      gateway: grant,
+    });
+    expect(target.env).toMatchObject({ ANTHROPIC_BASE_URL: grant.anthropicBaseUrl });
+    expect(JSON.stringify(target.env)).not.toContain(ANTHROPIC_KEY);
+    // An old app's "its own account" changes nothing either.
     agents.updateSettings(
       { id: workspace, slug: 'default', name: 'default', isDefault: true },
       row.id,
-      { section: 'models', values: { model_source: 'hub' } },
+      { section: 'models', values: { model_source: 'agent' } },
     );
     expect(agents.modelSourceFor(row, workspace, selection)).toBe('hub');
-    // No model to give it at all: its own, whatever the choice.
-    expect(
-      agents.modelSourceFor(row, workspace, { model: null, provider: null, providerId: null }),
-    ).toBe('agent');
+    // No model to give it at all: not its own account — a failure that says where to add one.
+    const none = { model: null, provider: null, providerId: null };
+    expect(agents.modelSourceFor(row, workspace, none)).toBe('hub');
+    expect(agents.gatewayMiss(row, workspace, none)).toMatch(/Settings → Models/);
   });
 
   it('wires Gemini CLI, Grok Build and Pi, writing only the hub’s block of their own settings', async () => {
@@ -436,11 +459,6 @@ describe('the model gateway in the hub', () => {
     mkdirSync(path.join(home, '.gemini'), { recursive: true });
     const theirs = JSON.stringify({ security: { auth: { selectedType: 'oauth-personal' } } });
     writeFileSync(path.join(home, '.gemini', 'settings.json'), theirs);
-    agents.updateSettings(
-      { id: workspace, slug: 'default', name: 'default', isDefault: true },
-      gemini.row.id,
-      { section: 'models', values: { model_source: 'hub' } },
-    );
     const signedIn = await start('gemini-cli');
     expect(signedIn.env.GEMINI_CLI_HOME).toBe(
       path.join(h.dataDir, 'gateway', 'agents', 'gemini-cli', 'home'),
@@ -470,17 +488,16 @@ describe('the model gateway in the hub', () => {
     const models = JSON.parse(readFileSync(path.join(home, '.pi', 'agent', 'models.json'), 'utf8'));
     expect(models.providers['corehub-gateway'].baseUrl).toBe(pi.grant.openaiBaseUrl);
 
-    // A file the hub may not change: the agent keeps its own account, nothing half-wired.
+    // A file the hub may not change: nothing half-wired, and no quiet fall back to the agent's
+    // own account (§144) — the turn fails, saying why.
     writeFileSync(path.join(home, '.pi', 'agent', 'models.json'), '{ broken');
-    const refused = await start('pi', false);
-    expect(refused.env.COREHUB_GATEWAY_TOKEN).toBeUndefined();
-    expect(refused.target.sessionConfig).toBeUndefined();
-    expect(refused.target.envRemove).toBeUndefined();
-    // …which is what it had before the gateway: the profile's key under its own name.
-    expect(refused.env.GROQ_API_KEY).toBe(GROQ_KEY);
+    await expect(start('pi', false)).rejects.toMatchObject({
+      code: 'provider_not_configured',
+      message: expect.stringMatching(/Pi cannot run: Core Hub could not write/),
+    });
   });
 
-  it('keeps a Gemini CLI older than the gateway sign-in type on its own account', async () => {
+  it('refuses a Gemini CLI older than the gateway sign-in type, asking for an update', async () => {
     const h = await hub('hub');
     await addProvider(h, 'groq', GROQ_KEY);
     await drainJobs(h.app);
@@ -495,7 +512,10 @@ describe('the model gateway in the hub', () => {
     const selection = agents.selectionFor(row, workspace, {
       model: 'groq/llama-3.3-70b-versatile',
     });
-    expect(agents.modelSourceFor(row, workspace, selection)).toBe('agent');
+    expect(agents.modelSourceFor(row, workspace, selection)).toBe('hub');
+    expect(agents.gatewayMiss(row, workspace, selection)).toMatch(
+      /0\.45\.0 cannot run on Core Hub's models: it needs version .+ Update it in Agents\./,
+    );
   });
 
   it('is off when the operator switched it off', async () => {

@@ -691,55 +691,7 @@ export function createAcpAdapter(options: AcpAdapterOptions): AgentAdapter {
       };
     },
 
-    settings(target, stored): SettingsSection[] {
-      // Where its model calls go (ADR 0029), for an agent the hub can point at its model gateway.
-      const models: SettingsSection[] = entryOf(target.slug)?.gateway
-        ? [
-            {
-              key: 'models',
-              title: { ar: 'النماذج', en: 'Models' },
-              restart_required: false,
-              applies: 'next_message',
-              note: {
-                ar: 'يسري من الرسالة التالية: المحادثة المفتوحة يُعاد تشغيل الوكيل فيها على المصدر المختار.',
-                en: 'Takes effect from the next message: an open conversation starts the agent again on the chosen source.',
-              },
-              fields: [
-                {
-                  key: 'model_source',
-                  label: { ar: 'مصدر النماذج', en: 'Model source' },
-                  kind: 'choice',
-                  value: typeof stored.model_source === 'string' ? stored.model_source : null,
-                  default: 'auto',
-                  options: [
-                    {
-                      value: 'auto',
-                      label: 'Automatic',
-                      labels: { ar: 'تلقائي', en: 'Automatic' },
-                    },
-                    {
-                      value: 'hub',
-                      label: "Core Hub's models",
-                      labels: { ar: 'نماذج كور هب', en: "Core Hub's models" },
-                    },
-                    {
-                      value: 'agent',
-                      label: "The agent's own account",
-                      labels: { ar: 'حساب الوكيل نفسه', en: "The agent's own account" },
-                    },
-                  ],
-                  min: null,
-                  max: null,
-                  hint: null,
-                  help: {
-                    ar: 'نماذج كور هب: يعمل الوكيل على أي نموذج أضفته في الإعدادات ← النماذج، تختاره من منتقي النماذج، ولا يُعطى أي مفتاح. حساب الوكيل نفسه: يعمل على حسابه أو إعداداته كما كان. التلقائي: نماذج كور هب في الحاوية، وعلى جهازك نماذج كور هب إلا إن كان الوكيل مسجَّل الدخول بحسابه.',
-                    en: "Core Hub's models: the agent runs on any model you added in Settings → Models, picked in the model picker, and is given no key. The agent's own account: it runs on its own account or settings, as before. Automatic: Core Hub's models in the container; on your computer, Core Hub's models unless the agent is signed in to its own account.",
-                  },
-                },
-              ],
-            },
-          ]
-        : [];
+    settings(_target, stored): SettingsSection[] {
       return [
         {
           key: 'session',
@@ -772,7 +724,6 @@ export function createAcpAdapter(options: AcpAdapterOptions): AgentAdapter {
             },
           ],
         },
-        ...models,
       ];
     },
 

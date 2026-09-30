@@ -54,8 +54,10 @@ CLIProxyAPI's `api-call` (the account's token is put in by CLIProxyAPI and never
 addresses are the vendors' undocumented ones, so a reading that fails says so and changes
 nothing. Actions: renew, turn off/on, sign out, sign in another account.
 
-### 4. Hermes may use the hub's models
-"Hermes uses Core Hub's models", one switch per hub: each provider row the gateway serves becomes
+### 4. Hermes uses the hub's models
+Amended 2026-09-30 by DECISIONS §144: there is no switch; every hub whose gateway is available
+routes Hermes through it, and the native route at the end of the fallback chain is gone. As
+first written ("Hermes uses Core Hub's models", one switch per hub): each provider row the gateway serves becomes
 one `providers:` block at that row's own gateway address, on the model's own wire (Anthropic
 Messages for Claude models, so Hermes keeps prompt caching; Responses for OpenAI and ChatGPT;
 Chat Completions otherwise), with a long-lived per-profile token signed by the hub. A new hub
@@ -74,7 +76,7 @@ a later change once the owner's live hubs have moved (§143 "Removal plan").
 - The hub runs vendor sign-ins it did not run before, with the vendors' own CLI clients as
   CLIProxyAPI presents them. Terms are the person's call; the hub says one neutral sentence.
 - CLIProxyAPI now starts at boot when a subscription is signed in (it renews tokens only while it
-  runs) or when Hermes uses the gateway; it still starts on first need otherwise.
+  runs) and, since §144, on every hub whose gateway is available, because Hermes uses it.
 - A pin bump of CLIProxyAPI must keep the management calls the hub makes; the real-binary test
   (`subscriptions.real.test.ts`, in the required `model-gateway-real` job) drives each of them.
 - No image or installer size change: CLIProxyAPI is already in both (ADR 0029).

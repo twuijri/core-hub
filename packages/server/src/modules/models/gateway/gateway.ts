@@ -157,6 +157,11 @@ export class ModelGateway {
     this.limitWait = options.limitWait ?? LIMIT_WAIT;
   }
 
+  /** Switched on by the operator (`COREHUB_MODEL_GATEWAY` is not `off`). */
+  enabled(): boolean {
+    return this.options.enabled;
+  }
+
   /** Whether an agent can be pointed here at all: switched on, and CLIProxyAPI is present. */
   available(): boolean {
     return this.options.enabled && this.options.cliproxy.status().state !== 'absent';

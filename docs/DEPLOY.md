@@ -50,7 +50,7 @@ sets:
 Subscriptions signed in to through the gateway (ADR 0030) are kept by CLIProxyAPI in
 `<DATA_DIR>/gateway/cliproxy-auth/` (one `0600` file per account; they hold the accounts' tokens —
 back them up with the rest of the data folder, and keep them as private). The same folder holds
-`hermes-models.json` (whether Hermes uses the hub's models), `hermes-token.key` (what Hermes's
+`hermes-token.key` (what Hermes's
 profile tokens are signed with; deleting it revokes them, and the hub makes a new one) and
 `gateway.port` (the loopback port the gateway asks for again). Nothing else needs a volume: the
 existing data volume already covers it.

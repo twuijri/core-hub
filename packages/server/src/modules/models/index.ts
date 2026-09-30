@@ -73,7 +73,6 @@ import type { SpeechFormat } from './adapters/types.js';
 import { CliproxySupervisor } from './gateway/cliproxy.js';
 import { ModelGateway } from './gateway/gateway.js';
 import { locateCliproxy } from './gateway/locate.js';
-import { readHermesSource, writeHermesSource } from './hermes-source.js';
 
 export { ModelsService } from './service.js';
 export type {
@@ -357,7 +356,7 @@ function contextOf(app: FastifyInstance): ModelsService {
     // Loopback calls to its own translator: never a test's scripted provider fetch.
     subscriptions: () => modelGatewayFor(app).subscriptions(),
     gatewayDirect: () => modelGatewayFor(app).direct(),
-    // "Hermes uses Core Hub's models" (DECISIONS §143).
+    // Hermes reaches its models through the gateway, always (DECISIONS §144).
     hermesGateway: {
       unavailable: () => {
         const gateway = modelGatewayFor(app);
@@ -365,8 +364,6 @@ function contextOf(app: FastifyInstance): ModelsService {
           ? null
           : 'the model gateway is off on this hub, or it has no CLIProxyAPI';
       },
-      source: () => readHermesSource(gatewayDir(app)) ?? 'native',
-      setSource: (source) => writeHermesSource(gatewayDir(app), source, 'chosen'),
       token: (workspace) => modelGatewayFor(app).hermesToken(workspace),
       rowAddress: (providerId, wire) => modelGatewayFor(app).rowAddress(providerId, wire),
       listening: () => modelGatewayFor(app).port() !== null,
@@ -433,11 +430,6 @@ const actorOf = (request: FastifyRequest): { userId: string } => {
   if (!principal) throw new HubError('internal', { message: 'route has no principal' });
   return { userId: principal.user.id };
 };
-
-/** The gateway's folder: CLIProxyAPI's files, its account store, and Hermes's choice (§143). */
-function gatewayDir(app: FastifyInstance): string {
-  return path.join(app.hub.config.dataDir, 'gateway');
-}
 
 /** A `ProviderAccount.id` from the path; Fastify decoded it, unless something left `%` codes. */
 function accountIdOf(value: unknown): string {
@@ -618,6 +610,7 @@ export const modelsModule = defineModule({
       // a key; which model a token reaches is set per turn by the runner.
       gateway: {
         available: () => modelGatewayFor(app).available(),
+        enabled: () => modelGatewayFor(app).enabled(),
         serves: (workspace, providerId) => contextOf(app).gatewayServes(workspace, providerId),
         contextWindow: (workspace, providerId, model) =>
           contextOf(app).gatewayContextWindow(workspace, providerId, model),
@@ -651,25 +644,16 @@ export const modelsModule = defineModule({
     app.addHook('onReady', async () => {
       const db = requireSqlite(app.hub.database);
       const service = contextOf(app);
-      // Hermes on the hub's models (§143): decided once per hub — a new hub (no provider yet)
-      // with a gateway starts on it, a hub that already has providers stays as it was — and,
-      // when chosen, the gateway listens before Hermes's files are written, so they carry its
-      // address (the same port as last time whenever it is free).
+      // Hermes reaches its models through the gateway, on every hub (DECISIONS §144, reversing
+      // §143's per-hub choice): the gateway listens before Hermes's files are written, so they
+      // carry its address (the same port as last time whenever it is free).
       const gateway = modelGatewayFor(app);
-      const dir = gatewayDir(app);
-      let hermesSource = readHermesSource(dir);
-      if (hermesSource === null) {
-        const fresh = service.providerCount() === 0;
-        hermesSource = fresh && gateway.available() ? 'hub' : 'native';
-        try {
-          writeHermesSource(dir, hermesSource, fresh ? 'default_new_hub' : 'default_existing_hub');
-        } catch (error) {
-          app.log.warn({ err: error }, 'gateway: could not keep the Hermes model choice');
-        }
-      }
-      if (hermesSource === 'hub' && gateway.available()) {
+      if (gateway.available()) {
         await gateway.listen().catch((error: unknown) => {
-          app.log.warn({ err: error }, 'gateway: could not listen; Hermes keeps its own providers');
+          app.log.error(
+            { err: error },
+            'gateway: could not listen; Hermes cannot reach the models the gateway serves',
+          );
         });
       }
       const owner = ownerUser(db);
@@ -693,11 +677,10 @@ export const modelsModule = defineModule({
       // tokens only while it runs, and the provider cards show their accounts, so a hub that has
       // any starts it now and reads them every minute — in the background, never holding boot.
       if (!gateway.available()) return;
-      if (gateway.hasSubscriptionAccounts() || hermesSource === 'hub') {
-        void service.subscriptions.refresh(true).then((read) => {
-          if (!read.ok) app.log.warn({ reason: read.reason }, 'gateway: subscriptions not read');
-        });
-      }
+      // Hermes answers through it, so it starts now either way.
+      void service.subscriptions.refresh(true).then((read) => {
+        if (!read.ok) app.log.warn({ reason: read.reason }, 'gateway: subscriptions not read');
+      });
       subscriptionTimer = setInterval(() => {
         if (gateway.hasSubscriptionAccounts()) void service.subscriptions.refresh(true);
       }, 60_000);
@@ -1030,27 +1013,6 @@ export const modelsModule = defineModule({
     });
 
     // ------------------------ subscriptions through the gateway (DECISIONS §143)
-
-    defineRoute(app, deps, {
-      operationId: 'models.getHermesModelSource',
-      handler: (request) => {
-        const { service } = enter(request);
-        return service.hermesModelSource();
-      },
-    });
-
-    defineRoute(app, deps, {
-      operationId: 'models.setHermesModelSource',
-      handler: async (request, { body }) => {
-        const { service, scope, actor } = enter(request);
-        const source = (body as { source?: unknown } | null)?.source;
-        if (source === 'hub') {
-          const gateway = modelGatewayFor(app);
-          if (gateway.available()) await gateway.listen();
-        }
-        return service.setHermesModelSource(scope, actor, source as 'native' | 'hub');
-      },
-    });
 
     defineRoute(app, deps, {
       operationId: 'models.listSubscriptionVendors',

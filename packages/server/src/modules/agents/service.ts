@@ -21,7 +21,6 @@
  */
 import {
   credentialState,
-  ownSignIn,
   type CredentialProbeOptions,
   type CredentialState,
 } from './agent-credentials.js';
@@ -129,8 +128,8 @@ export interface AgentsServiceOptions {
    */
   credentialProbe?: CredentialProbeOptions;
   /**
-   * An agent's automatic model source (ADR 0029): `hub` — the gateway for every coding agent (the
-   * container image); `auto` — the gateway unless the agent has its own sign-in (a computer).
+   * Retired (§144): every coding agent goes through the gateway wherever the hub runs. Accepted
+   * from an older caller and ignored.
    */
   modelSourceDefault?: () => 'hub' | 'auto';
   /**
@@ -430,6 +429,23 @@ export class AgentsService implements UpdatePolicyStore {
     const row = this.loadAgent(id);
     const sections = this.settings(scope, id);
     const section = sections.find((candidate) => candidate.key === input.section);
+    if (
+      !section &&
+      input.section === 'models' &&
+      Object.keys(input.values).every((key) => key === 'model_source')
+    ) {
+      // The retired model source choice (§144): an app from before it still sends it. Accepted,
+      // stored nowhere, changes nothing — every coding agent goes through the hub's gateway.
+      return {
+        section: {
+          key: 'models',
+          title: { ar: 'النماذج', en: 'Models' },
+          restart_required: false,
+          fields: [],
+        },
+        restart_job_id: null,
+      };
+    }
     if (!section) throw notFound({ resource: 'settings_section', id: input.section });
     const allowed = new Set(section.fields.map((field) => field.key));
     const unknown = Object.keys(input.values).filter((key) => !allowed.has(key));
@@ -1272,74 +1288,55 @@ export class AgentsService implements UpdatePolicyStore {
 
   /**
    * Where this agent's model calls go in this profile: `hub` — through the model gateway, to the
-   * model the turn chose, with no provider key handed to it; `agent` — its own account or
-   * settings, as before the gateway. `null` where it is not the hub's to say: Hermes, the hub's
-   * own agent, an agent the gateway does not wire yet, a hub whose gateway is off.
+   * model the turn chose, with no provider key handed to it. `null` where it is not the hub's to
+   * say: Hermes and the hub's own agent (they reach the gateway their own way), an agent the
+   * gateway does not wire yet, and a hub whose operator switched the gateway off
+   * (`COREHUB_MODEL_GATEWAY=off`).
    *
-   * The person's choice in the agent's settings (`model_source`) wins. Automatic is the image's
-   * `hub` (the owner, 2026-09-29: in the container every coding agent uses the gateway), and on a
-   * computer `hub` unless the agent is signed in to its own account there. Either way `agent`
-   * when the hub has no model to give it — no model chosen and no default — so an agent that
-   * worked before the gateway still does.
+   * There is no other answer (the owner, 2026-09-30: «ابي كل الايجنتات تمر عن طريقنا مالها اتصال
+   * بنفسها … كل شي يكون عن طريق الهب بدون زر», DECISIONS §144): the agent's settings no longer
+   * choose, its own sign-in on this computer does not count, and when the hub has no model for
+   * it the turn fails with `gatewayMiss`'s words instead of running on the agent's own account.
+   * `agent` stays in the type for callers written against the opt-in design; it is never
+   * returned.
    */
   modelSourceFor(
     row: AgentRow,
-    workspaceId: string,
-    selection: AgentSelection,
+    _workspaceId: string,
+    _selection: AgentSelection,
   ): 'hub' | 'agent' | null {
     const entry = this.catalog.find((candidate) => candidate.id === row.slug);
     if (!entry?.gateway) return null;
     const gateway = this.options.models?.()?.gateway;
-    if (!gateway?.available()) return null;
-    // An agent whose wiring needs a file of the hub's, where the hub has nowhere to write it.
-    if (entry.gateway.config === 'gemini-settings' && !this.options.gatewayStateDir) {
-      return null;
-    }
-    // Older than its wiring works with (one found on the computer, or never updated): as before.
-    if (
-      entry.gateway.minVersion &&
-      row.version &&
-      compareVersions(row.version, entry.gateway.minVersion) < 0
-    ) {
-      return 'agent';
-    }
-    const chosen = this.settingsRow(workspaceId, row.id)?.settings?.model_source;
-    if (chosen === 'agent') return 'agent';
-    if (!selection.providerId || !selection.model) return 'agent';
-    if (chosen === 'hub') return 'hub';
-    let serves: boolean;
-    try {
-      serves = gateway.serves(workspaceId, selection.providerId);
-    } catch {
-      serves = false;
-    }
-    if (!serves) return 'agent';
-    if ((this.options.modelSourceDefault?.() ?? 'auto') === 'hub') return 'hub';
-    const probe = this.options.credentialProbe;
-    return probe && ownSignIn(row.slug, probe) ? 'agent' : 'hub';
+    if (!gateway) return null;
+    if (!(gateway.enabled?.() ?? gateway.available())) return null;
+    return 'hub';
   }
 
   /**
-   * Why a turn that could have run on the hub's models does not, in words for the chat: `null`
-   * when it does, when the agent is not wired, when the person chose the agent's own account, or
-   * when its own sign-in on this computer is what Automatic picked.
+   * Why a turn that must run on the hub's models cannot, in words for the chat — pointing at
+   * what to fix (Settings → Models, the model picker, or Agents). `null` when it can, or when
+   * `modelSourceFor` says the agent is not the gateway's.
    */
   gatewayMiss(row: AgentRow, workspaceId: string, selection: AgentSelection): string | null {
-    const entry = this.catalog.find((candidate) => candidate.id === row.slug);
-    if (!entry?.gateway) return null;
-    const gateway = this.options.models?.()?.gateway;
-    if (!gateway?.available()) return null;
-    if (this.settingsRow(workspaceId, row.id)?.settings?.model_source === 'agent') return null;
-    if (this.modelSourceFor(row, workspaceId, selection) !== 'agent') return null;
+    if (this.modelSourceFor(row, workspaceId, selection) !== 'hub') return null;
+    const entry = this.catalog.find((candidate) => candidate.id === row.slug)!;
+    const gateway = this.options.models!()!.gateway!;
+    if (!gateway.available()) {
+      return `${row.name} cannot run: Core Hub's model gateway is not available on this hub (its CLIProxyAPI is missing), and agents reach models only through it. Check the hub's log, or ask the administrator.`;
+    }
+    if (entry.gateway!.config === 'gemini-settings' && !this.options.gatewayStateDir) {
+      return `${row.name} cannot run: Core Hub has nowhere to write its model gateway settings. Check the hub's log, or ask the administrator.`;
+    }
     if (
-      entry.gateway.minVersion &&
+      entry.gateway!.minVersion &&
       row.version &&
-      compareVersions(row.version, entry.gateway.minVersion) < 0
+      compareVersions(row.version, entry.gateway!.minVersion) < 0
     ) {
-      return `Core Hub did not run ${row.name} on its providers: version ${row.version} is older than ${entry.gateway.minVersion}; update it in Agents.`;
+      return `${row.name} ${row.version} cannot run on Core Hub's models: it needs version ${entry.gateway!.minVersion} or newer. Update it in Agents.`;
     }
     if (!selection.providerId || !selection.model) {
-      return `Core Hub did not run ${row.name} on its providers: no model is chosen for this chat, or «${selection.model ?? ''}» is not in this profile's models. Pick one in the model picker.`;
+      return `${row.name} cannot run: Core Hub has no model for it. Add a provider or choose a default model in Settings → Models, or pick a model for this chat.`;
     }
     let serves: boolean;
     try {
@@ -1350,7 +1347,7 @@ export class AgentsService implements UpdatePolicyStore {
     if (!serves) {
       const port = this.options.models?.() ?? null;
       const name = port?.providerSlug?.(workspaceId, selection.providerId) ?? 'its provider';
-      return `Core Hub did not run ${row.name} on its providers: «${selection.model}» of ${name} is not served by Core Hub's model gateway (the provider has no key the hub can use, or it is a subscription signed in through Hermes, which the hub does not lend). Pick another model.`;
+      return `${row.name} cannot run on «${selection.model}» of ${name}: Core Hub's model gateway cannot serve that provider (it has no key the hub can use, or it is a sign-in only Hermes can use). Pick another model, or add the provider again in Settings → Models.`;
     }
     return null;
   }
@@ -1446,12 +1443,14 @@ export class AgentsService implements UpdatePolicyStore {
         stateDir: this.options.gatewayStateDir ?? '',
       });
       if (!written.ok) {
-        // Its own account, as before the gateway: nothing half-wired.
+        // Nothing half-wired, and no quiet fall back to the agent's own account (§144).
         this.options.log.warn(
           { agent: row.slug, reason: written.reason },
-          'agents: could not write the model gateway into the agent’s own settings; it runs on its own account',
+          'agents: could not write the model gateway into the agent’s own settings',
         );
-        return null;
+        throw new HubError('provider_not_configured', {
+          message: `${row.name} cannot run: Core Hub could not write its model gateway settings (${written.reason}). Check the hub's log.`,
+        });
       }
       Object.assign(wired, written.env);
       sessionConfig = written.sessionConfig;

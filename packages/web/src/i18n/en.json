@@ -1202,13 +1202,6 @@
       "resets": "Resets",
       "checked": "Checked",
       "observed": "From the last answer"
-    },
-    "hermes_source": {
-      "label": "Hermes uses Core Hub’s models",
-      "hint_hub": "Hermes reaches its models through Core Hub’s gateway, subscriptions included. Speech and embeddings stay as they are.",
-      "hint_pending": "Chosen; Hermes gets it once the gateway is running.",
-      "hint_native": "Hermes uses its own providers. Turn this on to give it every model Core Hub serves.",
-      "unavailable": "Not available on this hub: {reason}"
     }
   },
   "working_dir": {

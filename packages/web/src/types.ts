@@ -34,7 +34,6 @@ export type ProviderAccount = Schemas['ProviderAccount'];
 export type ProviderAccountError = Schemas['ProviderAccountError'];
 export type UsageWindow = Schemas['UsageWindow'];
 export type ProviderMove = Schemas['ProviderMove'];
-export type HermesModelSource = Schemas['HermesModelSource'];
 export type Session = Schemas['Session'];
 export type SettingsSection = Schemas['SettingsSection'];
 export type SettingsField = Schemas['SettingsField'];

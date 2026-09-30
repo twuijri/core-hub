@@ -4,7 +4,6 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { HubApiError } from '@corehub/contracts';
 import { useAuth } from '../auth/context.js';
 import type {
-  HermesModelSource,
   ProviderAccount,
   ProviderAccounts,
   ProviderMove,
@@ -560,31 +559,5 @@ export function useMoveToGateway() {
         })
       ).data as ProviderMove,
     onSuccess: () => void queryClient.invalidateQueries({ queryKey: ['models', 'providers'] }),
-  });
-}
-
-/** "Hermes uses Core Hub's models". */
-export function useHermesSource() {
-  const { client, profile, session } = useAuth();
-  return useQuery({
-    queryKey: ['models', 'hermes-source', profile] as const,
-    queryFn: async () =>
-      (await client.request('get', '/models/hermes-source')).data as HermesModelSource,
-    enabled: !!session,
-    retry: (count, error) => !isUnsupported(error) && count < 2,
-  });
-}
-
-export function useSetHermesSource() {
-  const { client } = useAuth();
-  const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: async (source: 'native' | 'hub') =>
-      (await client.request('put', '/models/hermes-source', { body: { source } }))
-        .data as HermesModelSource,
-    onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: ['models', 'hermes-source'] });
-      void queryClient.invalidateQueries({ queryKey: ['models', 'runtime'] });
-    },
   });
 }

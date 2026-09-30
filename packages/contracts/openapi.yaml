@@ -14101,87 +14101,6 @@ paths:
           $ref: '#/components/responses/Conflict'
         '503':
           $ref: '#/components/responses/ServiceUnavailable'
-  /models/hermes-source:
-    get:
-      operationId: models.getHermesModelSource
-      tags: [models]
-      summary: Whether Hermes reaches its models through Core Hub's gateway
-      description: >-
-        "Hermes uses Core Hub's models" (DECISIONS §143), one choice per hub. With `hub`, the
-        model Hermes answers with, its cron model and its fallbacks are served by the hub's
-        gateway whenever the gateway can serve them — every subscription signed in through the
-        gateway included — and each call is counted by the gateway; a model the gateway cannot
-        serve (a Nous or MiniMax sign-in through Hermes) stays Hermes's own. Speech, embeddings
-        and the ChatGPT images of a Hermes sign-in stay as they are. `native` is Hermes as
-        before. `effective` is what Hermes was last given: `native` whenever the gateway is
-        off or missing (`available: false`, with `reason`). An older hub answers 404.
-      parameters:
-        - $ref: '#/components/parameters/Profile'
-      x-rt-events: []
-      responses:
-        '200':
-          description: The choice.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/HermesModelSource'
-              example:
-                source: hub
-                effective: hub
-                available: true
-                reason: null
-        '401':
-          $ref: '#/components/responses/Unauthorized'
-        '404':
-          $ref: '#/components/responses/NotFound'
-    put:
-      operationId: models.setHermesModelSource
-      tags: [models]
-      summary: Switch Hermes to Core Hub's gateway or back (owner/admin)
-      description: >-
-        Rewrites every Hermes profile's model blocks and restarts Hermes when idle, like saving a
-        provider. Switching back to `native` removes only the blocks the hub wrote and gives
-        Hermes its own providers again: rollback is one switch. `hub` on a hub whose gateway is
-        not available is `409 state_invalid` (`details.reason = gateway_unavailable`).
-      x-roles: [owner, admin]
-      parameters:
-        - $ref: '#/components/parameters/Profile'
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              required: [source]
-              properties:
-                source:
-                  type: string
-                  enum: [native, hub]
-            example:
-              source: hub
-      x-rt-events: []
-      responses:
-        '200':
-          description: The choice.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/HermesModelSource'
-              example:
-                source: hub
-                effective: hub
-                available: true
-                reason: null
-        '400':
-          $ref: '#/components/responses/BadRequest'
-        '401':
-          $ref: '#/components/responses/Unauthorized'
-        '403':
-          $ref: '#/components/responses/Forbidden'
-        '404':
-          $ref: '#/components/responses/NotFound'
-        '409':
-          $ref: '#/components/responses/Conflict'
   /models:
     get:
       operationId: models.listCatalogue
@@ -22517,12 +22436,13 @@ components:
                 known"). Where an installed coding agent's model calls go in this profile (added
                 2026-09-30, DECISIONS §140, ADR 0029): `hub` — through the hub's model gateway, to
                 the model picked for the conversation from the hub's own providers (`Model.agent_gateway`),
-                with no provider key handed to the agent, and its default is `default_model`;
-                `agent` — to the agent's own account or settings, as before. Chosen in the agent's
-                settings (`model_source`: automatic, the hub, the agent's own); automatic is `hub` in
-                the container image and, on a computer, `hub` unless the agent is signed in to its
-                own account. `agent` also when the hub has no model to give it. Absent for Hermes,
-                the hub's own agent, agents the gateway does not wire yet, hubs whose gateway is off,
+                with no provider key handed to the agent, and its default is `default_model`.
+                Since DECISIONS §144 (2026-09-30) every coding agent the gateway wires is `hub`:
+                the per-agent choice is retired, an agent's own sign-in does not count, and a turn
+                the hub has no model for fails with `provider_not_configured` rather than running
+                on the agent's own account. `agent` is kept in this description for clients
+                written before §144 and is no longer sent. Absent for Hermes, the hub's own agent,
+                agents the gateway does not wire yet, hubs whose operator switched the gateway off,
                 and older hubs.
             gateway_min_context:
               type: integer
@@ -27741,23 +27661,6 @@ components:
       properties:
         disabled:
           type: boolean
-    HermesModelSource:
-      type: object
-      required: [source, effective, available, reason]
-      properties:
-        source:
-          type: string
-          enum: [native, hub]
-          description: The choice.
-        effective:
-          type: string
-          enum: [native, hub]
-          description: What Hermes was given.
-        available:
-          type: boolean
-          description: The hub's gateway can serve Hermes (on, and CLIProxyAPI present).
-        reason:
-          type: [string, 'null']
     RuntimeReport:
       type: object
       description: >-

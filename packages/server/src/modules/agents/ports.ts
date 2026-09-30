@@ -171,6 +171,11 @@ export interface AgentGatewayUsage {
 export interface AgentGatewayPort {
   /** Switched on, and the hub has CLIProxyAPI. */
   available(): boolean;
+  /**
+   * Switched on by the operator (`COREHUB_MODEL_GATEWAY` is not `off`), whether or not the hub has
+   * CLIProxyAPI. Absent on an older port: `available()` stands in.
+   */
+  enabled?(): boolean;
   /** Whether a profile's provider row can be served (it has a key; not a signed-in subscription). */
   serves(workspace: string, providerId: string): boolean;
   /** The model row's context window, for the agents that must be told it. */

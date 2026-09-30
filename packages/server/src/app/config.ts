@@ -211,9 +211,9 @@ const envSchema = z.object({
    */
   COREHUB_CLIPROXY_BIN: z.string().trim().min(1).optional(),
   /**
-   * What an agent's automatic model source is (ADR 0029): `hub` — every coding agent uses the
-   * gateway (the image sets it); `auto` — the gateway unless the agent is signed in to its own
-   * account (a person's computer). A person's own choice in the agent's settings always wins.
+   * Retired (DECISIONS §144): was an agent's automatic model source (ADR 0029). Every coding
+   * agent now goes through the gateway wherever the hub runs; still accepted, so a stack that
+   * sets it starts as before, and ignored.
    */
   COREHUB_AGENT_MODEL_SOURCE: z
     .enum(['hub', 'auto'], { message: 'COREHUB_AGENT_MODEL_SOURCE must be hub or auto' })
@@ -375,7 +375,7 @@ export interface ModelGatewayConfig {
   enabled: boolean;
   /** `COREHUB_CLIPROXY_BIN`, when set. */
   cliproxyBin: string | null;
-  /** `COREHUB_AGENT_MODEL_SOURCE`: `hub` in the image, `auto` elsewhere. */
+  /** `COREHUB_AGENT_MODEL_SOURCE`: retired and ignored (§144); read for older stacks only. */
   defaultSource: 'hub' | 'auto';
 }
 

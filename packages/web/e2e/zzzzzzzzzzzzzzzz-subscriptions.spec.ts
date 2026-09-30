@@ -52,8 +52,8 @@ test.describe('subscriptions through Core Hub’s gateway', () => {
     await login(page);
     await models(page);
 
-    // Hermes on Core Hub's models: a new hub with a gateway starts on it.
-    await expect(page.getByTestId('hermes-source-switch')).toHaveAttribute('data-state', 'checked');
+    // Hermes goes through Core Hub's gateway with no switch to turn (§144).
+    await expect(page.getByTestId('hermes-source-switch')).toHaveCount(0);
 
     // 1. ChatGPT by a short code.
     let dialog = await subscriptionChoice(page, 'ChatGPT (Plus / Pro / Business)');

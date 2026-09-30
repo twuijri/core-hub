@@ -235,9 +235,9 @@ ENV COREHUB_VERSION=${COREHUB_VERSION} \
     HERMES_DISABLE_LAZY_INSTALLS=1 \
     HERMES_LAZY_INSTALL_TARGET=/data/hermes-packages \
     COREHUB_AGENT_MODEL_SOURCE=hub
-# COREHUB_AGENT_MODEL_SOURCE=hub: in the container every coding agent runs on the hub's own
-# providers through its model gateway unless a person switches it to its own account (ADR 0029;
-# the owner, 2026-09-29). A computer's hub (the desktop app) decides per agent instead.
+# COREHUB_AGENT_MODEL_SOURCE=hub: kept so an older stack's environment still reads the same;
+# retired and ignored since DECISIONS §144 — every coding agent runs on the hub's own providers
+# through its model gateway, in the container and on a computer alike.
 # HOME is inside the volume (decision §78): the coding agents read their own config files from
 # it (`~/.claude/CLAUDE.md`, `~/.codex/config.toml` …), edited from the web, and an upgrade that
 # replaces the container must not drop them. The hub makes the folder on the first boot of a

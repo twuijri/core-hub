@@ -1202,13 +1202,6 @@
       "resets": "يُصفَّر",
       "checked": "فُحص",
       "observed": "من آخر إجابة"
-    },
-    "hermes_source": {
-      "label": "Hermes يستخدم نماذج Core Hub",
-      "hint_hub": "يصل Hermes إلى نماذجه عبر بوابة Core Hub، والاشتراكات منها. الصوت والتضمينات تبقى كما هي.",
-      "hint_pending": "تم الاختيار؛ يستلمه Hermes حين تعمل البوابة.",
-      "hint_native": "Hermes يستخدم مزوّديه الخاصين. فعّل هذا ليعطيه كل نموذج يخدمه Core Hub.",
-      "unavailable": "غير متاح في هذا المركز: {reason}"
     }
   },
   "working_dir": {

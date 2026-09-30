@@ -151,10 +151,6 @@ function hub(state: Partial<Hub> = {}) {
         ],
       });
     }
-    if (url.includes('/models/hermes-source')) {
-      if (h.old) return missing();
-      return json({ source: 'hub', effective: 'hub', available: true, reason: null });
-    }
     if (url.includes('/models/provider-presets')) {
       return json({ items: [], host: { containerized: false, loopback_alias: 'x' } });
     }
@@ -368,6 +364,5 @@ describe('subscriptions on the models screen', () => {
     await userEvent.click(await screen.findByTestId('open-add-provider'));
     await screen.findByTestId('add-mode-custom');
     await waitFor(() => expect(screen.queryByTestId('add-mode-subscription')).toBeNull());
-    expect(screen.queryByTestId('hermes-source')).toBeNull();
   });
 });

@@ -26,26 +26,20 @@ hub. What each conversation used shows in its run, with an estimated cost when t
 | Grok Build, Pi | yes (tested with the real agents, tool calls included; the hub keeps one entry in their own settings file, below) |
 | Hermes, Core Hub (Direct) | they already run on every provider you add |
 
-## Choosing, per agent
+## No switch: every agent goes through Core Hub
 
-Open the agent → **Settings** → **Models** → **Model source**:
-
-- **Automatic** (the default). In the container image: the hub's models. On your computer (the
-  desktop app): the hub's models, unless the agent is signed in to its own account there (for
-  example `claude login`), in which case it keeps that account.
-- **Core Hub's models**: always the gateway.
-- **The agent's own account**: as before the gateway — its own sign-in, its own settings, or the
-  key of its own vendor from Settings → Models.
-
-The agent's card says which one it uses ("Models: Core Hub's providers" / "Models: the agent's own
-account"). A change applies from the next message.
+Every coding agent runs on the hub's models, through the gateway — there is nothing to choose
+(the owner, 2026-09-30, DECISIONS §144). An agent's own sign-in on your computer (for example
+`claude login`) is not used by Core Hub; it still works when you run the agent yourself outside
+Core Hub. The agent's card says "Models: Core Hub's providers".
 
 When the agent is on the hub's models, its model picker — on the web and in the phone apps — lists
 every model the gateway can serve, and "Default · …" is the profile's default model. A model whose
 provider says it cannot call tools is left out (a coding agent works through tools), and a model
 whose context window is smaller than the agent needs says "small context" (64K for Claude Code,
 Codex, Gemini CLI and Grok Build; 32K for Goose, OpenCode, Qwen Code and Kimi Code; 16K for Pi). If there is no model to give it at all (no model
-picked and no default set), the agent uses its own account.
+picked and no default set), the message fails and says so: add a provider or choose a default in
+Settings → Models.
 
 ## What the hub writes in an agent's own settings
 
@@ -60,12 +54,11 @@ wrote it, and no key is ever written (the entry names the variable the session t
   it without changing Pi's saved default.
 - **Gemini CLI**, only when you signed in to it with Google or Vertex: it runs in a home of Core
   Hub's own (under the hub's data folder) whose `.gemini` links to every file of yours and holds a
-  copy of your `settings.json` saying "gateway". Your own files are not changed. (Not on Windows:
-  there a signed-in Gemini CLI keeps its own account.)
+  copy of your `settings.json` saying "gateway". Your own files are not changed.
 
-The entries stay when the agent later runs on its own account; without Core Hub's token they do
-nothing. If the file cannot be read as its format, or already has an entry of that name you wrote,
-the hub leaves it alone and the agent uses its own account; the hub's log says why.
+The entries stay when you run the agent yourself outside Core Hub; without Core Hub's token they
+do nothing. If the file cannot be read as its format, or already has an entry of that name you
+wrote, the hub leaves it alone and the message fails, saying so; the hub's log says why.
 
 ## What is not shared
 
@@ -84,11 +77,13 @@ the hub leaves it alone and the agent uses its own account; the hub's log says w
   choice wins, as it always did.
 - The gateway listens on `127.0.0.1` only, on a port of its own; nothing outside the computer (or the
   container) can reach it, and it answers nothing without a live session token.
-- **Operators:** `COREHUB_MODEL_GATEWAY=off` switches it off (agents get the profile's keys as
-  before); `COREHUB_AGENT_MODEL_SOURCE=hub|auto` sets what Automatic means; the image carries
-  CLIProxyAPI at `/opt/corehub/bin/cli-proxy-api`. See `docs/DEPLOY.md`.
+- **Operators:** `COREHUB_MODEL_GATEWAY=off` switches it off for the whole hub (agents and Hermes
+  get the profile's keys as before the gateway); `COREHUB_AGENT_MODEL_SOURCE` is still accepted
+  and ignored; the image carries CLIProxyAPI at `/opt/corehub/bin/cli-proxy-api`. See
+  `docs/DEPLOY.md`.
 - **Developers:** run `pnpm cliproxy:fetch` once; the hub finds the copy in
-  `~/.cache/corehub/cliproxy/`. Without it, coding agents use their own accounts and the log says why.
+  `~/.cache/corehub/cliproxy/`. Without it, a coding agent's message fails saying the gateway is
+  not available.
 
 ## Subscriptions (sign in instead of a key)
 
@@ -114,10 +109,10 @@ A ChatGPT or xAI subscription signed in to through Hermes (the older way) keeps 
 offers **Move to Core Hub's gateway**, which signs in once more (a sign-in cannot be copied) and
 then moves your model choices to it.
 
-**Hermes uses Core Hub's models** (the switch at the top of Settings → Models): Hermes then reaches
-every model the gateway serves through it, subscriptions included; turn it off to give Hermes its
-own providers again. New hubs start with it on; hubs that already had providers keep Hermes as it
-was until you switch.
+**Hermes goes through Core Hub too**, with no switch: every Hermes message Core Hub sends (web,
+phones, channels, workflows, schedules) reaches its model through the gateway, subscriptions
+included. On your computer Core Hub runs Hermes in a home of its own (under the hub's data folder)
+and never writes your `~/.hermes`, so the Hermes app you use yourself keeps its own settings.
 
 ## If a message fails
 
@@ -125,7 +120,9 @@ was until you switch.
   again (the hub starts the agent afresh).
 - "… is not available to agents through Core Hub" — the model's provider has no key or signed-in
   account, or it is a subscription signed in to through Hermes (move it to the gateway on its card);
-  pick another model or switch the agent to its own account.
+  pick another model.
+- "… cannot run: Core Hub has no model for it" — add a provider or choose a default in Settings →
+  Models, or pick a model for this chat.
 - "no model is chosen for this conversation" — pick a model, or set a default in Settings → Models.
 - "<provider> ran out of quota for <model>. Pick another model for this chat." — the provider said the
   model's quota (or credit) is spent. A limit that passes (Google's per-minute limits say "Resource

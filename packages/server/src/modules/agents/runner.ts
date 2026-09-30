@@ -120,8 +120,6 @@ interface LiveRun {
   quotaTimer?: NodeJS.Timeout;
   /** The models the gateway moved this turn past, in order (`model_fallback`). */
   fallenBack?: RunnerFallbackAttempt[];
-  /** Why this turn could have run on the hub's models and did not (`AgentsService.gatewayMiss`). */
-  gatewayMiss?: string | null;
 }
 
 /**
@@ -131,10 +129,6 @@ interface LiveRun {
  * turn itself.
  */
 const QUOTA_GRACE_MS = 8_000;
-
-/** An agent's words for "I have no key or sign-in of my own". */
-const NEEDS_OWN_ACCOUNT =
-  /auth|sign ?in|log ?in|api[ _-]?key|credential|unauthori[sz]ed|\b401\b|OPENAI_API_KEY|GEMINI_API_KEY/i;
 
 export interface AgentRunnerDeps {
   service: AgentsService;
@@ -170,19 +164,6 @@ export class AgentRunner implements AgentRunnerPort {
     });
 
     const live = await this.open(row, request, selection);
-    // An agent that ends up on its own account when the hub's models were meant: why, for the
-    // chat, if the agent then fails for want of a key or a sign-in.
-    let gatewayMiss: string | null = null;
-    if (live.adapterKind === 'acp' && !live.gateway) {
-      try {
-        gatewayMiss =
-          live.modelSource === 'hub'
-            ? `Core Hub's model gateway could not start, so ${row.name} ran on its own account; the hub's log says why.`
-            : (service.gatewayMiss?.(row, request.workspace, selection) ?? null);
-      } catch {
-        gatewayMiss = null;
-      }
-    }
 
     const run: LiveRun = {
       runId: request.runId,
@@ -197,7 +178,6 @@ export class AgentRunner implements AgentRunnerPort {
       tools: new Map(),
       outputDir: request.files?.outputDir ?? null,
       handedOver: [],
-      gatewayMiss,
     };
     this.runs.set(request.runId, run);
     // From here until the run ends, a call to the hub's own tools from this profile may act
@@ -334,6 +314,13 @@ export class AgentRunner implements AgentRunnerPort {
       void live.session.close().catch(() => undefined);
       live = undefined;
     }
+    // Every coding agent reaches its model through the hub's gateway, with no path to its own
+    // account (the owner, 2026-09-30, DECISIONS §144): a turn the hub has no model for fails
+    // here, saying what to fix, rather than running on whatever the agent has of its own.
+    if (source === 'hub') {
+      const miss = service.gatewayMiss(row, request.workspace, chosen);
+      if (miss) throw new HubError('provider_not_configured', { message: miss });
+    }
     if (!live) {
       let gateway: AgentGatewayGrant | null = null;
       // The process's own session, once it exists: what the token's `alive` asks about.
@@ -347,11 +334,13 @@ export class AgentRunner implements AgentRunnerPort {
             alive: () => !started.live || !isClosed(started.live.session),
           });
         } catch (error) {
-          // The agent still runs, on its own account as before the gateway; the log says why.
           this.deps.log.warn(
             { err: error, agent: row.slug },
-            'agents: the model gateway could not start; the agent runs on its own account',
+            'agents: the model gateway could not start',
           );
+          throw new HubError('provider_not_configured', {
+            message: `${row.name} cannot run: Core Hub's model gateway could not start, and agents reach models only through it. The hub's log says why.`,
+          });
         }
       }
       const target = service.targetFor(row, request.workspace, {
@@ -382,8 +371,6 @@ export class AgentRunner implements AgentRunnerPort {
         agentId: row.id,
         sessionId,
         unwatch,
-        // What was asked for, even when the gateway could not start and the agent fell back to
-        // its own account: the next turn does not restart it to try again.
         modelSource: source,
         gateway,
       };
@@ -820,21 +807,6 @@ export class AgentRunner implements AgentRunnerPort {
           provider_id: run.quota.providerId,
           model_id: run.quota.model,
         },
-      };
-    }
-    // It ran on its own account because the hub could not route it, and it has no key or
-    // sign-in of its own: say why the hub did not route it, above the agent's words (owner,
-    // 2026-09-30: "Codex CLI needs an OpenAI key" for a chat on the hub's default model).
-    if (
-      event.type === 'failed' &&
-      run.gatewayMiss &&
-      event.code !== 'cancelled' &&
-      NEEDS_OWN_ACCOUNT.test(event.message)
-    ) {
-      event = {
-        type: 'failed',
-        code: 'provider_not_configured',
-        message: `${run.gatewayMiss} (${event.message})`,
       };
     }
     if (event.type === 'completed' || event.type === 'failed') {

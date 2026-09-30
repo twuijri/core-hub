@@ -62,7 +62,6 @@ import { FallbackList } from './FallbackList.js';
 import { SignInPanel } from './SignInPanel.js';
 import { ProviderAccountsDialog } from './ProviderAccountsDialog.js';
 import { MoveToGatewayDialog } from './MoveToGatewayDialog.js';
-import { HermesSourceCard } from './HermesSourceCard.js';
 import { SpeechCard } from './SpeechCard.js';
 import { RuntimeCard } from './RuntimeChecks.js';
 import { needsLoopbackWarning, suggestedHostUrl } from './loopback.js';
@@ -155,7 +154,6 @@ export function ModelsScreen() {
         <RuntimeCard report={runtime.data} />
       )}
       {/* "Hermes uses Core Hub's models" (DECISIONS §143): hidden on a hub without it. */}
-      {tab === 'general' && <HermesSourceCard />}
 
       <Segmented
         className="mb-4"

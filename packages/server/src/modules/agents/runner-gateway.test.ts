@@ -107,6 +107,7 @@ function setup(options: {
     loadAgent: () => ({
       id: 'agent-1',
       slug: 'claude-code',
+      name: 'Claude Code',
       installState: 'installed',
       adapterKind: 'acp',
     }),
@@ -190,30 +191,31 @@ describe('agent runner: the model gateway (ADR 0029)', () => {
     expect(h.grants[0]!.revoked).toBe(true);
   });
 
-  it('restarts the agent on its own account when the person switches it, and revokes the token', async () => {
-    let source: 'hub' | 'agent' = 'hub';
-    const h = setup({ source: () => source });
-    await h.turn('r1');
-    source = 'agent';
-    await h.turn('r2');
-    expect(h.closed).toEqual(['session-1']);
-    expect(h.grants[0]!.revoked).toBe(true);
-    expect(h.targets[1]!.gateway).toBeNull();
-    expect(h.grants).toHaveLength(1);
-  });
-
-  it('runs the agent on its own account when the gateway cannot start, and says why in the log', async () => {
+  it('fails a turn the gateway cannot start for, instead of running the agent on its own account', async () => {
     const h = setup({ source: () => 'hub', failGateway: true });
-    const events = await h.turn('r1');
-    expect(events.at(-1)).toMatchObject({ type: 'completed' });
-    expect(h.targets[0]!.gateway).toBeNull();
-    expect(events.some((event) => event.type === 'usage')).toBe(false);
+    await expect(h.turn('r1')).rejects.toMatchObject({
+      code: 'provider_not_configured',
+      message: expect.stringMatching(
+        /Claude Code cannot run: Core Hub's model gateway could not start/,
+      ),
+    });
+    // No process was started on the agent's own account.
+    expect(h.targets).toEqual([]);
     expect(h.log.lines.some((line) => /model gateway could not start/.test(String(line.msg)))).toBe(
       true,
     );
-    // Not retried on every turn: the process stays.
-    await h.turn('r2');
-    expect(h.closed).toEqual([]);
+  });
+
+  it('fails a turn the hub has no model for, saying where to add one, and starts nothing', async () => {
+    const miss =
+      'Claude Code cannot run: Core Hub has no model for it. Add a provider or choose a default model in Settings → Models, or pick a model for this chat.';
+    const h = setup({ source: () => 'hub', miss });
+    await expect(h.turn('r1')).rejects.toMatchObject({
+      code: 'provider_not_configured',
+      message: miss,
+    });
+    expect(h.grants).toEqual([]);
+    expect(h.targets).toEqual([]);
   });
 
   it('leaves an agent the gateway does not serve exactly as before', async () => {
@@ -304,24 +306,6 @@ describe('agent runner: the model gateway (ADR 0029)', () => {
       answered: { model: 'last', provider: 'backup' },
     });
     expect(events.at(-1)).toMatchObject({ type: 'completed' });
-    await h.runner.closeAll();
-  });
-
-  it('says why the hub did not route the agent when it then asks for its own sign-in', async () => {
-    const h = setup({
-      source: () => 'agent',
-      miss: "Core Hub did not run Codex CLI on its providers: «gemini» of proxy is not served by Core Hub's model gateway.",
-      play: async () => {
-        throw new Error('Authentication required');
-      },
-    });
-    const events = await h.turn('r1');
-    expect(events.at(-1)).toEqual({
-      type: 'failed',
-      code: 'provider_not_configured',
-      message:
-        "Core Hub did not run Codex CLI on its providers: «gemini» of proxy is not served by Core Hub's model gateway. (Authentication required)",
-    });
     await h.runner.closeAll();
   });
 });

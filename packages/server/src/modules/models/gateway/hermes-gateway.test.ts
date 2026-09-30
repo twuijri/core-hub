@@ -1,10 +1,11 @@
 /**
- * "Hermes uses Core Hub's models" (DECISIONS §143): what the hub writes into Hermes's home when the
- * choice is `hub`, that a call made the way Hermes makes it — the row's own gateway address, the
- * profile's token from `.env`, the provider's own model id — reaches that row through the gateway,
- * and that switching back gives Hermes its own providers again. CLIProxyAPI is the stand-in.
+ * Hermes reaches its models through Core Hub's gateway, always (DECISIONS §144, reversing §143's
+ * per-hub choice): what the hub writes into Hermes's home, that a call made the way Hermes makes
+ * it — the row's own gateway address, the profile's token from `.env`, the provider's own model id
+ * — reaches that row through the gateway, that there is no switch left to turn it off, and that a
+ * person's own Hermes (`~/.hermes`, on a computer) is never written. CLIProxyAPI is the stand-in.
  */
-import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -12,7 +13,6 @@ import { parse } from 'yaml';
 import { afterEach, describe, expect, it } from 'vitest';
 import { authed, drainJobs, signedInHub, type TestHub } from '../../../../tests/unit/helpers.js';
 import { parseEnv } from '../dotenv.js';
-import { readHermesSource, writeHermesSource } from '../hermes-source.js';
 import { upstreamPrefix } from './cliproxy-config.js';
 
 const FAKE = path.join(
@@ -47,12 +47,12 @@ function providers(): typeof fetch {
 
 async function hub(
   gateway: 'on' | 'off',
-  decided?: 'native' | 'hub',
+  env: Record<string, string> = {},
 ): Promise<Hub & { home: string }> {
   const home = mkdtempSync(path.join(tmpdir(), 'corehub-hermes-gw-'));
   cleanup.push(() => rmSync(home, { recursive: true, force: true }));
   const made = await signedInHub(
-    { COREHUB_MODEL_GATEWAY: gateway },
+    { COREHUB_MODEL_GATEWAY: gateway, ...env },
     {
       models: {
         fetchImpl: providers(),
@@ -63,7 +63,6 @@ async function hub(
     },
   );
   cleanup.push(() => made.close());
-  if (decided) writeHermesSource(path.join(made.dataDir, 'gateway'), decided, 'chosen');
   return Object.assign(made as Hub, { home });
 }
 
@@ -88,28 +87,28 @@ const config = (home: string) =>
 const env = (home: string) => parseEnv(readFileSync(path.join(home, '.env'), 'utf8'));
 
 describe('Hermes on the hub’s models', () => {
-  it('a new hub with a gateway decides `hub`; a hub that already has providers stays native', async () => {
-    const fresh = await hub('on');
-    expect(readHermesSource(path.join(fresh.dataDir, 'gateway'))).toBe('hub');
-    const read = await authed(fresh, fresh.token, {
-      method: 'GET',
-      url: '/api/v1/models/hermes-source',
-    });
-    expect(read.json()).toMatchObject({ source: 'hub', effective: 'hub', available: true });
-
-    const off = await hub('off');
-    expect(readHermesSource(path.join(off.dataDir, 'gateway'))).toBe('native');
-    const refused = await authed(off, off.token, {
-      method: 'PUT',
-      url: '/api/v1/models/hermes-source',
-      payload: { source: 'hub' },
-    });
-    expect(refused.statusCode).toBe(409);
-    expect(refused.json()).toMatchObject({ details: { reason: 'gateway_unavailable' } });
+  it('has no switch: the choice’s routes are gone, and a choice an earlier build kept is ignored', async () => {
+    const h = await hub('on');
+    for (const method of ['GET', 'PUT'] as const) {
+      const response = await authed(h, h.token, {
+        method,
+        url: '/api/v1/models/hermes-source',
+        ...(method === 'PUT' ? { payload: { source: 'native' } } : {}),
+      });
+      expect(response.statusCode).toBe(404);
+    }
+    // A preview build's `native` choice, left in the data folder: read by nobody.
+    writeFileSync(
+      path.join(h.dataDir, 'gateway', 'hermes-models.json'),
+      '{"source":"native","why":"chosen"}\n',
+    );
+    await add(h, 'groq', 'gsk-hermes-no-switch');
+    await drainJobs(h.app);
+    expect(Object.keys(config(h.home).providers ?? {})).toContain('corehub-gw-groq');
   });
 
   it('writes one block per provider at its gateway address, with the profile’s token, and a call reaches the row', async () => {
-    const h = await hub('on', 'native');
+    const h = await hub('on');
     const anthropic = await add(h, 'anthropic', 'sk-ant-hermes-gateway');
     const groq = await add(h, 'groq', 'gsk-hermes-gateway');
     await drainJobs(h.app);
@@ -121,17 +120,6 @@ describe('Hermes on the hub’s models', () => {
         fallbacks: [{ provider_id: groq.id, model: 'llama-3.3-70b-versatile' }],
       },
     });
-    // Native first: Hermes's own providers.
-    expect(config(h.home).model?.provider).toBe('anthropic');
-
-    const switched = await authed(h, h.token, {
-      method: 'PUT',
-      url: '/api/v1/models/hermes-source',
-      payload: { source: 'hub' },
-    });
-    expect(switched.statusCode, switched.body).toBe(200);
-    expect(switched.json()).toMatchObject({ source: 'hub', effective: 'hub' });
-
     const written = config(h.home);
     const blocks = written.providers ?? {};
     const messages = blocks['corehub-gw-anthropic']!;
@@ -150,14 +138,13 @@ describe('Hermes on the hub’s models', () => {
       provider: 'corehub-gw-anthropic',
       default: 'claude-sonnet-4-5',
     });
-    // The chain through the gateway, and Hermes's own route to the chat model last.
+    // The chain goes through the gateway too, with no route of Hermes's own around it.
     expect(written.fallback_providers).toEqual([
       { provider: 'corehub-gw-groq', model: 'llama-3.3-70b-versatile' },
-      { provider: 'anthropic', model: 'claude-sonnet-4-5' },
     ]);
     const token = env(h.home).get('COREHUB_GATEWAY_TOKEN')!;
     expect(token).toMatch(/^chgwh_/);
-    // The keys stay where they were, for what Hermes still does by itself (speech, a fallback).
+    // The keys stay where they were, for what Hermes still does by itself (speech, embeddings).
     expect(env(h.home).get('ANTHROPIC_API_KEY')).toBe('sk-ant-hermes-gateway');
 
     // A call as Hermes makes it: the block's address, the token, the provider's own model id.
@@ -191,19 +178,48 @@ describe('Hermes on the hub’s models', () => {
       body: JSON.stringify({ model: 'llama-3.3-70b-versatile', messages: [] }),
     });
     expect(forged.status).toBe(401);
+  });
 
-    // Back to native: the hub's gateway blocks and the token go, Hermes's own providers return.
-    const back = await authed(h, h.token, {
+  it('a hub whose operator switched the gateway off gives Hermes its own routes', async () => {
+    const h = await hub('off');
+    const groq = await add(h, 'groq', 'gsk-hermes-gateway-off');
+    await drainJobs(h.app);
+    await authed(h, h.token, {
       method: 'PUT',
-      url: '/api/v1/models/hermes-source',
-      payload: { source: 'native' },
+      url: '/api/v1/models/defaults',
+      payload: { default: { provider_id: groq.id, model: 'llama-3.3-70b-versatile' } },
     });
-    expect(back.json()).toMatchObject({ source: 'native', effective: 'native' });
-    const after = config(h.home);
+    const written = config(h.home);
     expect(
-      Object.keys(after.providers ?? {}).filter((name) => name.startsWith('corehub-gw-')),
-    ).toEqual([]);
-    expect(after.model?.provider).toBe('anthropic');
+      Object.keys(written.providers ?? {}).some((name) => name.startsWith('corehub-gw-')),
+    ).toBe(false);
+    expect(written.model?.provider).toBe('corehub-groq');
     expect(env(h.home).get('COREHUB_GATEWAY_TOKEN')).toBeUndefined();
+  });
+
+  it('never writes a person’s own Hermes (`~/.hermes`) on their computer', async () => {
+    // A person's own Hermes, with a provider of their own: what their Hermes app keeps using.
+    const person = mkdtempSync(path.join(tmpdir(), 'corehub-person-'));
+    cleanup.push(() => rmSync(person, { recursive: true, force: true }));
+    const own = path.join(person, '.hermes');
+    mkdirSync(own, { recursive: true });
+    const ownConfig = 'model:\n  provider: openrouter\n  default: my/own-model\n';
+    const ownEnv = 'OPENROUTER_API_KEY=sk-or-the-persons-own\n';
+    writeFileSync(path.join(own, 'config.yaml'), ownConfig);
+    writeFileSync(path.join(own, '.env'), ownEnv);
+
+    // The hub writes its own Hermes home (`${DATA_DIR}/hermes` on a computer, ADR 0021: the
+    // runtime's `home`, proven in hermes-runtime.test.ts), wherever the person's HOME is.
+    const h = await hub('on', { HOME: person });
+    const groq = await add(h, 'groq', 'gsk-hermes-person');
+    await drainJobs(h.app);
+    await authed(h, h.token, {
+      method: 'PUT',
+      url: '/api/v1/models/defaults',
+      payload: { default: { provider_id: groq.id, model: 'llama-3.3-70b-versatile' } },
+    });
+    expect(config(h.home).model?.provider).toBe('corehub-gw-groq');
+    expect(readFileSync(path.join(own, 'config.yaml'), 'utf8')).toBe(ownConfig);
+    expect(readFileSync(path.join(own, '.env'), 'utf8')).toBe(ownEnv);
   });
 });

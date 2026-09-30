@@ -5075,3 +5075,57 @@ change of key providers that starts a new process, begins them again); a change 
 while a sign-in is pending keeps the old process for that sign-in until it ends; phones show
 accounts, status, usage and "check now" and sign in by code or pasted address, but the web alone
 has turn off, renew, sign out and "move to the gateway".
+
+## 144. Every agent reaches its model through the hub, with no switch
+
+Status: decided by the owner, 2026-09-30 — «ابي كل الايجنتات تمر عن طريقنا مالها اتصال بنفسها …
+كل شي يكون عن طريق الهب بدون زر» ("I want every agent to go through us, with no connection of
+its own … everything through the hub, without a button"). It reverses the opt-in parts of §140,
+§141, §142 and §143 named below; everything else in them stands.
+
+- **Hermes.** The "Hermes uses Core Hub's models" choice of §143 is gone, with its operations
+  (`models.getHermesModelSource` / `models.setHermesModelSource`, `/models/hermes-source`) and its
+  schema `HermesModelSource`. They were added in this same unreleased change (the compatibility
+  base, v1.1.5, never had them), so removing them breaks no released client; a preview build that
+  called them gets 404 and hides the card. On every hub whose gateway is available the hub writes
+  Hermes's `providers:` blocks at the gateway (§143's `corehub-gw-<slug>`, token, port) for every
+  row the gateway serves, at every boot and every change; `<DATA_DIR>/gateway/hermes-models.json`,
+  left by a preview build, is read by nobody. §143's escape hatch — Hermes's own route to the chat
+  model at the end of its fallback chain — is removed: the chain goes through the gateway too.
+  Speech, embeddings, the ChatGPT images of a Hermes sign-in and the rows the gateway cannot serve
+  (a Nous Portal or MiniMax sign-in through Hermes) stay as they were. A hub whose operator
+  switched the gateway off (`COREHUB_MODEL_GATEWAY=off`) or that has no CLIProxyAPI gives Hermes
+  its own routes, as before the gateway: that is the operator's switch, not a person's.
+- **A person's own Hermes, on a computer.** The hub never writes `~/.hermes`. Every Hermes turn
+  the hub starts (web, phones, channels, workflows, schedules) runs in the hub's own Hermes home,
+  `${DATA_DIR}/hermes` (ADR 0021 decision 3, `hermes-runtime.ts`: `HERMES_HOME` of the TUI gateway
+  and of the gateway child the hub supervises, whatever the mode; only the install's dependency
+  state is shared, by a link inside the hub's home, and §129's lock-directory isolation keeps the
+  two gateways apart). The gateway blocks and the token are written there only. So messages sent
+  through Core Hub go through the gateway, and messages the person sends from their own Hermes
+  app keep their own configuration. Limit: where the hub attaches to a Hermes gateway somebody
+  else runs (`external` mode), the jobs that gateway runs by itself follow its own files.
+- **Coding agents.** No model source choice: the settings form no longer has the `models`
+  section (`model_source`: Automatic / Core Hub's models / the agent's own account), an agent's
+  own sign-in on the computer no longer counts, and `COREHUB_AGENT_MODEL_SOURCE` (§140, `hub` in
+  the image) is still accepted and ignored. Every coding agent the gateway wires runs through it.
+  When the hub has no model for it — none chosen and no default, a model of a provider the
+  gateway cannot serve, an agent older than its wiring, a gateway that cannot start or a settings
+  file the hub cannot write — the turn fails before any process starts, `provider_not_configured`,
+  with words saying what to do (Settings → Models, the model picker, or Agents); it never runs on
+  the agent's own account. §142's rewriting of the agent's "Authentication required" is gone with
+  that path.
+- **Compatibility.** `Agent.model_source` stays in the contract (`hub`, or absent where the hub
+  does not wire the agent); `agent` is no longer sent, and clients that read it keep working. A
+  `PATCH /agents/{id}/settings` with `section: models` and only `model_source`, from an app
+  written before this, is answered 200 and changes nothing; any other key in that section is 404,
+  as an unknown section always was. Stored `model_source` values are left in the settings rows
+  and ignored. Phones had no control of their own (they render the server's form), so nothing
+  changes there.
+- **Proven.** `hermes-gateway.test.ts` (no switch; a preview build's `native` ignored; blocks and
+  token written with no native route in the chain; operator off gives Hermes its own routes; a
+  person's `~/.hermes` byte-for-byte unchanged), `hub-gateway.test.ts` (no `models` section, an old
+  app's `model_source: agent` ignored, an agent signed in to its own account on the computer
+  still started on the gateway with no key, the failure words for no model / unserved provider /
+  old version / unwritable file), `runner-gateway.test.ts` (a gateway that cannot start or a turn
+  with no model fails before any process starts).

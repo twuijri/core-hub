@@ -113,7 +113,6 @@ import {
 } from './subscriptions.js';
 import { upstreamModel, upstreamPrefix } from './gateway/cliproxy-config.js';
 import { t, type UiLanguage } from '../../i18n/index.js';
-import type { HermesModelSource } from './hermes-source.js';
 
 /** The variable a Hermes profile's gateway token is in (DECISIONS §143). */
 export const HERMES_GATEWAY_TOKEN_ENV = 'COREHUB_GATEWAY_TOKEN';
@@ -275,8 +274,6 @@ export interface ModelsServiceOptions {
 export interface HermesGatewayPort {
   /** Why the gateway cannot serve Hermes (off, no CLIProxyAPI), or null. */
   unavailable(): string | null;
-  source(): HermesModelSource;
-  setSource(source: HermesModelSource): void;
   /** A profile's token, or null when there can be none. */
   token(workspace: string): string | null;
   /** A provider row's address on the listener, or null before the listener is up. */
@@ -3120,21 +3117,6 @@ export class ModelsService {
           member.provider ? [{ provider: member.provider, model: member.model }] : [],
         )
       : null;
-    // The escape hatch: a chat model the gateway serves from a key Hermes can also use by itself
-    // ends the chain on Hermes's own route to it, so Hermes still answers if the gateway is down.
-    if (viaGateway && gatewayToken && chat.choice && fallbacks) {
-      const ref = this.refOfRole(workspace, 'chat');
-      const row = ref ? this.store.providerById(ref.provider_id) : undefined;
-      const own =
-        row && row.authKind !== 'oauth' ? hermesProviderNameOf(row.slug, this.entryOf(row)) : null;
-      if (
-        own &&
-        ref &&
-        !fallbacks.some((each) => each.provider === own && each.model === ref.model)
-      ) {
-        fallbacks.push({ provider: own, model: ref.model });
-      }
-    }
     return {
       credentials,
       hermesProviders,
@@ -4273,17 +4255,16 @@ export class ModelsService {
     return hermesProviderNameOf(row.slug, entry);
   }
 
-  // ------------------------------------------- Hermes on the hub's models (§143)
+  // ------------------------------------------- Hermes on the hub's models (§143, §144)
 
-  /** How many providers any profile has added (removed ones not counted): 0 on a new hub. */
-  providerCount(): number {
-    return this.store.everyProviderRow().filter((row) => !row.archivedAt).length;
-  }
-
-  /** Whether Hermes is given the gateway now: chosen, available, and the listener up. */
+  /**
+   * Whether Hermes is given the gateway now: available and the listener up — on every hub, with
+   * no choice to make (§144). Only a hub whose operator switched the gateway off, or that has no
+   * CLIProxyAPI, writes Hermes's own routes instead.
+   */
   private hermesViaGateway(): boolean {
     const port = this.options.hermesGateway;
-    if (!port || port.source() !== 'hub' || port.unavailable()) return false;
+    if (!port || port.unavailable()) return false;
     return port.listening();
   }
 
@@ -4328,53 +4309,6 @@ export class ModelsService {
       });
     }
     return out;
-  }
-
-  /** `models.getHermesModelSource`. */
-  hermesModelSource(): {
-    source: HermesModelSource;
-    effective: HermesModelSource;
-    available: boolean;
-    reason: string | null;
-  } {
-    const port = this.options.hermesGateway;
-    const reason = port ? port.unavailable() : 'the model gateway is off on this hub';
-    return {
-      source: port?.source() ?? 'native',
-      effective: this.hermesViaGateway() ? 'hub' : 'native',
-      available: reason === null,
-      reason,
-    };
-  }
-
-  /** `models.setHermesModelSource`: rewrites every Hermes profile, and restarts Hermes when idle. */
-  setHermesModelSource(
-    scope: WorkspaceScope,
-    actor: Actor,
-    source: HermesModelSource,
-  ): ReturnType<ModelsService['hermesModelSource']> {
-    const port = this.options.hermesGateway;
-    if (source !== 'hub' && source !== 'native') {
-      throw validationFailed({ field: 'source', reason: 'native or hub' });
-    }
-    if (source === 'hub') {
-      const reason = port ? port.unavailable() : 'the model gateway is off on this hub';
-      if (!port || reason) throw gatewayUnavailable(reason ?? 'unavailable');
-    }
-    port?.setSource(source);
-    this.options.audit.record({
-      workspace: scope.id,
-      ownerId: actor.userId,
-      actorKind: 'user',
-      actorId: actor.userId,
-      action: 'agent.model_source_changed',
-      entityKind: 'agent',
-      entityId: 'hermes',
-      summary: `Hermes reaches its models ${source === 'hub' ? "through Core Hub's gateway" : 'by itself'}`,
-      data: { source },
-    });
-    this.propagate(scope, actor);
-    return this.hermesModelSource();
   }
 
   private requireModel(scope: WorkspaceScope, ref: ModelRefInput): ModelRow {

@@ -66,7 +66,9 @@ chose (the picker's choice, else the agent's default in the profile). A catalogu
 inside the agent.
 
 ### 5. Model source per agent
-Each coding agent the gateway wires has a setting `model_source`: Automatic, the hub's models, or its
+Superseded 2026-09-30 by DECISIONS §144: there is no per-agent choice; every coding agent the
+gateway wires runs through it, and a turn the hub has no model for fails saying so instead of
+running on the agent's own account. As first decided: each coding agent the gateway wires has a setting `model_source`: Automatic, the hub's models, or its
 own account. In the container image Automatic is the hub (`COREHUB_AGENT_MODEL_SOURCE=hub`; the
 owner: in Docker every coding agent uses the gateway); on a computer (the desktop app) it is the hub
 unless the agent is signed in to its own account there. Whatever is chosen, an agent keeps its own
