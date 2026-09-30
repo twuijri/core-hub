@@ -458,7 +458,7 @@ function StepRow({
         <div className="trajectory-step-body" id={bodyId} data-testid="trajectory-step-body">
           {step.kind === 'turn' && step.model && (
             <p className="trajectory-step-meta" dir="auto" data-testid="trajectory-step-model">
-              {t('trajectory.model', { model: step.model })}
+              {t('trajectory.model', { model: names?.(step.model) ?? step.model })}
             </p>
           )}
           {step.fallback && failureReasons(step.fallback) && (

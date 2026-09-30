@@ -1169,7 +1169,18 @@ export class AgentsService implements UpdatePolicyStore {
     const asked = run.model?.trim() ?? '';
     if (asked && port) {
       try {
-        const ref = port.resolveModelKey(workspaceId, asked);
+        // A run on the agent's default names the model by its bare id and the provider by its
+        // row (`AgentDirectory.defaultProvider`): that row first. The bare id alone is found in
+        // whichever provider lists it first — another provider's model of the same name, such
+        // as a subscription the gateway does not lend (owner, 2026-09-30: a new Codex chat ran
+        // on its own account and asked for a sign-in).
+        const slug =
+          run.provider && !asked.includes('/') && port.providerSlug
+            ? port.providerSlug(workspaceId, run.provider)
+            : null;
+        const ref =
+          (slug ? port.resolveModelKey(workspaceId, `${slug}/${asked}`) : null) ??
+          port.resolveModelKey(workspaceId, asked);
         if (ref) {
           return {
             model: ref.model,
@@ -1306,6 +1317,42 @@ export class AgentsService implements UpdatePolicyStore {
     if ((this.options.modelSourceDefault?.() ?? 'auto') === 'hub') return 'hub';
     const probe = this.options.credentialProbe;
     return probe && ownSignIn(row.slug, probe) ? 'agent' : 'hub';
+  }
+
+  /**
+   * Why a turn that could have run on the hub's models does not, in words for the chat: `null`
+   * when it does, when the agent is not wired, when the person chose the agent's own account, or
+   * when its own sign-in on this computer is what Automatic picked.
+   */
+  gatewayMiss(row: AgentRow, workspaceId: string, selection: AgentSelection): string | null {
+    const entry = this.catalog.find((candidate) => candidate.id === row.slug);
+    if (!entry?.gateway) return null;
+    const gateway = this.options.models?.()?.gateway;
+    if (!gateway?.available()) return null;
+    if (this.settingsRow(workspaceId, row.id)?.settings?.model_source === 'agent') return null;
+    if (this.modelSourceFor(row, workspaceId, selection) !== 'agent') return null;
+    if (
+      entry.gateway.minVersion &&
+      row.version &&
+      compareVersions(row.version, entry.gateway.minVersion) < 0
+    ) {
+      return `Core Hub did not run ${row.name} on its providers: version ${row.version} is older than ${entry.gateway.minVersion}; update it in Agents.`;
+    }
+    if (!selection.providerId || !selection.model) {
+      return `Core Hub did not run ${row.name} on its providers: no model is chosen for this chat, or «${selection.model ?? ''}» is not in this profile's models. Pick one in the model picker.`;
+    }
+    let serves = false;
+    try {
+      serves = gateway.serves(workspaceId, selection.providerId);
+    } catch {
+      serves = false;
+    }
+    if (!serves) {
+      const port = this.options.models?.() ?? null;
+      const name = port?.providerSlug?.(workspaceId, selection.providerId) ?? 'its provider';
+      return `Core Hub did not run ${row.name} on its providers: «${selection.model}» of ${name} is not served by Core Hub's model gateway (the provider has no key the hub can use, or it is a subscription signed in through Hermes, which the hub does not lend). Pick another model.`;
+    }
+    return null;
   }
 
   /** A gateway token for one agent process (the runner revokes it when the process goes). */

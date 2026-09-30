@@ -351,6 +351,47 @@ describe('a turn a fallback model answered', () => {
     expect(screen.getByText(/Answered by CLI Proxy · GPT 5\.5/)).toBeInTheDocument();
   });
 
+  it('names a key, or a bare model id one provider has, by the provider’s own name', () => {
+    const names = catalogueNames(
+      [
+        {
+          key: 'custom-cli-proxy-api/gpt-6-sol',
+          provider: 'custom-cli-proxy-api',
+          provider_id: 'P1',
+          model: 'gpt-6-sol',
+          alias: null,
+        },
+        {
+          key: 'custom-cli-proxy-api/gemini-3.8-flash-high',
+          provider: 'custom-cli-proxy-api',
+          provider_id: 'P1',
+          model: 'gemini-3.8-flash-high',
+          alias: null,
+        },
+        {
+          key: 'other/shared-id',
+          provider: 'other',
+          provider_id: 'P2',
+          model: 'shared-id',
+          alias: null,
+        },
+        {
+          key: 'custom-cli-proxy-api/shared-id',
+          provider: 'custom-cli-proxy-api',
+          provider_id: 'P1',
+          model: 'shared-id',
+          alias: null,
+        },
+      ] as unknown as Model[],
+      [{ id: 'P1', label: 'CLI Proxy' }],
+    );
+    expect(names('custom-cli-proxy-api/gpt-6-sol')).toBe('CLI Proxy · gpt-6-sol');
+    expect(names('gemini-3.8-flash-high')).toBe('CLI Proxy · gemini-3.8-flash-high');
+    // Two providers have it: which one is not known, so the id stays as it is.
+    expect(names('shared-id')).toBeNull();
+    expect(names('other/shared-id')).toBe('other · shared-id');
+  });
+
   it('says it in Arabic', () => {
     mount({ r1: run() }, 'ar');
     expect(screen.getByTestId('fallback-note')).toHaveTextContent(

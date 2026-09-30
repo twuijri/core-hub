@@ -24,7 +24,9 @@ export function catalogueNames(
   const byKey = new Map(catalogue.map((model) => [model.key, model]));
   const labels = new Map(providers.map((provider) => [provider.id, provider.label]));
   return (key) => {
-    const model = byKey.get(key);
+    // A key, or a bare model id (a turn on the agent's default names it so) that one provider has.
+    const bare = byKey.has(key) ? [] : catalogue.filter((candidate) => candidate.model === key);
+    const model = byKey.get(key) ?? (bare.length === 1 ? bare[0] : undefined);
     if (!model) return null;
     const provider = labels.get(model.provider_id) || model.provider;
     return `${provider} · ${model.alias ?? model.model}`;
