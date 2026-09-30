@@ -118,34 +118,51 @@ export function defaultModelLabel(
 /**
  * The chat models an agent's picker offers. A coding agent on the hub's models (ADR 0029) is
  * offered what the gateway can serve it — every hub provider's model, but not a subscription
- * signed in to through Hermes (`Model.agent_gateway`); every other agent, the whole catalogue.
+ * signed in to through Hermes (`Model.agent_gateway`), nor a model its provider says cannot call
+ * tools (`Model.agent_tools`, DECISIONS §141); a model whose context window is smaller than the
+ * agent's floor (`Agent.gateway_min_context`) says so (`smallContext`). Every other agent, the
+ * whole catalogue.
  */
 export function composerModelOptions(
   catalogue: readonly Model[],
-  agent?: Pick<Agent, 'kind' | 'model_source'> | undefined,
+  agent?: Pick<Agent, 'kind' | 'model_source' | 'gateway_min_context'> | undefined,
+  smallContext?: (floor: number) => string,
 ): ComboboxOption[] {
   const gatewayOnly = agent?.kind === 'acp' && agent.model_source === 'hub';
+  const floor = gatewayOnly ? (agent?.gateway_min_context ?? null) : null;
   return (
     chatModels([...catalogue])
       .filter((model) => model.visible && !model.disabled)
-      .filter((model) => !gatewayOnly || model.agent_gateway === true)
+      .filter(
+        (model) => !gatewayOnly || (model.agent_gateway === true && model.agent_tools !== false),
+      )
       // `key` is `<provider>/<model>`, which is what a session stores.
-      .map((model) => modelOption(model, model.key))
+      .map((model) => {
+        const option = modelOption(model, model.key);
+        if (!floor || !smallContext || model.context_window == null) return option;
+        if (model.context_window >= floor) return option;
+        return { ...option, detail: `${option.detail ?? model.key} · ${smallContext(floor)}` };
+      })
   );
 }
 
 export function useComposerModels(
-  agent?: Pick<Agent, 'kind' | 'model_source'> | undefined,
+  agent?: Pick<Agent, 'kind' | 'model_source' | 'gateway_min_context'> | undefined,
 ): ComboboxOption[] {
   const catalogue = useCatalogue();
+  const { t } = useI18n();
   const gatewayOnly = agent?.kind === 'acp' && agent.model_source === 'hub';
+  const floor = gatewayOnly ? (agent?.gateway_min_context ?? null) : null;
   return useMemo(
     () =>
       composerModelOptions(
         catalogue.data ?? [],
-        gatewayOnly ? { kind: 'acp', model_source: 'hub' } : undefined,
+        gatewayOnly
+          ? { kind: 'acp', model_source: 'hub', ...(floor ? { gateway_min_context: floor } : {}) }
+          : undefined,
+        (value) => t('composer.model_small_context', { tokens: Math.round(value / 1000) }),
       ),
-    [catalogue.data, gatewayOnly],
+    [catalogue.data, gatewayOnly, floor, t],
   );
 }
 

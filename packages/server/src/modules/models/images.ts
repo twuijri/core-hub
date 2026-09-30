@@ -14,7 +14,7 @@
  * sees a key.
  */
 import { PRODUCT, derived } from '@corehub/contracts';
-import type { ModelCapability } from './schema.js';
+import { MODEL_CAPABILITIES, type ModelCapability, type StoredCapability } from './schema.js';
 
 /**
  * Ids that name a model which answers with pictures. Deliberately about families, not
@@ -27,17 +27,22 @@ const IMAGE_MODEL_ID =
 /** True when the model draws: its provider said so, or its id says so. */
 export function isImageModel(
   modelKey: string,
-  capabilities: readonly ModelCapability[] = [],
+  capabilities: readonly StoredCapability[] = [],
 ): boolean {
   return capabilities.includes('image_output') || IMAGE_MODEL_ID.test(modelKey);
 }
 
-/** The capabilities a model is served with: what was stored, plus `image_output` by its id. */
+/**
+ * The capabilities a model is served with: what was stored — the contract's values only, never a
+ * marker kept beside them (`NO_TOOLS`) — plus `image_output` by its id.
+ */
 export function withImageCapability(
   modelKey: string,
-  capabilities: readonly ModelCapability[],
+  capabilities: readonly StoredCapability[],
 ): ModelCapability[] {
-  const out = [...capabilities];
+  const out = capabilities.filter((value): value is ModelCapability =>
+    (MODEL_CAPABILITIES as readonly string[]).includes(value),
+  );
   if (!out.includes('image_output') && IMAGE_MODEL_ID.test(modelKey)) out.push('image_output');
   return out;
 }
@@ -60,7 +65,7 @@ const IMAGES_API_MODEL =
  */
 export function isImageOnlyModel(
   modelKey: string,
-  capabilities: readonly ModelCapability[] = [],
+  capabilities: readonly StoredCapability[] = [],
 ): boolean {
   return isImageModel(modelKey, capabilities) && IMAGES_API_MODEL.test(modelKey);
 }

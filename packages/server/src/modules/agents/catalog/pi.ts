@@ -47,6 +47,7 @@ export const pi: CatalogEntry = {
   // away (its `credentials`), as for every agent on the gateway.
   gateway: {
     wire: 'openai-chat',
+    minContext: 16_000,
     env: (gw) => ({ COREHUB_GATEWAY_TOKEN: gw.token }),
     clears: [],
     config: 'pi-models',

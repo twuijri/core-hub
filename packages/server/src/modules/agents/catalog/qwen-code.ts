@@ -26,6 +26,7 @@ export const qwenCode: CatalogEntry = {
   // own `modelProviders` selection in `~/.qwen/settings.json` still wins, as Qwen Code orders it.
   gateway: {
     wire: 'openai-chat',
+    minContext: 32_000,
     env: (gw) => ({
       OPENAI_BASE_URL: gw.openaiBaseUrl,
       OPENAI_API_KEY: gw.token,

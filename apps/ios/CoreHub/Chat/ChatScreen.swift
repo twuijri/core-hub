@@ -92,7 +92,10 @@ struct ChatScreen: View {
         }
         .sheet(item: $exported) { file in ActivitySheet(items: [file.url]) }
         .sheet(isPresented: $pickingModel) {
-            ModelPickerSheet(options: controls?.models ?? [], loaded: controls?.modelsLoaded ?? false, current: model.state.model, allowDefault: true) { value in
+            ModelPickerSheet(
+                options: controls?.models ?? [], loaded: controls?.modelsLoaded ?? false, current: model.state.model, allowDefault: true,
+                defaultLabel: controls?.defaultModelName.map { l10n("chat_controls.model_default_named", ["model": $0]) }
+            ) { value in
                 Task { await model.setModel(value) }
             }
         }

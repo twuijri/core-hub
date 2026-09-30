@@ -63,6 +63,7 @@ export const grokBuild: CatalogEntry = {
   // person's own default alone. A model's own key wins over a `grok login`.
   gateway: {
     wire: 'openai-chat',
+    minContext: 64_000,
     env: (gw) => ({ COREHUB_GATEWAY_TOKEN: gw.token }),
     // Another default or endpoint for its models would move it off the table the hub wrote.
     clears: ['GROK_MODELS_BASE_URL', 'GROK_MODELS_LIST_URL', 'GROK_CONFIG', 'GROK_CONFIG_PATH'],

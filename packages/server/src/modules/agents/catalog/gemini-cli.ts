@@ -27,6 +27,7 @@ export const geminiCli: CatalogEntry = {
   // (`gateway-config.ts`).
   gateway: {
     wire: 'google',
+    minContext: 64_000,
     env: (gw) => ({
       GOOGLE_GEMINI_BASE_URL: gw.googleBaseUrl,
       GEMINI_API_KEY: gw.token,

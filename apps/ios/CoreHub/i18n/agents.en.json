@@ -151,6 +151,10 @@
       "done_uninstall": "Removed.",
       "done_restart": "Restarted.",
       "failed_with": "Failed: {error}"
+    },
+    "model_source": {
+      "hub": "Models: Core Hub's providers",
+      "agent": "Models: the agent's own account"
     }
   }
 }

@@ -73,6 +73,7 @@ export const goose: CatalogEntry = {
   // Responses (its docs, 1.52.0). Environment only; its `config.yaml` is left alone.
   gateway: {
     wire: 'openai-chat',
+    minContext: 32_000,
     env: (gw) => ({
       GOOSE_PROVIDER: 'openai',
       GOOSE_MODEL: gw.mainModel,

@@ -110,6 +110,15 @@ fun AgentsScreen(profile: String, onOpen: (Route) -> Unit) {
                             listOfNotNull(agent.vendor, agent.install.version).joinToString(" · ").takeIf { it.isNotEmpty() }?.let {
                                 Text(it, fontSize = FontTokens.sizeXs.sp, color = t.textMuted)
                             }
+                            // Where its model calls go (ADR 0029): the hub's providers, or its own account.
+                            // An older hub, or an agent the gateway does not wire: nothing.
+                            when (hub.core.android.chat.ChatControls.modelSource(agent)) {
+                                "hub" -> stringResource(R.string.agents_model_source_hub)
+                                "agent" -> stringResource(R.string.agents_model_source_agent)
+                                else -> null
+                            }?.let {
+                                Text(it, fontSize = FontTokens.sizeXs.sp, color = t.textMuted, modifier = Modifier.testTag("agent.model_source.${agent.slug}"))
+                            }
                         }
                         val (label, tone) = statusText(agent.status)
                         StatusBadge(label, tone)

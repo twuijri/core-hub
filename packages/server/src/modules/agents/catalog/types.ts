@@ -301,6 +301,12 @@ export interface GatewayWiring {
   /** A block of its own configuration the hub writes and keeps (`gateway-config.ts`). */
   config?: GatewayConfigKind;
   /**
+   * The smallest context window worth giving the agent through the gateway (its system prompt and
+   * tools alone fill much of a small one): the model picker marks a smaller model (DECISIONS §141,
+   * `Agent.gateway_min_context`). A hint, not a refusal.
+   */
+  minContext: number;
+  /**
    * The oldest version the wiring works with; an older one (found on the computer, or not updated)
    * keeps its own account. Absent: any.
    */

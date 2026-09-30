@@ -390,6 +390,7 @@
     "model": "النموذج",
     "model_default": "النموذج الافتراضي",
     "model_default_named": "الافتراضي · {model}",
+    "model_small_context": "سياق صغير (أقل من {tokens} ألف)",
     "model_agent_default": "افتراضي الوكيل نفسه",
     "approval": "وضع الصلاحيات",
     "approval_no_agent": "اختر وكيلًا أولًا.",

@@ -56,6 +56,7 @@ export const claudeCode: CatalogEntry = {
   // signed-in Claude Code on a person's computer stays on its own account unless switched.
   gateway: {
     wire: 'anthropic',
+    minContext: 64_000,
     env: (gw) => ({
       ANTHROPIC_BASE_URL: gw.anthropicBaseUrl,
       ANTHROPIC_AUTH_TOKEN: gw.token,

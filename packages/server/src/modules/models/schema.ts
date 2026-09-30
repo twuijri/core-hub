@@ -82,6 +82,15 @@ export const MODEL_CAPABILITIES = [
 ] as const;
 export type ModelCapability = (typeof MODEL_CAPABILITIES)[number];
 
+/**
+ * Kept in `models.capabilities` beside the contract's values and never served as one (DECISIONS
+ * §141): the provider's own metadata says the model cannot call tools — OpenRouter's
+ * `supported_parameters` without `tools`. A coding agent needs tool calls, so its picker on the
+ * hub's models leaves such a model out (`Model.agent_tools: false`). Absent: not known.
+ */
+export const NO_TOOLS = 'no_tools';
+export type StoredCapability = ModelCapability | typeof NO_TOOLS;
+
 export const MODEL_SOURCES = ['catalogue', 'discovered', 'manual'] as const;
 export type ModelSource = (typeof MODEL_SOURCES)[number];
 
@@ -237,7 +246,7 @@ export const models = sqliteTable(
     contextWindow: integer('context_window'),
     maxOutputTokens: integer('max_output_tokens'),
     pricing: json<ModelPricing>('pricing').notNull().default(EMPTY_OBJECT),
-    capabilities: json<ModelCapability[]>('capabilities').notNull().default(EMPTY_ARRAY),
+    capabilities: json<StoredCapability[]>('capabilities').notNull().default(EMPTY_ARRAY),
     /** The contract's `Model.disabled` is `!enabled`. */
     enabled: bool('enabled').notNull().default(true),
     /** The contract's `Model.visible`: hidden from pickers without being disabled. */

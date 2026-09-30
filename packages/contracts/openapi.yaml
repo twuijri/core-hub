@@ -22031,6 +22031,15 @@ components:
                 own account. `agent` also when the hub has no model to give it. Absent for Hermes,
                 the hub's own agent, agents the gateway does not wire yet, hubs whose gateway is off,
                 and older hubs.
+            gateway_min_context:
+              type: integer
+              minimum: 1
+              description: >-
+                The smallest context window, in tokens, worth giving this coding agent through the
+                model gateway (added 2026-09-30, DECISIONS §141): its system prompt and tools fill
+                much of a smaller one. Sent with `model_source`; the model picker marks a model
+                whose `context_window` is known and smaller ("small context"). A hint, not a
+                refusal. Absent with `model_source`, and from older hubs.
     AgentPatch:
       type: object
       properties:
@@ -26601,13 +26610,22 @@ components:
         agent_gateway:
           type: boolean
           description: >-
-            Coding agents (Claude Code, Codex, Gemini CLI, Goose, OpenCode, Qwen Code, Kimi Code,
-            Grok Build, Pi — the last three from DECISIONS §141) can run this model through the
-            hub's model gateway (added 2026-09-30, DECISIONS §140, ADR 0029):
+            Coding agents (Claude Code, Codex, Goose, OpenCode, Qwen Code, Kimi Code; Gemini CLI,
+            Grok Build and Pi from DECISIONS §141) can run this model through the hub's model
+            gateway (added 2026-09-30, DECISIONS §140, ADR 0029):
             its provider has a key the hub holds and is not a subscription signed in to through
             Hermes, which the hub does not lend to other agents. The model picker of an agent
             whose `model_source` is `hub` lists these models only. Absent from an older hub,
             which has no gateway.
+        agent_tools:
+          type: boolean
+          description: >-
+            `false` when the provider's own metadata says this model cannot call tools (added
+            2026-09-30, DECISIONS §141) — OpenRouter's `supported_parameters` without `tools`.
+            A coding agent works through tool calls, so the model picker of an agent whose
+            `model_source` is `hub` leaves such a model out. Absent when it is not known (most
+            providers do not say), when the hub has no gateway, and from older hubs; never
+            `true`.
         pricing:
           oneOf:
             - $ref: '#/components/schemas/ModelPricing'

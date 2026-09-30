@@ -61,5 +61,7 @@
   "chat_controls_steer_hint": "Guide the running reply without stopping it.",
   "chat_controls_steered": "Sent to the running reply.",
   "chat_controls_steer_queued": "The reply could not take it now; it goes as the next message.",
-  "chat_controls_save": "Save"
+  "chat_controls_save": "Save",
+  "chat_controls_model_default_named": "Default · %1$s",
+  "chat_controls_model_small_context": "small context (under %1$sK)"
 }

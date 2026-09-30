@@ -1484,6 +1484,8 @@ export class AgentsService implements UpdatePolicyStore {
         : null;
     return serializeAgent(row, {
       modelSource,
+      gatewayMinContext:
+        this.catalog.find((entry) => entry.id === row.slug)?.gateway?.minContext ?? null,
       profile: scope.slug,
       hasAvatar: this.options.avatars?.has(row.id) ?? false,
       settings,

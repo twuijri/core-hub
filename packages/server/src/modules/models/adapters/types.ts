@@ -16,7 +16,7 @@
  * `fetchImpl` is always injected, so every adapter test in this repository runs against a
  * scripted response and the suite never reaches the network.
  */
-import type { ModelCapability, ModelKind, ModelPricing } from '../schema.js';
+import type { ModelKind, ModelPricing, StoredCapability } from '../schema.js';
 
 /** Everything an adapter needs about the provider row it is acting for. */
 export interface ProviderContext {
@@ -64,7 +64,7 @@ export interface DiscoveredModel {
   kind: ModelKind;
   contextWindow?: number | null;
   maxOutputTokens?: number | null;
-  capabilities?: ModelCapability[];
+  capabilities?: StoredCapability[];
   /** Only when the provider reports prices (OpenRouter does; most do not). */
   pricing?: ModelPricing;
   preview?: boolean;

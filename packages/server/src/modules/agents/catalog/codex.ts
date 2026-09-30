@@ -46,6 +46,7 @@ export const codex: CatalogEntry = {
   // token there, over a person's ChatGPT sign-in).
   gateway: {
     wire: 'openai-responses',
+    minContext: 64_000,
     env: (gw) => ({
       COREHUB_GATEWAY_TOKEN: gw.token,
       CODEX_CONFIG: JSON.stringify({

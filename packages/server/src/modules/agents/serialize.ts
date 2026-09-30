@@ -137,6 +137,8 @@ export function serializeAgent(
     ownModel?: string | null;
     /** Where its model calls go in this profile (ADR 0029): `hub`, `agent`, or not said. */
     modelSource?: 'hub' | 'agent' | null;
+    /** The smallest context window worth giving it through the gateway (§141), with `modelSource`. */
+    gatewayMinContext?: number | null;
   },
 ): ContractAgent {
   const enabled = options.settings?.enabled ?? true;
@@ -206,6 +208,9 @@ export function serializeAgent(
     ...(options.credentials ? { credentials: options.credentials } : {}),
     ...(options.ownModel ? { agent_default_model: options.ownModel } : {}),
     ...(options.modelSource ? { model_source: options.modelSource } : {}),
+    ...(options.modelSource && options.gatewayMinContext
+      ? { gateway_min_context: options.gatewayMinContext }
+      : {}),
   };
 }
 

@@ -29,6 +29,7 @@ export const kimiCode: CatalogEntry = {
   // at the gateway. Nothing is written to its `config.toml`.
   gateway: {
     wire: 'openai-chat',
+    minContext: 32_000,
     env: (gw) => ({
       KIMI_MODEL_NAME: gw.mainModel,
       KIMI_MODEL_API_KEY: gw.token,

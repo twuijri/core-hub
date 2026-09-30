@@ -28,7 +28,7 @@ import { authed, drainJobs, signedInHub, type TestHub } from '../../../../tests/
 import { agentsServiceFor } from '../../agents/index.js';
 import { agents as agentRows } from '../../agents/schema.js';
 import { modelsServiceFor } from '../index.js';
-import { providers as providerRows } from '../schema.js';
+import { models as modelRows, providers as providerRows } from '../schema.js';
 import { upstreamPrefix } from './cliproxy-config.js';
 
 const FAKE = path.join(
@@ -208,6 +208,41 @@ describe('the model gateway in the hub', () => {
       `${upstreamPrefix(anthropic.id)}/claude-sonnet-4-5`,
     );
     grant.revoke();
+  });
+
+  it('says which models cannot call tools, and each wired agent’s context floor (§141)', async () => {
+    const h = await hub('hub');
+    const groq = await addProvider(h, 'groq', GROQ_KEY);
+    await drainJobs(h.app);
+    // The provider's metadata said the model takes no tools (`adapters/openai.ts`).
+    requireSqlite(h.app.hub.database)
+      .update(modelRows)
+      .set({ capabilities: ['streaming', 'no_tools'] })
+      .where(eq(modelRows.providerId, groq.id))
+      .run();
+    const catalogue = await authed(h, h.token, { method: 'GET', url: '/api/v1/models' });
+    const llama = (
+      catalogue.json() as {
+        items: { key: string; agent_tools?: boolean; capabilities: string[] }[];
+      }
+    ).items.find((m) => m.key === 'groq/llama-3.3-70b-versatile');
+    expect(llama?.agent_tools).toBe(false);
+    // The marker is the hub's own: never served as a capability.
+    expect(llama?.capabilities).toEqual(['streaming']);
+    markInstalled(h, 'claude-code');
+    markInstalled(h, 'pi');
+    const list = await authed(h, h.token, { method: 'GET', url: '/api/v1/agents' });
+    const items = (
+      list.json() as {
+        items: { slug: string; model_source?: string; gateway_min_context?: number }[];
+      }
+    ).items;
+    expect(items.find((a) => a.slug === 'claude-code')).toMatchObject({
+      model_source: 'hub',
+      gateway_min_context: 64_000,
+    });
+    expect(items.find((a) => a.slug === 'pi')?.gateway_min_context).toBe(16_000);
+    expect(items.find((a) => a.slug === 'hermes')?.gateway_min_context).toBeUndefined();
   });
 
   it('shows the agent’s model source on its card and lets the person choose it', async () => {

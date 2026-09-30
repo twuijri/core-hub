@@ -79,6 +79,7 @@ import {
   type ResolvedCredential,
 } from './propagation.js';
 import {
+  NO_TOOLS,
   ensembles,
   models,
   providers,
@@ -692,7 +693,9 @@ export class ModelsService {
           context_window: model.contextWindow,
           max_output_tokens: model.maxOutputTokens,
           pricing: { ...model.pricing },
-          capabilities: [...model.capabilities],
+          // The contract's values only: a marker kept beside them (`NO_TOOLS`) would reach an older
+          // hub that imports the file as a capability it serves (§141). A refresh finds it again.
+          capabilities: model.capabilities.filter((value) => value !== NO_TOOLS),
           enabled: model.enabled,
           visible: model.visible,
           preview: model.preview,
@@ -1489,6 +1492,8 @@ export class ModelsService {
         return {
           ...model,
           agent_gateway: served.has(row.providerId) && row.kind === 'chat' && row.enabled,
+          // A coding agent needs tool calls; said only when the provider's metadata says it cannot.
+          ...(row.capabilities.includes(NO_TOOLS) ? { agent_tools: false } : {}),
         };
       }),
       next_cursor:

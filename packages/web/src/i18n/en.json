@@ -390,6 +390,7 @@
     "model": "Model",
     "model_default": "Default model",
     "model_default_named": "Default · {model}",
+    "model_small_context": "small context (under {tokens}K)",
     "model_agent_default": "Agent's own default",
     "approval": "Approvals",
     "approval_no_agent": "Pick an agent first.",

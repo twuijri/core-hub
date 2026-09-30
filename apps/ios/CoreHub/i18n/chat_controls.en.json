@@ -66,6 +66,8 @@
     "steer_hint": "Guide the running reply without stopping it.",
     "steered": "Sent to the running reply.",
     "steer_queued": "The reply could not take it now; it goes as the next message.",
-    "save": "Save"
+    "save": "Save",
+    "model_default_named": "Default · {model}",
+    "model_small_context": "small context (under {tokens}K)"
   }
 }

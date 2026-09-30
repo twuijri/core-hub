@@ -31,6 +31,7 @@ export const opencode: CatalogEntry = {
   // token, and models.dev left unasked. Its `opencode.json` is left alone.
   gateway: {
     wire: 'openai-chat',
+    minContext: 32_000,
     env: (gw) => {
       const limit = { context: gw.contextWindow ?? 128_000, output: 32_000 };
       return {

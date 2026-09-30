@@ -257,6 +257,7 @@ fun ChatScreen(
             hub.core.android.ui.components.ModelPickerSheet(
                 ui.models, ui.modelsLoaded, chat.session?.model, allowDefault = true,
                 onChoose = { value -> pickingModel = false; vm.setModel(value) }, onDismiss = { pickingModel = false },
+                defaultLabel = ui.defaultModelName?.let { stringResource(R.string.chat_controls_model_default_named, it) },
             )
         }
         // The words appear in the draft while they are spoken; with Auto and no keyboard to go
@@ -298,6 +299,7 @@ fun ChatScreen(
             isAdmin = signedIn?.user?.isAdmin == true,
             onApproval = { value -> chipAgent?.let { vm.setApproval(it, value) } },
             allowDefault = true,
+            defaultModelName = ui.defaultModelName,
             folder = ui.draftFolder,
             dirs = ui.dirs,
             dirsError = ui.dirsError?.let { hub.core.android.ui.components.errorText(it) },

@@ -84,6 +84,15 @@ struct AgentCard: View {
                                 .foregroundStyle(Tone.textMuted)
                                 .lineLimit(1)
                         }
+                        // Where its model calls go (ADR 0029): the hub's providers, or its own
+                        // account. An older hub, or an agent the gateway does not wire: nothing.
+                        if let key = ChatControls.modelSourceKey(agent) {
+                            Text(l10n(key))
+                                .font(.system(size: FontSize.sizeXs))
+                                .foregroundStyle(Tone.textMuted)
+                                .lineLimit(1)
+                                .accessibilityIdentifier("agent.model_source")
+                        }
                     }
                     Spacer(minLength: Space.s2)
                     if agent.status != .available {

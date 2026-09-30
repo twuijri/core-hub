@@ -75,6 +75,8 @@ fun ComposerChips(
     modifier: Modifier = Modifier,
     /** A new chat may keep the agent's default; a chat that has one cannot go back to it. */
     allowDefault: Boolean = false,
+    /** Which model «Default» is, when the hub says: «Default · <model>» (ADR 0029). */
+    defaultModelName: String? = null,
     /** A new chat's folder: shown only when [onFolder] is given (a chat's folder is fixed once it ran). */
     folder: String? = null,
     dirs: WorkingDirs? = null,
@@ -85,6 +87,8 @@ fun ComposerChips(
     steerReady: Boolean = false,
 ) {
     var sheet by remember { mutableStateOf<String?>(null) }
+    val defaultLabel = defaultModelName?.let { stringResource(R.string.chat_controls_model_default_named, it) }
+        ?: stringResource(R.string.chat_controls_model_default)
     Row(
         modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 16.dp, vertical = 2.dp).testTag("composer.chips"),
         horizontalArrangement = Arrangement.spacedBy(6.dp),
@@ -97,7 +101,7 @@ fun ComposerChips(
             ) { sheet = "folder" }
         }
         ControlChip(
-            Lucide.Cpu, ChatControls.modelLabel(model, models) ?: stringResource(R.string.chat_controls_model_default),
+            Lucide.Cpu, ChatControls.modelLabel(model, models) ?: defaultLabel,
             stringResource(R.string.chat_controls_model), "composer.model",
         ) { sheet = "model" }
         if (approval != null) {
@@ -115,7 +119,10 @@ fun ComposerChips(
         }
     }
     when (sheet) {
-        "model" -> ModelPickerSheet(models, modelsLoaded, model, allowDefault, onChoose = { onModel(it); sheet = null }, onDismiss = { sheet = null })
+        "model" -> ModelPickerSheet(
+            models, modelsLoaded, model, allowDefault, onChoose = { onModel(it); sheet = null }, onDismiss = { sheet = null },
+            defaultLabel = defaultLabel,
+        )
         "approvals" -> if (approval != null) {
             ApprovalSheet(approval, isAdmin, onChoose = { onApproval(it); sheet = null }, onDismiss = { sheet = null })
         }
@@ -190,6 +197,8 @@ fun ModelPickerSheet(
     allowDefault: Boolean,
     onChoose: (String?) -> Unit,
     onDismiss: () -> Unit,
+    /** The «Default» row's words (which model it is, when known). */
+    defaultLabel: String? = null,
 ) {
     val t = LocalTokens.current
     var query by remember { mutableStateOf("") }
@@ -203,7 +212,7 @@ fun ModelPickerSheet(
             if (allowDefault && query.isBlank()) {
                 item(key = "default") {
                     ChoiceRow(
-                        stringResource(R.string.chat_controls_model_default), stringResource(R.string.chat_controls_model_default_hint),
+                        defaultLabel ?: stringResource(R.string.chat_controls_model_default), stringResource(R.string.chat_controls_model_default_hint),
                         current == null, tag = "model.default",
                     ) { onChoose(null) }
                 }
@@ -216,7 +225,10 @@ fun ModelPickerSheet(
             ChatControls.groups(shown).forEach { (group, items) ->
                 item(key = "group:$group") { MenuLabel(group) }
                 items(items, key = { it.value }) { option ->
-                    ChoiceRow(option.label, option.value.takeIf { it != option.label }, option.value == current, tag = "model.${option.value}") {
+                    // The id under the name, and «small context» under the agent's floor (§141).
+                    val small = option.smallUnder?.let { stringResource(R.string.chat_controls_model_small_context, (it / 1000).toString()) }
+                    val detail = listOfNotNull(option.value.takeIf { it != option.label }, small).joinToString(" · ").ifEmpty { null }
+                    ChoiceRow(option.label, detail, option.value == current, tag = "model.${option.value}") {
                         onChoose(option.value)
                     }
                 }

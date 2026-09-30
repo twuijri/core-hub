@@ -135,6 +135,8 @@ describe('models adapters: OpenAI-shaped', () => {
           { id: 'text-embedding-3-small' },
           { id: 'whisper-1' },
           { id: 'no-id-here', name: 'ignored' },
+          // The provider lists what the model takes, and tools are not among them (§141).
+          { id: 'tiny/no-tools', supported_parameters: ['temperature', 'max_tokens'] },
         ],
       },
     });
@@ -147,7 +149,11 @@ describe('models adapters: OpenAI-shaped', () => {
       'text-embedding-3-small',
       'whisper-1',
       'no-id-here',
+      'tiny/no-tools',
     ]);
+    expect(result.models[4]!.capabilities).toEqual(['no_tools']);
+    // A provider that says nothing leaves it unknown.
+    expect(result.models[3]!.capabilities).toBeUndefined();
     const sonnet = result.models[0]!;
     expect(sonnet).toMatchObject({
       label: 'Claude Sonnet 4.5',
