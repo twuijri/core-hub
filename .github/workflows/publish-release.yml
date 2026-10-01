@@ -134,6 +134,10 @@ jobs:
             echo "::notice::$TAG predates the MSIX: its release has no Microsoft Store package."
             without="$without --without=windows-msix"
           fi
+          if ! git cat-file -e "$TAG:apps/desktop/scripts/argon2-darwin-x64.mjs" 2>/dev/null; then
+            echo "::notice::$TAG predates the Intel Mac app: its release has the Apple Silicon one only."
+            without="$without --without=macos-x64"
+          fi
           if ! git cat-file -e "$TAG:apps/desktop/src/main/auto-update.ts" 2>/dev/null; then
             echo "::notice::$TAG predates the self-updating apps: its release has no update feeds."
             without="$without --without=updates"

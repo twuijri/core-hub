@@ -77,7 +77,8 @@ describe('the built page', () => {
 
   it('points every download at the releases page until the latest release is read', () => {
     const hrefs = [...html.matchAll(/data-asset="[\w-]+"[^>]*href="([^"]+)"/g)].map((m) => m[1]);
-    expect(hrefs).toHaveLength(5);
+    // Six downloads: Windows, the two Macs (Apple Silicon and Intel), AppImage, .deb, Android.
+    expect(hrefs).toHaveLength(6);
     for (const href of hrefs)
       expect(href).toBe('https://github.com/twuijri/core-hub/releases/latest');
   });

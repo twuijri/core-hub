@@ -62,8 +62,11 @@ describe('file names (apps/desktop/scripts/release-assets.mjs is the source)', (
   it('picks every download from the real v1.1.1 release (GET /releases/latest, 2026-09-26)', () => {
     const release = readRelease(realRelease, REPO)!;
     expect(release).not.toBeNull();
-    expect(Object.keys(release.downloads).sort()).toEqual([...ASSET_KEYS].sort());
-    for (const expected of releaseAssets(release.version)) {
+    // v1.1.1 predates the Intel Mac app (DECISIONS §152): its button opens the release page.
+    expect(Object.keys(release.downloads).sort()).toEqual(
+      ASSET_KEYS.filter((key) => key !== 'macos-dmg-x64').sort(),
+    );
+    for (const expected of releaseAssets(release.version, { intelMac: false })) {
       if (expected.key === 'windows-msix') continue;
       const got = release.downloads[expected.key as keyof typeof release.downloads]!;
       expect(got.name).toBe(expected.name);
@@ -256,5 +259,26 @@ describe('sizes', () => {
     [0, ''],
   ] as const)('%s → %s', (bytes, text) => {
     expect(formatSize(bytes)).toBe(text);
+  });
+});
+
+describe('the two Mac downloads (DECISIONS §152)', () => {
+  it('picks the Apple Silicon and the Intel dmg by their names', () => {
+    const tag = 'v1.2.0';
+    const asset = (name: string) => ({
+      name,
+      browser_download_url: download(tag, name),
+      size: 2e8,
+    });
+    const release = readRelease(
+      {
+        tag_name: tag,
+        html_url: `https://github.com/${REPO}/releases/tag/${tag}`,
+        assets: [asset('Core-Hub-1.2.0-arm64.dmg'), asset('Core-Hub-1.2.0-x64.dmg')],
+      },
+      REPO,
+    )!;
+    expect(release.downloads['macos-dmg']?.name).toBe('Core-Hub-1.2.0-arm64.dmg');
+    expect(release.downloads['macos-dmg-x64']?.name).toBe('Core-Hub-1.2.0-x64.dmg');
   });
 });

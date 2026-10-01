@@ -175,6 +175,26 @@ RunStatus,RunFailureNotice}.ts(x)` و`realtime/envelope.ts` واختبارات `
   صحيح في العربية؛ في الإعدادات وفي صفحات الوكيل (`SidebarGroup pinned`، `styles/kit.css`). Playwright الثلاثة → 26 ناجحة،
   واللقطات محدّثة.
 
+### نسختان لـmacOS: Apple Silicon وIntel (DECISIONS §152)
+طلب المالك للإصدار القادم: نسخة Intel بجانب Apple Silicon، تنزيلان منفصلان؛ حجم التنزيل يهمّه.
+- **تطبيقان لا تطبيق شامل (universal)**: الشامل يحمل إطاري Electron والملفات الأصلية للمعمارِيّتين، أي نحو 1.8 ضعف dmg
+  الإصدار 1.1.6 (139 MB) لكل جهاز Mac؛ المنفصلان يبقى كلٌّ بحجمه. يُبنيان في تشغيل واحد على مشغّل Apple Silicon (x64 بالبناء
+  المتقاطع)، فملف `latest-mac.yml` واحد يذكر الملفّين.
+- **كل ملف ثنائي لـdarwin-x64**: Electron يُنزَّل لكل معمارية؛ better-sqlite3 فيه darwin-x64؛ CLIProxyAPI مثبّت لـdarwin-x64 في
+  `pin.json` من قبل؛ المركز المدمج يعمل على Node الخاص بـElectron؛ هرمز وPython غير مضمّنين. **argon2 0.45 بلا ملف darwin-x64**
+  (كان في 0.44): بناء سطح المكتب يجمّعه من مصادر argon2 على الـMac بـ`node-gyp --arch=x64` ويتحقق منه بـ`lipo`
+  (`apps/desktop/scripts/argon2-darwin-x64.mjs`).
+- **التحديث**: `latest-mac.yml` واحد بالملفّين، وelectron-updater يعطي Mac بمعالج Apple الملف الذي في اسمه arm64 وIntel الآخر؛
+  النسخة المثبّتة لـApple Silicon تبقى تتحدّث كما كانت. `check-feeds` يطلب الملفّين، و`--without=macos-x64` للوسوم الأقدم.
+- **التوقيع وCI**: `desktop-signed.yml` يوقّع ويوثّق ويفحص التطبيقين والـzip؛ ووظيفة جديدة «Intel Mac» على `macos-15-intel` تشغّل
+  رحلات الدخان الثلاث على تطبيق x64 المحزوم (ومنها الوضع المحلي الذي يحمّل argon2 المجمّع لـx86_64).
+- **صفحة التنزيل**: زرّان «Apple Silicon (M1–M4)» و«Intel».
+- **الأحجام**: arm64 كما في 1.1.6: dmg 139 MB وzip 139 MB؛ x64: يُسجَّل من ملخّص CI أدناه بعد أول بناء.
+- الملفات: `apps/desktop/electron-builder.config.cjs`، `scripts/build-hub.mjs`، `scripts/argon2-darwin-x64.mjs` (جديد)،
+  `scripts/release-assets.mjs` واختبارها، `.github/workflows/{desktop,desktop-signed,publish-release}.yml`،
+  `site/src/{index.html,releases.js,i18n.js}` واختباراتها، `docs/RELEASING.md`، `README.md`.
+- الفحوص: `vitest run tests/unit` (apps/desktop) → 218 ناجحة؛ `vitest run` (site) → 41 ناجحة. البناء نفسه يجري على macOS في CI فقط.
+
 ## العقد (ما تغيّر في packages/contracts، أو «لا شيء»)
 حدث جديد `run.status` على `/rt/sessions` (إضافة؛ `contracts:compat` OK مقابل v1.1.6) وإضافته إلى `x-rt-events` لـ`sessions.createRun`.
 `Run.error.details` يحمل `reason` بثلاث قيم و`said` (الحقل موجود في غلاف `Error`). وقبل ذلك: لا شيء. `check_error` كان دائمًا جملة يعرضها العميل؛ الآن بلغة الطلب.
