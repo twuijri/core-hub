@@ -224,6 +224,13 @@ OpenCode الكبيرة بأدوات تمر).
   Node 24) أنهى خطوته بعد «Starting download» بلون أخضر ودون أن يفكّ شيئًا من ملف الـmacOS (570 MB) — لا سطر «download
   completed» في السجل — فلم يجد `ls` ملف x64. الإصلاح: وظيفة الـmacOS ترفع zip الـx64 وحده في ملف صغير (146 MB)، ووظيفة Intel
   تنزّله بـ`download-artifact@v8`، ثم تتحقق من وصوله وتعيد جلبه بـ`gh run download` حتى ثلاث مرات قبل أن تفشل بسبب واضح.
+- **التحصين نفسه في `publish-release.yml`** (الإصدار 1.1.7 يعتمد عليه): التنزيل بـ`download-artifact@v8`، ثم خطوة «The release
+  files» تجمع كل ملف يحمله الإصدار — dmg وzip لجهازَي Mac، و.exe و.msix لـWindows، وAppImage و.deb، و.apk لـAndroid، وملفات
+  التحديث الثلاثة `latest*.yml` (وكلٌّ لا يذكر إلا ملفًا موجودًا) — بـ`release-assets.mjs collect` الذي يفشل ويسمّي الناقص. إن
+  نقص شيء: تنزيل جديد مرة بـ`gh run download` (صلاحية `actions: read`)، ثم الجمع مرة أخرى، وإلا تتوقف الوظيفة بخطأ واضح قبل أن
+  يُنشأ الإصدار أو يُرفع إليه شيء.
+- **متابعة معروفة**: `actions/download-artifact@v4` ما زال في `ios.yml` و`ios-screenshots.yml` و`hermes-watch.yml`؛ تُركت كما
+  هي بطلب المنسّق، وقد تصيبها المشكلة نفسها.
 
 ## العقد (ما تغيّر في packages/contracts، أو «لا شيء»)
 حدث جديد `run.status` على `/rt/sessions` (إضافة؛ `contracts:compat` OK مقابل v1.1.6) وإضافته إلى `x-rt-events` لـ`sessions.createRun`.
