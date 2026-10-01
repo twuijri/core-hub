@@ -5371,3 +5371,21 @@ Status: the owner's requests, 2026-10-01 — «اذا المستخدم سحب ا
   the «Reply» accessibility action, a disabled row, the rules, and a long press on the agent's
   reply opening the menu whose Reply answers it. iOS `SwipeToReplyTests` (XCTest): the same rules
   and the action's name in both languages; SwiftUI's gesture itself is checked on a device.
+
+## 151. The sidebar's «Back to chats» / «Back to agents» row sits at the bottom, above the footer
+
+Status: the owner's decision, 2026-10-01. It supersedes where §33 (Agents at the top level,
+2026-09-24) and the Settings sidebar put the back row: at the top, where the rail is.
+
+- **Web, every nested sidebar that uses the back row** — Settings («رجوع إلى المحادثات» / "Back to
+  chats") and an agent's own pages («رجوع إلى الوكلاء» / "Back to agents"): the row is pinned at
+  the bottom of the sidebar, directly above the footer box (the connection, the person, the
+  gear and sign-out, then language, theme and version). It is outside the scrolling list, so it
+  stays in view however far the menu above it scrolls, and Tab reaches it just before the
+  footer. Same look, icon and link as before; the arrow keeps pointing toward the reading start,
+  so it is right in Arabic. The phone drawer is the same sidebar and follows. The phone apps' own
+  layout is unchanged.
+- **Proven.** Web `tests/agents-top-level.test.tsx` (the row comes after the agent's list and the
+  footer straight after it); Playwright `zzz-agents-top-level.spec.ts` (above the footer, below
+  the agent's pages) and `smoke.spec.ts` (Settings in a short window, its menu scrolled to the end:
+  the row still in view, directly above the footer); screenshots refreshed.

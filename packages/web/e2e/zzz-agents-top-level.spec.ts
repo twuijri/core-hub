@@ -63,6 +63,12 @@ test('27. Agents above Tasks: a card chip opens the agent with its own side list
   // Inside: the back row, the agent, its pages — and the rail has stepped aside.
   const back = page.getByTestId('back-to-agents');
   await expect(back).toHaveText('رجوع إلى الوكلاء');
+  // At the bottom, pinned directly above the footer box (owner, 2026-10-01, §151).
+  const backBox = (await back.boundingBox())!;
+  const footerBox = (await page.getByTestId('footer').first().boundingBox())!;
+  const sectionsBox = (await page.getByTestId('agent-sections').boundingBox())!;
+  expect(backBox.y).toBeGreaterThan(sectionsBox.y);
+  expect(Math.abs(footerBox.y - (backBox.y + backBox.height))).toBeLessThan(24);
   await expect(page.getByTestId('rail')).toHaveCount(0);
   await expect(page.getByTestId('segments')).toHaveCount(0);
   await expect(page.getByTestId('agent-nav-head')).toContainText('Hermes');

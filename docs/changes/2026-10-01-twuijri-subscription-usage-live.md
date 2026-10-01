@@ -109,6 +109,16 @@ RunStatus,RunFailureNotice}.ts(x)` و`realtime/envelope.ts` واختبارات `
 - الفحوص: `./gradlew :app:testDebugUnitTest --tests hub.core.android.ui.SwipeToReplyUiTest` → 7 ناجحة؛ `compileDebugKotlin`
   ناجح؛ iOS يبنيه ويختبره CI (لا Xcode هنا)؛ والإيماءة نفسها في SwiftUI تحتاج تجربة على جهاز.
 
+### «رجوع إلى المحادثات» و«رجوع إلى الوكلاء» في أسفل الشريط الجانبي (DECISIONS §151)
+قرار المالك (2026-10-01): صف الرجوع في الشريط الجانبي للإعدادات ولصفحات الوكيل صار في الأسفل، مثبّتًا فوق صندوق التذييل
+مباشرة (الاتصال والاسم والترس والخروج، ثم اللغة والسمة والإصدار)، خارج القائمة التي تتمرّر فيبقى ظاهرًا مهما تمرّرت، وTab يصل
+إليه قبل التذييل. الشكل والأيقونة والرابط كما هي، والاتجاه صحيح في العربية. يحلّ محل موضعه في الأعلى في §33 (2026-09-24).
+درج الويب على الجوال هو الشريط نفسه فيتبعه؛ تطبيقا الجوال كما هما.
+- الملفات: `packages/web/src/shell/Sidebar.tsx`؛ الاختبارات `tests/agents-top-level.test.tsx`، و`e2e/zzz-agents-top-level.spec.ts`،
+  و`e2e/smoke.spec.ts` (نافذة قصيرة والقائمة متمرّرة: الصف ظاهر فوق التذييل)، ولقطات `e2e/shots` محدّثة.
+- الفحوص: `vitest run tests/agents-top-level.test.tsx …` → 22 ناجحة؛ Playwright `smoke` و`zzz-agents-top-level` و`zz-design`
+  بعامل واحد → 26 ناجحة.
+
 ## العقد (ما تغيّر في packages/contracts، أو «لا شيء»)
 حدث جديد `run.status` على `/rt/sessions` (إضافة؛ `contracts:compat` OK مقابل v1.1.6) وإضافته إلى `x-rt-events` لـ`sessions.createRun`.
 `Run.error.details` يحمل `reason` بثلاث قيم و`said` (الحقل موجود في غلاف `Error`). وقبل ذلك: لا شيء. `check_error` كان دائمًا جملة يعرضها العميل؛ الآن بلغة الطلب.

@@ -153,6 +153,18 @@ test.describe('web smoke journeys', () => {
     // was open — not a New chat pressed to get out.
     await expect(page.getByTestId('rail')).toHaveCount(0);
     await expect(page.getByTestId('back-to-chats')).toHaveText('رجوع إلى المحادثات');
+    // At the bottom, pinned directly above the footer: the menu above it scrolls, it stays in
+    // view (owner, 2026-10-01, DECISIONS §151).
+    const viewport = page.viewportSize();
+    await page.setViewportSize({ width: viewport?.width ?? 1280, height: 480 });
+    await page
+      .getByTestId('settings-nav')
+      .evaluate((nav) => nav.closest('.ch-sidebar-body')?.scrollTo(0, 1e6));
+    await expect(page.getByTestId('back-to-chats')).toBeInViewport();
+    const backBox = (await page.getByTestId('back-to-chats').boundingBox())!;
+    const footerBox = (await page.getByTestId('footer').first().boundingBox())!;
+    expect(Math.abs(footerBox.y - (backBox.y + backBox.height))).toBeLessThan(24);
+    if (viewport) await page.setViewportSize(viewport);
     await page.getByTestId('settings-nav').getByRole('link', { name: 'المستخدمون' }).click();
     await page.getByTestId('back-to-chats').click();
     await expect(page).toHaveURL(chatUrl);
