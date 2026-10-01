@@ -869,6 +869,17 @@ export class ModelGateway {
                     ? 'gateway: the same model answered a plain request on the Chat route'
                     : 'gateway: the same model refused a plain request on the Chat route too',
                 );
+                if (
+                  probed.ok &&
+                  googleModel(target.model) &&
+                  call.path.startsWith('/v1/messages')
+                ) {
+                  // Which part of the agent's request the model refuses, for the log only (owner,
+                  // 2026-10-01): one small tool on the Chat route, then the agent's own system
+                  // prompt and tools on it — to tell CLIProxyAPI's Anthropic route from the tools
+                  // or the request's size.
+                  await this.diagnose(grant, target, upstreams, built.body);
+                }
               }
               if (probed?.ok) {
                 // The model answers a plain request but refuses the agent's own: its shape is the
@@ -1028,6 +1039,10 @@ export class ModelGateway {
   private async probeLimit(
     target: GatewayTarget,
     upstreams: GatewayUpstream[],
+    request: Record<string, unknown> = {
+      messages: [{ role: 'user', content: 'ok' }],
+      max_tokens: 1,
+    },
   ): Promise<{ ok: boolean; text: string } | null> {
     let lease;
     try {
@@ -1037,9 +1052,8 @@ export class ModelGateway {
     }
     const payload = Buffer.from(
       JSON.stringify({
+        ...request,
         model: upstreamModel(target.providerId, target.model),
-        messages: [{ role: 'user', content: 'ok' }],
-        max_tokens: 1,
         stream: false,
       }),
     );
@@ -1076,6 +1090,54 @@ export class ModelGateway {
   }
 
   /**
+   * Two small requests on the Chat route, each logged as answered or refused: a plain one with one
+   * small tool, and one with the agent's own system prompt and tools and its last words. Nothing
+   * the agent sees changes.
+   */
+  private async diagnose(
+    grant: GatewayGrantRecord,
+    target: GatewayTarget,
+    upstreams: GatewayUpstream[],
+    body: Record<string, unknown>,
+  ): Promise<void> {
+    const oneTool = {
+      messages: [{ role: 'user', content: 'ok' }],
+      max_tokens: 16,
+      tools: [
+        {
+          type: 'function',
+          function: {
+            name: 'read_file',
+            description: 'Read a file',
+            parameters: { type: 'object', properties: { path: { type: 'string' } } },
+          },
+        },
+      ],
+    };
+    const agents = chatOfAnthropic(body);
+    for (const [name, request] of [
+      ['one small tool', oneTool],
+      ["the agent's own system prompt and tools", agents],
+    ] as const) {
+      const answer = await this.probeLimit(target, upstreams, request);
+      this.options.log.warn(
+        {
+          agent: grant.agentSlug,
+          providerId: target.providerId,
+          model: target.model,
+          probe: name,
+          tools: Array.isArray(request.tools) ? request.tools.length : 0,
+          bytes: Buffer.byteLength(JSON.stringify(request)),
+          said: answer && !answer.ok ? providerWords(answer.text, target) : null,
+        },
+        answer?.ok
+          ? 'gateway: diagnosis — the Chat route answered'
+          : 'gateway: diagnosis — the Chat route refused it too',
+      );
+    }
+  }
+
+  /**
    * The next lighter way to ask a refused Google model, set for the rest of the session, or null
    * when there is none: not a Google model, nothing left to lighten, or every step tried.
    */
@@ -1090,8 +1152,14 @@ export class ModelGateway {
     const current = shapes.get(key)?.step ?? 0;
     const was = JSON.stringify(current ? SHAPES[current - 1]!.apply(body) : body);
     for (let step = current + 1; step <= SHAPES.length; step += 1) {
-      // A step that changes nothing in this request is not a step.
-      if (JSON.stringify(SHAPES[step - 1]!.apply(body)) === was) continue;
+      // A step that changes nothing in this request is not a step (and the log says so).
+      if (JSON.stringify(SHAPES[step - 1]!.apply(body)) === was) {
+        this.options.log.info(
+          { agent: grant.agentSlug, model: target.model, shape: SHAPES[step - 1]!.name },
+          'gateway: this lighter step changes nothing in the request; skipped',
+        );
+        continue;
+      }
       shapes.set(key, { step, settled: false });
       this.shapes.set(grant, shapes);
       return step;
@@ -1703,4 +1771,51 @@ export const SHAPES: readonly {
  */
 function googleModel(model: string): boolean {
   return /^(?:models\/)?(?:gemini|gemma)\b/i.test(model.replace(/^.*\//, ''));
+}
+
+/**
+ * An Anthropic Messages request as an OpenAI Chat one, for the gateway's diagnosis: its system
+ * prompt, its last user words, and its tools. Not a translation of a conversation.
+ */
+export function chatOfAnthropic(body: Record<string, unknown>): Record<string, unknown> {
+  const textOf = (content: unknown): string =>
+    typeof content === 'string'
+      ? content
+      : Array.isArray(content)
+        ? content
+            .map((block) =>
+              block && typeof block === 'object' && (block as { type?: unknown }).type === 'text'
+                ? String((block as { text?: unknown }).text ?? '')
+                : '',
+            )
+            .filter(Boolean)
+            .join('\n')
+        : '';
+  const messages = Array.isArray(body.messages)
+    ? (body.messages as { role?: unknown; content?: unknown }[])
+    : [];
+  const lastUser = [...messages].reverse().find((message) => message.role === 'user');
+  const tools = Array.isArray(body.tools) ? (body.tools as Record<string, unknown>[]) : [];
+  const system = textOf(body.system);
+  return {
+    messages: [
+      ...(system ? [{ role: 'system', content: system }] : []),
+      { role: 'user', content: textOf(lastUser?.content) || 'ok' },
+    ],
+    max_tokens: 16,
+    ...(tools.length > 0
+      ? {
+          tools: tools
+            .filter((tool) => typeof tool.name === 'string')
+            .map((tool) => ({
+              type: 'function',
+              function: {
+                name: tool.name,
+                description: typeof tool.description === 'string' ? tool.description : '',
+                parameters: tool.input_schema ?? { type: 'object', properties: {} },
+              },
+            })),
+        }
+      : {}),
+  };
 }

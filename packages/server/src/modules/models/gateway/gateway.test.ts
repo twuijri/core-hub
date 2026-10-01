@@ -9,6 +9,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import pino from 'pino';
 import { parse } from 'yaml';
+import { capturingLogger } from '../../../../tests/unit/helpers.js';
 import { afterEach, describe, expect, it } from 'vitest';
 
 /** CLIProxyAPI's file, as far as these tests read it. */
@@ -31,6 +32,7 @@ import {
   withoutThinking,
   lowerThinking,
   trimTools,
+  chatOfAnthropic,
   scrubInternalNames,
   type GatewaySource,
 } from './gateway.js';
@@ -67,6 +69,7 @@ function upstream(overrides: Partial<GatewayUpstream> = {}): GatewayUpstream {
       { id: 'claude-thinks', contextWindow: null },
       { id: 'gemini-high-effort', contextWindow: null },
       { id: 'gemini-big-tools', contextWindow: null },
+      { id: 'gemini-anthropic-route', contextWindow: null },
     ],
     ...overrides,
   };
@@ -83,7 +86,12 @@ interface Harness {
 const open: Harness[] = [];
 
 function harness(
-  options: { binary?: string | null; enabled?: boolean; env?: NodeJS.ProcessEnv } = {},
+  options: {
+    binary?: string | null;
+    enabled?: boolean;
+    env?: NodeJS.ProcessEnv;
+    log?: typeof log;
+  } = {},
 ): Harness {
   const stateDir = mkdtempSync(path.join(tmpdir(), 'corehub-gw-test-'));
   const late: Harness['late'] = [];
@@ -114,7 +122,7 @@ function harness(
   const gateway = new ModelGateway({
     cliproxy,
     source,
-    log,
+    log: options.log ?? log,
     enabled: options.enabled ?? true,
     limitWait: { defaultMs: 20, maxMs: 1_000 },
   });
@@ -698,6 +706,53 @@ describe('the gateway', () => {
         })),
       );
       expect(lowerThinking(thinking)).toEqual({ ...thinking, output_config: { effort: 'low' } });
+    });
+
+    it('says in the log which part of the agent’s request the model refuses, asking the Chat route', async () => {
+      const captured = capturingLogger();
+      const h = harness({ log: captured.logger as never });
+      const grant = await grantOf(h);
+      grant.setTurn({
+        runId: 'run-route',
+        providerId: PROVIDER,
+        model: 'gemini-anthropic-route',
+        report: () => {},
+      });
+      await post(`${grant.anthropicBaseUrl}/v1/messages`, grant.token, {
+        model: 'corehub-main',
+        system: [{ type: 'text', text: 'You are Claude Code.' }],
+        messages: [{ role: 'user', content: [{ type: 'text', text: 'هلا' }] }],
+        tools: [{ name: 'Write', description: 'Write a file', input_schema: { type: 'object' } }],
+      });
+      const said = captured.lines.map((line) => String(line.msg));
+      expect(said).toContain('gateway: the provider refused a call');
+      expect(said).toContain('gateway: the same model answered a plain request on the Chat route');
+      const diagnosis = captured.lines.filter((line) =>
+        String(line.msg).startsWith('gateway: diagnosis'),
+      );
+      expect(diagnosis.map((line) => [line.probe, line.msg])).toEqual([
+        ['one small tool', 'gateway: diagnosis — the Chat route answered'],
+        ["the agent's own system prompt and tools", 'gateway: diagnosis — the Chat route answered'],
+      ]);
+      expect(
+        chatOfAnthropic({
+          system: [{ type: 'text', text: 'S' }],
+          messages: [{ role: 'user', content: 'hi' }],
+          tools: [{ name: 'Write', description: 'W', input_schema: { type: 'object' } }],
+        }),
+      ).toEqual({
+        messages: [
+          { role: 'system', content: 'S' },
+          { role: 'user', content: 'hi' },
+        ],
+        max_tokens: 16,
+        tools: [
+          {
+            type: 'function',
+            function: { name: 'Write', description: 'W', parameters: { type: 'object' } },
+          },
+        ],
+      });
     });
 
     it('counts tokens itself: Claude Code’s many count_tokens calls never reach the provider', async () => {

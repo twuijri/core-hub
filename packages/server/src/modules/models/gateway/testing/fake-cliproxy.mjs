@@ -155,7 +155,8 @@ createServer((request, response) => {
       (/thinks$/.test(body.model) && body.thinking) ||
       (/high-effort$/.test(body.model) && body.output_config?.effort === 'high') ||
       (/big-tools$/.test(body.model) && JSON.stringify(body.tools ?? []).length > 2000);
-    if (refusedShape) {
+    const refusedRoute = /anthropic-route$/.test(body.model) && url.pathname === '/v1/messages';
+    if (refusedShape || refusedRoute) {
       // A model refused only when asked to think as the agent asks (as CLIProxyAPI answers it:
       // the message alone on the Anthropic route).
       response.writeHead(429, { 'content-type': 'application/json' });
