@@ -174,7 +174,13 @@ function TrajectoryBody({
         <>
           {data.timing === 'none' && (
             <Notice tone="info" className="mb-3">
-              <span data-testid="trajectory-untimed">{t('trajectory.untimed')}</span>
+              {/* Only what the person sent: the turn ended before the agent did anything, so there
+                  is nothing to time — not an old conversation (owner, 2026-10-01). */}
+              {data.steps.every((step) => step.kind === 'input') ? (
+                <span data-testid="trajectory-not-started">{t('trajectory.not_started')}</span>
+              ) : (
+                <span data-testid="trajectory-untimed">{t('trajectory.untimed')}</span>
+              )}
             </Notice>
           )}
           {data.timing === 'partial' && (

@@ -72,7 +72,7 @@ const MODEL = 'fake-coder';
  * as the owner's own proxy lists a Claude model: an agent that picks one of them by itself (Claude
  * Code's bridge matching "opus" in the list) must still be served the turn's model.
  */
-const OTHER_MODELS = ['claude-opus-4-6-thinking', 'gemini-3-flash'];
+const OTHER_MODELS = ['claude-opus-4-6-thinking', 'gemini-3-flash', 'gemini-coder'];
 /**
  * A Google Antigravity subscription signed in through the bundled CLIProxyAPI (DECISIONS §143):
  * its account file points CLIProxyAPI at a stand-in for Google's Cloud Code endpoint, which
@@ -600,7 +600,7 @@ describe.skipIf(!enabled)('the model gateway, for real (COREHUB_REAL_GATEWAY=1)'
   });
 
   /** An agent installed, its home and its gateway grant, and the target the hub would start. */
-  async function prepareAgent(id: string) {
+  async function prepareAgent(id: string, model = MODEL) {
     const entry = entryOf(id);
     const installer = createNpmInstaller({
       dataDir,
@@ -634,7 +634,7 @@ describe.skipIf(!enabled)('the model gateway, for real (COREHUB_REAL_GATEWAY=1)'
     grant.setTurn({
       runId: `run-${id}`,
       providerId: PROVIDER_ID,
-      model: MODEL,
+      model,
       report: (usage) => reports.push(usage),
     });
     const context = {
@@ -700,6 +700,7 @@ describe.skipIf(!enabled)('the model gateway, for real (COREHUB_REAL_GATEWAY=1)'
   async function runAgent(
     id: string,
     prompt: string,
+    model = MODEL,
   ): Promise<{
     said: string;
     events: AgentEvent[];
@@ -708,7 +709,7 @@ describe.skipIf(!enabled)('the model gateway, for real (COREHUB_REAL_GATEWAY=1)'
     home: string;
     token: string;
   }> {
-    const { target, adapter, grant, reports, env, home } = await prepareAgent(id);
+    const { target, adapter, grant, reports, env, home } = await prepareAgent(id, model);
     const session: AgentSession = await adapter.start(target);
     const events: AgentEvent[] = [];
     const reading = (async () => {
@@ -1045,6 +1046,61 @@ describe.skipIf(!enabled)('the model gateway, for real (COREHUB_REAL_GATEWAY=1)'
       const answered = antigravityThinking.at(-1);
       expect(answered, JSON.stringify(antigravityThinking)).toMatch(/thinkingLevel/);
       expect(answered).not.toMatch(/"high"/);
+    },
+    5 * 60_000,
+  );
+
+  it.each(['codex', 'gemini-cli'])(
+    '%s answers on a Google Antigravity subscription (the profile default)',
+    async (id) => {
+      if (id !== 'codex' && process.env.COREHUB_REAL_GATEWAY_ALL !== '1') return;
+      antigravityCalls.length = 0;
+      await withRunner(
+        id,
+        async (turn) => {
+          const events = await turn(`run-antigravity-${id}`, 'Say pong.');
+          expect(events.at(-1), JSON.stringify(events.at(-1))).toMatchObject({ type: 'completed' });
+          expect(saidIn(events)).toContain('pong from Antigravity');
+        },
+        {
+          selection: () => ({
+            model: ANTIGRAVITY_MODEL,
+            provider: null,
+            providerId: ANTIGRAVITY_ID,
+          }),
+        },
+      );
+    },
+    5 * 60_000,
+  );
+
+  it(
+    'Claude Code on a Google model goes the Chat way, and round-trips a tool call and Arabic',
+    async () => {
+      // §148: for a Google model the gateway speaks Chat to CLIProxyAPI itself and answers Claude
+      // Code in Anthropic's shape, tool calls and their results included.
+      const before = provider.seen.length;
+      const result = await runAgent(
+        'claude-code',
+        `Create the file ${PROOF_FILE} in the working directory with the Write tool.`,
+        'gemini-coder',
+      );
+      const proof = path.join(result.home, PROOF_FILE);
+      expect(existsSync(proof)).toBe(true);
+      expect(readFileSync(proof, 'utf8')).toBe(PROOF_TEXT);
+      expect(result.said).toContain('The proof file is written.');
+      const calls = provider.seen.slice(before);
+      expect(calls.every((call) => call.body.model === 'gemini-coder')).toBe(true);
+      // The tool's result went back to the model as Chat's own `tool` message.
+      expect(
+        calls.some((call) =>
+          ((call.body.messages ?? []) as { role: string }[]).some((m) => m.role === 'tool'),
+        ),
+      ).toBe(true);
+      rmSync(result.home, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 });
+      const arabic = await runAgent('claude-code', ARABIC_PROMPT, 'gemini-coder');
+      expect(arabic.said).toBe(ARABIC_TOKENS.join(''));
+      rmSync(arabic.home, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 });
     },
     5 * 60_000,
   );

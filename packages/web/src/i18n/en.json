@@ -3493,6 +3493,7 @@
     "empty_title": "Nothing has happened yet",
     "empty_body": "Send a message and each step the agent takes appears here.",
     "untimed": "This conversation is from before the hub recorded step times, so there is no timeline — only the steps.",
+    "not_started": "The turn ended before the agent began, so there is no timeline — only what was sent.",
     "partial": "Earlier turns were recorded before the hub kept step times; the timeline shows the rest.",
     "unit": {
       "ms": "ms",

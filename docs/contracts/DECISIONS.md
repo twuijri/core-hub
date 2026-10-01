@@ -5334,6 +5334,27 @@ Hermes on the same account answered. Proposed here — owner to confirm:
   every non-Google model are never changed (test: a refused `claude-*` model's request reaches the
   provider with its thinking and effort as sent, and the chain takes over). The log says each refusal
   as it came, the plain request's outcome, each lighter attempt, and the one that answered.
+- **Claude Code on a Google model goes the Chat way (the owner's log, preview.44).** Gemini CLI and
+  six Chat-wire agents answered on the same Antigravity row while every lighter step was refused on
+  `/v1/messages`, so the refusal is CLIProxyAPI's Claude handler, not the account or the request's
+  shape. What reaches Google from the two routes differs only a little: the Claude route adds
+  `thinkingConfig {thinkingLevel: "high"}`, drops the first system text (Claude Code's
+  `x-anthropic-billing-header`), injects a required `reason` parameter into parameterless tools,
+  merges the user's text blocks into one content, and derives `sessionId` another way. For a Google
+  model (`googleModel()`) on `/v1/messages`, the gateway now translates the request to OpenAI Chat
+  (system, images, `tool_use`/`tool_result`, `tool_choice`, effort or thinking budget →
+  `reasoning_effort`; thinking blocks and schema-less server tools dropped), sends it to CLIProxyAPI's
+  `/v1/chat/completions`, and answers Claude Code in Anthropic's shape — streamed as Anthropic SSE
+  (thinking and text streamed; each tool call gathered and sent whole as a `tool_use` block at the
+  end), as one JSON, or as an Anthropic error. A Claude model, through Antigravity too, still goes to
+  `/v1/messages` byte for byte (test).
+- **An agent on the gateway asking for its own sign-in.** When an agent started on the gateway
+  refuses to start with an auth error (Codex: "Authentication required"), the turn fails with
+  `provider_not_configured` and says the agent did not take the hub's gateway, instead of the old
+  "needs an OpenAI key or a ChatGPT sign-in" card; the log names the model, the provider and the
+  names (not values) of the environment the agent was given.
+- **A turn that failed before it began** has no timeline: its trajectory says so instead of calling
+  the conversation older than step times.
 
 ## 149. No phone push for a reply the person is watching
 

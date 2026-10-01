@@ -46,6 +46,12 @@ import {
 } from './tokens.js';
 import { NO_USAGE, UsageTap, addUsage, type CallUsage } from './usage.js';
 import { redactSecrets } from '../../../lib/redact-text.js';
+import {
+  ChatToAnthropicStream,
+  anthropicToChat,
+  chatErrorToAnthropic,
+  chatToAnthropic,
+} from './anthropic-chat.js';
 
 /** The model names an agent is started with; each resolves to the model its turn chose. */
 export const GATEWAY_MODEL_ALIASES = ['corehub-main', 'corehub-small'] as const;
@@ -774,7 +780,21 @@ export class ModelGateway {
     // How this session asks the model, once a Google model refused the agent's own request but
     // answered a plain one (below): its thinking lowered, then off, then its tools trimmed.
     const shaped = this.shapes.get(grant)?.get(exhaustedKey(target)) ?? null;
-    const call = shaped ? { ...built, body: SHAPES[shaped.step - 1]!.apply(built.body) } : built;
+    const asSent = shaped ? { ...built, body: SHAPES[shaped.step - 1]!.apply(built.body) } : built;
+    // A Google model asked on Claude's wire: the gateway speaks Chat to CLIProxyAPI itself and
+    // answers in Anthropic's shape (§148). Google refuses Claude Code's requests on CLIProxyAPI's
+    // Anthropic route while the same account and model answer its Chat and Gemini routes, tools
+    // included. Claude models, and every other model, keep the Anthropic route as they were.
+    const translated =
+      wire === 'anthropic' &&
+      /^\/v1\/messages(?:\?|$)/.test(asSent.path) &&
+      googleModel(target.model);
+    const call = translated
+      ? {
+          path: '/v1/chat/completions',
+          body: anthropicToChat(asSent.body, String(asSent.body.model ?? '')),
+        }
+      : asSent;
     const payload = Buffer.from(JSON.stringify(call.body));
     const upstream = httpRequest({
       host: '127.0.0.1',
@@ -846,9 +866,9 @@ export class ModelGateway {
             // 2026-10-01: "ran out of quota" on an account signed in minutes earlier).
             const asked = `${grant.turn?.runId ?? grant.lastRunId ?? ''}\n${key}`;
             if (
-              !call.path.startsWith('/v1/chat/completions') &&
+              (translated || !call.path.startsWith('/v1/chat/completions')) &&
               LIMIT_HINT.test(`${status} ${text}`) &&
-              !/"(?:reason|details|retryDelay)"/.test(text)
+              (translated || !/"(?:reason|details|retryDelay)"/.test(text))
             ) {
               // Once per model and turn: a second refusal is read with what the first one said.
               const known = this.probed.get(grant)?.get(asked);
@@ -869,17 +889,6 @@ export class ModelGateway {
                     ? 'gateway: the same model answered a plain request on the Chat route'
                     : 'gateway: the same model refused a plain request on the Chat route too',
                 );
-                if (
-                  probed.ok &&
-                  googleModel(target.model) &&
-                  call.path.startsWith('/v1/messages')
-                ) {
-                  // Which part of the agent's request the model refuses, for the log only (owner,
-                  // 2026-10-01): one small tool on the Chat route, then the agent's own system
-                  // prompt and tools on it — to tell CLIProxyAPI's Anthropic route from the tools
-                  // or the request's size.
-                  await this.diagnose(grant, target, upstreams, built.body);
-                }
               }
               if (probed?.ok) {
                 // The model answers a plain request but refuses the agent's own: its shape is the
@@ -991,6 +1000,13 @@ export class ModelGateway {
             }
             const headers = answerHeaders(answer.headers);
             delete headers['content-length'];
+            if (translated) {
+              // In the envelope of the wire the agent speaks.
+              headers['content-type'] = 'application/json';
+              response.writeHead(status, headers);
+              response.end(chatErrorToAnthropic(status, scrubInternalNames(text, target)));
+              return;
+            }
             response.writeHead(status, headers);
             response.end(scrubInternalNames(text, target));
           });
@@ -1008,8 +1024,51 @@ export class ModelGateway {
           'gateway: the model answered the lighter request; the session keeps asking it this way',
         );
       }
-      response.writeHead(status, answerHeaders(answer.headers));
       const tap = new UsageTap(answer.headers['content-type']);
+      if (translated) {
+        // Chat back to Anthropic's shape: a stream event by event, a whole answer at once.
+        const label = target.model;
+        const streaming = String(answer.headers['content-type'] ?? '').includes('event-stream');
+        const headers = answerHeaders(answer.headers);
+        delete headers['content-length'];
+        headers['content-type'] = streaming ? 'text/event-stream' : 'application/json';
+        response.writeHead(status, headers);
+        const stream = streaming ? new ChatToAnthropicStream(label) : null;
+        const whole: Buffer[] = [];
+        answer.on('data', (chunk: Buffer) => {
+          tap.push(chunk);
+          if (!stream) {
+            whole.push(chunk);
+            return;
+          }
+          const out = stream.push(chunk);
+          if (out && !response.write(out)) {
+            answer.pause();
+            response.once('drain', () => answer.resume());
+          }
+        });
+        answer.on('end', () => {
+          if (stream) response.end(stream.end());
+          else {
+            let parsed: Record<string, unknown> = {};
+            try {
+              parsed = JSON.parse(Buffer.concat(whole).toString('utf8')) as Record<string, unknown>;
+            } catch {
+              // An empty or broken answer: an empty message.
+            }
+            response.end(JSON.stringify(chatToAnthropic(parsed, label)));
+          }
+          finish();
+          const used = tap.result();
+          if (used && runId) this.account(grant, turn, runId, target, used);
+        });
+        answer.on('error', () => {
+          finish();
+          response.destroy();
+        });
+        return;
+      }
+      response.writeHead(status, answerHeaders(answer.headers));
       answer.on('data', (chunk: Buffer) => {
         tap.push(chunk);
         if (!response.write(chunk)) {
@@ -1086,54 +1145,6 @@ export class ModelGateway {
       });
     } finally {
       lease.done();
-    }
-  }
-
-  /**
-   * Two small requests on the Chat route, each logged as answered or refused: a plain one with one
-   * small tool, and one with the agent's own system prompt and tools and its last words. Nothing
-   * the agent sees changes.
-   */
-  private async diagnose(
-    grant: GatewayGrantRecord,
-    target: GatewayTarget,
-    upstreams: GatewayUpstream[],
-    body: Record<string, unknown>,
-  ): Promise<void> {
-    const oneTool = {
-      messages: [{ role: 'user', content: 'ok' }],
-      max_tokens: 16,
-      tools: [
-        {
-          type: 'function',
-          function: {
-            name: 'read_file',
-            description: 'Read a file',
-            parameters: { type: 'object', properties: { path: { type: 'string' } } },
-          },
-        },
-      ],
-    };
-    const agents = chatOfAnthropic(body);
-    for (const [name, request] of [
-      ['one small tool', oneTool],
-      ["the agent's own system prompt and tools", agents],
-    ] as const) {
-      const answer = await this.probeLimit(target, upstreams, request);
-      this.options.log.warn(
-        {
-          agent: grant.agentSlug,
-          providerId: target.providerId,
-          model: target.model,
-          probe: name,
-          tools: Array.isArray(request.tools) ? request.tools.length : 0,
-          bytes: Buffer.byteLength(JSON.stringify(request)),
-          said: answer && !answer.ok ? providerWords(answer.text, target) : null,
-        },
-        answer?.ok
-          ? 'gateway: diagnosis — the Chat route answered'
-          : 'gateway: diagnosis — the Chat route refused it too',
-      );
     }
   }
 
@@ -1771,51 +1782,4 @@ export const SHAPES: readonly {
  */
 function googleModel(model: string): boolean {
   return /^(?:models\/)?(?:gemini|gemma)\b/i.test(model.replace(/^.*\//, ''));
-}
-
-/**
- * An Anthropic Messages request as an OpenAI Chat one, for the gateway's diagnosis: its system
- * prompt, its last user words, and its tools. Not a translation of a conversation.
- */
-export function chatOfAnthropic(body: Record<string, unknown>): Record<string, unknown> {
-  const textOf = (content: unknown): string =>
-    typeof content === 'string'
-      ? content
-      : Array.isArray(content)
-        ? content
-            .map((block) =>
-              block && typeof block === 'object' && (block as { type?: unknown }).type === 'text'
-                ? String((block as { text?: unknown }).text ?? '')
-                : '',
-            )
-            .filter(Boolean)
-            .join('\n')
-        : '';
-  const messages = Array.isArray(body.messages)
-    ? (body.messages as { role?: unknown; content?: unknown }[])
-    : [];
-  const lastUser = [...messages].reverse().find((message) => message.role === 'user');
-  const tools = Array.isArray(body.tools) ? (body.tools as Record<string, unknown>[]) : [];
-  const system = textOf(body.system);
-  return {
-    messages: [
-      ...(system ? [{ role: 'system', content: system }] : []),
-      { role: 'user', content: textOf(lastUser?.content) || 'ok' },
-    ],
-    max_tokens: 16,
-    ...(tools.length > 0
-      ? {
-          tools: tools
-            .filter((tool) => typeof tool.name === 'string')
-            .map((tool) => ({
-              type: 'function',
-              function: {
-                name: tool.name,
-                description: typeof tool.description === 'string' ? tool.description : '',
-                parameters: tool.input_schema ?? { type: 'object', properties: {} },
-              },
-            })),
-        }
-      : {}),
-  };
 }

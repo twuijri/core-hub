@@ -126,6 +126,40 @@ RunStatus,RunFailureNotice}.ts(x)` و`realtime/envelope.ts` واختبارات `
 - اختبار حقيقي: Antigravity البديل يرفض `thinkingLevel: high`، فيجيب Claude Code بعد خفض التفكير (يصل Google `thinkingLevel: low`،
   لا إيقافه).
 
+#### سجل المالك (preview.44): مسار Claude في CLIProxyAPI وحده يرفض؛ Claude Code على نموذج Google يذهب طريق Chat
+الدليل: Gemini CLI وستة وكلاء على سلك Chat (Goose وOpenCode وQwen وKimi وGrok وPi) أجابوا على صف Antigravity نفسه، والخطوات الأخف
+كلها رُفضت على `/v1/messages`. فالرفض من معالج Claude في CLIProxyAPI لا من الحساب ولا من شكل الطلب.
+- **مقارنة ما يصل Google** من المسارين (بديل Antigravity، الطلب نفسه): نقطة النهاية واحدة (`streamGenerateContent?alt=sse`)، والنموذج
+  و`userAgent: antigravity` و`requestType: agent` والمشروع والرؤوس والأدوات و`systemInstruction` متطابقة تقريبًا. الفروق من مسار
+  Claude: يضيف `generationConfig.thinkingConfig {thinkingLevel: "high"}`؛ ويُسقط أول نص نظام (`x-anthropic-billing-header: cc_version=…`)
+  ومسار Chat يبقيه؛ ويحقن معامل `reason` إلزاميًا في الأدوات بلا معاملات (أداتان)؛ ويدمج كتل نص المستخدم في محتوى واحد بثلاثة أجزاء؛
+  و`sessionId` يُشتق بطريقة أخرى.
+- **الإصلاح**: `models/gateway/anthropic-chat.ts` (جديد): لطلب `/v1/messages` على **نموذج Google فقط** (`googleModel()`) تترجم البوابة
+  طلب Anthropic إلى OpenAI Chat (النظام، الصور، `tool_use` → `tool_calls`، `tool_result` → رسائل `tool` مع «Error: » للخطأ، `tool_choice`،
+  `effort`/ميزانية التفكير → `reasoning_effort`؛ تُسقط كتل التفكير من التاريخ والأدوات الخادمية بلا مخطط) وترسله إلى `/v1/chat/completions`
+  في CLIProxyAPI، ثم تعيد الجواب إلى Anthropic: بثًّا بأحداث SSE (`message_start`، كتل التفكير والنص تُبث، استدعاءات الأدوات تُجمع لكل
+  فهرس وتُرسل كاملة عند النهاية بكتلة `tool_use` و`input_json_delta` واحد، `message_delta` بسبب التوقف والاستهلاك، `message_stop`)، أو JSON
+  واحدًا، والخطأ بصيغة خطأ Anthropic. الاستهلاك يُحسب من أجزاء Chat الأصلية.
+- **Claude لا يُمس**: نموذج `claude-*` (ومنه Claude عبر Antigravity) يذهب إلى `/v1/messages` كما أرسله Claude Code بايتًا ببايت
+  (اختبار: `x-fake-path` = `/v1/messages`، التفكير والجهد كما أُرسلا).
+- **الاختبارات**: وحدة `anthropic-chat.test.ts` (4)؛ البوابة: ترجمة بأداتين متداخلتين ونص عربي وتفكير واستهلاك وتوازن الكتل، وClaude بلا
+  تغيير، ونموذج Google يرفضه مسار Anthropic في البديل ويجيب عبر Chat؛ وحقيقي: Claude Code الحقيقي على نموذج Google عبر CLIProxyAPI الحقيقي
+  وبديل Antigravity يستدعي أداة ويعود بنتيجتها ويجيب بالعربية.
+
+#### Codex على «افتراضي · gemini-3.8-flash-high» يفشل فورًا ببطاقة «يحتاج مفتاح OpenAI أو تسجيل دخول ChatGPT»
+- **لم أستطع إعادته هنا**: Codex الحقيقي (codex-acp 2.1.1) على صف Antigravity افتراضيًا عبر البوابة يجيب (اختبار حقيقي
+  `it.each(['codex','gemini-cli'])`)، والمصادقة على البوابة ببروتوكول codex-acp المدمج. فالسبب في إعداد المالك لم يُعرف بعد.
+- **ما تغيّر**: إن بدأ وكيل على البوابة ثم رفض البدء طالبًا تسجيل دخوله هو (auth / sign in / API key / 401 …) لم يعد يظهر البطاقة القديمة:
+  يفشل الدور بـ`provider_not_configured` وجملة تقول إن الوكيل لم يأخذ بوابة المركز عند بدئه وطلب تسجيل دخوله، وفي السجل سطر
+  `agents: the agent asked for its own sign-in although it was started on the model gateway` بالنموذج والمزوّد وأسماء متغيرات البيئة التي
+  مُرّرت له (الأسماء لا القيم). ورمز الوكيل يُلغى. اختبار وحدة في `runner-gateway.test.ts`.
+- **المطلوب**: سطور `agents:` و`gateway:` من سجل المالك حول دور Codex الفاشل (ومنها السطر الجديد وحقل `wired`) لإيجاد السبب.
+
+#### الخط الزمني لدور فشل قبل أن يبدأ
+محادثة جديدة فشل دورها قبل البدء كانت تقول «هذه المحادثة من قبل أن يسجّل المركز أوقات الخطوات…». الآن إن لم يكن في المسار إلا ما أُرسل
+(`timing: none` وكل الخطوات `input`) يقول: «انتهى الدور قبل أن يبدأ الوكيل، فلا خط زمني — فقط ما أُرسل.» (`TrajectoryView.tsx`،
+`i18n/{ar,en}.json`، اختبار في `tests/trajectory.test.tsx`).
+
 ### «رجوع إلى المحادثات» و«رجوع إلى الوكلاء» في أسفل الشريط الجانبي (DECISIONS §151)
 قرار المالك (2026-10-01): صف الرجوع في الشريط الجانبي للإعدادات ولصفحات الوكيل صار في الأسفل، مثبّتًا فوق صندوق التذييل
 مباشرة (الاتصال والاسم والترس والخروج، ثم اللغة والسمة والإصدار)، خارج القائمة التي تتمرّر فيبقى ظاهرًا مهما تمرّرت، وTab يصل
@@ -168,6 +202,13 @@ $ vitest run tests/viewing.test.tsx   (packages/web) → 2 passed
 $ node scripts/i18n-check.mjs → OK · node scripts/i18n/limits.mjs → OK
 $ ./gradlew --no-daemon :app:compileDebugKotlin (apps/android) → نجح
 CI على أول دفعة (aed9835a): 15 ناجحًا.
+preview.44 (طريق Chat لـClaude Code على Google، بدء Codex، الخط الزمني):
+$ eslint (gateway، agents، web/src/chat) → OK · tsc --noEmit (server، web) → exit 0 · change-record:check → OK
+$ vitest run --maxWorkers=2 src/modules/models src/modules/agents src/modules/sessions (packages/server)
+  → Test Files 121 passed | 27 skipped · Tests 1345 passed | 106 skipped
+$ vitest run tests/trajectory.test.tsx tests/model-status.test.ts tests/run-quota-notice.test.tsx (packages/web) → 18 passed
+$ COREHUB_REAL_GATEWAY=1 COREHUB_REAL_GATEWAY_ALL=1 vitest run --maxWorkers=1 model-gateway.real.test.ts gateway-stream.real.test.ts
+  → Test Files 2 passed · Tests 38 passed
 ```
 
 ## المخاطر والرجوع

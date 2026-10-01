@@ -330,4 +330,30 @@ describe('the Trajectory tab', () => {
     const footer = screen.getByTestId('trajectory-metrics');
     expect(footer.querySelectorAll('[data-metric]')).toHaveLength(2);
   });
+
+  it('says a turn that ended before the agent began is that, not an old conversation', async () => {
+    const input = STEPS.filter((s) => s.kind === 'input').map((s) => ({
+      ...s,
+      started_at: null,
+      ended_at: null,
+      duration_ms: null,
+    }));
+    mount(
+      trajectory({
+        timing: 'none',
+        started_at: null,
+        ended_at: null,
+        steps: input,
+        metrics: {
+          ...trajectory().metrics,
+          model_ms: null,
+          tool_ms: null,
+          avg_first_token_ms: null,
+          input_tokens: null,
+        },
+      }),
+    );
+    expect(await screen.findByTestId('trajectory-not-started')).toBeInTheDocument();
+    expect(screen.queryByTestId('trajectory-untimed')).toBeNull();
+  });
 });

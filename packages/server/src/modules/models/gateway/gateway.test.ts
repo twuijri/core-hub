@@ -9,7 +9,6 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import pino from 'pino';
 import { parse } from 'yaml';
-import { capturingLogger } from '../../../../tests/unit/helpers.js';
 import { afterEach, describe, expect, it } from 'vitest';
 
 /** CLIProxyAPI's file, as far as these tests read it. */
@@ -32,7 +31,6 @@ import {
   withoutThinking,
   lowerThinking,
   trimTools,
-  chatOfAnthropic,
   scrubInternalNames,
   type GatewaySource,
 } from './gateway.js';
@@ -70,6 +68,8 @@ function upstream(overrides: Partial<GatewayUpstream> = {}): GatewayUpstream {
       { id: 'gemini-high-effort', contextWindow: null },
       { id: 'gemini-big-tools', contextWindow: null },
       { id: 'gemini-anthropic-route', contextWindow: null },
+      { id: 'gemini-tools-chat', contextWindow: null },
+      { id: 'claude-tools-chat', contextWindow: null },
     ],
     ...overrides,
   };
@@ -708,9 +708,117 @@ describe('the gateway', () => {
       expect(lowerThinking(thinking)).toEqual({ ...thinking, output_config: { effort: 'low' } });
     });
 
-    it('says in the log which part of the agent’s request the model refuses, asking the Chat route', async () => {
-      const captured = capturingLogger();
-      const h = harness({ log: captured.logger as never });
+    it('speaks Chat to CLIProxyAPI for a Google model on Claude’s wire, and answers in Anthropic’s stream', async () => {
+      const h = harness();
+      const grant = await grantOf(h);
+      grant.setTurn({
+        runId: 'run-chat',
+        providerId: PROVIDER,
+        model: 'gemini-tools-chat',
+        report: () => {},
+      });
+      const answer = await post(`${grant.anthropicBaseUrl}/v1/messages`, grant.token, {
+        model: 'corehub-main',
+        stream: true,
+        max_tokens: 32000,
+        thinking: { type: 'adaptive' },
+        output_config: { effort: 'high' },
+        system: [{ type: 'text', text: 'You are Claude Code.' }],
+        tools: [
+          {
+            name: 'Read',
+            description: 'Read a file',
+            input_schema: { type: 'object', properties: { path: { type: 'string' } } },
+          },
+        ],
+        messages: [
+          { role: 'user', content: [{ type: 'text', text: 'Read x.md' }] },
+          {
+            role: 'assistant',
+            content: [
+              { type: 'thinking', thinking: 'hm', signature: '' },
+              { type: 'text', text: 'Reading.' },
+              { type: 'tool_use', id: 'toolu_1', name: 'Read', input: { path: 'x.md' } },
+            ],
+          },
+          {
+            role: 'user',
+            content: [
+              {
+                type: 'tool_result',
+                tool_use_id: 'toolu_1',
+                content: [{ type: 'text', text: 'X' }],
+              },
+              { type: 'text', text: 'and a.md, b.md' },
+            ],
+          },
+        ],
+      });
+      expect(answer.status).toBe(200);
+      expect(answer.headers.get('content-type')).toContain('text/event-stream');
+      // The route CLIProxyAPI was asked on, and what it was sent.
+      expect(answer.headers.get('x-fake-path')).toBe('/v1/chat/completions');
+      expect(answer.headers.get('x-fake-roles')).toBe('system,user,assistant,tool,user');
+      expect(answer.headers.get('x-fake-tools')).toBe('1');
+      expect(answer.headers.get('x-fake-effort')).toBe('high');
+      const events = (await answer.text())
+        .split('\n')
+        .filter((line) => line.startsWith('data: '))
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Anthropic SSE events, read by path in assertions
+        .map((line) => JSON.parse(line.slice(6)) as Record<string, any>);
+      expect(events[0]!.type).toBe('message_start');
+      expect(events.at(-1)!.type).toBe('message_stop');
+      const text = events
+        .filter((e) => e.type === 'content_block_delta' && e.delta.type === 'text_delta')
+        .map((e) => e.delta.text)
+        .join('');
+      expect(text).toBe('هلا! Reading two files.');
+      const thought = events
+        .filter((e) => e.type === 'content_block_delta' && e.delta.type === 'thinking_delta')
+        .map((e) => e.delta.thinking)
+        .join('');
+      expect(thought).toBe('Let me look.');
+      const tools = events
+        .filter((e) => e.type === 'content_block_start' && e.content_block.type === 'tool_use')
+        .map((e) => [e.content_block.id, e.content_block.name]);
+      expect(tools).toEqual([
+        ['call_a', 'Read'],
+        ['call_b', 'Read'],
+      ]);
+      const inputs = events
+        .filter((e) => e.type === 'content_block_delta' && e.delta.type === 'input_json_delta')
+        .map((e) => JSON.parse(e.delta.partial_json));
+      expect(inputs).toEqual([{ path: 'a.md' }, { path: 'b.md' }]);
+      const delta = events.find((e) => e.type === 'message_delta')!;
+      expect(delta.delta.stop_reason).toBe('tool_use');
+      expect(delta.usage).toEqual({ input_tokens: 42, output_tokens: 7 });
+      // Every block opened is closed, in order.
+      const starts = events.filter((e) => e.type === 'content_block_start').map((e) => e.index);
+      const stops = events.filter((e) => e.type === 'content_block_stop').map((e) => e.index);
+      expect(starts).toEqual(stops);
+    });
+
+    it('keeps a Claude model, and any model on Anthropic’s route, byte for byte as the agent sent it', async () => {
+      const h = harness();
+      const grant = await grantOf(h);
+      grant.setTurn({
+        runId: 'run-claude-route',
+        providerId: PROVIDER,
+        model: 'claude-tools-chat',
+        report: () => {},
+      });
+      const answer = await post(`${grant.anthropicBaseUrl}/v1/messages`, grant.token, {
+        model: 'corehub-main',
+        thinking: { type: 'adaptive' },
+        output_config: { effort: 'high' },
+      });
+      expect(answer.headers.get('x-fake-path')).toBe('/v1/messages');
+      expect(answer.headers.get('x-fake-thinking')).toBe('yes');
+      expect(answer.headers.get('x-fake-effort')).toBe('high');
+    });
+
+    it('answers a Google model on the Chat route where CLIProxyAPI’s Anthropic route is refused', async () => {
+      const h = harness();
       const grant = await grantOf(h);
       grant.setTurn({
         runId: 'run-route',
@@ -718,41 +826,14 @@ describe('the gateway', () => {
         model: 'gemini-anthropic-route',
         report: () => {},
       });
-      await post(`${grant.anthropicBaseUrl}/v1/messages`, grant.token, {
+      const answer = await post(`${grant.anthropicBaseUrl}/v1/messages`, grant.token, {
         model: 'corehub-main',
-        system: [{ type: 'text', text: 'You are Claude Code.' }],
-        messages: [{ role: 'user', content: [{ type: 'text', text: 'هلا' }] }],
-        tools: [{ name: 'Write', description: 'Write a file', input_schema: { type: 'object' } }],
+        stream: true,
+        messages: [{ role: 'user', content: 'هلا' }],
       });
-      const said = captured.lines.map((line) => String(line.msg));
-      expect(said).toContain('gateway: the provider refused a call');
-      expect(said).toContain('gateway: the same model answered a plain request on the Chat route');
-      const diagnosis = captured.lines.filter((line) =>
-        String(line.msg).startsWith('gateway: diagnosis'),
-      );
-      expect(diagnosis.map((line) => [line.probe, line.msg])).toEqual([
-        ['one small tool', 'gateway: diagnosis — the Chat route answered'],
-        ["the agent's own system prompt and tools", 'gateway: diagnosis — the Chat route answered'],
-      ]);
-      expect(
-        chatOfAnthropic({
-          system: [{ type: 'text', text: 'S' }],
-          messages: [{ role: 'user', content: 'hi' }],
-          tools: [{ name: 'Write', description: 'W', input_schema: { type: 'object' } }],
-        }),
-      ).toEqual({
-        messages: [
-          { role: 'system', content: 'S' },
-          { role: 'user', content: 'hi' },
-        ],
-        max_tokens: 16,
-        tools: [
-          {
-            type: 'function',
-            function: { name: 'Write', description: 'W', parameters: { type: 'object' } },
-          },
-        ],
-      });
+      expect(answer.status).toBe(200);
+      expect(answer.headers.get('x-fake-path')).toBe('/v1/chat/completions');
+      expect(await answer.text()).toContain('"text":"hello"');
     });
 
     it('counts tokens itself: Claude Code’s many count_tokens calls never reach the provider', async () => {

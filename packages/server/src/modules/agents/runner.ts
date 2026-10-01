@@ -130,6 +130,10 @@ interface LiveRun {
  */
 const QUOTA_GRACE_MS = 8_000;
 
+/** An agent's words for "I have no key or sign-in of my own". */
+const NEEDS_OWN_ACCOUNT =
+  /auth|sign ?in|log ?in|api[ _-]?key|credential|unauthori[sz]ed|\b401\b|OPENAI_API_KEY|GEMINI_API_KEY/i;
+
 export interface AgentRunnerDeps {
   service: AgentsService;
   adapters: AdapterSet;
@@ -381,6 +385,25 @@ export class AgentRunner implements AgentRunnerPort {
         session = await adapters.byKind(row.adapterKind).start(target);
       } catch (error) {
         gateway?.revoke();
+        const said = error instanceof Error ? error.message : String(error);
+        // An agent wired to the gateway that still asks for its own key or sign-in when it starts
+        // (owner, 2026-10-01: Codex on «Default · gemini-3.8-flash-high» said "Authentication
+        // required"): the log keeps its words and its wiring's shape, the chat says it plainly.
+        if (gateway && NEEDS_OWN_ACCOUNT.test(said)) {
+          this.deps.log.warn(
+            {
+              agent: row.slug,
+              err: error,
+              model: chosen.model,
+              providerId: chosen.providerId,
+              wired: Object.keys(target.env ?? {}).sort(),
+            },
+            'agents: the agent asked for its own sign-in although it was started on the model gateway',
+          );
+          throw new HubError('provider_not_configured', {
+            message: `${row.name} did not take Core Hub's model gateway when it started and asked for its own sign-in (it said: ${said}). The hub's log has the details.`,
+          });
+        }
         throw error;
       }
       const sessionId = request.sessionId;

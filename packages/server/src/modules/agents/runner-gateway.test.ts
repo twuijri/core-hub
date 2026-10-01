@@ -41,6 +41,8 @@ function setup(options: {
   failGateway?: boolean;
   /** Why the hub did not route the agent (`AgentsService.gatewayMiss`). */
   miss?: string;
+  /** The agent refuses to start with this error. */
+  startError?: string;
   /** The turn as the agent plays it; absent, two model calls and the end. */
   play?: (
     turn: AgentGatewayTurn | null | undefined,
@@ -53,6 +55,7 @@ function setup(options: {
   let sessions = 0;
   const adapter = {
     async start(): Promise<AgentSession> {
+      if (options.startError) throw new Error(options.startError);
       sessions += 1;
       const id = `session-${sessions}`;
       const grant = grants.at(-1);
@@ -368,5 +371,18 @@ describe('agent runner: the model gateway (ADR 0029)', () => {
     });
     expect(events.at(-1)).toMatchObject({ type: 'completed' });
     await h.runner.closeAll();
+  });
+
+  it('says plainly when an agent on the gateway still asks for its own sign-in as it starts', async () => {
+    const h = setup({ source: () => 'hub', startError: 'Authentication required' });
+    await expect(h.turn('r1')).rejects.toMatchObject({
+      code: 'provider_not_configured',
+      message: expect.stringContaining("did not take Core Hub's model gateway"),
+    });
+    // Its token does not outlive the refused start.
+    expect(h.grants[0]!.revoked).toBe(true);
+    expect(h.log.lines.some((line) => /asked for its own sign-in/.test(String(line.msg)))).toBe(
+      true,
+    );
   });
 });
