@@ -5300,6 +5300,40 @@ Hermes on the same account answered. Proposed here — owner to confirm:
 - Checked and left as they are: CLIProxyAPI retries nothing itself (`request-retry: 0`,
   `max-retry-interval: 0`, cooling off); a plain Claude Code turn makes one call, so parallel calls do
   not explain the refusals.
+- **Second live test (preview.41).** Three more causes, found with the real CLIProxyAPI, a
+  Google Antigravity account file pointed at a stand-in for Google, and the real Claude Code:
+  - **Claude Code's token counts**: Claude Code asks `count_tokens` about fifteen times as a turn
+    starts (counted at the gateway); CLIProxyAPI turns each into Antigravity's `countTokens`, Google
+    refuses them with RESOURCE_EXHAUSTED, and the refusal cost the turn its model — which is why
+    Claude Code failed where Hermes and Gemini CLI on the same account and model answered. The
+    gateway now answers `/v1/messages/count_tokens` itself with an estimate (about four bytes of
+    system, messages and tools a token); none reaches a provider.
+  - **The account cooled itself down**: the sign-in set the account's own `disable_cooling: false`
+    (§143), which outranks the config's `disable-cooling: true`, so after one 429 CLIProxyAPI
+    refused every later call without asking Google ("All credentials … are cooling down"). Accounts
+    are now set `disable_cooling: true` at sign-in, and existing ones once per process.
+  - **No vendor's raw answer in the chat**: the fallback line's "why" and the failure notice say
+    only the hub's sentence; the provider's words (a message inside another answer read out of its
+    JSON) stay in `Run.error.details.said` and the hub's log.
+- **Changing Claude Code's request (the owner, 2026-10-01: «ما ابي نخرب كلود علشان جيميناي»).** Any
+  adjustment of what an agent asks — thinking level, tools, `max_tokens` — is scoped to exactly the
+  case a log proves fails: keyed on a Google model (Gemini, Gemma; Google's API, Antigravity, Vertex
+  or a proxy) and on that cause; the smallest change that works (a lower thinking level Google
+  accepts before "off"); a no-op for every Claude model, Claude models through Antigravity included,
+  whose request reaches the provider byte for byte as Claude Code sent it; tests prove both.
+- **A Google model refusing the agent's own request (the owner's log, preview.43).** Claude Code's
+  `/v1/messages` to Antigravity · gemini-3.8-flash-high was refused with "Resource has been
+  exhausted", while the same model answered the gateway's plain Chat request a moment later — so the
+  refusal is about the shape of Claude Code's request, not the account. When a Google model refuses
+  a call and answers the plain request, the gateway asks again one step lighter at a time, each step
+  with the ones before it: **its thinking lowered** (Anthropic `effort` → `low`, a thinking budget →
+  1024; Responses/Chat `effort` → `low`; Gemini `thinkingLevel` → `low`), then **without thinking**,
+  then **its tools' schema descriptions taken out** (the same tools and arguments; each tool's own
+  description cut to 160 characters). The step that answered is kept for the rest of the session and
+  the log names it; with every step refused, the usual wait and fallback follow. A Claude model and
+  every non-Google model are never changed (test: a refused `claude-*` model's request reaches the
+  provider with its thinking and effort as sent, and the chain takes over). The log says each refusal
+  as it came, the plain request's outcome, each lighter attempt, and the one that answered.
 
 ## 149. No phone push for a reply the person is watching
 
@@ -5326,21 +5360,6 @@ should not"). Each push also costs a request on the push relay.
   two screens), web `tests/viewing.test.tsx` (visible and focused says it and repeats it; blur,
   hidden, another conversation, unmount say `null`; a reconnect says it again). iOS and Android
   send it from their chat screens (Android compiled locally; iOS built by CI).
-- **Second live test (preview.41).** Three more causes, found with the real CLIProxyAPI, a
-  Google Antigravity account file pointed at a stand-in for Google, and the real Claude Code:
-  - **Claude Code's token counts**: Claude Code asks `count_tokens` about fifteen times as a turn
-    starts (counted at the gateway); CLIProxyAPI turns each into Antigravity's `countTokens`, Google
-    refuses them with RESOURCE_EXHAUSTED, and the refusal cost the turn its model — which is why
-    Claude Code failed where Hermes and Gemini CLI on the same account and model answered. The
-    gateway now answers `/v1/messages/count_tokens` itself with an estimate (about four bytes of
-    system, messages and tools a token); none reaches a provider.
-  - **The account cooled itself down**: the sign-in set the account's own `disable_cooling: false`
-    (§143), which outranks the config's `disable-cooling: true`, so after one 429 CLIProxyAPI
-    refused every later call without asking Google ("All credentials … are cooling down"). Accounts
-    are now set `disable_cooling: true` at sign-in, and existing ones once per process.
-  - **No vendor's raw answer in the chat**: the fallback line's "why" and the failure notice say
-    only the hub's sentence; the provider's words (a message inside another answer read out of its
-    JSON) stay in `Run.error.details.said` and the hub's log.
 
 ## 150. Phones: swipe a message to reply, and a long press on the agent's reply opens its menu
 
@@ -5371,22 +5390,21 @@ Status: the owner's requests, 2026-10-01 — «اذا المستخدم سحب ا
   the «Reply» accessibility action, a disabled row, the rules, and a long press on the agent's
   reply opening the menu whose Reply answers it. iOS `SwipeToReplyTests` (XCTest): the same rules
   and the action's name in both languages; SwiftUI's gesture itself is checked on a device.
-- **Changing Claude Code's request (the owner, 2026-10-01: «ما ابي نخرب كلود علشان جيميناي»).** Any
-  adjustment of what an agent asks — thinking level, tools, `max_tokens` — is scoped to exactly the
-  case a log proves fails: keyed on a Google model (Gemini, Gemma; Google's API, Antigravity, Vertex
-  or a proxy) and on that cause; the smallest change that works (a lower thinking level Google
-  accepts before "off"); a no-op for every Claude model, Claude models through Antigravity included,
-  whose request reaches the provider byte for byte as Claude Code sent it; tests prove both.
-- **A Google model refusing the agent's own request (the owner's log, preview.43).** Claude Code's
-  `/v1/messages` to Antigravity · gemini-3.8-flash-high was refused with "Resource has been
-  exhausted", while the same model answered the gateway's plain Chat request a moment later — so the
-  refusal is about the shape of Claude Code's request, not the account. When a Google model refuses
-  a call and answers the plain request, the gateway asks again one step lighter at a time, each step
-  with the ones before it: **its thinking lowered** (Anthropic `effort` → `low`, a thinking budget →
-  1024; Responses/Chat `effort` → `low`; Gemini `thinkingLevel` → `low`), then **without thinking**,
-  then **its tools' schema descriptions taken out** (the same tools and arguments; each tool's own
-  description cut to 160 characters). The step that answered is kept for the rest of the session and
-  the log names it; with every step refused, the usual wait and fallback follow. A Claude model and
-  every non-Google model are never changed (test: a refused `claude-*` model's request reaches the
-  provider with its thinking and effort as sent, and the chain takes over). The log says each refusal
-  as it came, the plain request's outcome, each lighter attempt, and the one that answered.
+
+## 151. The sidebar's «Back to chats» / «Back to agents» row sits at the bottom, above the footer
+
+Status: the owner's decision, 2026-10-01. It supersedes where §33 (Agents at the top level,
+2026-09-24) and the Settings sidebar put the back row: at the top, where the rail is.
+
+- **Web, every nested sidebar that uses the back row** — Settings («رجوع إلى المحادثات» / "Back to
+  chats") and an agent's own pages («رجوع إلى الوكلاء» / "Back to agents"): the row is pinned at
+  the bottom of the sidebar, directly above the footer box (the connection, the person, the
+  gear and sign-out, then language, theme and version). It is outside the scrolling list, so it
+  stays in view however far the menu above it scrolls, and Tab reaches it just before the
+  footer. Same look, icon and link as before; the arrow keeps pointing toward the reading start,
+  so it is right in Arabic. The phone drawer is the same sidebar and follows. The phone apps' own
+  layout is unchanged.
+- **Proven.** Web `tests/agents-top-level.test.tsx` (the row comes after the agent's list and the
+  footer straight after it); Playwright `zzz-agents-top-level.spec.ts` (above the footer, below
+  the agent's pages) and `smoke.spec.ts` (Settings in a short window, its menu scrolled to the end:
+  the row still in view, directly above the footer); screenshots refreshed.
