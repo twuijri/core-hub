@@ -160,7 +160,17 @@ createServer((request, response) => {
       (/high-effort$/.test(body.model) && effort === 'high') ||
       (/big-tools$/.test(body.model) && JSON.stringify(body.tools ?? []).length > 2000);
     const refusedRoute = /anthropic-route$/.test(body.model) && url.pathname === '/v1/messages';
-    if (refusedShape || refusedRoute) {
+    // Models refused for one thing in Claude Code's request (the gateway's bisect, §148): its
+    // billing line, its identity sentence, a JSON-schema keyword in its tools, its own headers.
+    const said = JSON.stringify(body.messages ?? []);
+    const refusedPart =
+      (/refuses-billing$/.test(body.model) && said.includes('x-anthropic-billing-header')) ||
+      (/refuses-identity$/.test(body.model) && said.includes('You are Claude Code')) ||
+      (/refuses-schema$/.test(body.model) &&
+        JSON.stringify(body.tools ?? []).includes('$schema')) ||
+      (/refuses-agent$/.test(body.model) &&
+        String(request.headers['user-agent'] ?? '').startsWith('claude-cli'));
+    if (refusedShape || refusedRoute || refusedPart) {
       // A model refused only when asked to think as the agent asks (as CLIProxyAPI answers it:
       // the message alone on the Anthropic route).
       response.writeHead(429, { 'content-type': 'application/json' });

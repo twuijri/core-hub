@@ -5348,6 +5348,19 @@ Hermes on the same account answered. Proposed here — owner to confirm:
   (thinking and text streamed; each tool call gathered and sent whole as a `tool_use` block at the
   end), as one JSON, or as an Anthropic error. A Claude model, through Antigravity too, still goes to
   `/v1/messages` byte for byte (test).
+- **A one-off diagnosis when the Chat route is refused too (the owner's log, preview.45).** The
+  translated request was refused on `/v1/chat/completions` while the plain request answered there,
+  so something in Claude Code's content is refused. For Claude Code on a Google model only, refused
+  while the plain request answers, once a session per model, the gateway asks the refused request
+  again in six variants (stream, headers and `max_tokens` as sent; read to the first word or the
+  refusal, then let go), logging `gateway: bisect step N: answered|refused`: (1) without Claude
+  Code's `x-anthropic-billing-header` line; (2) its identity sentence made neutral; (3) without
+  tools; (4) tool schemas cleaned for Gemini (`$schema`, `additionalProperties`, `propertyNames`,
+  `patternProperties`, `format`, `exclusive*`, `const`, `examples`, `$ref`/`$defs` out, `allOf`
+  merged); (5) the system prompt alone; (6) without the agent's own request headers. The first of
+  (1), (4) or (6) that answers is kept for the session and the request asked again with it; (2),
+  (3) and (5) are only logged. With none kept, the lighter steps, the wait and the chain follow as
+  before. A Claude model is never diagnosed.
 - **An agent on the gateway asking for its own sign-in.** When an agent started on the gateway
   refuses to start with an auth error (Codex: "Authentication required"), the turn fails with
   `provider_not_configured` and says the agent did not take the hub's gateway, instead of the old

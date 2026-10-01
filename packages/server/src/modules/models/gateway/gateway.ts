@@ -52,6 +52,7 @@ import {
   chatErrorToAnthropic,
   chatToAnthropic,
 } from './anthropic-chat.js';
+import { BISECT, bisectStep } from './bisect.js';
 
 /** The model names an agent is started with; each resolves to the model its turn chose. */
 export const GATEWAY_MODEL_ALIASES = ['corehub-main', 'corehub-small'] as const;
@@ -165,6 +166,11 @@ export class ModelGateway {
     GatewayGrantRecord,
     Map<string, { step: number; settled: boolean }>
   >();
+  /**
+   * Claude Code on a Google model, refused while a plain request answers: the one-off diagnosis
+   * already made this session per model, and the step kept from it, if any (`BISECT`).
+   */
+  private readonly bisected = new WeakMap<GatewayGrantRecord, Map<string, number | null>>();
   /** What CLIProxyAPI's Chat route said of a refused model, per grant, turn and model. */
   private readonly probed = new WeakMap<
     GatewayGrantRecord,
@@ -789,10 +795,16 @@ export class ModelGateway {
       wire === 'anthropic' &&
       /^\/v1\/messages(?:\?|$)/.test(asSent.path) &&
       googleModel(target.model);
+    // The step a diagnosis of this session found Google to answer, when it is safe to keep.
+    const kept = translated
+      ? bisectStep(this.bisected.get(grant)?.get(exhaustedKey(target)) ?? undefined)
+      : null;
     const call = translated
       ? {
           path: '/v1/chat/completions',
-          body: anthropicToChat(asSent.body, String(asSent.body.model ?? '')),
+          body: ((chat) => (kept ? kept.apply(chat) : chat))(
+            anthropicToChat(asSent.body, String(asSent.body.model ?? '')),
+          ),
         }
       : asSent;
     const payload = Buffer.from(JSON.stringify(call.body));
@@ -802,7 +814,7 @@ export class ModelGateway {
       method: 'POST',
       path: call.path,
       headers: {
-        ...forwardHeaders(request.headers),
+        ...(kept?.bareHeaders ? {} : forwardHeaders(request.headers)),
         authorization: `Bearer ${lease.key}`,
         'content-type': 'application/json',
         'content-length': String(payload.length),
@@ -855,6 +867,7 @@ export class ModelGateway {
                 path: call.path.replace(/\?.*$/, ''),
                 status,
                 shape: shaped ? SHAPES[shaped.step - 1]!.name : 'as the agent sent it',
+                ...(kept ? { bisectKept: `${kept.n}: ${kept.name}` } : {}),
                 said: providerWords(text, target),
               },
               'gateway: the provider refused a call',
@@ -896,6 +909,21 @@ export class ModelGateway {
                 // Hermes answered on the same account and model while Claude Code was refused).
                 // A Google model is asked again one step lighter at a time — never a Claude model,
                 // never another provider's (DECISIONS §148: «ما ابي نخرب كلود علشان جيميناي»).
+                // Claude Code on a Google model is first diagnosed, once a session (preview.45).
+                if (translated && !this.bisected.get(grant)?.has(key)) {
+                  const found = await this.bisect(
+                    grant,
+                    target,
+                    upstreams,
+                    call.body,
+                    forwardHeaders(request.headers),
+                  );
+                  if (found) {
+                    if (response.destroyed || response.writableEnded) return;
+                    await this.forward(request, response, route, grant, target, upstreams);
+                    return;
+                  }
+                }
                 const step = this.nextShape(grant, target, built.body);
                 if (step) {
                   this.options.log.warn(
@@ -1142,6 +1170,128 @@ export class ModelGateway {
         probe.on('timeout', () => probe.destroy());
         probe.on('error', () => resolve(null));
         probe.end(payload);
+      });
+    } finally {
+      lease.done();
+    }
+  }
+
+  /**
+   * Once a session per model: Claude Code's refused request on a Google model asked again in each
+   * `BISECT` variant, each outcome logged. The first variant that answers and is safe to keep is
+   * kept for the session (its number returned); the others are only said.
+   */
+  private async bisect(
+    grant: GatewayGrantRecord,
+    target: GatewayTarget,
+    upstreams: GatewayUpstream[],
+    body: Record<string, unknown>,
+    headers: Record<string, string | string[]>,
+  ): Promise<number | null> {
+    const key = exhaustedKey(target);
+    const done = this.bisected.get(grant) ?? new Map<string, number | null>();
+    done.set(key, null);
+    this.bisected.set(grant, done);
+    this.options.log.warn(
+      { agent: grant.agentSlug, providerId: target.providerId, model: target.model },
+      'gateway: diagnosing which part of the request the model refuses (once this session)',
+    );
+    let found: number | null = null;
+    for (const step of BISECT) {
+      const outcome = await this.askOnce(
+        upstreams,
+        step.apply(body),
+        step.bareHeaders ? {} : headers,
+      );
+      const word = !outcome ? 'not asked' : outcome.ok ? 'answered' : 'refused';
+      this.options.log.warn(
+        {
+          agent: grant.agentSlug,
+          providerId: target.providerId,
+          model: target.model,
+          step: step.n,
+          change: step.name,
+          status: outcome?.status ?? null,
+          said: outcome && !outcome.ok ? providerWords(outcome.text, target) : null,
+        },
+        `gateway: bisect step ${step.n}: ${word}`,
+      );
+      if (outcome?.ok && step.keep && found === null) found = step.n;
+    }
+    if (found !== null) {
+      done.set(key, found);
+      this.options.log.warn(
+        {
+          agent: grant.agentSlug,
+          providerId: target.providerId,
+          model: target.model,
+          step: found,
+          change: bisectStep(found)!.name,
+        },
+        'gateway: the session keeps asking the model with this bisect step',
+      );
+    }
+    return found;
+  }
+
+  /**
+   * One Chat Completions request on CLIProxyAPI exactly as given (a stream stays a stream), read
+   * only until the model's first word or its refusal, then let go. `null` when it could not ask.
+   */
+  private async askOnce(
+    upstreams: GatewayUpstream[],
+    body: Record<string, unknown>,
+    headers: Record<string, string | string[]>,
+  ): Promise<{ ok: boolean; status: number; text: string } | null> {
+    let lease;
+    try {
+      lease = await this.options.cliproxy.lease(upstreams);
+    } catch {
+      return null;
+    }
+    const payload = Buffer.from(JSON.stringify(body));
+    try {
+      return await new Promise((resolve) => {
+        const ask = httpRequest(
+          {
+            host: '127.0.0.1',
+            port: lease.port,
+            method: 'POST',
+            path: '/v1/chat/completions',
+            headers: {
+              ...headers,
+              authorization: `Bearer ${lease.key}`,
+              'content-type': 'application/json',
+              'content-length': String(payload.length),
+            },
+            timeout: 60_000,
+          },
+          (answer) => {
+            const status = answer.statusCode ?? 500;
+            if (status >= 400) {
+              void readBody(answer, MAX_ERROR_BYTES)
+                .catch(() => Buffer.alloc(0))
+                .then((raw) => resolve({ ok: false, status, text: raw.toString('utf8') }));
+              return;
+            }
+            let seen = '';
+            const settle = () => {
+              // A stream that opens with an error is a refusal too.
+              const refused = /"error"\s*:/.test(seen);
+              resolve({ ok: !refused, status, text: refused ? seen : '' });
+              ask.destroy();
+            };
+            answer.on('data', (chunk: Buffer) => {
+              seen += chunk.toString('utf8');
+              if (seen.length > 4096 || /\n\n/.test(seen)) settle();
+            });
+            answer.on('end', settle);
+            answer.on('error', settle);
+          },
+        );
+        ask.on('timeout', () => ask.destroy());
+        ask.on('error', () => resolve(null));
+        ask.end(payload);
       });
     } finally {
       lease.done();

@@ -86,6 +86,8 @@ const antigravityCalls: string[] = [];
 const antigravityThinking: (string | null)[] = [];
 /** While true, the stand-in refuses a generation that asks to think hard, as Google may. */
 let refuseThinking = false;
+/** Google refusing any request that carries Claude Code's billing line (§148 bisect). */
+let refuseBilling = false;
 
 async function fakeAntigravity(): Promise<{ server: Server; url: string }> {
   const server = createServer((request, response) => {
@@ -110,12 +112,18 @@ async function fakeAntigravity(): Promise<{ server: Server; url: string }> {
       if (method === 'streamGenerateContent' || method === 'generateContent') {
         antigravityThinking.push(/"thinkingConfig":(\{[^}]*\})/.exec(raw)?.[1] ?? null);
       }
-      if (
-        refuseThinking &&
+      const refusedBilling =
+        refuseBilling &&
         (method === 'streamGenerateContent' || method === 'generateContent') &&
-        /"thinkingLevel":"high"/.test(raw)
+        raw.includes('x-anthropic-billing-header');
+      if (refusedBilling) antigravityCalls.push('refused-billing');
+      if (
+        refusedBilling ||
+        (refuseThinking &&
+          (method === 'streamGenerateContent' || method === 'generateContent') &&
+          /"thinkingLevel":"high"/.test(raw))
       ) {
-        antigravityCalls.push('refused-thinking');
+        if (!refusedBilling) antigravityCalls.push('refused-thinking');
         response.writeHead(429, { 'content-type': 'application/json' });
         response.end(
           JSON.stringify({
@@ -1046,6 +1054,37 @@ describe.skipIf(!enabled)('the model gateway, for real (COREHUB_REAL_GATEWAY=1)'
       const answered = antigravityThinking.at(-1);
       expect(answered, JSON.stringify(antigravityThinking)).toMatch(/thinkingLevel/);
       expect(answered).not.toMatch(/"high"/);
+    },
+    5 * 60_000,
+  );
+
+  it(
+    'Claude Code answers on Antigravity when Google refuses its billing line: the bisect keeps it out',
+    async () => {
+      antigravityCalls.length = 0;
+      refuseBilling = true;
+      try {
+        await withRunner(
+          'claude-code',
+          async (turn) => {
+            const events = await turn('run-antigravity-billing', 'Say pong.');
+            expect(events.at(-1)).toMatchObject({ type: 'completed' });
+            expect(saidIn(events)).toContain('pong from Antigravity');
+          },
+          {
+            selection: () => ({
+              model: ANTIGRAVITY_MODEL,
+              provider: null,
+              providerId: ANTIGRAVITY_ID,
+            }),
+          },
+        );
+      } finally {
+        refuseBilling = false;
+      }
+      // The real CLIProxyAPI carries the billing line to Google on the Chat route; refused once
+      // as Claude Code sent it, then answered without it.
+      expect(antigravityCalls).toContain('refused-billing');
     },
     5 * 60_000,
   );

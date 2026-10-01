@@ -9,6 +9,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import pino from 'pino';
 import { parse } from 'yaml';
+import { capturingLogger } from '../../../../tests/unit/helpers.js';
 import { afterEach, describe, expect, it } from 'vitest';
 
 /** CLIProxyAPI's file, as far as these tests read it. */
@@ -68,6 +69,11 @@ function upstream(overrides: Partial<GatewayUpstream> = {}): GatewayUpstream {
       { id: 'gemini-high-effort', contextWindow: null },
       { id: 'gemini-big-tools', contextWindow: null },
       { id: 'gemini-anthropic-route', contextWindow: null },
+      { id: 'gemini-refuses-billing', contextWindow: null },
+      { id: 'gemini-refuses-identity', contextWindow: null },
+      { id: 'gemini-refuses-schema', contextWindow: null },
+      { id: 'gemini-refuses-agent', contextWindow: null },
+      { id: 'claude-refuses-billing', contextWindow: null },
       { id: 'gemini-tools-chat', contextWindow: null },
       { id: 'claude-tools-chat', contextWindow: null },
     ],
@@ -834,6 +840,118 @@ describe('the gateway', () => {
       expect(answer.status).toBe(200);
       expect(answer.headers.get('x-fake-path')).toBe('/v1/chat/completions');
       expect(await answer.text()).toContain('"text":"hello"');
+    });
+
+    describe('Claude Code refused by a Google model that answers a plain request', () => {
+      // As Claude Code asks: its billing line and identity first, a tool schema with `$schema`.
+      const claudeCode = {
+        model: 'corehub-main',
+        stream: true,
+        system: [
+          { type: 'text', text: 'x-anthropic-billing-header: cc_version=2.1; cc_entrypoint=cli;' },
+          { type: 'text', text: "You are Claude Code, Anthropic's official CLI for Claude." },
+          { type: 'text', text: 'Help with code.' },
+        ],
+        messages: [{ role: 'user', content: 'هلا' }],
+        tools: [
+          {
+            name: 'Read',
+            description: 'Read a file.',
+            input_schema: {
+              $schema: 'http://json-schema.org/draft-07/schema#',
+              type: 'object',
+              properties: { format: { type: 'string', format: 'uri' } },
+              additionalProperties: false,
+            },
+          },
+        ],
+      };
+      const ask = async (model: string, captured = capturingLogger()) => {
+        const h = harness({ log: captured.logger });
+        const grant = await grantOf(h);
+        grant.setTurn({ runId: 'run-bisect', providerId: PROVIDER, model, report: () => {} });
+        const first = await post(`${grant.anthropicBaseUrl}/v1/messages`, grant.token, claudeCode, {
+          'user-agent': 'claude-cli/2.1 (external, cli)',
+        });
+        const firstText = await first.text();
+        const second = await post(
+          `${grant.anthropicBaseUrl}/v1/messages`,
+          grant.token,
+          claudeCode,
+          {
+            'user-agent': 'claude-cli/2.1 (external, cli)',
+          },
+        );
+        await second.text();
+        const steps = captured.lines
+          .map((line) => String(line.msg))
+          .filter((msg) => msg.startsWith('gateway: bisect step'));
+        const kept = captured.lines.filter(
+          (line) =>
+            line.msg === 'gateway: the session keeps asking the model with this bisect step',
+        );
+        return { h, first, firstText, second, steps, kept };
+      };
+
+      it('keeps the billing line out for the session when that is what Google refuses', async () => {
+        const r = await ask('gemini-refuses-billing');
+        expect(r.first.status).toBe(200);
+        expect(r.firstText).toContain('message_stop');
+        expect(r.steps).toEqual([
+          'gateway: bisect step 1: answered',
+          'gateway: bisect step 2: refused',
+          'gateway: bisect step 3: refused',
+          'gateway: bisect step 4: refused',
+          'gateway: bisect step 5: refused',
+          'gateway: bisect step 6: refused',
+        ]);
+        expect(r.kept).toHaveLength(1);
+        expect(r.kept[0]!.step).toBe(1);
+        // Once a session: the second turn goes straight through with the step kept.
+        expect(r.second.status).toBe(200);
+      });
+
+      it('keeps tool schemas cleaned for Gemini when a schema keyword is what Google refuses', async () => {
+        const r = await ask('gemini-refuses-schema');
+        expect(r.first.status).toBe(200);
+        expect(r.steps).toEqual([
+          'gateway: bisect step 1: refused',
+          'gateway: bisect step 2: refused',
+          'gateway: bisect step 3: answered',
+          'gateway: bisect step 4: answered',
+          'gateway: bisect step 5: answered',
+          'gateway: bisect step 6: refused',
+        ]);
+        expect(r.kept[0]!.step).toBe(4);
+        expect(r.second.status).toBe(200);
+      });
+
+      it('leaves the agent’s own headers out when they are what Google refuses', async () => {
+        const r = await ask('gemini-refuses-agent');
+        expect(r.first.status).toBe(200);
+        expect(r.steps.at(-1)).toBe('gateway: bisect step 6: answered');
+        expect(r.kept[0]!.step).toBe(6);
+      });
+
+      it('only says it when the identity sentence is what Google refuses, and does not ask again', async () => {
+        const r = await ask('gemini-refuses-identity');
+        expect(r.steps).toEqual([
+          'gateway: bisect step 1: refused',
+          'gateway: bisect step 2: answered',
+          'gateway: bisect step 3: refused',
+          'gateway: bisect step 4: refused',
+          'gateway: bisect step 5: refused',
+          'gateway: bisect step 6: refused',
+        ]);
+        expect(r.kept).toHaveLength(0);
+        expect(r.first.status).not.toBe(200);
+      });
+
+      it('never diagnoses a Claude model: its request reaches the provider as sent', async () => {
+        const r = await ask('claude-refuses-billing');
+        expect(r.steps).toEqual([]);
+        expect(r.first.headers.get('x-fake-path')).toBe('/v1/messages');
+      });
     });
 
     it('counts tokens itself: Claude Code’s many count_tokens calls never reach the provider', async () => {

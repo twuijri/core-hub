@@ -146,6 +146,24 @@ RunStatus,RunFailureNotice}.ts(x)` و`realtime/envelope.ts` واختبارات `
   تغيير، ونموذج Google يرفضه مسار Anthropic في البديل ويجيب عبر Chat؛ وحقيقي: Claude Code الحقيقي على نموذج Google عبر CLIProxyAPI الحقيقي
   وبديل Antigravity يستدعي أداة ويعود بنتيجتها ويجيب بالعربية.
 
+#### سجل المالك (preview.45): طريق Chat يُرفض أيضًا — تشخيص لمرة واحدة في الجلسة
+السجل: الطلب المترجَم خرج على `/v1/chat/completions` ورُفض 429، والطلب البسيط على Chat **أجاب**، و«تفكير أدنى» و«بلا تفكير» تُخطّيا (لا
+تفكير في الطلب المترجَم)، و«الأدوات مختصرة» رُفض، ثم الانتظار ثم السلسلة. فالمسار ليس السبب: شيء في **محتوى** طلب Claude Code (وطلبات
+OpenCode الكبيرة بأدوات تمر).
+- **التشخيص** (`models/gateway/bisect.ts`، جديد): لـClaude Code على نموذج Google فقط، حين يُرفض ويجيب الطلب البسيط، مرة واحدة في الجلسة
+  لكل نموذج، تسأل البوابة النموذج ست صيغ من الطلب المرفوض نفسه (البث والرؤوس وmax_tokens كما هي؛ تُقرأ حتى أول كلمة أو الرفض ثم تُترك):
+  1) بلا سطر `x-anthropic-billing-header`؛ 2) جملة الهوية («You are Claude Code…» / «You are a Claude agent…») بجملة محايدة؛ 3) بلا أدوات؛
+  4) مخططات الأدوات منظّفة لـGemini (حذف `$schema` و`additionalProperties` و`propertyNames` و`patternProperties` و`format`
+  و`exclusive*` و`const` و`examples` و`$ref/$defs`، ودمج `allOf`)؛ 5) موجّه النظام وحده؛ 6) بلا رؤوس الوكيل (`user-agent: claude-cli…`،
+  `anthropic-beta`…) — أضفتها لأن الطلب البسيط يُرسل بلا رؤوس الوكيل والطلب الحقيقي بها.
+- كل خطوة في السجل: `gateway: bisect step N: answered|refused|not asked` مع التغيير والحالة وكلام المزوّد منقّحًا.
+- **ما يُحفظ**: أول خطوة آمنة أجابت (1 أو 4 أو 6) تبقى طريقة السؤال لبقية الجلسة (`gateway: the session keeps asking the model with this
+  bisect step`) ويُعاد الطلب بها فورًا. 2 و3 و5 تُسجَّل فقط. إن لم تُجب خطوة آمنة: الخطوات الأخف ثم الانتظار ثم السلسلة كما كانت.
+- **Claude لا يُمس**: لا تشخيص لنموذج Claude (اختبار: لا سطور bisect، والطلب على `/v1/messages`).
+- الاختبارات: خمسة في `gateway.test.ts` (سطر الفوترة يُحفظ 1، المخطط يُحفظ 4، الرؤوس تُحفظ 6، الهوية تُسجَّل فقط ولا تشخيص ثانٍ، Claude بلا
+  تشخيص)؛ وحقيقي: بديل Antigravity يرفض كل طلب فيه سطر الفوترة، فيجيب Claude Code الحقيقي عبر CLIProxyAPI الحقيقي بعد التشخيص (يثبت أيضًا
+  أن مسار Chat في CLIProxyAPI يحمل سطر الفوترة إلى Google).
+
 #### Codex على «افتراضي · gemini-3.8-flash-high» يفشل فورًا ببطاقة «يحتاج مفتاح OpenAI أو تسجيل دخول ChatGPT»
 - **لم أستطع إعادته هنا**: Codex الحقيقي (codex-acp 2.1.1) على صف Antigravity افتراضيًا عبر البوابة يجيب (اختبار حقيقي
   `it.each(['codex','gemini-cli'])`)، والمصادقة على البوابة ببروتوكول codex-acp المدمج. فالسبب في إعداد المالك لم يُعرف بعد.
@@ -214,6 +232,11 @@ $ vitest run --maxWorkers=2 src/modules/models src/modules/agents src/modules/se
 $ vitest run tests/trajectory.test.tsx tests/model-status.test.ts tests/run-quota-notice.test.tsx (packages/web) → 18 passed
 $ COREHUB_REAL_GATEWAY=1 COREHUB_REAL_GATEWAY_ALL=1 vitest run --maxWorkers=1 model-gateway.real.test.ts gateway-stream.real.test.ts
   → Test Files 2 passed · Tests 38 passed
+preview.45 (التشخيص):
+$ eslint models/gateway → OK · tsc --noEmit (server) → exit 0
+$ vitest run --maxWorkers=2 src/modules/models src/modules/agents → Test Files 93 passed | 26 skipped · Tests 1140 passed | 102 skipped
+$ COREHUB_REAL_GATEWAY=1 vitest run model-gateway.real.test.ts -t Antigravity → 5 passed
+$ COREHUB_REAL_GATEWAY=1 COREHUB_REAL_GATEWAY_ALL=1 vitest run --maxWorkers=1 model-gateway.real.test.ts gateway-stream.real.test.ts → Test Files 2 passed · Tests 39 passed
 ```
 
 ## المخاطر والرجوع
