@@ -5376,7 +5376,17 @@ Status: the owner's requests, 2026-10-01 — «اذا المستخدم سحب ا
   case a log proves fails: keyed on a Google model (Gemini, Gemma; Google's API, Antigravity, Vertex
   or a proxy) and on that cause; the smallest change that works (a lower thinking level Google
   accepts before "off"); a no-op for every Claude model, Claude models through Antigravity included,
-  whose request reaches the provider byte for byte as Claude Code sent it; tests prove both. A
-  candidate — asking a refused Gemini model once more without the agent's thinking settings, for the
-  rest of the session, when the same model answers a plain request — is on
-  `fix/gateway-gemini-claude-code`, waiting for the owner's log to show the refusal is about thinking.
+  whose request reaches the provider byte for byte as Claude Code sent it; tests prove both.
+- **A Google model refusing the agent's own request (the owner's log, preview.43).** Claude Code's
+  `/v1/messages` to Antigravity · gemini-3.8-flash-high was refused with "Resource has been
+  exhausted", while the same model answered the gateway's plain Chat request a moment later — so the
+  refusal is about the shape of Claude Code's request, not the account. When a Google model refuses
+  a call and answers the plain request, the gateway asks again one step lighter at a time, each step
+  with the ones before it: **its thinking lowered** (Anthropic `effort` → `low`, a thinking budget →
+  1024; Responses/Chat `effort` → `low`; Gemini `thinkingLevel` → `low`), then **without thinking**,
+  then **its tools' schema descriptions taken out** (the same tools and arguments; each tool's own
+  description cut to 160 characters). The step that answered is kept for the rest of the session and
+  the log names it; with every step refused, the usual wait and fallback follow. A Claude model and
+  every non-Google model are never changed (test: a refused `claude-*` model's request reaches the
+  provider with its thinking and effort as sent, and the chain takes over). The log says each refusal
+  as it came, the plain request's outcome, each lighter attempt, and the one that answered.

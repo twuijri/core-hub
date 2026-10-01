@@ -154,8 +154,11 @@ export class ModelGateway {
   private upstreamCache: { at: number; value: GatewayUpstream[] } | null = null;
 
   private readonly limitWait: { defaultMs: number; maxMs: number };
-  /** Models a session asks without the agent's thinking settings, once those were refused. */
-  private readonly lightened = new WeakMap<GatewayGrantRecord, Set<string>>();
+  /** How a session asks a Google model that refused the agent's own request (`SHAPES`). */
+  private readonly shapes = new WeakMap<
+    GatewayGrantRecord,
+    Map<string, { step: number; settled: boolean }>
+  >();
   /** What CLIProxyAPI's Chat route said of a refused model, per grant, turn and model. */
   private readonly probed = new WeakMap<
     GatewayGrantRecord,
@@ -768,9 +771,10 @@ export class ModelGateway {
     const turn = grant.turn;
     const runId = turn?.runId ?? grant.lastRunId;
     const built = route.call(target);
-    // A model this session already had to ask without the agent's thinking settings (below).
-    const light = this.lightened.get(grant)?.has(exhaustedKey(target)) === true;
-    const call = light ? { ...built, body: withoutThinking(built.body) } : built;
+    // How this session asks the model, once a Google model refused the agent's own request but
+    // answered a plain one (below): its thinking lowered, then off, then its tools trimmed.
+    const shaped = this.shapes.get(grant)?.get(exhaustedKey(target)) ?? null;
+    const call = shaped ? { ...built, body: SHAPES[shaped.step - 1]!.apply(built.body) } : built;
     const payload = Buffer.from(JSON.stringify(call.body));
     const upstream = httpRequest({
       host: '127.0.0.1',
@@ -820,6 +824,21 @@ export class ModelGateway {
             response.off('close', onClose);
             let text = raw.toString('utf8');
             const key = exhaustedKey(target);
+            // Every refused call in the hub's log as the provider put it (redacted): which path,
+            // model and shape of request — so a person's log says exactly what Google said.
+            this.options.log.warn(
+              {
+                agent: grant.agentSlug,
+                runId: grant.turn?.runId ?? grant.lastRunId,
+                providerId: target.providerId,
+                model: target.model,
+                path: call.path.replace(/\?.*$/, ''),
+                status,
+                shape: shaped ? SHAPES[shaped.step - 1]!.name : 'as the agent sent it',
+                said: providerWords(text, target),
+              },
+              'gateway: the provider refused a call',
+            );
             // CLIProxyAPI answers Claude Code, Codex and Gemini CLI with the provider's message
             // alone, so Google's own reason (QUOTA_EXHAUSTED, MODEL_CAPACITY_EXHAUSTED, an
             // account restriction) and its retry delay are lost there. The Chat route keeps the
@@ -839,24 +858,45 @@ export class ModelGateway {
                   this.probed.get(grant) ?? new Map<string, { ok: boolean; text: string }>();
                 seen.set(asked, probed);
                 this.probed.set(grant, seen);
+                this.options.log.warn(
+                  {
+                    agent: grant.agentSlug,
+                    providerId: target.providerId,
+                    model: target.model,
+                    said: probed.ok ? null : providerWords(probed.text, target),
+                  },
+                  probed.ok
+                    ? 'gateway: the same model answered a plain request on the Chat route'
+                    : 'gateway: the same model refused a plain request on the Chat route too',
+                );
               }
-              if (!known && probed?.ok && !grant.waited.has(key)) {
-                // It answers a plain request now: ask again at once — and, when the refused call
-                // carried the agent's thinking settings, without them (that is then the likelier
-                // reason than a limit that passed in the same second).
-                grant.waited.add(key);
-                if (!light && googleModel(target.model) && thinkingOf(built.body)) {
-                  const lightened = this.lightened.get(grant) ?? new Set<string>();
-                  lightened.add(key);
-                  this.lightened.set(grant, lightened);
+              if (probed?.ok) {
+                // The model answers a plain request but refuses the agent's own: its shape is the
+                // likelier reason than a limit that passed in the same second (owner, 2026-10-01:
+                // Hermes answered on the same account and model while Claude Code was refused).
+                // A Google model is asked again one step lighter at a time — never a Claude model,
+                // never another provider's (DECISIONS §148: «ما ابي نخرب كلود علشان جيميناي»).
+                const step = this.nextShape(grant, target, built.body);
+                if (step) {
                   this.options.log.warn(
-                    { agent: grant.agentSlug, providerId: target.providerId, model: target.model },
-                    'gateway: the model answers a plain request; asking again without the agent’s thinking settings',
+                    {
+                      agent: grant.agentSlug,
+                      providerId: target.providerId,
+                      model: target.model,
+                      shape: SHAPES[step - 1]!.name,
+                    },
+                    'gateway: asking the model again with a lighter request',
                   );
+                  if (response.destroyed || response.writableEnded) return;
+                  await this.forward(request, response, route, grant, target, upstreams);
+                  return;
                 }
-                if (response.destroyed || response.writableEnded) return;
-                await this.forward(request, response, route, grant, target, upstreams);
-                return;
+                if (!known && !grant.waited.has(key)) {
+                  grant.waited.add(key);
+                  if (response.destroyed || response.writableEnded) return;
+                  await this.forward(request, response, route, grant, target, upstreams);
+                  return;
+                }
               }
               if (probed && !probed.ok && probed.text) text = probed.text;
             }
@@ -876,7 +916,7 @@ export class ModelGateway {
                 readFromChatRoute: text !== raw.toString('utf8'),
                 said: providerWords(text, target),
               },
-              'gateway: the provider refused a call',
+              'gateway: what the hub makes of the refusal',
             );
             if (
               verdict.kind === 'wait' &&
@@ -900,20 +940,6 @@ export class ModelGateway {
               this.tellWaiting(grant, target, verdict.ms, verdict.reason);
               await new Promise((resolve) => setTimeout(resolve, verdict.ms));
               if (response.destroyed || response.writableEnded) return;
-              // Asked again without the agent's own thinking settings (Claude Code's `thinking`
-              // and `effort`, which CLIProxyAPI sends Google as `thinkingLevel: high`): Hermes,
-              // which sends none, is answered on the same account and model while Claude Code
-              // is refused (owner, 2026-10-01). If that is what Google refuses, this answers,
-              // the rest of the session asks the same way, and the log says so.
-              if (!light && googleModel(target.model) && thinkingOf(built.body)) {
-                const lightened = this.lightened.get(grant) ?? new Set<string>();
-                lightened.add(key);
-                this.lightened.set(grant, lightened);
-                this.options.log.warn(
-                  { agent: grant.agentSlug, providerId: target.providerId, model: target.model },
-                  'gateway: asking the refused model again without the agent’s thinking settings',
-                );
-              }
               await this.forward(request, response, route, grant, target, upstreams);
               return;
             }
@@ -958,6 +984,18 @@ export class ModelGateway {
             response.end(scrubInternalNames(text, target));
           });
         return;
+      }
+      if (shaped && !shaped.settled) {
+        shaped.settled = true;
+        this.options.log.warn(
+          {
+            agent: grant.agentSlug,
+            providerId: target.providerId,
+            model: target.model,
+            shape: SHAPES[shaped.step - 1]!.name,
+          },
+          'gateway: the model answered the lighter request; the session keeps asking it this way',
+        );
       }
       response.writeHead(status, answerHeaders(answer.headers));
       const tap = new UsageTap(answer.headers['content-type']);
@@ -1035,6 +1073,30 @@ export class ModelGateway {
     } finally {
       lease.done();
     }
+  }
+
+  /**
+   * The next lighter way to ask a refused Google model, set for the rest of the session, or null
+   * when there is none: not a Google model, nothing left to lighten, or every step tried.
+   */
+  private nextShape(
+    grant: GatewayGrantRecord,
+    target: GatewayTarget,
+    body: Record<string, unknown>,
+  ): number | null {
+    if (!googleModel(target.model)) return null;
+    const key = exhaustedKey(target);
+    const shapes = this.shapes.get(grant) ?? new Map<string, { step: number; settled: boolean }>();
+    const current = shapes.get(key)?.step ?? 0;
+    const was = JSON.stringify(current ? SHAPES[current - 1]!.apply(body) : body);
+    for (let step = current + 1; step <= SHAPES.length; step += 1) {
+      // A step that changes nothing in this request is not a step.
+      if (JSON.stringify(SHAPES[step - 1]!.apply(body)) === was) continue;
+      shapes.set(key, { step, settled: false });
+      this.shapes.set(grant, shapes);
+      return step;
+    }
+    return null;
   }
 
   private quotaFailure(
@@ -1537,16 +1599,33 @@ export function estimateTokens(body: Record<string, unknown>): number {
   return Math.max(1, Math.ceil(bytes / 4));
 }
 
-/** Whether a request carries the agent's own thinking settings, in any of the wires. */
-function thinkingOf(body: Record<string, unknown>): boolean {
-  const config = body.generationConfig as Record<string, unknown> | undefined;
-  return (
-    body.thinking !== undefined ||
-    body.output_config !== undefined ||
-    body.reasoning !== undefined ||
-    body.reasoning_effort !== undefined ||
-    (config !== undefined && config.thinkingConfig !== undefined)
-  );
+/** The lowest thinking a request's own settings ask, in each wire: kept on, at its least. */
+export function lowerThinking(body: Record<string, unknown>): Record<string, unknown> {
+  const out: Record<string, unknown> = { ...body };
+  const thinking = out.thinking as Record<string, unknown> | undefined;
+  if (thinking && typeof thinking === 'object' && typeof thinking.budget_tokens === 'number') {
+    out.thinking = { ...thinking, budget_tokens: Math.min(thinking.budget_tokens, 1024) };
+  }
+  const output = out.output_config as Record<string, unknown> | undefined;
+  if (output && typeof output === 'object' && output.effort !== undefined) {
+    out.output_config = { ...output, effort: 'low' };
+  }
+  const reasoning = out.reasoning as Record<string, unknown> | undefined;
+  if (reasoning && typeof reasoning === 'object' && reasoning.effort !== undefined) {
+    out.reasoning = { ...reasoning, effort: 'low' };
+  }
+  if (out.reasoning_effort !== undefined) out.reasoning_effort = 'low';
+  const config = out.generationConfig as Record<string, unknown> | undefined;
+  const thinkingConfig = config?.thinkingConfig as Record<string, unknown> | undefined;
+  if (config && thinkingConfig && typeof thinkingConfig === 'object') {
+    const lowered: Record<string, unknown> = { ...thinkingConfig };
+    if (lowered.thinkingLevel !== undefined) lowered.thinkingLevel = 'low';
+    if (typeof lowered.thinkingBudget === 'number' && lowered.thinkingBudget > 0) {
+      lowered.thinkingBudget = Math.min(lowered.thinkingBudget, 1024);
+    }
+    out.generationConfig = { ...config, thinkingConfig: lowered };
+  }
+  return out;
 }
 
 /** A request without the agent's own thinking settings; the provider's defaults apply. */
@@ -1564,6 +1643,57 @@ export function withoutThinking(body: Record<string, unknown>): Record<string, u
   }
   return out;
 }
+
+/** The longest a trimmed tool's own description is kept. */
+const TRIMMED_DESCRIPTION = 160;
+
+/**
+ * A request's tools with their schemas' descriptions taken out and their own shortened: the
+ * same tools and arguments, a much smaller request.
+ */
+export function trimTools(body: Record<string, unknown>): Record<string, unknown> {
+  const strip = (value: unknown): unknown => {
+    if (Array.isArray(value)) return value.map(strip);
+    if (!value || typeof value !== 'object') return value;
+    const out: Record<string, unknown> = {};
+    for (const [name, inner] of Object.entries(value as Record<string, unknown>)) {
+      if (name === 'description' || name === 'examples') continue;
+      out[name] = strip(inner);
+    }
+    return out;
+  };
+  const shorten = (text: unknown) =>
+    typeof text === 'string' && text.length > TRIMMED_DESCRIPTION
+      ? `${text.slice(0, TRIMMED_DESCRIPTION - 1)}…`
+      : text;
+  const tool = (entry: unknown): unknown => {
+    if (!entry || typeof entry !== 'object') return entry;
+    const t = entry as Record<string, unknown>;
+    const out: Record<string, unknown> = { ...t };
+    if ('description' in t) out.description = shorten(t.description);
+    for (const field of ['input_schema', 'parameters', 'parametersJsonSchema']) {
+      if (field in t) out[field] = strip(t[field]);
+    }
+    if (t.function && typeof t.function === 'object') out.function = tool(t.function);
+    if (Array.isArray(t.functionDeclarations))
+      out.functionDeclarations = t.functionDeclarations.map(tool);
+    return out;
+  };
+  return Array.isArray(body.tools) ? { ...body, tools: body.tools.map(tool) } : body;
+}
+
+/**
+ * The lighter ways a refused Google model is asked again, in order, each with the ones before
+ * it; the log names the one that answered.
+ */
+export const SHAPES: readonly {
+  name: string;
+  apply(body: Record<string, unknown>): Record<string, unknown>;
+}[] = [
+  { name: 'thinking lowered', apply: lowerThinking },
+  { name: 'without thinking', apply: withoutThinking },
+  { name: 'without thinking, tools trimmed', apply: (body) => trimTools(withoutThinking(body)) },
+];
 
 /**
  * A Google model (Gemini, Gemma), whoever serves it — Google's own API, Antigravity, Vertex or a

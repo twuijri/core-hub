@@ -146,7 +146,16 @@ createServer((request, response) => {
       return;
     }
     response.setHeader('x-fake-thinking', body.thinking ? 'yes' : 'no');
-    if (/thinks$/.test(body.model) && body.thinking) {
+    response.setHeader('x-fake-effort', String(body.output_config?.effort ?? ''));
+    response.setHeader(
+      'x-fake-tool-descriptions',
+      JSON.stringify(body.tools ?? []).includes('"description"') ? 'yes' : 'no',
+    );
+    const refusedShape =
+      (/thinks$/.test(body.model) && body.thinking) ||
+      (/high-effort$/.test(body.model) && body.output_config?.effort === 'high') ||
+      (/big-tools$/.test(body.model) && JSON.stringify(body.tools ?? []).length > 2000);
+    if (refusedShape) {
       // A model refused only when asked to think as the agent asks (as CLIProxyAPI answers it:
       // the message alone on the Anthropic route).
       response.writeHead(429, { 'content-type': 'application/json' });

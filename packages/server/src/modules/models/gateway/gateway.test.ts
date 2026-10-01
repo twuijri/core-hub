@@ -29,6 +29,8 @@ import {
   classifyLimit,
   estimateTokens,
   withoutThinking,
+  lowerThinking,
+  trimTools,
   scrubInternalNames,
   type GatewaySource,
 } from './gateway.js';
@@ -63,6 +65,8 @@ function upstream(overrides: Partial<GatewayUpstream> = {}): GatewayUpstream {
       { id: 'flash-busy', contextWindow: null },
       { id: 'gemini-thinks', contextWindow: null },
       { id: 'claude-thinks', contextWindow: null },
+      { id: 'gemini-high-effort', contextWindow: null },
+      { id: 'gemini-big-tools', contextWindow: null },
     ],
     ...overrides,
   };
@@ -645,6 +649,7 @@ describe('the gateway', () => {
       const asked = await post(`${claude.anthropicBaseUrl}/v1/messages`, claude.token, thinking);
       expect(asked.headers.get('x-fake-model')).toBe(`${upstreamPrefix(PROVIDER)}/coder`);
       expect(asked.headers.get('x-fake-thinking')).toBe('yes');
+      expect(asked.headers.get('x-fake-effort')).toBe('high');
       expect(claudeMoves).toHaveLength(1);
       expect(
         withoutThinking({
@@ -653,6 +658,46 @@ describe('the gateway', () => {
           generationConfig: { thinkingConfig: {}, topP: 1 },
         }),
       ).toEqual({ model: 'm', generationConfig: { topP: 1 } });
+    });
+
+    it('lowers a Gemini model’s thinking first, and trims its tools only when nothing else answers', async () => {
+      const h = harness();
+      const ask = async (model: string, body: Record<string, unknown>) => {
+        const grant = await grantOf(h);
+        grant.setTurn({ runId: `run-${model}`, providerId: PROVIDER, model, report: () => {} });
+        const answer = await post(`${grant.anthropicBaseUrl}/v1/messages`, grant.token, body);
+        return { answer, grant };
+      };
+      const thinking = {
+        model: 'corehub-main',
+        thinking: { type: 'adaptive' },
+        output_config: { effort: 'high' },
+      };
+      // Refused only at high effort: answered with thinking still on, at low effort.
+      const high = await ask('gemini-high-effort', thinking);
+      expect(high.answer.status).toBe(200);
+      expect(high.answer.headers.get('x-fake-thinking')).toBe('yes');
+      expect(high.answer.headers.get('x-fake-effort')).toBe('low');
+      // Refused for its tools' size: answered with the same tools, their descriptions trimmed.
+      const tools = Array.from({ length: 6 }, (_, i) => ({
+        name: `tool_${i}`,
+        description: 'A long description of what this tool does. '.repeat(10),
+        input_schema: {
+          type: 'object',
+          properties: { path: { type: 'string', description: 'where' } },
+        },
+      }));
+      const big = await ask('gemini-big-tools', { ...thinking, tools });
+      expect(big.answer.status).toBe(200);
+      expect(big.answer.headers.get('x-fake-thinking')).toBe('no');
+      expect(trimTools({ tools }).tools).toEqual(
+        tools.map((tool) => ({
+          name: tool.name,
+          description: `${tool.description.slice(0, 159)}…`,
+          input_schema: { type: 'object', properties: { path: { type: 'string' } } },
+        })),
+      );
+      expect(lowerThinking(thinking)).toEqual({ ...thinking, output_config: { effort: 'low' } });
     });
 
     it('counts tokens itself: Claude Code’s many count_tokens calls never reach the provider', async () => {

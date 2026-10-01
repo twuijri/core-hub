@@ -82,7 +82,9 @@ const ANTIGRAVITY_ID = '01KGATEWAYANTIGRAVITYROW01';
 const ANTIGRAVITY_MODEL = 'gemini-3-flash';
 /** What the stand-in was asked, by method. */
 const antigravityCalls: string[] = [];
-/** While true, the stand-in refuses a generation that asks to think, as Google may. */
+/** The thinking settings each generation asked Google for. */
+const antigravityThinking: (string | null)[] = [];
+/** While true, the stand-in refuses a generation that asks to think hard, as Google may. */
 let refuseThinking = false;
 
 async function fakeAntigravity(): Promise<{ server: Server; url: string }> {
@@ -105,10 +107,13 @@ async function fakeAntigravity(): Promise<{ server: Server; url: string }> {
         );
         return;
       }
+      if (method === 'streamGenerateContent' || method === 'generateContent') {
+        antigravityThinking.push(/"thinkingConfig":(\{[^}]*\})/.exec(raw)?.[1] ?? null);
+      }
       if (
         refuseThinking &&
         (method === 'streamGenerateContent' || method === 'generateContent') &&
-        raw.includes('"thinkingConfig"')
+        /"thinkingLevel":"high"/.test(raw)
       ) {
         antigravityCalls.push('refused-thinking');
         response.writeHead(429, { 'content-type': 'application/json' });
@@ -1011,9 +1016,10 @@ describe.skipIf(!enabled)('the model gateway, for real (COREHUB_REAL_GATEWAY=1)'
   );
 
   it(
-    'Claude Code still answers on Antigravity when Google refuses its thinking settings',
+    'Claude Code still answers on Antigravity when Google refuses its high thinking, at a lower level',
     async () => {
       antigravityCalls.length = 0;
+      antigravityThinking.length = 0;
       refuseThinking = true;
       try {
         await withRunner(
@@ -1034,8 +1040,11 @@ describe.skipIf(!enabled)('the model gateway, for real (COREHUB_REAL_GATEWAY=1)'
       } finally {
         refuseThinking = false;
       }
-      console.log('ANTIGRAVITY CALLS', JSON.stringify(antigravityCalls));
       expect(antigravityCalls).toContain('refused-thinking');
+      // Answered with its thinking lowered, not turned off: the smallest change that works.
+      const answered = antigravityThinking.at(-1);
+      expect(answered, JSON.stringify(antigravityThinking)).toMatch(/thinkingLevel/);
+      expect(answered).not.toMatch(/"high"/);
     },
     5 * 60_000,
   );
