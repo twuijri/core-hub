@@ -109,6 +109,14 @@ RunStatus,RunFailureNotice}.ts(x)` و`realtime/envelope.ts` واختبارات `
 - الفحوص: `./gradlew :app:testDebugUnitTest --tests hub.core.android.ui.SwipeToReplyUiTest` → 7 ناجحة؛ `compileDebugKotlin`
   ناجح؛ iOS يبنيه ويختبره CI (لا Xcode هنا)؛ والإيماءة نفسها في SwiftUI تحتاج تجربة على جهاز.
 
+#### قيد المالك: لا نُضعف Claude من أجل Gemini («ما ابي نخرب كلود علشان جيميناي»)
+أي تعديل على طلب Claude Code (مستوى التفكير، الأدوات، `max_tokens`) يُحصر في الحالة التي يثبت السجل فشلها: نموذج Google (Gemini، Gemma
+— عبر Google أو Antigravity أو Vertex أو بروكسي) والسبب نفسه؛ أصغر تغيير ينجح (مستوى تفكير أدنى تقبله Google قبل «إيقافه»)؛ ولا شيء
+لنماذج Claude — ومنها Claude عبر Antigravity — فطلبها يصل كما أرسله Claude Code بايتًا ببايت؛ والاختبارات تثبت الأمرين. سجل كل رفض
+(`gateway: the provider refused a call`) في هذا الـPR؛ ومرشّح «إعادة سؤال Gemini المرفوض بلا إعدادات تفكير الوكيل حين يجيب النموذج
+نفسه طلبًا بسيطًا» على الفرع `fix/gateway-gemini-claude-code` فقط، بانتظار سجل المالك (اختبار وحدة: Claude لا يتغيّر طلبه أبدًا؛
+واختبار حقيقي: Antigravity يرفض `thinkingConfig` فيجيب الدور بعد الإعادة).
+
 ## العقد (ما تغيّر في packages/contracts، أو «لا شيء»)
 حدث جديد `run.status` على `/rt/sessions` (إضافة؛ `contracts:compat` OK مقابل v1.1.6) وإضافته إلى `x-rt-events` لـ`sessions.createRun`.
 `Run.error.details` يحمل `reason` بثلاث قيم و`said` (الحقل موجود في غلاف `Error`). وقبل ذلك: لا شيء. `check_error` كان دائمًا جملة يعرضها العميل؛ الآن بلغة الطلب.

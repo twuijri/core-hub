@@ -145,6 +145,22 @@ createServer((request, response) => {
       );
       return;
     }
+    response.setHeader('x-fake-thinking', body.thinking ? 'yes' : 'no');
+    if (/thinks$/.test(body.model) && body.thinking) {
+      // A model refused only when asked to think as the agent asks (as CLIProxyAPI answers it:
+      // the message alone on the Anthropic route).
+      response.writeHead(429, { 'content-type': 'application/json' });
+      response.end(
+        JSON.stringify({
+          type: 'error',
+          error: {
+            type: 'rate_limit_error',
+            message: 'Resource has been exhausted (e.g. check quota).',
+          },
+        }),
+      );
+      return;
+    }
     if (body.model.endsWith('busy')) {
       // As CLIProxyAPI answers an Antigravity "no capacity" refusal: the message alone on the
       // Anthropic route, the provider's whole answer on the Chat route.

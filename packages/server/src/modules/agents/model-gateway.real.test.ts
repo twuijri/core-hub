@@ -82,6 +82,8 @@ const ANTIGRAVITY_ID = '01KGATEWAYANTIGRAVITYROW01';
 const ANTIGRAVITY_MODEL = 'gemini-3-flash';
 /** What the stand-in was asked, by method. */
 const antigravityCalls: string[] = [];
+/** While true, the stand-in refuses a generation that asks to think, as Google may. */
+let refuseThinking = false;
 
 async function fakeAntigravity(): Promise<{ server: Server; url: string }> {
   const server = createServer((request, response) => {
@@ -91,6 +93,24 @@ async function fakeAntigravity(): Promise<{ server: Server; url: string }> {
       const method = /v1internal:(\w+)/.exec(request.url ?? '')?.[1] ?? request.url ?? '';
       antigravityCalls.push(method);
       if (method === 'countTokens') {
+        response.writeHead(429, { 'content-type': 'application/json' });
+        response.end(
+          JSON.stringify({
+            error: {
+              code: 429,
+              message: 'Resource has been exhausted (e.g. check quota).',
+              status: 'RESOURCE_EXHAUSTED',
+            },
+          }),
+        );
+        return;
+      }
+      if (
+        refuseThinking &&
+        (method === 'streamGenerateContent' || method === 'generateContent') &&
+        raw.includes('"thinkingConfig"')
+      ) {
+        antigravityCalls.push('refused-thinking');
         response.writeHead(429, { 'content-type': 'application/json' });
         response.end(
           JSON.stringify({
@@ -986,6 +1006,36 @@ describe.skipIf(!enabled)('the model gateway, for real (COREHUB_REAL_GATEWAY=1)'
       expect(
         antigravityCalls.filter((call) => /generateContent/i.test(call)).length,
       ).toBeGreaterThan(0);
+    },
+    5 * 60_000,
+  );
+
+  it(
+    'Claude Code still answers on Antigravity when Google refuses its thinking settings',
+    async () => {
+      antigravityCalls.length = 0;
+      refuseThinking = true;
+      try {
+        await withRunner(
+          'claude-code',
+          async (turn) => {
+            const events = await turn('run-antigravity-thinking', 'Say pong.');
+            expect(events.at(-1)).toMatchObject({ type: 'completed' });
+            expect(saidIn(events)).toContain('pong from Antigravity');
+          },
+          {
+            selection: () => ({
+              model: ANTIGRAVITY_MODEL,
+              provider: null,
+              providerId: ANTIGRAVITY_ID,
+            }),
+          },
+        );
+      } finally {
+        refuseThinking = false;
+      }
+      console.log('ANTIGRAVITY CALLS', JSON.stringify(antigravityCalls));
+      expect(antigravityCalls).toContain('refused-thinking');
     },
     5 * 60_000,
   );

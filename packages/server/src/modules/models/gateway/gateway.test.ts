@@ -28,6 +28,7 @@ import {
   isLoopback,
   classifyLimit,
   estimateTokens,
+  withoutThinking,
   scrubInternalNames,
   type GatewaySource,
 } from './gateway.js';
@@ -60,6 +61,8 @@ function upstream(overrides: Partial<GatewayUpstream> = {}): GatewayUpstream {
       { id: 'flash-per-minute', contextWindow: null },
       { id: 'flash-per-day', contextWindow: null },
       { id: 'flash-busy', contextWindow: null },
+      { id: 'gemini-thinks', contextWindow: null },
+      { id: 'claude-thinks', contextWindow: null },
     ],
     ...overrides,
   };
@@ -598,6 +601,58 @@ describe('the gateway', () => {
       expect(moves[0]!.failed.said).toContain('No capacity available for model');
       expect(moves[0]!.failed.said).toContain('MODEL_CAPACITY_EXHAUSTED');
       expect(moves[0]!.failed.said).not.toMatch(/h01k/i);
+    });
+
+    it('asks a Gemini model again without the agent’s thinking settings when it answers a plain request; never a Claude model', async () => {
+      const h = harness();
+      const grant = await grantOf(h);
+      const fellBack: unknown[] = [];
+      grant.setTurn({
+        runId: 'run-thinks',
+        providerId: PROVIDER,
+        model: 'gemini-thinks',
+        report: () => {},
+        fallbacks: [{ providerId: PROVIDER, model: 'coder' }],
+        fellBack: (move) => fellBack.push(move),
+      });
+      const thinking = {
+        model: 'corehub-main',
+        thinking: { type: 'adaptive' },
+        output_config: { effort: 'high' },
+      };
+      const first = await post(`${grant.anthropicBaseUrl}/v1/messages`, grant.token, thinking);
+      expect(first.status).toBe(200);
+      // The turn's own model answered, asked without the thinking settings; no fallback.
+      expect(first.headers.get('x-fake-model')).toBe(`${upstreamPrefix(PROVIDER)}/gemini-thinks`);
+      expect(first.headers.get('x-fake-thinking')).toBe('no');
+      expect(fellBack).toEqual([]);
+      // The next call of the session goes the same way at once.
+      const next = await post(`${grant.anthropicBaseUrl}/v1/messages`, grant.token, thinking);
+      expect(next.status).toBe(200);
+      expect(next.headers.get('x-fake-thinking')).toBe('no');
+      // A Claude model is never asked differently, refused or not («ما ابي نخرب كلود علشان جيميناي»):
+      // its request reaches the provider as Claude Code sent it, and the chain takes over.
+      const claude = await grantOf(h);
+      const claudeMoves: unknown[] = [];
+      claude.setTurn({
+        runId: 'run-claude',
+        providerId: PROVIDER,
+        model: 'claude-thinks',
+        report: () => {},
+        fallbacks: [{ providerId: PROVIDER, model: 'coder' }],
+        fellBack: (move) => claudeMoves.push(move),
+      });
+      const asked = await post(`${claude.anthropicBaseUrl}/v1/messages`, claude.token, thinking);
+      expect(asked.headers.get('x-fake-model')).toBe(`${upstreamPrefix(PROVIDER)}/coder`);
+      expect(asked.headers.get('x-fake-thinking')).toBe('yes');
+      expect(claudeMoves).toHaveLength(1);
+      expect(
+        withoutThinking({
+          model: 'm',
+          thinking: {},
+          generationConfig: { thinkingConfig: {}, topP: 1 },
+        }),
+      ).toEqual({ model: 'm', generationConfig: { topP: 1 } });
     });
 
     it('counts tokens itself: Claude Code’s many count_tokens calls never reach the provider', async () => {

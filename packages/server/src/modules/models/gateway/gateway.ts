@@ -154,6 +154,8 @@ export class ModelGateway {
   private upstreamCache: { at: number; value: GatewayUpstream[] } | null = null;
 
   private readonly limitWait: { defaultMs: number; maxMs: number };
+  /** Models a session asks without the agent's thinking settings, once those were refused. */
+  private readonly lightened = new WeakMap<GatewayGrantRecord, Set<string>>();
   /** What CLIProxyAPI's Chat route said of a refused model, per grant, turn and model. */
   private readonly probed = new WeakMap<
     GatewayGrantRecord,
@@ -765,7 +767,10 @@ export class ModelGateway {
     // A call belongs to the turn it started in, even if it ends after the turn.
     const turn = grant.turn;
     const runId = turn?.runId ?? grant.lastRunId;
-    const call = route.call(target);
+    const built = route.call(target);
+    // A model this session already had to ask without the agent's thinking settings (below).
+    const light = this.lightened.get(grant)?.has(exhaustedKey(target)) === true;
+    const call = light ? { ...built, body: withoutThinking(built.body) } : built;
     const payload = Buffer.from(JSON.stringify(call.body));
     const upstream = httpRequest({
       host: '127.0.0.1',
@@ -836,8 +841,19 @@ export class ModelGateway {
                 this.probed.set(grant, seen);
               }
               if (!known && probed?.ok && !grant.waited.has(key)) {
-                // It answers now: the limit has passed; ask again at once.
+                // It answers a plain request now: ask again at once — and, when the refused call
+                // carried the agent's thinking settings, without them (that is then the likelier
+                // reason than a limit that passed in the same second).
                 grant.waited.add(key);
+                if (!light && googleModel(target.model) && thinkingOf(built.body)) {
+                  const lightened = this.lightened.get(grant) ?? new Set<string>();
+                  lightened.add(key);
+                  this.lightened.set(grant, lightened);
+                  this.options.log.warn(
+                    { agent: grant.agentSlug, providerId: target.providerId, model: target.model },
+                    'gateway: the model answers a plain request; asking again without the agent’s thinking settings',
+                  );
+                }
                 if (response.destroyed || response.writableEnded) return;
                 await this.forward(request, response, route, grant, target, upstreams);
                 return;
@@ -884,6 +900,20 @@ export class ModelGateway {
               this.tellWaiting(grant, target, verdict.ms, verdict.reason);
               await new Promise((resolve) => setTimeout(resolve, verdict.ms));
               if (response.destroyed || response.writableEnded) return;
+              // Asked again without the agent's own thinking settings (Claude Code's `thinking`
+              // and `effort`, which CLIProxyAPI sends Google as `thinkingLevel: high`): Hermes,
+              // which sends none, is answered on the same account and model while Claude Code
+              // is refused (owner, 2026-10-01). If that is what Google refuses, this answers,
+              // the rest of the session asks the same way, and the log says so.
+              if (!light && googleModel(target.model) && thinkingOf(built.body)) {
+                const lightened = this.lightened.get(grant) ?? new Set<string>();
+                lightened.add(key);
+                this.lightened.set(grant, lightened);
+                this.options.log.warn(
+                  { agent: grant.agentSlug, providerId: target.providerId, model: target.model },
+                  'gateway: asking the refused model again without the agent’s thinking settings',
+                );
+              }
               await this.forward(request, response, route, grant, target, upstreams);
               return;
             }
@@ -1505,4 +1535,42 @@ export function estimateTokens(body: Record<string, unknown>): number {
     JSON.stringify([body.system ?? null, body.messages ?? [], body.tools ?? []]),
   );
   return Math.max(1, Math.ceil(bytes / 4));
+}
+
+/** Whether a request carries the agent's own thinking settings, in any of the wires. */
+function thinkingOf(body: Record<string, unknown>): boolean {
+  const config = body.generationConfig as Record<string, unknown> | undefined;
+  return (
+    body.thinking !== undefined ||
+    body.output_config !== undefined ||
+    body.reasoning !== undefined ||
+    body.reasoning_effort !== undefined ||
+    (config !== undefined && config.thinkingConfig !== undefined)
+  );
+}
+
+/** A request without the agent's own thinking settings; the provider's defaults apply. */
+export function withoutThinking(body: Record<string, unknown>): Record<string, unknown> {
+  const out: Record<string, unknown> = { ...body };
+  delete out.thinking;
+  delete out.output_config;
+  delete out.reasoning;
+  delete out.reasoning_effort;
+  const config = out.generationConfig as Record<string, unknown> | undefined;
+  if (config && config.thinkingConfig !== undefined) {
+    const rest = { ...config };
+    delete rest.thinkingConfig;
+    out.generationConfig = rest;
+  }
+  return out;
+}
+
+/**
+ * A Google model (Gemini, Gemma), whoever serves it — Google's own API, Antigravity, Vertex or a
+ * proxy. The thinking retry is for these only: a Claude model, Claude Code's own, through
+ * Antigravity too, is always asked exactly as Claude Code asks (owner, 2026-10-01: «ما ابي نخرب
+ * كلود علشان جيميناي»).
+ */
+function googleModel(model: string): boolean {
+  return /^(?:models\/)?(?:gemini|gemma)\b/i.test(model.replace(/^.*\//, ''));
 }

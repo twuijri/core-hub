@@ -5371,3 +5371,12 @@ Status: the owner's requests, 2026-10-01 — «اذا المستخدم سحب ا
   the «Reply» accessibility action, a disabled row, the rules, and a long press on the agent's
   reply opening the menu whose Reply answers it. iOS `SwipeToReplyTests` (XCTest): the same rules
   and the action's name in both languages; SwiftUI's gesture itself is checked on a device.
+- **Changing Claude Code's request (the owner, 2026-10-01: «ما ابي نخرب كلود علشان جيميناي»).** Any
+  adjustment of what an agent asks — thinking level, tools, `max_tokens` — is scoped to exactly the
+  case a log proves fails: keyed on a Google model (Gemini, Gemma; Google's API, Antigravity, Vertex
+  or a proxy) and on that cause; the smallest change that works (a lower thinking level Google
+  accepts before "off"); a no-op for every Claude model, Claude models through Antigravity included,
+  whose request reaches the provider byte for byte as Claude Code sent it; tests prove both. A
+  candidate — asking a refused Gemini model once more without the agent's thinking settings, for the
+  rest of the session, when the same model answers a plain request — is on
+  `fix/gateway-gemini-claude-code`, waiting for the owner's log to show the refusal is about thinking.
