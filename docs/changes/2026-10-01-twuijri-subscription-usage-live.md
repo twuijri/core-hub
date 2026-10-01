@@ -72,6 +72,20 @@ RunStatus,RunFailureNotice}.ts(x)` و`realtime/envelope.ts` واختبارات `
   الأخرى والتطبيقات القديمة كما كانت. نُفّذ على الويب وiOS وAndroid.
 
 
+#### التجربة الحية الثانية (preview.41): لماذا يفشل Claude Code وحده على Gemini، والحساب الذي يبرّد نفسه
+بثنائي CLIProxyAPI 8.0.4 الحقيقي، وملف حساب Antigravity يشير إلى بديل لخادم Google، وClaude Code الحقيقي:
+- **السبب الأول — عدّ الرموز**: Claude Code يسأل `count_tokens` نحو 15 مرة عند بدء الدور (عددتها عند البوابة)، وCLIProxyAPI يحوّل
+  كلًّا منها إلى `countTokens` عند Antigravity، فيرفضها حدّ Google بـRESOURCE_EXHAUSTED، والرفض كان يُسقط نموذج الدور كله — لهذا
+  نجح هرمز وGemini CLI على الحساب والنموذج نفسيهما وفشل Claude Code. **الإصلاح**: البوابة تجيب `/v1/messages/count_tokens` بنفسها
+  بتقدير (نحو 4 بايت للرمز من النظام والرسائل والأدوات)، ولا يصل أيّها إلى مزوّد. اختبار حقيقي جديد يفشل على الكود القديم بالضبط
+  كما رآه المالك ويمر بعده.
+- **السبب الثاني — التبريد**: تسجيل الدخول (§143) كان يضبط حقل الحساب `disable_cooling: false`، وهو يغلب `disable-cooling: true`
+  في الإعداد، فبعد 429 واحد يرفض CLIProxyAPI كل طلب لاحق محليًا («All credentials … are cooling down»). أثبتّه بالثنائي الحقيقي
+  (الحقل false: الطلبان التاليان لا يصلان Google؛ true: يصلان). **الإصلاح**: `true` عند التسجيل، وللحسابات الموجودة مرة في كل تشغيل.
+- **النص الخام**: سطر البديل وإشعار الفشل يقولان جملة المركز وحدها؛ كلام المزوّد (ورسالة داخل JSON مستخرجة منه) في
+  `Run.error.details.said` وسجل المركز.
+- فحصت ولم أجد سببًا: طلب الرسالة نفسه (`max_tokens` 32000 يُسقطه CLIProxyAPI، و`thinkingLevel: high`) يصل ويُجاب عند البديل.
+
 ## العقد (ما تغيّر في packages/contracts، أو «لا شيء»)
 حدث جديد `run.status` على `/rt/sessions` (إضافة؛ `contracts:compat` OK مقابل v1.1.6) وإضافته إلى `x-rt-events` لـ`sessions.createRun`.
 `Run.error.details` يحمل `reason` بثلاث قيم و`said` (الحقل موجود في غلاف `Error`). وقبل ذلك: لا شيء. `check_error` كان دائمًا جملة يعرضها العميل؛ الآن بلغة الطلب.

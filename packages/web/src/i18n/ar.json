@@ -348,7 +348,6 @@
     "quota_pick_model": "اختر نموذجًا آخر",
     "no_capacity": "لا تتوفر لدى «{provider}» سعة لـ«{model}» الآن. أعد المحاولة بعد قليل، أو اختر نموذجًا آخر لهذه المحادثة.",
     "rate_limited": "«{provider}» يحدّ الطلبات على «{model}» الآن. أعد المحاولة بعد دقيقة، أو اختر نموذجًا آخر لهذه المحادثة.",
-    "quota_said": "قال «{provider}»: {said}",
     "model_status": {
       "trying": "يجرّب {model}…",
       "waiting_capacity": "لا سعة الآن لدى {model} — يعيد السؤال بعد {seconds} ث",

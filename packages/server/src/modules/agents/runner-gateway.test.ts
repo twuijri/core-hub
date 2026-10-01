@@ -310,8 +310,7 @@ describe('agent runner: the model gateway (ADR 0029)', () => {
     expect(events.find((event) => event.type === 'model_fallback')).toMatchObject({
       failed: [
         {
-          error:
-            'Google Antigravity has no capacity for gemini-3.8-flash-high right now — No capacity available for model gemini-3.8-flash-high on the server',
+          error: 'Google Antigravity has no capacity for gemini-3.8-flash-high right now',
         },
       ],
     });
@@ -356,13 +355,13 @@ describe('agent runner: the model gateway (ADR 0029)', () => {
           model: 'coder',
           provider: 'example',
           code: 'rate_limited',
-          error: 'CLI Proxy ran out of quota for Coder — quota',
+          error: 'CLI Proxy ran out of quota for Coder',
         },
         {
           model: 'spare',
           provider: 'backup',
           code: 'rate_limited',
-          error: 'Backup has no capacity for Spare right now — No capacity available',
+          error: 'Backup has no capacity for Spare right now',
         },
       ],
       answered: { model: 'last', provider: 'backup' },

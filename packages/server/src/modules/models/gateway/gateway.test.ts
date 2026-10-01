@@ -27,6 +27,7 @@ import {
   ModelGateway,
   isLoopback,
   classifyLimit,
+  estimateTokens,
   scrubInternalNames,
   type GatewaySource,
 } from './gateway.js';
@@ -452,6 +453,8 @@ describe('the gateway', () => {
         /^The provider is limiting requests to Label flash-spent right now/,
       );
       expect(said.error.message).toContain('Resource has been exhausted');
+      // The provider's words, never a vendor's raw JSON inside them.
+      expect(said.error.message).not.toContain('{"error"');
       // Never the hub's internal name for the provider row.
       expect(said.error.message).not.toMatch(/h01k/i);
       expect(exhausted).toEqual([
@@ -595,6 +598,35 @@ describe('the gateway', () => {
       expect(moves[0]!.failed.said).toContain('No capacity available for model');
       expect(moves[0]!.failed.said).toContain('MODEL_CAPACITY_EXHAUSTED');
       expect(moves[0]!.failed.said).not.toMatch(/h01k/i);
+    });
+
+    it('counts tokens itself: Claude Code’s many count_tokens calls never reach the provider', async () => {
+      const h = harness();
+      const grant = await grantOf(h);
+      grant.setTurn({
+        runId: 'run-count',
+        providerId: PROVIDER,
+        model: 'flash-busy',
+        report: () => {},
+      });
+      const body = {
+        model: 'corehub-main',
+        system: 'You are Claude Code.',
+        messages: [{ role: 'user', content: 'هلا '.repeat(100) }],
+        tools: [{ name: 'Write', input_schema: { type: 'object' } }],
+      };
+      for (let i = 0; i < 15; i += 1) {
+        const counted = await post(
+          `${grant.anthropicBaseUrl}/v1/messages/count_tokens`,
+          grant.token,
+          body,
+        );
+        expect(counted.status).toBe(200);
+        const { input_tokens } = (await counted.json()) as { input_tokens: number };
+        expect(input_tokens).toBe(estimateTokens(body));
+        expect(input_tokens).toBeGreaterThan(100);
+      }
+      expect((await calls(h))[`${upstreamPrefix(PROVIDER)}/flash-busy`]).toBeUndefined();
     });
 
     it('takes the hub’s internal names out of any other error it passes on', () => {

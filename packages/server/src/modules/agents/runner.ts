@@ -223,16 +223,21 @@ export class AgentRunner implements AgentRunnerPort {
             service.providerSlugOf(workspace, { providerId, model, provider: null });
           // Every model the turn went past, in order: the chosen one first (a second move
           // reported alone read as if the turn had started on the chain's first model). Its
-          // "why" is the hub's sentence and the provider's own words after it.
+          // "why" is the hub's sentence alone — never a vendor's raw answer (owner, 2026-10-01);
+          // the provider's words are in the hub's log, and in `Run.error.details` if the run fails.
           run.fallenBack = [
             ...(run.fallenBack ?? []),
             {
               model: move.failed.model,
               provider: slug(move.failed.providerId, move.failed.model),
               code: 'rate_limited',
-              error: `${limitWords(move.failed)} — ${move.failed.said}`,
+              error: limitWords(move.failed),
             },
           ];
+          this.deps.log.info(
+            { runId: run.runId, model: move.failed.model, said: move.failed.said },
+            'agents: the gateway moved the turn on; the provider said',
+          );
           this.push(run, {
             type: 'model_fallback',
             failed: run.fallenBack.map((attempt) => ({ ...attempt })),

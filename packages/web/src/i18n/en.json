@@ -348,7 +348,6 @@
     "quota_pick_model": "Choose another model",
     "no_capacity": "{provider} has no capacity for {model} right now. Try again in a moment, or pick another model for this chat.",
     "rate_limited": "{provider} is limiting requests to {model} right now. Try again in a minute, or pick another model for this chat.",
-    "quota_said": "{provider} said: {said}",
     "model_status": {
       "trying": "Trying {model}…",
       "waiting_capacity": "{model} has no capacity right now — asking again in {seconds}s",

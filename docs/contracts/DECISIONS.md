@@ -5326,3 +5326,18 @@ should not"). Each push also costs a request on the push relay.
   two screens), web `tests/viewing.test.tsx` (visible and focused says it and repeats it; blur,
   hidden, another conversation, unmount say `null`; a reconnect says it again). iOS and Android
   send it from their chat screens (Android compiled locally; iOS built by CI).
+- **Second live test (preview.41).** Three more causes, found with the real CLIProxyAPI, a
+  Google Antigravity account file pointed at a stand-in for Google, and the real Claude Code:
+  - **Claude Code's token counts**: Claude Code asks `count_tokens` about fifteen times as a turn
+    starts (counted at the gateway); CLIProxyAPI turns each into Antigravity's `countTokens`, Google
+    refuses them with RESOURCE_EXHAUSTED, and the refusal cost the turn its model — which is why
+    Claude Code failed where Hermes and Gemini CLI on the same account and model answered. The
+    gateway now answers `/v1/messages/count_tokens` itself with an estimate (about four bytes of
+    system, messages and tools a token); none reaches a provider.
+  - **The account cooled itself down**: the sign-in set the account's own `disable_cooling: false`
+    (§143), which outranks the config's `disable-cooling: true`, so after one 429 CLIProxyAPI
+    refused every later call without asking Google ("All credentials … are cooling down"). Accounts
+    are now set `disable_cooling: true` at sign-in, and existing ones once per process.
+  - **No vendor's raw answer in the chat**: the fallback line's "why" and the failure notice say
+    only the hub's sentence; the provider's words (a message inside another answer read out of its
+    JSON) stay in `Run.error.details.said` and the hub's log.

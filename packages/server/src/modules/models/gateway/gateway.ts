@@ -497,6 +497,16 @@ export class ModelGateway {
       );
       return;
     }
+    if (url.pathname === '/gateway/anthropic/v1/messages/count_tokens') {
+      // Answered here, never upstream (owner, 2026-10-01): Claude Code asks this some fifteen
+      // times at the start of a turn, and CLIProxyAPI turns each into a call to the provider's
+      // own counter — Google Antigravity's `countTokens`, whose limit refuses them with
+      // RESOURCE_EXHAUSTED, which then cost the turn its model. Claude Code reads the count
+      // only to show and manage its context; an estimate serves that.
+      response.writeHead(200, { 'content-type': 'application/json' });
+      response.end(JSON.stringify({ input_tokens: estimateTokens(body) }));
+      return;
+    }
     const resolved = this.resolveModel(
       grant,
       typeof body.model === 'string' ? body.model : '',
@@ -1402,6 +1412,12 @@ function providerWords(text: string, target: GatewayTarget): string {
   } catch {
     // Not JSON: its text as it came.
   }
+  // A message that carries another answer inside it (CLIProxyAPI's "… cooling down (last error:
+  // {"error": {…}})"): that answer's own message, not its JSON.
+  said = said.replace(/\{[\s\S]*\}/g, (blob) => {
+    const inner = /"message"\s*:\s*"((?:[^"\\]|\\.)*)"/.exec(blob)?.[1];
+    return inner ? inner.replace(/\\"/g, '"') : '';
+  });
   said = redactSecrets(scrubInternalNames(said, target)).replace(/\s+/g, ' ').trim();
   return said.length > 400 ? `${said.slice(0, 399)}…` : said || 'the provider gave no reason';
 }
@@ -1460,4 +1476,16 @@ function answerQuota(response: ServerResponse, wire: Wire, failure: GatewayQuota
           };
   response.writeHead(429, { 'content-type': 'application/json', 'x-should-retry': 'false' });
   response.end(JSON.stringify(body));
+}
+
+/**
+ * A request's input, in tokens, as an estimate: about four bytes of its system prompt, messages
+ * and tools a token (the rule of thumb for English and code; Arabic counts higher, which errs
+ * towards a fuller window rather than an emptier one).
+ */
+export function estimateTokens(body: Record<string, unknown>): number {
+  const bytes = Buffer.byteLength(
+    JSON.stringify([body.system ?? null, body.messages ?? [], body.tools ?? []]),
+  );
+  return Math.max(1, Math.ceil(bytes / 4));
 }

@@ -69,9 +69,9 @@ describe('a spent quota', () => {
       }),
     );
     expect(screen.getByTestId('run-failed-reason').textContent).not.toMatch(/quota/);
-    expect(screen.getByTestId('run-failed-detail').textContent).toContain(
-      'MODEL_CAPACITY_EXHAUSTED',
-    );
+    // The provider's words are kept in the details, not shown.
+    expect(screen.queryByTestId('run-failed-detail')).toBeNull();
+    expect(screen.getByTestId('run-failed-quota').textContent).not.toContain('MODEL_CAPACITY');
     expect(
       quotaOf({ ...FAILURE, details: { ...FAILURE.details, reason: 'rate_limited' } }),
     ).toMatchObject({

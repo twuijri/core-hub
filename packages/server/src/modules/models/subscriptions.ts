@@ -391,14 +391,22 @@ export class Subscriptions {
     await client.setFields(account.name, {
       prefix: upstreamPrefix(providerId),
       note: accountMarker(providerId),
-      disable_cooling: false,
+      // The hub's gateway decides what a refusal means and when to ask again (§142, §148): an
+      // account that cools itself down after one 429 refuses every later call locally, the
+      // gateway's own retry included ("All credentials … are cooling down", owner 2026-10-01),
+      // and this per-account field outranks the config's `disable-cooling`.
+      disable_cooling: true,
     });
+    this.uncooled.add(account.name);
     // The list the cards read, with the mark on it.
     this.remember(await client.credentials());
     return account.name;
   }
 
   // ------------------------------------------------------------------ accounts
+
+  /** Accounts whose cooling this process has turned off (`disable_cooling`). */
+  private readonly uncooled = new Set<string>();
 
   private remember(credentials: ManagementCredential[]): void {
     this.snapshot = { at: this.now(), credentials };
@@ -427,7 +435,18 @@ export class Subscriptions {
     if (reason) return { ok: false, reason };
     try {
       await this.withClient(async (client) => {
-        this.remember(await client.credentials());
+        const credentials = await client.credentials();
+        // Accounts signed in before the hub turned their cooling off (§148): once a process.
+        for (const entry of credentials) {
+          if (!entry.note?.startsWith('corehub:') || this.uncooled.has(entry.name)) continue;
+          try {
+            await client.setFields(entry.name, { disable_cooling: true });
+          } catch {
+            // Best effort: the account still works, it only cools itself down after a 429.
+          }
+          this.uncooled.add(entry.name);
+        }
+        this.remember(credentials);
         const failed = await client.drainErrors().catch(() => []);
         this.errors.push(...failed);
         if (this.errors.length > MAX_ERRORS) this.errors.splice(0, this.errors.length - MAX_ERRORS);

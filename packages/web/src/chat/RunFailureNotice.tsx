@@ -206,11 +206,8 @@ export function RunFailureNotice({
         <p data-testid="run-failed-reason" dir="auto">
           {t(`chat.${quota.reason}`, { provider: quota.provider, model: quota.model })}
         </p>
-        {quota.said && (
-          <p className="text-xs opacity-80" data-testid="run-failed-detail" dir="auto">
-            {t('chat.quota_said', { provider: quota.provider, said: quota.said })}
-          </p>
-        )}
+        {/* Only the hub's sentence: the provider's own words stay in `Run.error.details.said`
+            (owner, 2026-10-01: no vendor's raw answer in the chat). */}
         {onPickModel && (
           <p>
             <Button
