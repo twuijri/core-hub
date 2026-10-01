@@ -5264,9 +5264,16 @@ Status: fixes from the owner's first real sign-in, 2026-10-01 (v1.1.6, preview.3
 
 ## 148. A provider's refusal said for what it is: no capacity and a passing limit are not a spent quota; the chat hears what the gateway is doing
 
-The owner's Google Antigravity sign-in, 2026-10-01: Claude Code on a working account was told
-"ran out of quota" for two models and answered by `openrouter/free` after 88 s of "Thinking", while
-Hermes on the same account answered. Proposed here — owner to confirm:
+The owner's Google Antigravity sign-in, 2026-10-01: Claude Code, on an account that Hermes used
+fine, was told "ran out of quota" for two models and answered by `openrouter/free` after 88 s of
+"Thinking", while Hermes on the same account answered. Proposed here — owner to confirm:
+
+**Live fact (owner, 2026-10-02).** Claude Code has never received an answer from any Google model in
+any live test, on any route or preview. Every live Google-model answer was from Hermes, Gemini CLI or
+the other Chat/Responses agents; Claude Code's live answers were only on ChatGPT (gpt-6-sol), through
+the owner's own proxy and through the ChatGPT subscription. Wherever a test below says Claude Code
+"answers" on a Google model, the answer came from a stand-in for Google, not from Google; each fix
+here removed one refusal the stand-in reproduces, and none is yet proven live.
 
 - **Google's reason is read, not guessed.** Google says `RESOURCE_EXHAUSTED` for a spent quota, for no
   capacity and for a per-minute limit alike, and CLIProxyAPI 8.0.4 keeps only the message when it
@@ -5304,8 +5311,9 @@ Hermes on the same account answered. Proposed here — owner to confirm:
   Google Antigravity account file pointed at a stand-in for Google, and the real Claude Code:
   - **Claude Code's token counts**: Claude Code asks `count_tokens` about fifteen times as a turn
     starts (counted at the gateway); CLIProxyAPI turns each into Antigravity's `countTokens`, Google
-    refuses them with RESOURCE_EXHAUSTED, and the refusal cost the turn its model — which is why
-    Claude Code failed where Hermes and Gemini CLI on the same account and model answered. The
+    refuses them with RESOURCE_EXHAUSTED, and the refusal cost the turn its model — one reason
+    Claude Code failed where Hermes and Gemini CLI on the same account and model answered, and not
+    the only one: live, Claude Code was still refused after this fix (preview.42 to .45). The
     gateway now answers `/v1/messages/count_tokens` itself with an estimate (about four bytes of
     system, messages and tools a token); none reaches a provider.
   - **The account cooled itself down**: the sign-in set the account's own `disable_cooling: false`
