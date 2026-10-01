@@ -5401,8 +5401,11 @@ Status: the owner's decision, 2026-10-01. It supersedes where §33 (Agents at th
   the bottom of the sidebar, directly above the footer box (the connection, the person, the
   gear and sign-out, then language, theme and version). It is outside the scrolling list, so it
   stays in view however far the menu above it scrolls, and Tab reaches it just before the
-  footer. Same look, icon and link as before; the arrow keeps pointing toward the reading start,
-  so it is right in Arabic. The phone drawer is the same sidebar and follows. The phone apps' own
+  footer. The same arrow, label and link; the arrow keeps pointing toward the reading start, so
+  it is right in Arabic. After preview.44 (the owner: it read as one more menu item) the pinned
+  zone has a thin divider above it and its row is drawn as a bordered button — the 1px border and
+  radius of the secondary buttons and dropdown triggers, spanning the sidebar with the usual
+  inset — with no second divider between it and the footer, so it reads as the footer's. The phone drawer is the same sidebar and follows. The phone apps' own
   layout is unchanged.
 - **Proven.** Web `tests/agents-top-level.test.tsx` (the row comes after the agent's list and the
   footer straight after it); Playwright `zzz-agents-top-level.spec.ts` (above the footer, below

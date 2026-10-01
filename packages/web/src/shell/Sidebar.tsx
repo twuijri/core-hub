@@ -381,7 +381,7 @@ export function Sidebar({
       {agentPage !== null ? (
         <AgentBackRow onNavigate={onNavigate} />
       ) : settingsId !== null ? (
-        <SidebarGroup testId="settings-back">
+        <SidebarGroup testId="settings-back" pinned>
           <SidebarRow
             icon={<IconArrowStart size={18} />}
             label={t('shell.back_to_chats')}

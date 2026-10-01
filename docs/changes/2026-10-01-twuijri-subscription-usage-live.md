@@ -135,6 +135,11 @@ RunStatus,RunFailureNotice}.ts(x)` و`realtime/envelope.ts` واختبارات `
   و`e2e/smoke.spec.ts` (نافذة قصيرة والقائمة متمرّرة: الصف ظاهر فوق التذييل)، ولقطات `e2e/shots` محدّثة.
 - الفحوص: `vitest run tests/agents-top-level.test.tsx …` → 22 ناجحة؛ Playwright `smoke` و`zzz-agents-top-level` و`zz-design`
   بعامل واحد → 26 ناجحة.
+- بعد ملاحظة المالك على preview.44 (الصف بدا عنصرًا آخر من القائمة): المنطقة المثبّتة لها فاصل رفيع فوقها (border-top) بينها
+  وبين القائمة المتمرّرة، والصف مرسوم زرًّا بحدّ 1px وحواف الأزرار الثانوية («اختبر»/«تعديل») ومشغّلات القوائم، بعرض الشريط
+  مع الحافة المعتادة؛ وبلا فاصل ثانٍ بينه وبين التذييل فيُقرأ جزءًا منه. السهم والنص وحالات المرور والتركيز كما هي، والاتجاه
+  صحيح في العربية؛ في الإعدادات وفي صفحات الوكيل (`SidebarGroup pinned`، `styles/kit.css`). Playwright الثلاثة → 26 ناجحة،
+  واللقطات محدّثة.
 
 ## العقد (ما تغيّر في packages/contracts، أو «لا شيء»)
 حدث جديد `run.status` على `/rt/sessions` (إضافة؛ `contracts:compat` OK مقابل v1.1.6) وإضافته إلى `x-rt-events` لـ`sessions.createRun`.

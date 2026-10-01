@@ -34,7 +34,7 @@ import { canRestart, useRestartAgent } from './useRestartAgent.js';
 export function AgentBackRow({ onNavigate }: { onNavigate?: (() => void) | undefined }) {
   const { t } = useI18n();
   return (
-    <SidebarGroup testId="agent-back">
+    <SidebarGroup testId="agent-back" pinned>
       <SidebarRow
         icon={<IconArrowStart size={18} />}
         label={t(`nav.${navigation.agentShell.back}`)}
