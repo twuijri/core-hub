@@ -197,12 +197,14 @@ function Variable({
   const { t } = useI18n();
   return (
     <div className="flex min-w-0 flex-col gap-0.5 rounded-md bg-raised px-2 py-1.5">
-      <span className="flex min-w-0 items-center gap-1.5 text-xs">
-        <code dir="ltr" className="truncate">
+      {/* A long step id or title wraps to its own line and truncates there, inside the card
+          (owner, 2026-10-01: the label ran out of the box). */}
+      <span className="flex min-w-0 flex-wrap items-center gap-x-1.5 text-xs">
+        <code dir="ltr" className="min-w-0 max-w-full truncate">
           {path}
         </code>
         {label && (
-          <span className="truncate text-muted" dir="auto">
+          <span className="min-w-0 max-w-full truncate text-muted" dir="auto">
             {label}
           </span>
         )}
