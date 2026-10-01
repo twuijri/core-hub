@@ -845,6 +845,23 @@ export class ModelGateway {
               if (probed && !probed.ok && probed.text) text = probed.text;
             }
             const verdict = classifyLimit(status, text, answer.headers, this.limitWait);
+            // Every refused hop in the hub's log, as the provider put it (redacted): which path
+            // and model, what it answered, and what the hub made of it — so a person's log says
+            // exactly what Google said (owner, 2026-10-01).
+            this.options.log.warn(
+              {
+                agent: grant.agentSlug,
+                runId: grant.turn?.runId ?? grant.lastRunId,
+                providerId: target.providerId,
+                model: target.model,
+                path: call.path.replace(/\?.*$/, ''),
+                status,
+                verdict: verdict.kind === 'wait' ? `wait:${verdict.reason}` : verdict.kind,
+                readFromChatRoute: text !== raw.toString('utf8'),
+                said: providerWords(text, target),
+              },
+              'gateway: the provider refused a call',
+            );
             if (
               verdict.kind === 'wait' &&
               verdict.ms <= this.limitWait.maxMs &&
