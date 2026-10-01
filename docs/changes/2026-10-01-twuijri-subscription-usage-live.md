@@ -220,6 +220,10 @@ OpenCode الكبيرة بأدوات تمر).
   `scripts/release-assets.mjs` واختبارها، `.github/workflows/{desktop,desktop-signed,publish-release}.yml`،
   `site/src/{index.html,releases.js,i18n.js}` واختباراتها، `docs/RELEASING.md`، `README.md`.
 - الفحوص: `vitest run tests/unit` (apps/desktop) → 218 ناجحة؛ `vitest run` (site) → 41 ناجحة. البناء نفسه يجري على macOS في CI فقط.
+- **فشل وظيفة Intel على af970855 (تعليق وثائقي فقط)**: السبب أن `actions/download-artifact@v4` (إجراء Node 20 يجبره المشغّل على
+  Node 24) أنهى خطوته بعد «Starting download» بلون أخضر ودون أن يفكّ شيئًا من ملف الـmacOS (570 MB) — لا سطر «download
+  completed» في السجل — فلم يجد `ls` ملف x64. الإصلاح: وظيفة الـmacOS ترفع zip الـx64 وحده في ملف صغير (146 MB)، ووظيفة Intel
+  تنزّله بـ`download-artifact@v8`، ثم تتحقق من وصوله وتعيد جلبه بـ`gh run download` حتى ثلاث مرات قبل أن تفشل بسبب واضح.
 
 ## العقد (ما تغيّر في packages/contracts، أو «لا شيء»)
 حدث جديد `run.status` على `/rt/sessions` (إضافة؛ `contracts:compat` OK مقابل v1.1.6) وإضافته إلى `x-rt-events` لـ`sessions.createRun`.
