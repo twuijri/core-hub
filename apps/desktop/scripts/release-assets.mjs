@@ -10,13 +10,14 @@
 //                                         [--without=<key>]
 //       writes the release notes: downloads, the SmartScreen step, and the merged pull requests
 //       GitHub lists for the tag (its "generate release notes" answer), kept short.
-//   node scripts/release-assets.mjs check-feeds <version> <dir> <windows|macos|linux>
+//   node scripts/release-assets.mjs check-feeds <version> <dir> <windows|macos|linux> [--without=macos-x64]
 //       after packaging (desktop.yml, desktop-signed.yml): that platform's update feed is in
 //       <dir>, and every file it names is a release file that is there too.
 //
 // `--without=windows-msix` is for a tag whose code predates the MSIX (v1.1.0): its release has
 // no Store package, and the notes say so. `--without=updates` is for a tag whose code predates
-// the self-updating apps (before 1.1.3): no update feeds, no macOS zip.
+// the self-updating apps (before 1.1.3): no update feeds, no macOS zip. `--without=macos-x64` is
+// for a tag before the Intel Mac app (DECISIONS §152): the Apple Silicon dmg and zip only.
 //
 // The desktop app's update check (src/shared/updates.ts, assetFor) picks the installer for its
 // platform from these names; tests/unit/release-assets.test.ts keeps the two in step. The
@@ -50,15 +51,25 @@ export function msixVersion(version) {
   return `${parts.join('.')}.0`;
 }
 
+/** The keys of the Intel Mac files, left out with `--without=macos-x64` (a tag before them). */
+const MACOS_X64 = new Set([
+  'macos-dmg-x64',
+  'macos-zip-x64',
+  'update-macos-zip-x64-blockmap',
+  'update-macos-dmg-x64-blockmap',
+]);
+
 /**
  * Every file a release carries, by the name it has there. The desktop names are the ones
  * electron-builder.config.cjs gives the installers; the APK is renamed from Gradle's
  * `app-release.apk`.
  * @param {string} version plain X.Y.Z (a release tag's)
+ * @param {{ intelMac?: boolean }} [options] `intelMac: false` for a tag whose code builds the
+ *   Apple Silicon Mac app only (before DECISIONS §152)
  */
-export function releaseAssets(version) {
+export function releaseAssets(version, { intelMac = true } = {}) {
   const core = msixVersion(version).replace(/\.0$/, '');
-  return [
+  return /** @type {ReleaseFile[]} */ ([
     {
       key: 'windows-exe',
       label: 'Windows (installer)',
@@ -73,9 +84,17 @@ export function releaseAssets(version) {
     },
     {
       key: 'macos-dmg',
-      label: 'macOS (Apple silicon, signed and notarised)',
+      label: 'macOS — Apple Silicon (M1–M4), signed and notarised',
       name: `Core-Hub-${version}-arm64.dmg`,
       source: `Core-Hub-${version}-arm64.dmg`,
+    },
+    // Intel Macs, a download of their own (DECISIONS §152): one universal app would be close to
+    // twice the size for everyone.
+    {
+      key: 'macos-dmg-x64',
+      label: 'macOS — Intel, signed and notarised',
+      name: `Core-Hub-${version}-x64.dmg`,
+      source: `Core-Hub-${version}-x64.dmg`,
     },
     {
       key: 'linux-appimage',
@@ -95,7 +114,7 @@ export function releaseAssets(version) {
       name: `Core-Hub-${version}-android.apk`,
       source: 'app-release.apk',
     },
-  ];
+  ]).filter((asset) => intelMac || !MACOS_X64.has(asset.key));
 }
 
 /**
@@ -105,12 +124,15 @@ export function releaseAssets(version) {
  * changed, and are left out without harm when a build made none (the update then downloads the
  * whole file).
  * @param {string} version plain X.Y.Z
- * @returns {Array<ReleaseFile & { optional?: boolean, feed?: { platform: string, installer: string } }>}
+ * @param {{ intelMac?: boolean }} [options] see releaseAssets
+ * @returns {Array<ReleaseFile & { optional?: boolean, feed?: { platform: string, installer: string, installers?: string[] } }>}
  */
-export function updateAssets(version) {
+export function updateAssets(version, { intelMac = true } = {}) {
   const exe = `Core-Hub-Setup-${version}-x64.exe`;
   const zip = `Core-Hub-${version}-arm64-mac.zip`;
   const dmg = `Core-Hub-${version}-arm64.dmg`;
+  const zipX64 = `Core-Hub-${version}-x64-mac.zip`;
+  const dmgX64 = `Core-Hub-${version}-x64.dmg`;
   const appImage = `Core-Hub-${version}-x86_64.AppImage`;
   /** @param {string} key @param {string} name @param {object} [more] */
   const file = (key, name, more = {}) => ({ key, label: name, name, source: name, ...more });
@@ -118,12 +140,19 @@ export function updateAssets(version) {
     file('update-windows', 'latest.yml', { feed: { platform: 'windows', installer: exe } }),
     file('update-windows-blockmap', `${exe}.blockmap`, { optional: true }),
     // Squirrel.Mac installs from a zip of the signed app; the dmg stays the download.
+    // One feed lists both zips; electron-updater gives an Apple Silicon Mac the file whose name
+    // says arm64 and an Intel Mac the other (MacUpdater.filterFilesForArch; DECISIONS §152).
     file('macos-zip', zip),
-    file('update-macos', 'latest-mac.yml', { feed: { platform: 'macos', installer: zip } }),
+    file('macos-zip-x64', zipX64),
+    file('update-macos', 'latest-mac.yml', {
+      feed: { platform: 'macos', installer: zip, installers: intelMac ? [zip, zipX64] : [zip] },
+    }),
     file('update-macos-zip-blockmap', `${zip}.blockmap`, { optional: true }),
     file('update-macos-dmg-blockmap', `${dmg}.blockmap`, { optional: true }),
+    file('update-macos-zip-x64-blockmap', `${zipX64}.blockmap`, { optional: true }),
+    file('update-macos-dmg-x64-blockmap', `${dmgX64}.blockmap`, { optional: true }),
     file('update-linux', 'latest-linux.yml', { feed: { platform: 'linux', installer: appImage } }),
-  ];
+  ].filter((asset) => intelMac || !MACOS_X64.has(asset.key));
 }
 
 /** @typedef {{ key: string, label: string, name: string, source: string }} ReleaseFile */
@@ -160,15 +189,16 @@ export function readFeed(text) {
  *   feeds: Record<string, string | null>,
  *   published: string[],
  *   platforms?: string[],
+ *   intelMac?: boolean,
  * }} options `feeds`: each feed's file name → its text (null when it is not there);
  *   `published`: the file names the release carries; `platforms`: which feeds to check
  *   (default all three).
  * @returns {string[]}
  */
-export function feedProblems({ version, feeds, published, platforms }) {
+export function feedProblems({ version, feeds, published, platforms, intelMac = true }) {
   const problems = [];
   const names = new Set(published);
-  for (const asset of updateAssets(version)) {
+  for (const asset of updateAssets(version, { intelMac })) {
     if (!asset.feed) continue;
     if (platforms && !platforms.includes(asset.feed.platform)) continue;
     const text = feeds[asset.name];
@@ -179,8 +209,8 @@ export function feedProblems({ version, feeds, published, platforms }) {
     const feed = readFeed(text);
     if (feed.version !== version)
       problems.push(`${asset.name} is for version ${feed.version}, not ${version}`);
-    if (!feed.urls.includes(asset.feed.installer))
-      problems.push(`${asset.name} does not list ${asset.feed.installer}`);
+    for (const installer of asset.feed.installers ?? [asset.feed.installer])
+      if (!feed.urls.includes(installer)) problems.push(`${asset.name} does not list ${installer}`);
     for (const name of new Set([feed.path, ...feed.urls]))
       if (name && !names.has(name))
         problems.push(`${asset.name} names ${name}, which the release does not carry`);
@@ -190,23 +220,31 @@ export function feedProblems({ version, feeds, published, platforms }) {
 
 /**
  * Reads the feeds in `dir` and checks them against the files in `dir` (see feedProblems).
- * @param {{ version: string, dir: string, platforms?: string[] }} options
+ * @param {{ version: string, dir: string, platforms?: string[], intelMac?: boolean }} options
  * @returns {string[]}
  */
-export function checkFeedsIn({ version, dir, platforms }) {
+export function checkFeedsIn({ version, dir, platforms, intelMac = true }) {
   const present = readdirSync(dir);
   /** @type {Record<string, string | null>} */
   const feeds = {};
-  for (const asset of updateAssets(version))
+  for (const asset of updateAssets(version, { intelMac }))
     if (asset.feed)
       feeds[asset.name] = present.includes(asset.name)
         ? readFileSync(path.join(dir, asset.name), 'utf8')
         : null;
   const releaseNames = new Set(
-    [...releaseAssets(version), ...updateAssets(version)].map((a) => a.name),
+    [...releaseAssets(version, { intelMac }), ...updateAssets(version, { intelMac })].map(
+      (a) => a.name,
+    ),
   );
   const published = present.filter((name) => releaseNames.has(name));
-  return feedProblems({ version, feeds, published, ...(platforms ? { platforms } : {}) });
+  return feedProblems({
+    version,
+    feeds,
+    published,
+    intelMac,
+    ...(platforms ? { platforms } : {}),
+  });
 }
 
 /** @param {string} dir @returns {string[]} */
@@ -231,8 +269,9 @@ export function collect({ version, from, to, without = [] }) {
   const missing = [];
   const written = [];
   mkdirSync(to, { recursive: true });
-  const updates = without.includes('updates') ? [] : updateAssets(version);
-  for (const asset of [...releaseAssets(version), ...updates]) {
+  const intelMac = !without.includes('macos-x64');
+  const updates = without.includes('updates') ? [] : updateAssets(version, { intelMac });
+  for (const asset of [...releaseAssets(version, { intelMac }), ...updates]) {
     if (without.includes(asset.key)) continue;
     const found = files.filter((f) => path.basename(f) === asset.source);
     if (found.length === 0 && 'optional' in asset && asset.optional) continue;
@@ -246,7 +285,7 @@ export function collect({ version, from, to, without = [] }) {
   }
   if (missing.length > 0) throw new Error(`release: missing ${missing.join(', ')}`);
   if (updates.length > 0) {
-    const problems = checkFeedsIn({ version, dir: to });
+    const problems = checkFeedsIn({ version, dir: to, intelMac });
     if (problems.length > 0) throw new Error(`release: update feeds — ${problems.join('; ')}`);
   }
   return written;
@@ -269,7 +308,7 @@ export function releaseNotes({ tag, generated, repository, without = [] }) {
     if (m) changes.push(`- ${m[1]} (#${m[3]})`);
   }
   const compare = /\*\*Full Changelog\*\*:\s*(\S+)/.exec(generated)?.[1];
-  const rows = releaseAssets(version)
+  const rows = releaseAssets(version, { intelMac: !without.includes('macos-x64') })
     .filter((a) => !without.includes(a.key))
     .map((a) => `| ${a.label} | \`${a.name}\` |`);
   const msix = !without.includes('windows-msix');
@@ -331,7 +370,12 @@ function main(argv) {
   if (command === 'check-feeds' && rest.length === 3) {
     const [version, dir, platform] = /** @type {[string, string, string]} */ (rest);
     const plain = version.replace(/^v/, '');
-    const problems = checkFeedsIn({ version: plain, dir, platforms: [platform] });
+    const problems = checkFeedsIn({
+      version: plain,
+      dir,
+      platforms: [platform],
+      intelMac: !without.includes('macos-x64'),
+    });
     if (problems.length > 0) throw new Error(`update feed (${platform}): ${problems.join('; ')}`);
     console.log(`update feed (${platform}): names only files the release carries`);
     return;

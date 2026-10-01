@@ -12,7 +12,7 @@
 | | Platform | How you get it |
 |---|---|---|
 | 🪟 | **Windows** 10 / 11 (x64) | Installer (`.exe`), updates itself · Microsoft Store (coming) |
-| 🍎 | **macOS** (Apple silicon) | Signed and notarised `.dmg`, updates itself |
+| 🍎 | **macOS** (Apple Silicon and Intel, a download each) | Signed and notarised `.dmg`, updates itself |
 | 🐧 | **Linux** (x64) | AppImage (updates itself) · `.deb` |
 | 🤖 | **Android** 8.0 and later | `.apk`, updates itself · Google Play (coming) |
 | 📱 | **iPhone and iPad** (iOS 17 and later) | TestFlight by invitation · App Store (coming) |

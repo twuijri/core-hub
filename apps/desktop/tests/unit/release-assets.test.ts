@@ -78,6 +78,11 @@ describe('release asset names', () => {
     expect(names['macos-dmg']).toBe(
       expand(config.dmg.artifactName, { version, arch: 'arm64', ext: 'dmg' }),
     );
+    // Intel Macs, a download of their own (DECISIONS §152).
+    expect(names['macos-dmg-x64']).toBe(
+      expand(config.dmg.artifactName, { version, arch: 'x64', ext: 'dmg' }),
+    );
+    expect(names['macos-dmg-x64']).toBe('Core-Hub-1.2.0-x64.dmg');
     expect(names['linux-appimage']).toBe(
       expand(config.appImage.artifactName, { version, arch: 'x86_64', ext: 'AppImage' }),
     );
@@ -103,6 +108,7 @@ describe('release asset names', () => {
   it.each([
     ['win32', 'x64', 'Core-Hub-Setup-1.2.0-x64.exe'],
     ['darwin', 'arm64', 'Core-Hub-1.2.0-arm64.dmg'],
+    ['darwin', 'x64', 'Core-Hub-1.2.0-x64.dmg'],
     ['linux', 'x64', 'Core-Hub-1.2.0-x86_64.AppImage'],
   ] as const)(
     'let the update check of the GitHub build on %s %s find %s',
@@ -145,7 +151,7 @@ describe('collecting the release files', () => {
     put('corehub-android-signed/apk/release/app-release.apk');
     put('corehub-android-signed/bundle/release/app-release.aab');
     const to = path.join(dir, 'out');
-    collect({ version: '1.1.0', from, to, without: ['updates'] });
+    collect({ version: '1.1.0', from, to, without: ['updates', 'macos-x64'] });
     expect(readdirSync(to).sort()).toEqual(
       [
         'Core-Hub-1.1.0-android.apk',
@@ -179,9 +185,18 @@ describe('collecting the release files', () => {
     put(`corehub-desktop-macOS-signed/Core-Hub-${v}-arm64.dmg`);
     put(`corehub-desktop-macOS-signed/Core-Hub-${v}-arm64-mac.zip`);
     put(`corehub-desktop-macOS-signed/Core-Hub-${v}-arm64-mac.zip.blockmap`);
+    put(`corehub-desktop-macOS-signed/Core-Hub-${v}-x64.dmg`);
+    put(`corehub-desktop-macOS-signed/Core-Hub-${v}-x64-mac.zip`);
+    put(`corehub-desktop-macOS-signed/Core-Hub-${v}-x64-mac.zip.blockmap`);
+    // One feed, both Macs (DECISIONS §152).
     put(
       'corehub-desktop-macOS-signed/latest-mac.yml',
-      feedText(v, [`Core-Hub-${v}-arm64-mac.zip`, `Core-Hub-${v}-arm64.dmg`]),
+      feedText(v, [
+        `Core-Hub-${v}-x64-mac.zip`,
+        `Core-Hub-${v}-x64.dmg`,
+        `Core-Hub-${v}-arm64-mac.zip`,
+        `Core-Hub-${v}-arm64.dmg`,
+      ]),
     );
     put('corehub-android-signed/apk/release/app-release.apk');
     const to = path.join(dir, 'out');
@@ -192,6 +207,9 @@ describe('collecting the release files', () => {
         `Core-Hub-${v}-arm64.dmg`,
         `Core-Hub-${v}-arm64-mac.zip`,
         `Core-Hub-${v}-arm64-mac.zip.blockmap`,
+        `Core-Hub-${v}-x64.dmg`,
+        `Core-Hub-${v}-x64-mac.zip`,
+        `Core-Hub-${v}-x64-mac.zip.blockmap`,
         `Core-Hub-${v}-x64.msix`,
         `Core-Hub-${v}-x86_64.AppImage`,
         `Core-Hub-Setup-${v}-x64.exe`,
@@ -222,14 +240,14 @@ describe('collecting the release files', () => {
       'app-release.apk',
     ])
       writeFileSync(path.join(from, name), name);
-    expect(() => collect({ version: '1.1.0', from, to: path.join(dir, 'b') })).toThrow(
-      /missing Core-Hub-1\.1\.0-x64\.msix/,
-    );
+    expect(() =>
+      collect({ version: '1.1.0', from, to: path.join(dir, 'b'), without: ['macos-x64'] }),
+    ).toThrow(/missing Core-Hub-1\.1\.0-x64\.msix/);
     const written = collect({
       version: '1.1.0',
       from,
       to: path.join(dir, 'c'),
-      without: ['windows-msix', 'updates'],
+      without: ['windows-msix', 'updates', 'macos-x64'],
     });
     expect(written).toHaveLength(5);
   });
@@ -265,18 +283,23 @@ describe('the update feeds (DECISIONS §109)', () => {
     exe: expand(config.nsis.artifactName, { version, arch: 'x64', ext: 'exe' }),
     zip: expand(config.mac.artifactName, { version, arch: 'arm64', ext: 'zip' }),
     dmg: expand(config.dmg.artifactName, { version, arch: 'arm64', ext: 'dmg' }),
+    zipX64: expand(config.mac.artifactName, { version, arch: 'x64', ext: 'zip' }),
+    dmgX64: expand(config.dmg.artifactName, { version, arch: 'x64', ext: 'dmg' }),
     appImage: expand(config.appImage.artifactName, { version, arch: 'x86_64', ext: 'AppImage' }),
     deb: expand(config.deb.artifactName, { version, arch: 'amd64', ext: 'deb' }),
   };
   const feeds = {
     'latest.yml': feedText(version, [built.exe]),
-    'latest-mac.yml': feedText(version, [built.zip, built.dmg]),
+    'latest-mac.yml': feedText(version, [built.zipX64, built.dmgX64, built.zip, built.dmg]),
     'latest-linux.yml': feedText(version, [built.appImage, built.deb]),
   };
 
   it('name only files the release carries, under the names packaging gives them', () => {
     expect(feedProblems({ version, feeds, published })).toEqual([]);
     expect(updateAssets(version).find((a) => a.key === 'macos-zip')?.name).toBe(built.zip);
+    expect(updateAssets(version).find((a) => a.key === 'macos-zip-x64')?.name).toBe(
+      'Core-Hub-1.2.0-x64-mac.zip',
+    );
   });
 
   it('come from the GitHub releases of this repository, never pre-releases', () => {
@@ -287,6 +310,8 @@ describe('the update feeds (DECISIONS §109)', () => {
       releaseType: 'release',
     });
     expect(config.mac.target.map((t) => t.target)).toEqual(['dmg', 'zip']);
+    // Both Macs, each its own app (DECISIONS §152).
+    for (const target of config.mac.target) expect(target.arch).toEqual(['arm64', 'x64']);
   });
 
   it('fail when a feed names a file under another name, or misses one', () => {
@@ -297,17 +322,37 @@ describe('the update feeds (DECISIONS §109)', () => {
       'latest.yml does not list Core-Hub-Setup-1.2.0-x64.exe',
       'latest.yml names Core-Hub-Setup-1.2.0.exe, which the release does not carry',
     ]);
-    const noZip = published.filter((n) => !n.endsWith('-mac.zip'));
+    const noZip = published.filter((n) => !n.endsWith('-arm64-mac.zip'));
     expect(feedProblems({ version, feeds, published: noZip })).toEqual([
       'latest-mac.yml names Core-Hub-1.2.0-arm64-mac.zip, which the release does not carry',
     ]);
+    // A feed that forgot the Intel zip would leave Intel Macs without updates.
+    expect(
+      feedProblems({
+        version,
+        feeds: { ...feeds, 'latest-mac.yml': feedText(version, [built.zip, built.dmg]) },
+        published,
+      }),
+    ).toEqual(['latest-mac.yml does not list Core-Hub-1.2.0-x64-mac.zip']);
+    // …which is right for a tag before the Intel app.
+    expect(
+      feedProblems({
+        version,
+        feeds: { ...feeds, 'latest-mac.yml': feedText(version, [built.zip, built.dmg]) },
+        published,
+        intelMac: false,
+      }),
+    ).toEqual([]);
     expect(
       feedProblems({ version, feeds: { ...feeds, 'latest-linux.yml': null }, published }),
     ).toEqual(['latest-linux.yml is missing']);
     expect(
       feedProblems({
         version,
-        feeds: { ...feeds, 'latest-mac.yml': feedText('1.1.9', [built.zip, built.dmg]) },
+        feeds: {
+          ...feeds,
+          'latest-mac.yml': feedText('1.1.9', [built.zipX64, built.dmgX64, built.zip, built.dmg]),
+        },
         published,
       }),
     ).toEqual(['latest-mac.yml is for version 1.1.9, not 1.2.0']);
@@ -405,5 +450,23 @@ describe('release notes', () => {
     const notes = releaseNotes({ tag: 'v1.1.0', generated: many, repository: 'twuijri/core-hub' });
     expect(notes.match(/^- Change/gm)).toHaveLength(20);
     expect(notes).toContain('- …and 5 more.');
+  });
+});
+
+describe('one macOS feed, each Mac its own app (DECISIONS §152)', () => {
+  // electron-updater's own choice (MacUpdater.filterFilesForArch, electron-updater 6.8.9): an
+  // Apple Silicon Mac takes the files whose name says arm64; an Intel Mac takes the others.
+  const pick = (urls: string[], arm64Mac: boolean) => {
+    const arm = (url: string) => url.includes('arm64');
+    if (arm64Mac && urls.some(arm)) return urls.filter((url) => arm(url));
+    return urls.filter((url) => !arm(url));
+  };
+  const zips = updateAssets('1.2.0')
+    .filter((a) => a.key === 'macos-zip' || a.key === 'macos-zip-x64')
+    .map((a) => a.name);
+
+  it('gives an Apple Silicon Mac the arm64 zip, as before, and an Intel Mac the x64 one', () => {
+    expect(pick(zips, true)).toEqual(['Core-Hub-1.2.0-arm64-mac.zip']);
+    expect(pick(zips, false)).toEqual(['Core-Hub-1.2.0-x64-mac.zip']);
   });
 });

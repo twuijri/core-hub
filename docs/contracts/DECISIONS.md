@@ -5445,3 +5445,40 @@ Status: the owner's decision, 2026-10-01. It supersedes where §33 (Agents at th
   footer straight after it); Playwright `zzz-agents-top-level.spec.ts` (above the footer, below
   the agent's pages) and `smoke.spec.ts` (Settings in a short window, its menu scrolled to the end:
   the row still in view, directly above the footer); screenshots refreshed.
+
+## 152. Two macOS downloads: Apple Silicon and Intel
+
+Status: the owner's request for the next release, 2026-10-01 — an Intel build beside the Apple
+Silicon one, as separate downloads; he cares about download size.
+
+- **Two apps, not one universal app.** `electron-builder` builds the dmg and the zip for `arm64`
+  (as before) and `x64`: `Core-Hub-<v>-arm64.dmg` / `Core-Hub-<v>-arm64-mac.zip` and
+  `Core-Hub-<v>-x64.dmg` / `Core-Hub-<v>-x64-mac.zip`. A universal app carries both Electron
+  frameworks and both sets of native binaries: about 1.8 times the 139 MB dmg of 1.1.6 for every
+  Mac, where each separate app stays its own size. Both are built in one packaging run on the
+  Apple Silicon runner (x64 cross-built; no native module is rebuilt there), so one
+  `latest-mac.yml` lists both zips.
+- **Every binary for darwin-x64.** Electron (electron-builder downloads it per arch);
+  better-sqlite3 (its npm package ships darwin-x64); CLIProxyAPI (`scripts/cliproxy/pin.json`
+  already pins `darwin-x64`, `CLIProxyAPI_8.0.4_darwin_amd64.tar.gz` with its SHA-256); the
+  embedded hub runs on Electron's own Node (`ELECTRON_RUN_AS_NODE`), so per arch; Hermes and
+  Python are not bundled (the person's own install, ADR 0009). **argon2 0.45 ships no darwin-x64
+  binary** (0.44 did; 0.45.1's prebuilds are darwin-arm64, linux, win32, freebsd): the desktop
+  build compiles argon2's own sources for x86_64 on the Mac with `node-gyp --arch=x64` (Apple's
+  clang cross-compiles), checks it with `lipo`, and puts it at `prebuilds/darwin-x64/argon2.node`
+  (`apps/desktop/scripts/argon2-darwin-x64.mjs`); it is N-API, so not tied to one Node version.
+  `after-pack` keeps each app's own binaries and refuses an app without them, as before.
+- **Updates.** One `latest-mac.yml` names both zips; electron-updater gives an Apple Silicon Mac
+  (Rosetta included) the file whose name says `arm64` and an Intel Mac the others
+  (`MacUpdater.filterFilesForArch`). An installed Apple Silicon copy keeps updating to the arm64
+  zip, as before. The app's own update notice (`assetFor`) picks the dmg by `process.arch`.
+  `release-assets.mjs check-feeds … macos` now requires both zips in the feed; `--without=macos-x64`
+  (a tag before this, chosen by the workflows from whether the tag has
+  `scripts/argon2-darwin-x64.mjs`) expects the arm64 one only, so an older tag still releases.
+- **Signing and CI.** `desktop-signed.yml` signs, notarises, staples and checks both apps and both
+  zips in the same job. `desktop.yml` gains an **Intel Mac** job on `macos-15-intel`: the packaged
+  x64 app from the Apple Silicon build, checked to be x86_64 (its argon2 too), runs the three
+  desktop smoke journeys — remote mode, pairing, and local mode, whose embedded hub hashes the
+  owner's password with that argon2.
+- **The download page** shows both: «Apple Silicon (M1–M4)» and «Intel»; a release before this has
+  no Intel dmg and that button opens the release page.

@@ -304,6 +304,8 @@ or updates it if it exists — attaches the files and marks it **latest**:
 | `Core-Hub-X.Y.Z-x64.msix` | `desktop.yml` (Windows, the Store package, unsigned) |
 | `Core-Hub-X.Y.Z-arm64.dmg` | `desktop-signed.yml` (signed and notarised) |
 | `Core-Hub-X.Y.Z-arm64-mac.zip` | `desktop-signed.yml` (the same signed app, what macOS updates from) |
+| `Core-Hub-X.Y.Z-x64.dmg` | `desktop-signed.yml` (Intel Macs, signed and notarised; DECISIONS §152) |
+| `Core-Hub-X.Y.Z-x64-mac.zip` | `desktop-signed.yml` (the Intel app Intel Macs update from; `latest-mac.yml` lists both zips) |
 | `Core-Hub-X.Y.Z-x86_64.AppImage`, `corehub_X.Y.Z_amd64.deb` | `desktop.yml` (Linux) |
 | `latest.yml`, `latest-mac.yml`, `latest-linux.yml` | electron-builder, beside the installers they name |
 | `*.exe.blockmap`, `*-mac.zip.blockmap`, `*.dmg.blockmap` (when the build made them) | electron-builder |
@@ -395,7 +397,7 @@ pull request first when you want the release to carry it.
 
 **https://twuijri.github.io/core-hub/** — one static page, English first (owner, 2026-09-26) with an Arabic toggle,
 light and dark with the system. It offers the latest release's files for the visitor's system
-(Windows `.exe`, the Apple silicon `.dmg`, Linux AppImage and `.deb`, the Android `.apk`), the
+(Windows `.exe`, the Apple Silicon and Intel `.dmg`s, Linux AppImage and `.deb`, the Android `.apk`), the
 store buttons, and a short "Run your own hub" section with the Docker image.
 
 - **Always current, no redeploy per release.** The browser reads
