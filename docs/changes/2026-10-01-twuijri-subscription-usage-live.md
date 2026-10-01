@@ -189,7 +189,9 @@ RunStatus,RunFailureNotice}.ts(x)` و`realtime/envelope.ts` واختبارات `
 - **التوقيع وCI**: `desktop-signed.yml` يوقّع ويوثّق ويفحص التطبيقين والـzip؛ ووظيفة جديدة «Intel Mac» على `macos-15-intel` تشغّل
   رحلات الدخان الثلاث على تطبيق x64 المحزوم (ومنها الوضع المحلي الذي يحمّل argon2 المجمّع لـx86_64).
 - **صفحة التنزيل**: زرّان «Apple Silicon (M1–M4)» و«Intel».
-- **الأحجام**: arm64 كما في 1.1.6: dmg 139 MB وzip 139 MB؛ x64: يُسجَّل من ملخّص CI أدناه بعد أول بناء.
+- **الأحجام** (بناء CI لهذا الفرع، run 36864546080): arm64 ‏dmg ‏140.6 MB وzip ‏140.7 MB؛ x64 ‏dmg ‏146.0 MB وzip ‏146.3 MB. وظيفة
+  «Intel Mac (x64 app smoke)» على `macos-15-intel` نجحت (رحلات الدخان الثلاث على تطبيق x64، والوضع المحلي بـargon2 المجمّع)،
+  و`latest-mac.yml` الناتج يذكر الملفّين وفحص `check-feeds … macos` نجح.
 - الملفات: `apps/desktop/electron-builder.config.cjs`، `scripts/build-hub.mjs`، `scripts/argon2-darwin-x64.mjs` (جديد)،
   `scripts/release-assets.mjs` واختبارها، `.github/workflows/{desktop,desktop-signed,publish-release}.yml`،
   `site/src/{index.html,releases.js,i18n.js}` واختباراتها، `docs/RELEASING.md`، `README.md`.
