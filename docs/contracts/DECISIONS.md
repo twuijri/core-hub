@@ -5341,3 +5341,33 @@ should not"). Each push also costs a request on the push relay.
   - **No vendor's raw answer in the chat**: the fallback line's "why" and the failure notice say
     only the hub's sentence; the provider's words (a message inside another answer read out of its
     JSON) stay in `Run.error.details.said` and the hub's log.
+
+## 150. Phones: swipe a message to reply, and a long press on the agent's reply opens its menu
+
+Status: the owner's requests, 2026-10-01 — «اذا المستخدم سحب المحادثة يسار يخليني كاني برد عليها
+نفس التيليقرام», and a long press on the agent's message should open the same menu as on his own.
+
+- **Swipe to reply (iOS and Android).** A horizontal drag on a message bubble — the person's or the
+  agent's — moves it toward the reading start, with the reply arrow appearing behind it: left in a
+  left-to-right interface (Telegram), right in Arabic. That is away from the system back gesture
+  (iOS's interactive pop starts at the leading edge and moves toward the trailing side; Android's
+  gesture navigation answers at the screen edges, where the system's own gesture wins), so the two
+  do not compete. Past 60 pt/dp a light haptic; letting go there replies. Beyond it the bubble
+  moves at a third of the finger's speed, up to 96. The axis is decided once, at the drag's first
+  move past the touch slop: only a mostly horizontal start (|dx| > 1.5 |dy|) toward the reading
+  start is a swipe; anything else is left to the list's scroll. Never on a reply still streaming or
+  the empty shell a run opens with. Reduce Motion: the bubble returns without animating.
+  VoiceOver and TalkBack get a «Reply» action on the bubble.
+- **One reply path.** The swipe calls the same reply as the message menu's «Reply to this»: the
+  quoted strip with its «×» over the composer, and the message sent with `RunCreate.reply_to_message_id`
+  — what the web sends, so every agent and runtime gets the same quote. Choosing a reply, by swipe
+  or menu, now also puts the cursor in the composer and brings the keyboard up.
+- **Long press on the agent's reply** opens the same menu as on the person's message — Copy, Read
+  aloud, Reply, Fork from here — the «…» under the reply staying as it is. iOS shows the reply's
+  opening twelve lines as the menu's preview, not the whole card; Android's menu has no preview,
+  as for the person's message. Not on a streaming reply.
+- **Proven.** Android `SwipeToReplyUiTest` (Compose, Robolectric): a left swipe replies in
+  English, a right one in Arabic, the other direction, a vertical drag and a short swipe do not,
+  the «Reply» accessibility action, a disabled row, the rules, and a long press on the agent's
+  reply opening the menu whose Reply answers it. iOS `SwipeToReplyTests` (XCTest): the same rules
+  and the action's name in both languages; SwiftUI's gesture itself is checked on a device.

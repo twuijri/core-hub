@@ -63,5 +63,6 @@
   "chat_controls_steer_queued": "The reply could not take it now; it goes as the next message.",
   "chat_controls_save": "Save",
   "chat_controls_model_default_named": "Default · %1$s",
-  "chat_controls_model_small_context": "small context (under %1$sK)"
+  "chat_controls_model_small_context": "small context (under %1$sK)",
+  "chat_controls_reply_action": "Reply"
 }

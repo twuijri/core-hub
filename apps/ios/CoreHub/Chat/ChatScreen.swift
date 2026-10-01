@@ -28,6 +28,8 @@ struct ChatScreen: View {
     /// The composer's chips (model, approvals) and the chat's own actions (apps batch 1).
     @State private var controls: ChatControlsModel?
     @State private var replyTo: Message?
+    /// Bumped to put the cursor in the composer when a reply is chosen (§150).
+    @State private var composerFocus = 0
     /// `/clear-screen`: the messages shown before it stay in the conversation, hidden here.
     @State private var clearedBefore: String?
     @State private var pickingModel = false
@@ -288,7 +290,8 @@ struct ChatScreen: View {
                 onStop: { Task { await model.stopRun() } },
                 attachments: tray,
                 profile: model.profile,
-                recentText: model.state.messages.suffix(8).map(\.text)
+                recentText: model.state.messages.suffix(8).map(\.text),
+                focusRequest: composerFocus
             )
         }
         .padding(.horizontal, Space.s3)
@@ -375,7 +378,10 @@ struct ChatScreen: View {
         let profile = model.profile
         return MessageActions(
             speak: { [app] message in Speaker.shared.speak(message.text, app: app, profile: profile) },
-            reply: { message in replyTo = message },
+            reply: { message in
+                replyTo = message
+                composerFocus += 1
+            },
             fork: openChat == nil || isGlobalAgent ? nil : { message in
                 Task { if let session = await model.fork(at: message.id) { openChat?(session) } }
             }
@@ -556,6 +562,7 @@ struct MessageRow: View {
                 MessageAttachments(content: message.content, profile: profile)
             }
             .modifier(MessageMenu(message: message, actions: message.text.isEmpty ? nil : actions))
+            .modifier(swipeToReply)
         }
         .accessibilityIdentifier("message.user")
     }
@@ -606,7 +613,24 @@ struct MessageRow: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(Tone.agentBubble, in: BubbleShape(tightCorner: .topLeading))
         .overlay(BubbleShape(tightCorner: .topLeading).stroke(Tone.agentBubbleBorder, lineWidth: 1))
+        // A long press on a reply opens the same menu as on yours (§150), with the reply's
+        // opening lines as the preview; the «…» under it stays. Not while it streams.
+        .modifier(MessageMenu(
+            message: message,
+            actions: message.status == .streaming || message.text.isEmpty ? nil : actions,
+            preview: true
+        ))
+        .modifier(swipeToReply)
         .accessibilityIdentifier("message.agent")
+    }
+
+    /// Swipe toward the reading start to reply (§150); never on a reply still streaming.
+    private var swipeToReply: SwipeToReply {
+        SwipeToReply(
+            enabled: actions?.reply != nil && message.status != .streaming && !message.isEmpty,
+            uiDirection: uiDirection,
+            onReply: { actions?.reply?(message) }
+        )
     }
 }
 

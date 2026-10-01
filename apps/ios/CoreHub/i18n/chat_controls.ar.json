@@ -68,6 +68,7 @@
     "steer_queued": "لم يقبله الرد الجاري الآن؛ يُرسل رسالةً تالية.",
     "save": "حفظ",
     "model_default_named": "الافتراضي · {model}",
-    "model_small_context": "سياق صغير (أقل من {tokens} ألف)"
+    "model_small_context": "سياق صغير (أقل من {tokens} ألف)",
+    "reply_action": "ردّ"
   }
 }

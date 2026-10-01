@@ -68,6 +68,7 @@
     "steer_queued": "The reply could not take it now; it goes as the next message.",
     "save": "Save",
     "model_default_named": "Default · {model}",
-    "model_small_context": "small context (under {tokens}K)"
+    "model_small_context": "small context (under {tokens}K)",
+    "reply_action": "Reply"
   }
 }

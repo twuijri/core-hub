@@ -155,10 +155,18 @@ fun ChatScreen(
     // Copy, read aloud, reply and fork under each message of this chat (apps batch 1).
     val chatAgent = agents.firstOrNull { it.id == chat.session?.agentId }
     val globalAgent = chat.session?.globalAgent == true
+    // A reply chosen from a message (its menu, or a swipe, §150) puts the cursor in the composer
+    // and brings the keyboard up.
+    val composerFocus = remember { androidx.compose.ui.focus.FocusRequester() }
+    val keyboard = androidx.compose.ui.platform.LocalSoftwareKeyboardController.current
     val messageActions = remember(sessionId, onOpenChat, globalAgent) {
         hub.core.android.ui.components.MessageActions(
             speak = { vm.speak(it.text) },
-            reply = { replyTo = it },
+            reply = {
+                replyTo = it
+                runCatching { composerFocus.requestFocus() }
+                keyboard?.show()
+            },
             fork = if (onOpenChat == null || globalAgent) null else { message -> vm.fork(message.id) { onOpenChat(it.id, it.profile) } },
         )
     }
@@ -345,6 +353,7 @@ fun ChatScreen(
             leading = { AttachButton(vm.tray) },
             trailing = { MicButton(dictation) },
             hasAttachments = ready,
+            focus = composerFocus,
         )
     }
 }
