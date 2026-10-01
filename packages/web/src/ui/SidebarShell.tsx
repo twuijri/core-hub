@@ -76,15 +76,25 @@ export function SidebarBrand({
 export function SidebarGroup({
   children,
   label,
+  pinned = false,
   testId,
 }: {
   children: ReactNode;
   /** A visible heading for the group; omit for a group that needs none. */
   label?: ReactNode;
+  /**
+   * The zone pinned above the footer («Back to chats», «Back to agents»): a divider above it,
+   * and its rows drawn as bordered buttons, so it reads as part of the footer and not as one
+   * more menu item (owner, 2026-10-01, DECISIONS §151).
+   */
+  pinned?: boolean;
   testId?: string;
 }) {
   return (
-    <div className="ch-sidebar-group" data-testid={testId}>
+    <div
+      className={pinned ? 'ch-sidebar-group ch-sidebar-pinned' : 'ch-sidebar-group'}
+      data-testid={testId}
+    >
       {label !== undefined && <p className="ch-sidebar-group-label">{label}</p>}
       {children}
     </div>

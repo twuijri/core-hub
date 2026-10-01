@@ -1088,6 +1088,30 @@
   overflow-y: auto;
   padding: var(--ch-space-2);
 }
+/* The zone pinned above the footer (DECISIONS §151): a divider between it and the scrolling
+   menu, and its row a bordered button — the radius and 1px border of the secondary buttons and
+   the dropdown triggers — so it reads as part of the footer, not one more menu item. */
+.ch-sidebar-pinned {
+  padding: var(--ch-space-2) var(--ch-space-3) 0;
+  border-block-start: 1px solid var(--ch-color-border);
+}
+.ch-sidebar-pinned .ch-sidebar-row {
+  border: 1px solid var(--ch-color-border);
+  background: var(--ch-color-surface);
+  color: var(--ch-color-text);
+}
+.ch-sidebar-pinned .ch-sidebar-row:hover {
+  background: var(--ch-color-surface-2);
+  border-color: var(--ch-color-border-strong);
+}
+/* Folded to the rail, it keeps the rail's own inset. */
+.ch-sidebar[data-folded='true'] .ch-sidebar-pinned {
+  padding-inline: var(--ch-space-2);
+}
+/* The footer below it is the same area: no second divider between them. */
+.ch-sidebar-pinned + .ch-sidebar-foot {
+  border-block-start: 0;
+}
 .ch-sidebar-foot {
   display: flex;
   flex-direction: column;
