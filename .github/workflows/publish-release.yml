@@ -76,6 +76,11 @@ jobs:
     name: Windows and Linux
     needs: resolve
     uses: ./.github/workflows/desktop.yml
+    # desktop.yml's Intel Mac job asks for `actions: read`; a called workflow may not ask for more
+    # than its caller grants, or the whole run fails to start (v1.1.7, startup_failure).
+    permissions:
+      contents: read
+      actions: read
     with:
       ref: ${{ needs.resolve.outputs.ref }}
       version: ${{ needs.resolve.outputs.version }}
