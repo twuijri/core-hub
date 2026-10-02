@@ -10,12 +10,23 @@
 ## القرار والموافقات
 منح وظيفة `desktop` المستدعية `contents: read` و`actions: read` صراحةً. لا تغيير في الكود ولا في العقد. بعد الدمج يُعاد النشر يدويًا لوسم v1.1.7 الموجود (Actions → Publish release → `tag: v1.1.7`)؛ يبني من الوسم نفسه فلا حاجة لوسم جديد.
 
+## العقد (ما تغيّر في packages/contracts، أو «لا شيء»)
+لا شيء.
+
 ## الملفات والتأثير
 - `.github/workflows/publish-release.yml`
 
-## الفحوص
-- قراءة صلاحيات كل سير عمل مستدعى: `desktop.yml` وحده يطلب `actions: read` (السطر 242)؛ `desktop-signed.yml` و`android-signed.yml` لا يطلبان أكثر من `contents: read`، ووظيفة `publish` تمنح نفسها `actions: read` من قبل.
-- التحقق الحقيقي: تشغيل Publish release يدويًا على v1.1.7 بعد الدمج.
+## الفحوص (الأوامر ونواتجها الفعلية)
+```
+$ for f in desktop.yml desktop-signed.yml android-signed.yml; do git show origin/main:.github/workflows/$f | grep -n -A3 "permissions:"; done
+desktop.yml:      41:permissions: / 42:  contents: read
+desktop.yml:      242:    permissions: / 243: contents: read / 244: actions: read
+desktop-signed.yml: 38:permissions: / 39:  contents: read
+android-signed.yml: 29:permissions: / 30:  contents: read
+$ gh api repos/twuijri/core-hub/actions/runs/37050711395 --jq '{status,conclusion,path}'
+{"conclusion":"startup_failure","path":".github/workflows/publish-release.yml","status":"completed"}
+```
+لم يُشغَّل Publish release نفسه بعد التعديل (يعمل على وسم فقط)؛ التحقق الحقيقي تشغيله يدويًا على v1.1.7 بعد الدمج.
 
 ## المخاطر والرجوع
 صلاحية قراءة فقط لسجلات Actions للمستودع نفسه. الرجوع: حذف الكتلة.
