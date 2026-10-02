@@ -130,6 +130,10 @@ interface LiveRun {
  */
 const QUOTA_GRACE_MS = 8_000;
 
+/** An agent's words for "I have no key or sign-in of my own". */
+const NEEDS_OWN_ACCOUNT =
+  /auth|sign ?in|log ?in|api[ _-]?key|credential|unauthori[sz]ed|\b401\b|OPENAI_API_KEY|GEMINI_API_KEY/i;
+
 export interface AgentRunnerDeps {
   service: AgentsService;
   adapters: AdapterSet;
@@ -222,16 +226,22 @@ export class AgentRunner implements AgentRunnerPort {
           const slug = (providerId: string, model: string) =>
             service.providerSlugOf(workspace, { providerId, model, provider: null });
           // Every model the turn went past, in order: the chosen one first (a second move
-          // reported alone read as if the turn had started on the chain's first model).
+          // reported alone read as if the turn had started on the chain's first model). Its
+          // "why" is the hub's sentence alone — never a vendor's raw answer (owner, 2026-10-01);
+          // the provider's words are in the hub's log, and in `Run.error.details` if the run fails.
           run.fallenBack = [
             ...(run.fallenBack ?? []),
             {
               model: move.failed.model,
               provider: slug(move.failed.providerId, move.failed.model),
               code: 'rate_limited',
-              error: quotaSentence(move.failed),
+              error: limitWords(move.failed),
             },
           ];
+          this.deps.log.info(
+            { runId: run.runId, model: move.failed.model, said: move.failed.said },
+            'agents: the gateway moved the turn on; the provider said',
+          );
           this.push(run, {
             type: 'model_fallback',
             failed: run.fallenBack.map((attempt) => ({ ...attempt })),
@@ -239,6 +249,25 @@ export class AgentRunner implements AgentRunnerPort {
               model: move.answered.model,
               provider: slug(move.answered.providerId, move.answered.model),
             },
+          });
+          // While the next model thinks, the chat says which one it is.
+          this.push(run, {
+            type: 'model_status',
+            phase: 'trying',
+            provider: move.answered.providerLabel ?? move.failed.providerLabel,
+            model: move.answered.modelLabel,
+            seconds: null,
+            reason: move.failed.reason ?? 'quota_exhausted',
+          });
+        },
+        waiting: (wait) => {
+          this.push(run, {
+            type: 'model_status',
+            phase: 'waiting',
+            provider: wait.providerLabel,
+            model: wait.modelLabel,
+            seconds: wait.seconds,
+            reason: wait.reason,
           });
         },
       });
@@ -356,6 +385,25 @@ export class AgentRunner implements AgentRunnerPort {
         session = await adapters.byKind(row.adapterKind).start(target);
       } catch (error) {
         gateway?.revoke();
+        const said = error instanceof Error ? error.message : String(error);
+        // An agent wired to the gateway that still asks for its own key or sign-in when it starts
+        // (owner, 2026-10-01: Codex on «Default · gemini-3.8-flash-high» said "Authentication
+        // required"): the log keeps its words and its wiring's shape, the chat says it plainly.
+        if (gateway && NEEDS_OWN_ACCOUNT.test(said)) {
+          this.deps.log.warn(
+            {
+              agent: row.slug,
+              err: error,
+              model: chosen.model,
+              providerId: chosen.providerId,
+              wired: Object.keys(target.env ?? {}).sort(),
+            },
+            'agents: the agent asked for its own sign-in although it was started on the model gateway',
+          );
+          throw new HubError('provider_not_configured', {
+            message: `${row.name} did not take Core Hub's model gateway when it started and asked for its own sign-in (it said: ${said}). The hub's log has the details.`,
+          });
+        }
         throw error;
       }
       const sessionId = request.sessionId;
@@ -457,6 +505,17 @@ export class AgentRunner implements AgentRunnerPort {
    */
   get busy(): boolean {
     return this.runs.size > 0;
+  }
+
+  /**
+   * Whether a turn of this kind of agent is in flight (`hermes`): recycling Hermes after a change
+   * waits for Hermes's own turns, not for a coding agent's, which the restart does not touch.
+   */
+  busyWith(adapterKind: string): boolean {
+    for (const run of this.runs.values()) {
+      if (run.live.adapterKind === adapterKind) return true;
+    }
+    return false;
   }
 
   /**
@@ -801,11 +860,13 @@ export class AgentRunner implements AgentRunnerPort {
         code: 'rate_limited',
         message: quotaSentence(run.quota),
         details: {
-          reason: 'quota_exhausted',
+          reason: run.quota.reason ?? 'quota_exhausted',
           provider: run.quota.providerLabel,
           model: run.quota.modelLabel,
           provider_id: run.quota.providerId,
           model_id: run.quota.model,
+          // The provider's own words, with nothing of the hub's or anyone's secrets in them.
+          said: run.quota.said,
         },
       };
     }
@@ -850,9 +911,23 @@ export class AgentRunner implements AgentRunnerPort {
 
 /** A spent quota, in English; the sessions module says it in the person's language (`Run.error`). */
 export function quotaSentence(
-  failure: Pick<AgentGatewayQuotaFailure, 'providerLabel' | 'modelLabel'>,
+  failure: Pick<AgentGatewayQuotaFailure, 'providerLabel' | 'modelLabel' | 'reason'>,
 ): string {
-  return `${failure.providerLabel} ran out of quota for ${failure.modelLabel}. Pick another model for this chat.`;
+  return `${limitWords(failure)}. Pick another model for this chat.`;
+}
+
+/** Why a provider refused a model, in English (the sessions module says it localised). */
+export function limitWords(
+  failure: Pick<AgentGatewayQuotaFailure, 'providerLabel' | 'modelLabel' | 'reason'>,
+): string {
+  switch (failure.reason) {
+    case 'no_capacity':
+      return `${failure.providerLabel} has no capacity for ${failure.modelLabel} right now`;
+    case 'rate_limited':
+      return `${failure.providerLabel} is limiting requests to ${failure.modelLabel} right now`;
+    default:
+      return `${failure.providerLabel} ran out of quota for ${failure.modelLabel}`;
+  }
 }
 
 /** The agent has no such command (decision §57): `409 state_invalid`, said plainly. */
@@ -941,6 +1016,10 @@ export function failureCode(message: string | null | undefined): string {
   return 'agent_error';
 }
 
+/** Marks the hub's note around a turn's words as context from Core Hub, not the person's. */
+export const DOWNLOADS_NOTE_OPEN = '<corehub-context>';
+export const DOWNLOADS_NOTE_CLOSE = '</corehub-context>';
+
 export function promptText(blocks: RunnerPromptBlock[], files?: RunnerFileExchange | null): string {
   const parts: string[] = [];
   const attachments: string[] = [];
@@ -957,11 +1036,18 @@ export function promptText(blocks: RunnerPromptBlock[], files?: RunnerFileExchan
     parts.push(`Attached files (read them from these paths):\n${attachments.join('\n')}`);
   }
   if (files) {
+    // Context, not a request (owner, 2026-10-01): worded as an order ("Write any file … into")
+    // a model answering «هلا» took it for the task and wrote a file. It stays in the turn — the
+    // folder is this run's own, so no system prompt set when the agent started can carry it.
     parts.push(
-      `Write any file the user should be able to download into: ${files.outputDir}\n` +
-        'Files left there when the turn ends are attached to your reply automatically, and the ' +
-        'user sees them under it. Refer to such a file by its name only (for example ' +
-        '`chart.png`), never by this folder or any other path on this machine.',
+      `${DOWNLOADS_NOTE_OPEN}\n` +
+        'Only if the user asks for a file they can download (a document, an image, an export), ' +
+        `save it in this folder: ${files.outputDir}\n` +
+        'Files left there when the turn ends are attached to your reply, and the user sees them ' +
+        'under it; refer to such a file by its name only (for example `chart.png`), never by ' +
+        'this folder or any other path on this machine. When the user asks for no file, ignore ' +
+        'this note: do not create one.\n' +
+        DOWNLOADS_NOTE_CLOSE,
     );
   }
   return parts.join('\n\n');

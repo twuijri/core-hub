@@ -1,3 +1,4 @@
+import { useViewing } from '../realtime/useViewing.js';
 import { HubApiError } from '@corehub/contracts';
 import { useQuery } from '@tanstack/react-query';
 import {
@@ -178,6 +179,8 @@ function OpenSessionBody({ sessionId, title: pageTitle, intro }: OpenSessionProp
   const holding = anchor?.phase === 'loading' || anchor?.phase === 'shown';
 
   const stream = useSessionStream(sessionId, anchor?.messageId ?? null);
+  // The hub skips the phone push for a reply the person is watching here (DECISIONS §149).
+  useViewing(sessionId);
   const preferences = usePreferences();
   const patch = usePatchSession(sessionId);
   const transcript = useRef<HTMLDivElement>(null);

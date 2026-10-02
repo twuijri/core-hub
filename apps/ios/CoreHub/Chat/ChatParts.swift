@@ -296,6 +296,9 @@ struct Composer: View {
     /// The conversation's latest words: with Auto and no keyboard to go by, dictation listens
     /// in the language they are written in.
     var recentText: [String] = []
+    /// Bumped when a reply is chosen from a message (its menu, or a swipe, §150): the cursor goes
+    /// into the field and the keyboard comes up.
+    var focusRequest: Int = 0
     @Environment(\.l10n) private var l10n
     @Environment(AppModel.self) private var app
     @FocusState private var focused: Bool
@@ -382,6 +385,7 @@ struct Composer: View {
                 .lineLimit(1...6)
                 .font(.system(size: FontSize.sizeMd))
                 .focused($focused)
+                .onChange(of: focusRequest) { _, _ in focused = true }
                 .padding(.vertical, Space.s2)
                 .contentDirection(of: text.isEmpty ? placeholder : text)
                 .accessibilityIdentifier("composer.input")

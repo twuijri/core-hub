@@ -159,7 +159,8 @@ describe('subscriptions through the gateway', () => {
     expect(accountFile(h, name)).toMatchObject({
       prefix: upstreamPrefix(provider.id),
       note: `corehub:${provider.id.toLowerCase()}`,
-      disable_cooling: false,
+      // The gateway decides what a refusal means; the account never cools itself (§148).
+      disable_cooling: true,
     });
     const read = await authed(h, h.token, {
       method: 'GET',

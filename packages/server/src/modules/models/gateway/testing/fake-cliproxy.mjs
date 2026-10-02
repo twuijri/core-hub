@@ -145,6 +145,76 @@ createServer((request, response) => {
       );
       return;
     }
+    // Thinking and effort as either wire says them: Anthropic's, or Chat's (the gateway speaks
+    // Chat to a Google model itself, §148).
+    const thinks = Boolean(body.thinking || body.reasoning_effort);
+    const effort = String(body.output_config?.effort ?? body.reasoning_effort ?? '');
+    response.setHeader('x-fake-thinking', thinks ? 'yes' : 'no');
+    response.setHeader('x-fake-effort', effort);
+    response.setHeader(
+      'x-fake-tool-descriptions',
+      JSON.stringify(body.tools ?? []).includes('"description"') ? 'yes' : 'no',
+    );
+    const refusedShape =
+      (/thinks$/.test(body.model) && thinks) ||
+      (/high-effort$/.test(body.model) && effort === 'high') ||
+      (/big-tools$/.test(body.model) && JSON.stringify(body.tools ?? []).length > 2000);
+    const refusedRoute = /anthropic-route$/.test(body.model) && url.pathname === '/v1/messages';
+    // Models refused for one thing in Claude Code's request (the gateway's bisect, §148): its
+    // billing line, its identity sentence, a JSON-schema keyword in its tools, its own headers.
+    const said = JSON.stringify(body.messages ?? []);
+    const refusedPart =
+      (/refuses-billing$/.test(body.model) && said.includes('x-anthropic-billing-header')) ||
+      (/refuses-identity$/.test(body.model) && said.includes('You are Claude Code')) ||
+      (/refuses-schema$/.test(body.model) &&
+        JSON.stringify(body.tools ?? []).includes('$schema')) ||
+      (/refuses-agent$/.test(body.model) &&
+        String(request.headers['user-agent'] ?? '').startsWith('claude-cli'));
+    if (refusedShape || refusedRoute || refusedPart) {
+      // A model refused only when asked to think as the agent asks (as CLIProxyAPI answers it:
+      // the message alone on the Anthropic route).
+      response.writeHead(429, { 'content-type': 'application/json' });
+      response.end(
+        JSON.stringify({
+          type: 'error',
+          error: {
+            type: 'rate_limit_error',
+            message: 'Resource has been exhausted (e.g. check quota).',
+          },
+        }),
+      );
+      return;
+    }
+    if (body.model.endsWith('busy')) {
+      // As CLIProxyAPI answers an Antigravity "no capacity" refusal: the message alone on the
+      // Anthropic route, the provider's whole answer on the Chat route.
+      response.writeHead(429, { 'content-type': 'application/json' });
+      response.end(
+        url.pathname === '/v1/chat/completions'
+          ? JSON.stringify({
+              error: {
+                code: 429,
+                message: `No capacity available for model ${body.model} on the server`,
+                status: 'RESOURCE_EXHAUSTED',
+                details: [
+                  {
+                    '@type': 'type.googleapis.com/google.rpc.ErrorInfo',
+                    reason: 'MODEL_CAPACITY_EXHAUSTED',
+                    domain: 'cloudcode-pa.googleapis.com',
+                  },
+                ],
+              },
+            })
+          : JSON.stringify({
+              type: 'error',
+              error: {
+                type: 'rate_limit_error',
+                message: 'Resource has been exhausted (e.g. check quota).',
+              },
+            }),
+      );
+      return;
+    }
     if (body.model.endsWith('spent')) {
       response.writeHead(429, { 'content-type': 'application/json' });
       response.end(
@@ -274,6 +344,49 @@ createServer((request, response) => {
             },
           },
         ],
+      ]);
+      return;
+    }
+    if (url.pathname === '/v1/chat/completions' && /-tools-chat$/.test(body.model)) {
+      // A model that thinks, says a word, and calls two tools at once, their arguments
+      // interleaved — and echoes how many messages and tools it was sent.
+      response.setHeader('x-fake-messages', String((body.messages ?? []).length));
+      response.setHeader('x-fake-tools', String((body.tools ?? []).length));
+      response.setHeader('x-fake-roles', (body.messages ?? []).map((m) => m.role).join(','));
+      const chunk = (delta, finish = null) => [
+        null,
+        { id: 'c1', choices: [{ index: 0, delta, finish_reason: finish }] },
+      ];
+      sse(response, [
+        chunk({ role: 'assistant', reasoning_content: 'Let me ' }),
+        chunk({ reasoning_content: 'look.' }),
+        chunk({ content: 'هلا! ' }),
+        chunk({ content: 'Reading two files.' }),
+        chunk({
+          tool_calls: [
+            {
+              index: 0,
+              id: 'call_a',
+              type: 'function',
+              function: { name: 'Read', arguments: '{"pa' },
+            },
+          ],
+        }),
+        chunk({
+          tool_calls: [
+            {
+              index: 1,
+              id: 'call_b',
+              type: 'function',
+              function: { name: 'Read', arguments: '{"path":"b' },
+            },
+          ],
+        }),
+        chunk({ tool_calls: [{ index: 0, function: { arguments: 'th":"a.md"}' } }] }),
+        chunk({ tool_calls: [{ index: 1, function: { arguments: '.md"}' } }] }),
+        chunk({}, 'tool_calls'),
+        [null, { choices: [], usage: { prompt_tokens: 42, completion_tokens: 7 } }],
+        [null, '[DONE]'],
       ]);
       return;
     }

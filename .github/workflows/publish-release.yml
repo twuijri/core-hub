@@ -107,6 +107,8 @@ jobs:
     timeout-minutes: 20
     permissions:
       contents: write
+      # The GitHub CLI fetches this run's artifacts again if the download action did not.
+      actions: read
     env:
       TAG: ${{ needs.resolve.outputs.tag }}
       VERSION: ${{ needs.resolve.outputs.version }}
@@ -121,7 +123,11 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version-file: .nvmrc
-      - uses: actions/download-artifact@v4
+      # download-artifact@v4 once ended its step green with nothing extracted (2026-10-01, the
+      # Intel Mac job): here that would publish a release without its installers. So v8, and the
+      # next step proves every file arrived before anything is published.
+      - uses: actions/download-artifact@v8
+        continue-on-error: true
         with:
           path: ${{ runner.temp }}/artifacts
           pattern: corehub-*
@@ -134,13 +140,33 @@ jobs:
             echo "::notice::$TAG predates the MSIX: its release has no Microsoft Store package."
             without="$without --without=windows-msix"
           fi
+          if ! git cat-file -e "$TAG:apps/desktop/scripts/argon2-darwin-x64.mjs" 2>/dev/null; then
+            echo "::notice::$TAG predates the Intel Mac app: its release has the Apple Silicon one only."
+            without="$without --without=macos-x64"
+          fi
           if ! git cat-file -e "$TAG:apps/desktop/src/main/auto-update.ts" 2>/dev/null; then
             echo "::notice::$TAG predates the self-updating apps: its release has no update feeds."
             without="$without --without=updates"
           fi
           echo "WITHOUT=$without" >> "$GITHUB_ENV"
+      # Every file the release carries — both Mac dmgs and zips, the Windows .exe and .msix, the
+      # AppImage and .deb, the Android .apk, and the three latest*.yml feeds (each naming only files
+      # that are there) — or the job stops here, before the release exists. One fresh download with
+      # the GitHub CLI first, should the action have brought back less than it said.
       - name: The release files, under their release names
-        run: node apps/desktop/scripts/release-assets.mjs collect "$VERSION" "$RUNNER_TEMP/artifacts" "$RUNNER_TEMP/release" $WITHOUT
+        run: |
+          set -euo pipefail
+          collect() {
+            rm -rf "$RUNNER_TEMP/release"
+            node apps/desktop/scripts/release-assets.mjs collect "$VERSION" "$RUNNER_TEMP/artifacts" "$RUNNER_TEMP/release" $WITHOUT
+          }
+          if ! collect; then
+            echo "::warning::release files missing after the download; fetching the artifacts again"
+            rm -rf "$RUNNER_TEMP/artifacts"
+            gh run download "$GITHUB_RUN_ID" --repo "$GITHUB_REPOSITORY" --pattern 'corehub-*' --dir "$RUNNER_TEMP/artifacts"
+            collect || { echo "::error::the release is missing files (above); nothing was published"; exit 1; }
+          fi
+          ls -l "$RUNNER_TEMP/release" | tee -a "$GITHUB_STEP_SUMMARY"
       # The merged pull requests since the previous version tag, as GitHub lists them, kept short
       # under an English heading with the downloads and the SmartScreen step.
       - name: Release notes

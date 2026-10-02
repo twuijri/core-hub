@@ -39,11 +39,20 @@ import {
   GatewayTokens,
   type GatewayGrantInput,
   type GatewayGrantRecord,
+  type GatewayLimitReason,
   type GatewayQuotaFailure,
   type GatewayTurn,
   type GatewayTurnUsage,
 } from './tokens.js';
 import { NO_USAGE, UsageTap, addUsage, type CallUsage } from './usage.js';
+import { redactSecrets } from '../../../lib/redact-text.js';
+import {
+  ChatToAnthropicStream,
+  anthropicToChat,
+  chatErrorToAnthropic,
+  chatToAnthropic,
+} from './anthropic-chat.js';
+import { BISECT, bisectStep } from './bisect.js';
 
 /** The model names an agent is started with; each resolves to the model its turn chose. */
 export const GATEWAY_MODEL_ALIASES = ['corehub-main', 'corehub-small'] as const;
@@ -152,6 +161,21 @@ export class ModelGateway {
   private upstreamCache: { at: number; value: GatewayUpstream[] } | null = null;
 
   private readonly limitWait: { defaultMs: number; maxMs: number };
+  /** How a session asks a Google model that refused the agent's own request (`SHAPES`). */
+  private readonly shapes = new WeakMap<
+    GatewayGrantRecord,
+    Map<string, { step: number; settled: boolean }>
+  >();
+  /**
+   * Claude Code on a Google model, refused while a plain request answers: the one-off diagnosis
+   * already made this session per model, and the step kept from it, if any (`BISECT`).
+   */
+  private readonly bisected = new WeakMap<GatewayGrantRecord, Map<string, number | null>>();
+  /** What CLIProxyAPI's Chat route said of a refused model, per grant, turn and model. */
+  private readonly probed = new WeakMap<
+    GatewayGrantRecord,
+    Map<string, { ok: boolean; text: string }>
+  >();
 
   constructor(private readonly options: ModelGatewayOptions) {
     this.limitWait = options.limitWait ?? LIMIT_WAIT;
@@ -490,6 +514,16 @@ export class ModelGateway {
       );
       return;
     }
+    if (url.pathname === '/gateway/anthropic/v1/messages/count_tokens') {
+      // Answered here, never upstream (owner, 2026-10-01): Claude Code asks this some fifteen
+      // times at the start of a turn, and CLIProxyAPI turns each into a call to the provider's
+      // own counter — Google Antigravity's `countTokens`, whose limit refuses them with
+      // RESOURCE_EXHAUSTED, which then cost the turn its model. Claude Code reads the count
+      // only to show and manage its context; an estimate serves that.
+      response.writeHead(200, { 'content-type': 'application/json' });
+      response.end(JSON.stringify({ input_tokens: estimateTokens(body) }));
+      return;
+    }
     const resolved = this.resolveModel(
       grant,
       typeof body.model === 'string' ? body.model : '',
@@ -723,7 +757,9 @@ export class ModelGateway {
     // A model this turn was already told is out of quota is not asked again: the agent's own
     // retries get the answer at once, or the chain's next model.
     if (grant.exhausted.has(exhaustedKey(target))) {
-      const failure = this.quotaFailure(target, 'the provider said the quota is spent');
+      const failure =
+        grant.refusals.get(exhaustedKey(target)) ??
+        this.quotaFailure(target, 'quota_exhausted', 'the provider said the quota is spent');
       const next = this.fallBack(grant, failure, upstreams);
       if (next) {
         await this.forward(request, response, route, grant, next, upstreams);
@@ -746,7 +782,31 @@ export class ModelGateway {
     // A call belongs to the turn it started in, even if it ends after the turn.
     const turn = grant.turn;
     const runId = turn?.runId ?? grant.lastRunId;
-    const call = route.call(target);
+    const built = route.call(target);
+    // How this session asks the model, once a Google model refused the agent's own request but
+    // answered a plain one (below): its thinking lowered, then off, then its tools trimmed.
+    const shaped = this.shapes.get(grant)?.get(exhaustedKey(target)) ?? null;
+    const asSent = shaped ? { ...built, body: SHAPES[shaped.step - 1]!.apply(built.body) } : built;
+    // A Google model asked on Claude's wire: the gateway speaks Chat to CLIProxyAPI itself and
+    // answers in Anthropic's shape (§148). Google refuses Claude Code's requests on CLIProxyAPI's
+    // Anthropic route while the same account and model answer its Chat and Gemini routes, tools
+    // included. Claude models, and every other model, keep the Anthropic route as they were.
+    const translated =
+      wire === 'anthropic' &&
+      /^\/v1\/messages(?:\?|$)/.test(asSent.path) &&
+      googleModel(target.model);
+    // The step a diagnosis of this session found Google to answer, when it is safe to keep.
+    const kept = translated
+      ? bisectStep(this.bisected.get(grant)?.get(exhaustedKey(target)) ?? undefined)
+      : null;
+    const call = translated
+      ? {
+          path: '/v1/chat/completions',
+          body: ((chat) => (kept ? kept.apply(chat) : chat))(
+            anthropicToChat(asSent.body, String(asSent.body.model ?? '')),
+          ),
+        }
+      : asSent;
     const payload = Buffer.from(JSON.stringify(call.body));
     const upstream = httpRequest({
       host: '127.0.0.1',
@@ -754,7 +814,7 @@ export class ModelGateway {
       method: 'POST',
       path: call.path,
       headers: {
-        ...forwardHeaders(request.headers),
+        ...(kept?.bareHeaders ? {} : forwardHeaders(request.headers)),
         authorization: `Bearer ${lease.key}`,
         'content-type': 'application/json',
         'content-length': String(payload.length),
@@ -794,34 +854,159 @@ export class ModelGateway {
           .then(async (raw) => {
             finish();
             response.off('close', onClose);
-            const text = raw.toString('utf8');
-            const verdict = classifyLimit(status, text, answer.headers, this.limitWait);
+            let text = raw.toString('utf8');
             const key = exhaustedKey(target);
+            // Every refused call in the hub's log as the provider put it (redacted): which path,
+            // model and shape of request — so a person's log says exactly what Google said.
+            this.options.log.warn(
+              {
+                agent: grant.agentSlug,
+                runId: grant.turn?.runId ?? grant.lastRunId,
+                providerId: target.providerId,
+                model: target.model,
+                path: call.path.replace(/\?.*$/, ''),
+                status,
+                shape: shaped ? SHAPES[shaped.step - 1]!.name : 'as the agent sent it',
+                ...(kept ? { bisectKept: `${kept.n}: ${kept.name}` } : {}),
+                said: providerWords(text, target),
+              },
+              'gateway: the provider refused a call',
+            );
+            // CLIProxyAPI answers Claude Code, Codex and Gemini CLI with the provider's message
+            // alone, so Google's own reason (QUOTA_EXHAUSTED, MODEL_CAPACITY_EXHAUSTED, an
+            // account restriction) and its retry delay are lost there. The Chat route keeps the
+            // provider's whole answer: one small request on it says which it is (owner,
+            // 2026-10-01: "ran out of quota" on an account signed in minutes earlier).
+            const asked = `${grant.turn?.runId ?? grant.lastRunId ?? ''}\n${key}`;
+            if (
+              (translated || !call.path.startsWith('/v1/chat/completions')) &&
+              LIMIT_HINT.test(`${status} ${text}`) &&
+              (translated || !/"(?:reason|details|retryDelay)"/.test(text))
+            ) {
+              // Once per model and turn: a second refusal is read with what the first one said.
+              const known = this.probed.get(grant)?.get(asked);
+              const probed = known ?? (await this.probeLimit(target, upstreams));
+              if (!known && probed) {
+                const seen =
+                  this.probed.get(grant) ?? new Map<string, { ok: boolean; text: string }>();
+                seen.set(asked, probed);
+                this.probed.set(grant, seen);
+                this.options.log.warn(
+                  {
+                    agent: grant.agentSlug,
+                    providerId: target.providerId,
+                    model: target.model,
+                    said: probed.ok ? null : providerWords(probed.text, target),
+                  },
+                  probed.ok
+                    ? 'gateway: the same model answered a plain request on the Chat route'
+                    : 'gateway: the same model refused a plain request on the Chat route too',
+                );
+              }
+              if (probed?.ok) {
+                // The model answers a plain request but refuses the agent's own: its shape is the
+                // likelier reason than a limit that passed in the same second (owner, 2026-10-01:
+                // Hermes answered on the same account and model while Claude Code was refused).
+                // A Google model is asked again one step lighter at a time — never a Claude model,
+                // never another provider's (DECISIONS §148: «ما ابي نخرب كلود علشان جيميناي»).
+                // Claude Code on a Google model is first diagnosed, once a session (preview.45).
+                if (translated && !this.bisected.get(grant)?.has(key)) {
+                  const found = await this.bisect(
+                    grant,
+                    target,
+                    upstreams,
+                    call.body,
+                    forwardHeaders(request.headers),
+                  );
+                  if (found) {
+                    if (response.destroyed || response.writableEnded) return;
+                    await this.forward(request, response, route, grant, target, upstreams);
+                    return;
+                  }
+                }
+                const step = this.nextShape(grant, target, built.body);
+                if (step) {
+                  this.options.log.warn(
+                    {
+                      agent: grant.agentSlug,
+                      providerId: target.providerId,
+                      model: target.model,
+                      shape: SHAPES[step - 1]!.name,
+                    },
+                    'gateway: asking the model again with a lighter request',
+                  );
+                  if (response.destroyed || response.writableEnded) return;
+                  await this.forward(request, response, route, grant, target, upstreams);
+                  return;
+                }
+                if (!known && !grant.waited.has(key)) {
+                  grant.waited.add(key);
+                  if (response.destroyed || response.writableEnded) return;
+                  await this.forward(request, response, route, grant, target, upstreams);
+                  return;
+                }
+              }
+              if (probed && !probed.ok && probed.text) text = probed.text;
+            }
+            const verdict = classifyLimit(status, text, answer.headers, this.limitWait);
+            // Every refused hop in the hub's log, as the provider put it (redacted): which path
+            // and model, what it answered, and what the hub made of it — so a person's log says
+            // exactly what Google said (owner, 2026-10-01).
+            this.options.log.warn(
+              {
+                agent: grant.agentSlug,
+                runId: grant.turn?.runId ?? grant.lastRunId,
+                providerId: target.providerId,
+                model: target.model,
+                path: call.path.replace(/\?.*$/, ''),
+                status,
+                verdict: verdict.kind === 'wait' ? `wait:${verdict.reason}` : verdict.kind,
+                readFromChatRoute: text !== raw.toString('utf8'),
+                said: providerWords(text, target),
+              },
+              'gateway: what the hub makes of the refusal',
+            );
             if (
               verdict.kind === 'wait' &&
               verdict.ms <= this.limitWait.maxMs &&
               !grant.waited.has(key)
             ) {
               // A limit that passes (Google says RESOURCE_EXHAUSTED for a per-minute limit as
-              // for a spent quota; owner, 2026-09-30): wait the provider's time once, then ask
-              // again within the same turn. A second refusal is taken as spent.
+              // for a spent quota; owner, 2026-09-30), or no capacity for the model right now
+              // (Antigravity, 2026-10-01): wait the provider's time once, then ask again within
+              // the same turn. A second refusal ends the model's part in the turn.
               grant.waited.add(key);
               this.options.log.info(
-                { providerId: target.providerId, model: target.model, waitMs: verdict.ms },
-                'gateway: the provider is limiting for now; waiting once before asking again',
+                {
+                  providerId: target.providerId,
+                  model: target.model,
+                  waitMs: verdict.ms,
+                  reason: verdict.reason,
+                },
+                'gateway: the provider refuses the model for now; waiting once before asking again',
               );
-              this.tellWaiting(grant, target, verdict.ms);
+              this.tellWaiting(grant, target, verdict.ms, verdict.reason);
               await new Promise((resolve) => setTimeout(resolve, verdict.ms));
               if (response.destroyed || response.writableEnded) return;
               await this.forward(request, response, route, grant, target, upstreams);
               return;
             }
             if (verdict.kind !== 'pass') {
-              const failure = this.quotaFailure(target, providerWords(text, target));
+              const failure = this.quotaFailure(
+                target,
+                verdict.kind === 'spent' ? 'quota_exhausted' : verdict.reason,
+                providerWords(text, target),
+              );
               grant.exhausted.add(exhaustedKey(target));
+              grant.refusals.set(exhaustedKey(target), failure);
               this.options.log.info(
-                { providerId: target.providerId, model: target.model, status },
-                'gateway: the provider says the quota is spent',
+                {
+                  providerId: target.providerId,
+                  model: target.model,
+                  status,
+                  reason: failure.reason,
+                },
+                'gateway: the provider refuses the model for this turn',
               );
               const next = this.fallBack(grant, failure, upstreams);
               if (next) {
@@ -843,13 +1028,75 @@ export class ModelGateway {
             }
             const headers = answerHeaders(answer.headers);
             delete headers['content-length'];
+            if (translated) {
+              // In the envelope of the wire the agent speaks.
+              headers['content-type'] = 'application/json';
+              response.writeHead(status, headers);
+              response.end(chatErrorToAnthropic(status, scrubInternalNames(text, target)));
+              return;
+            }
             response.writeHead(status, headers);
             response.end(scrubInternalNames(text, target));
           });
         return;
       }
-      response.writeHead(status, answerHeaders(answer.headers));
+      if (shaped && !shaped.settled) {
+        shaped.settled = true;
+        this.options.log.warn(
+          {
+            agent: grant.agentSlug,
+            providerId: target.providerId,
+            model: target.model,
+            shape: SHAPES[shaped.step - 1]!.name,
+          },
+          'gateway: the model answered the lighter request; the session keeps asking it this way',
+        );
+      }
       const tap = new UsageTap(answer.headers['content-type']);
+      if (translated) {
+        // Chat back to Anthropic's shape: a stream event by event, a whole answer at once.
+        const label = target.model;
+        const streaming = String(answer.headers['content-type'] ?? '').includes('event-stream');
+        const headers = answerHeaders(answer.headers);
+        delete headers['content-length'];
+        headers['content-type'] = streaming ? 'text/event-stream' : 'application/json';
+        response.writeHead(status, headers);
+        const stream = streaming ? new ChatToAnthropicStream(label) : null;
+        const whole: Buffer[] = [];
+        answer.on('data', (chunk: Buffer) => {
+          tap.push(chunk);
+          if (!stream) {
+            whole.push(chunk);
+            return;
+          }
+          const out = stream.push(chunk);
+          if (out && !response.write(out)) {
+            answer.pause();
+            response.once('drain', () => answer.resume());
+          }
+        });
+        answer.on('end', () => {
+          if (stream) response.end(stream.end());
+          else {
+            let parsed: Record<string, unknown> = {};
+            try {
+              parsed = JSON.parse(Buffer.concat(whole).toString('utf8')) as Record<string, unknown>;
+            } catch {
+              // An empty or broken answer: an empty message.
+            }
+            response.end(JSON.stringify(chatToAnthropic(parsed, label)));
+          }
+          finish();
+          const used = tap.result();
+          if (used && runId) this.account(grant, turn, runId, target, used);
+        });
+        answer.on('error', () => {
+          finish();
+          response.destroy();
+        });
+        return;
+      }
+      response.writeHead(status, answerHeaders(answer.headers));
       answer.on('data', (chunk: Buffer) => {
         tap.push(chunk);
         if (!response.write(chunk)) {
@@ -871,10 +1118,225 @@ export class ModelGateway {
     upstream.end(payload);
   }
 
-  private quotaFailure(target: GatewayTarget, said: string): GatewayQuotaFailure {
+  /**
+   * One small Chat Completions request for the model, on CLIProxyAPI's Chat route, which passes
+   * the provider's whole error on: `ok` when the model answers now, else the provider's answer.
+   * `null` when it could not be asked.
+   */
+  private async probeLimit(
+    target: GatewayTarget,
+    upstreams: GatewayUpstream[],
+    request: Record<string, unknown> = {
+      messages: [{ role: 'user', content: 'ok' }],
+      max_tokens: 1,
+    },
+  ): Promise<{ ok: boolean; text: string } | null> {
+    let lease;
+    try {
+      lease = await this.options.cliproxy.lease(upstreams);
+    } catch {
+      return null;
+    }
+    const payload = Buffer.from(
+      JSON.stringify({
+        ...request,
+        model: upstreamModel(target.providerId, target.model),
+        stream: false,
+      }),
+    );
+    try {
+      return await new Promise((resolve) => {
+        const probe = httpRequest(
+          {
+            host: '127.0.0.1',
+            port: lease.port,
+            method: 'POST',
+            path: '/v1/chat/completions',
+            headers: {
+              authorization: `Bearer ${lease.key}`,
+              'content-type': 'application/json',
+              'content-length': String(payload.length),
+            },
+            timeout: 20_000,
+          },
+          (answer) => {
+            void readBody(answer, MAX_ERROR_BYTES)
+              .catch(() => Buffer.alloc(0))
+              .then((body) =>
+                resolve({ ok: (answer.statusCode ?? 500) < 400, text: body.toString('utf8') }),
+              );
+          },
+        );
+        probe.on('timeout', () => probe.destroy());
+        probe.on('error', () => resolve(null));
+        probe.end(payload);
+      });
+    } finally {
+      lease.done();
+    }
+  }
+
+  /**
+   * Once a session per model: Claude Code's refused request on a Google model asked again in each
+   * `BISECT` variant, each outcome logged. The first variant that answers and is safe to keep is
+   * kept for the session (its number returned); the others are only said.
+   */
+  private async bisect(
+    grant: GatewayGrantRecord,
+    target: GatewayTarget,
+    upstreams: GatewayUpstream[],
+    body: Record<string, unknown>,
+    headers: Record<string, string | string[]>,
+  ): Promise<number | null> {
+    const key = exhaustedKey(target);
+    const done = this.bisected.get(grant) ?? new Map<string, number | null>();
+    done.set(key, null);
+    this.bisected.set(grant, done);
+    this.options.log.warn(
+      { agent: grant.agentSlug, providerId: target.providerId, model: target.model },
+      'gateway: diagnosing which part of the request the model refuses (once this session)',
+    );
+    let found: number | null = null;
+    for (const step of BISECT) {
+      const outcome = await this.askOnce(
+        upstreams,
+        step.apply(body),
+        step.bareHeaders ? {} : headers,
+      );
+      const word = !outcome ? 'not asked' : outcome.ok ? 'answered' : 'refused';
+      this.options.log.warn(
+        {
+          agent: grant.agentSlug,
+          providerId: target.providerId,
+          model: target.model,
+          step: step.n,
+          change: step.name,
+          status: outcome?.status ?? null,
+          said: outcome && !outcome.ok ? providerWords(outcome.text, target) : null,
+        },
+        `gateway: bisect step ${step.n}: ${word}`,
+      );
+      if (outcome?.ok && step.keep && found === null) found = step.n;
+    }
+    if (found !== null) {
+      done.set(key, found);
+      this.options.log.warn(
+        {
+          agent: grant.agentSlug,
+          providerId: target.providerId,
+          model: target.model,
+          step: found,
+          change: bisectStep(found)!.name,
+        },
+        'gateway: the session keeps asking the model with this bisect step',
+      );
+    }
+    return found;
+  }
+
+  /**
+   * One Chat Completions request on CLIProxyAPI exactly as given (a stream stays a stream), read
+   * only until the model's first word or its refusal, then let go. `null` when it could not ask.
+   */
+  private async askOnce(
+    upstreams: GatewayUpstream[],
+    body: Record<string, unknown>,
+    headers: Record<string, string | string[]>,
+  ): Promise<{ ok: boolean; status: number; text: string } | null> {
+    let lease;
+    try {
+      lease = await this.options.cliproxy.lease(upstreams);
+    } catch {
+      return null;
+    }
+    const payload = Buffer.from(JSON.stringify(body));
+    try {
+      return await new Promise((resolve) => {
+        const ask = httpRequest(
+          {
+            host: '127.0.0.1',
+            port: lease.port,
+            method: 'POST',
+            path: '/v1/chat/completions',
+            headers: {
+              ...headers,
+              authorization: `Bearer ${lease.key}`,
+              'content-type': 'application/json',
+              'content-length': String(payload.length),
+            },
+            timeout: 60_000,
+          },
+          (answer) => {
+            const status = answer.statusCode ?? 500;
+            if (status >= 400) {
+              void readBody(answer, MAX_ERROR_BYTES)
+                .catch(() => Buffer.alloc(0))
+                .then((raw) => resolve({ ok: false, status, text: raw.toString('utf8') }));
+              return;
+            }
+            let seen = '';
+            const settle = () => {
+              // A stream that opens with an error is a refusal too.
+              const refused = /"error"\s*:/.test(seen);
+              resolve({ ok: !refused, status, text: refused ? seen : '' });
+              ask.destroy();
+            };
+            answer.on('data', (chunk: Buffer) => {
+              seen += chunk.toString('utf8');
+              if (seen.length > 4096 || /\n\n/.test(seen)) settle();
+            });
+            answer.on('end', settle);
+            answer.on('error', settle);
+          },
+        );
+        ask.on('timeout', () => ask.destroy());
+        ask.on('error', () => resolve(null));
+        ask.end(payload);
+      });
+    } finally {
+      lease.done();
+    }
+  }
+
+  /**
+   * The next lighter way to ask a refused Google model, set for the rest of the session, or null
+   * when there is none: not a Google model, nothing left to lighten, or every step tried.
+   */
+  private nextShape(
+    grant: GatewayGrantRecord,
+    target: GatewayTarget,
+    body: Record<string, unknown>,
+  ): number | null {
+    if (!googleModel(target.model)) return null;
+    const key = exhaustedKey(target);
+    const shapes = this.shapes.get(grant) ?? new Map<string, { step: number; settled: boolean }>();
+    const current = shapes.get(key)?.step ?? 0;
+    const was = JSON.stringify(current ? SHAPES[current - 1]!.apply(body) : body);
+    for (let step = current + 1; step <= SHAPES.length; step += 1) {
+      // A step that changes nothing in this request is not a step (and the log says so).
+      if (JSON.stringify(SHAPES[step - 1]!.apply(body)) === was) {
+        this.options.log.info(
+          { agent: grant.agentSlug, model: target.model, shape: SHAPES[step - 1]!.name },
+          'gateway: this lighter step changes nothing in the request; skipped',
+        );
+        continue;
+      }
+      shapes.set(key, { step, settled: false });
+      this.shapes.set(grant, shapes);
+      return step;
+    }
+    return null;
+  }
+
+  private quotaFailure(
+    target: GatewayTarget,
+    reason: GatewayLimitReason,
+    said: string,
+  ): GatewayQuotaFailure {
     return {
       providerId: target.providerId,
       model: target.model,
+      reason,
       providerLabel: target.providerLabel ?? 'The provider',
       modelLabel: target.modelLabel,
       said,
@@ -910,6 +1372,7 @@ export class ModelGateway {
             providerId: target.providerId,
             model: target.model,
             modelLabel: target.modelLabel,
+            providerLabel: target.providerLabel ?? 'The provider',
           },
         });
       } catch (error) {
@@ -920,12 +1383,18 @@ export class ModelGateway {
     return null;
   }
 
-  private tellWaiting(grant: GatewayGrantRecord, target: GatewayTarget, ms: number): void {
+  private tellWaiting(
+    grant: GatewayGrantRecord,
+    target: GatewayTarget,
+    ms: number,
+    reason: Exclude<GatewayLimitReason, 'quota_exhausted'>,
+  ): void {
     try {
       grant.turn?.waiting?.({
         providerLabel: target.providerLabel ?? 'The provider',
         modelLabel: target.modelLabel,
         seconds: Math.ceil(ms / 1000),
+        reason,
       });
     } catch (error) {
       this.options.log.warn({ err: error }, 'gateway: the turn refused a wait report');
@@ -1130,39 +1599,74 @@ function exhaustedKey(target: { providerId: string; model: string }): string {
 /** How long to wait for a provider's passing limit: its own word, else this; never longer. */
 const LIMIT_WAIT = { defaultMs: 20_000, maxMs: 30_000 };
 
-/** Words that say a quota is spent for longer than a turn can wait, or money is. */
-const SPENT =
-  /insufficient[_ ]?(?:quota|balance|credits?)|exceeded your current|billing|payment|out of credits|credit balance|usage[_ ]limit|per[_ ]?day|perday|daily|per[_ ]?month|permonth|monthly/i;
 /**
- * Words that say a quota, spent or passing. A plain rate limit ("slow down", `rate_limit_error`
- * alone) is not one: the agent's own retries are for it, as before.
+ * Words that say a quota is spent for longer than a turn can wait, or money is. Antigravity's
+ * "You have exhausted your capacity on this model. Your quota will reset after 2h10m" is the
+ * account's own quota for that model (its `QUOTA_EXHAUSTED`), not the server's capacity.
  */
-const LIMITED = /quota|resource[_ ]?exhausted|model_cooldown|cooling down/i;
+const SPENT =
+  /insufficient[_ ]?(?:quota|balance|credits?)|exceeded your current|billing|payment|out of credits|credit balance|usage[_ ]limit|per[_ ]?day|perday|daily|per[_ ]?month|permonth|monthly|"?QUOTA_EXHAUSTED"?|quota exhausted|exhausted your capacity|quota will reset/i;
+/**
+ * Words that say the provider has no capacity for the model right now — nothing about the
+ * account: Antigravity's `MODEL_CAPACITY_EXHAUSTED`, "No capacity available for model … on the
+ * server", an overloaded model. Worth a short wait, or another model.
+ */
+const NO_CAPACITY =
+  /MODEL_CAPACITY_EXHAUSTED|no capacity available|capacity (?:is )?(?:exceeded|unavailable)|model (?:is )?overloaded|overloaded_error|server (?:is )?(?:busy|overloaded)/i;
+/**
+ * Words that say a limit that passes: a quota word without a spent one ("Resource has been
+ * exhausted (e.g. check quota)", a per-minute metric, `RATE_LIMIT_EXCEEDED`), or CLIProxyAPI's
+ * cooling down. A plain rate limit ("slow down", `rate_limit_error` alone) is not one: the
+ * agent's own retries are for it, as before.
+ */
+const LIMITED =
+  /quota|resource[_ ]?exhausted|rate_limit_exceeded|per[_ ]?minute|model_cooldown|cooling down/i;
+
+/** An error that may be a limit, worth asking CLIProxyAPI's Chat route what it really is. */
+const LIMIT_HINT =
+  /^(?:429|503|529)\b|quota|resource[_ ]?exhausted|capacity|overloaded|rate[_ ]?limit|cooling down/i;
+
+/** How long a model with no capacity is waited for, when the provider does not say. */
+const CAPACITY_WAIT_MS = 5_000;
 
 /**
  * What a provider's error says of its limits:
- * - `spent` — the money or a daily/monthly quota is gone (402, `insufficient_quota`, billing,
- *   credit, a `…PerDay` quota): answered at once, no retry will get past it this turn;
- * - `wait` — a limit that passes (a per-minute rate or token limit: Google says
- *   `RESOURCE_EXHAUSTED` for both, owner 2026-09-30), with how long to wait: the provider's
+ * - `spent` — the money or the account's quota for the model is gone (402, `insufficient_quota`,
+ *   billing, credit, a daily/monthly quota, Antigravity's `QUOTA_EXHAUSTED` / "exhausted your
+ *   capacity … quota will reset"): answered at once, no retry will get past it this turn;
+ * - `wait` — refused for now, with why (`no_capacity`: the provider has no capacity for the
+ *   model; `rate_limited`: a limit that passes — Google says `RESOURCE_EXHAUSTED` for a per-minute
+ *   limit as for a spent quota, owner 2026-09-30) and how long to wait: the provider's
  *   `retry-after(-ms)`, Google's `RetryInfo.retryDelay`, "Please retry in …", CLIProxyAPI's
  *   `reset_seconds` — else a default;
- * - `pass` — anything else, passed on as it came (a plain 429 without those words is the agent's
- *   to retry, as before).
+ * - `pass` — anything else, passed on as it came.
  */
 export function classifyLimit(
   status: number,
   text: string,
   headers: IncomingMessage['headers'] = {},
   wait: { defaultMs: number; maxMs: number } = LIMIT_WAIT,
-): { kind: 'spent' } | { kind: 'wait'; ms: number } | { kind: 'pass' } {
+):
+  | { kind: 'spent' }
+  | { kind: 'wait'; ms: number; reason: 'no_capacity' | 'rate_limited' }
+  | { kind: 'pass' } {
   if (status === 402) return { kind: 'spent' };
-  if (status !== 429 && status !== 403) return { kind: 'pass' };
-  if (SPENT.test(text)) return { kind: 'spent' };
+  if (status !== 429 && status !== 403 && status !== 503 && status !== 529) {
+    return { kind: 'pass' };
+  }
+  if (status !== 503 && status !== 529 && SPENT.test(text)) return { kind: 'spent' };
+  const ms = retryDelayMs(text, headers);
+  if (NO_CAPACITY.test(text)) {
+    return {
+      kind: 'wait',
+      ms: ms ?? Math.min(wait.defaultMs, CAPACITY_WAIT_MS),
+      reason: 'no_capacity',
+    };
+  }
+  if (status === 503 || status === 529) return { kind: 'pass' };
   if (!LIMITED.test(text)) return { kind: 'pass' };
   if (status === 403 && !/quota|resource[_ ]?exhausted/i.test(text)) return { kind: 'pass' };
-  const ms = retryDelayMs(text, headers);
-  return { kind: 'wait', ms: ms ?? wait.defaultMs };
+  return { kind: 'wait', ms: ms ?? wait.defaultMs, reason: 'rate_limited' };
 }
 
 /** How long the provider asks to wait, in milliseconds, or null when it does not say. */
@@ -1225,11 +1729,49 @@ function providerWords(text: string, target: GatewayTarget): string {
           ? error
           : parsed.message;
     if (typeof message === 'string' && message.trim()) said = message;
+    // Google's own reason and quota names, which tell a spent quota from no capacity or an
+    // account restriction.
+    const details =
+      error && typeof error === 'object' ? (error as { details?: unknown }).details : undefined;
+    const codes = new Set<string>();
+    for (const detail of Array.isArray(details) ? details : []) {
+      const entry = (detail ?? {}) as {
+        reason?: unknown;
+        retryDelay?: unknown;
+        violations?: { quotaId?: unknown }[];
+      };
+      if (typeof entry.reason === 'string') codes.add(entry.reason);
+      for (const violation of Array.isArray(entry.violations) ? entry.violations : []) {
+        if (typeof violation?.quotaId === 'string') codes.add(violation.quotaId);
+      }
+      if (typeof entry.retryDelay === 'string') codes.add(`retry in ${entry.retryDelay}`);
+    }
+    if (codes.size > 0) said = `${said} (${[...codes].join(', ')})`;
   } catch {
     // Not JSON: its text as it came.
   }
-  said = scrubInternalNames(said, target).replace(/\s+/g, ' ').trim();
-  return said.length > 400 ? `${said.slice(0, 399)}…` : said || 'the quota is spent';
+  // A message that carries another answer inside it (CLIProxyAPI's "… cooling down (last error:
+  // {"error": {…}})"): that answer's own message, not its JSON.
+  said = said.replace(/\{[\s\S]*\}/g, (blob) => {
+    const inner = /"message"\s*:\s*"((?:[^"\\]|\\.)*)"/.exec(blob)?.[1];
+    return inner ? inner.replace(/\\"/g, '"') : '';
+  });
+  said = redactSecrets(scrubInternalNames(said, target)).replace(/\s+/g, ' ').trim();
+  return said.length > 400 ? `${said.slice(0, 399)}…` : said || 'the provider gave no reason';
+}
+
+/** Why a provider refused a model, as a person reads it (English; the chat says it localised). */
+export function limitSentence(
+  failure: Pick<GatewayQuotaFailure, 'reason' | 'providerLabel' | 'modelLabel'>,
+): string {
+  switch (failure.reason) {
+    case 'no_capacity':
+      return `${failure.providerLabel} has no capacity for ${failure.modelLabel} right now`;
+    case 'rate_limited':
+      return `${failure.providerLabel} is limiting requests to ${failure.modelLabel} right now`;
+    default:
+      return `${failure.providerLabel} ran out of quota for ${failure.modelLabel}`;
+  }
 }
 
 /**
@@ -1242,7 +1784,7 @@ function answerQuota(response: ServerResponse, wire: Wire, failure: GatewayQuota
     response.destroy();
     return;
   }
-  const message = `${failure.providerLabel} ran out of quota for ${failure.modelLabel}: pick another model for this chat in Core Hub. The provider said: ${failure.said}`;
+  const message = `${limitSentence(failure)}: pick another model for this chat in Core Hub. The provider said: ${failure.said}`;
   const body =
     wire === 'anthropic'
       ? { type: 'error', error: { type: 'rate_limit_error', message } }
@@ -1272,4 +1814,122 @@ function answerQuota(response: ServerResponse, wire: Wire, failure: GatewayQuota
           };
   response.writeHead(429, { 'content-type': 'application/json', 'x-should-retry': 'false' });
   response.end(JSON.stringify(body));
+}
+
+/**
+ * A request's input, in tokens, as an estimate: about four bytes of its system prompt, messages
+ * and tools a token (the rule of thumb for English and code; Arabic counts higher, which errs
+ * towards a fuller window rather than an emptier one).
+ */
+export function estimateTokens(body: Record<string, unknown>): number {
+  const bytes = Buffer.byteLength(
+    JSON.stringify([body.system ?? null, body.messages ?? [], body.tools ?? []]),
+  );
+  return Math.max(1, Math.ceil(bytes / 4));
+}
+
+/** The lowest thinking a request's own settings ask, in each wire: kept on, at its least. */
+export function lowerThinking(body: Record<string, unknown>): Record<string, unknown> {
+  const out: Record<string, unknown> = { ...body };
+  const thinking = out.thinking as Record<string, unknown> | undefined;
+  if (thinking && typeof thinking === 'object' && typeof thinking.budget_tokens === 'number') {
+    out.thinking = { ...thinking, budget_tokens: Math.min(thinking.budget_tokens, 1024) };
+  }
+  const output = out.output_config as Record<string, unknown> | undefined;
+  if (output && typeof output === 'object' && output.effort !== undefined) {
+    out.output_config = { ...output, effort: 'low' };
+  }
+  const reasoning = out.reasoning as Record<string, unknown> | undefined;
+  if (reasoning && typeof reasoning === 'object' && reasoning.effort !== undefined) {
+    out.reasoning = { ...reasoning, effort: 'low' };
+  }
+  if (out.reasoning_effort !== undefined) out.reasoning_effort = 'low';
+  const config = out.generationConfig as Record<string, unknown> | undefined;
+  const thinkingConfig = config?.thinkingConfig as Record<string, unknown> | undefined;
+  if (config && thinkingConfig && typeof thinkingConfig === 'object') {
+    const lowered: Record<string, unknown> = { ...thinkingConfig };
+    if (lowered.thinkingLevel !== undefined) lowered.thinkingLevel = 'low';
+    if (typeof lowered.thinkingBudget === 'number' && lowered.thinkingBudget > 0) {
+      lowered.thinkingBudget = Math.min(lowered.thinkingBudget, 1024);
+    }
+    out.generationConfig = { ...config, thinkingConfig: lowered };
+  }
+  return out;
+}
+
+/** A request without the agent's own thinking settings; the provider's defaults apply. */
+export function withoutThinking(body: Record<string, unknown>): Record<string, unknown> {
+  const out: Record<string, unknown> = { ...body };
+  delete out.thinking;
+  delete out.output_config;
+  delete out.reasoning;
+  delete out.reasoning_effort;
+  const config = out.generationConfig as Record<string, unknown> | undefined;
+  if (config && config.thinkingConfig !== undefined) {
+    const rest = { ...config };
+    delete rest.thinkingConfig;
+    out.generationConfig = rest;
+  }
+  return out;
+}
+
+/** The longest a trimmed tool's own description is kept. */
+const TRIMMED_DESCRIPTION = 160;
+
+/**
+ * A request's tools with their schemas' descriptions taken out and their own shortened: the
+ * same tools and arguments, a much smaller request.
+ */
+export function trimTools(body: Record<string, unknown>): Record<string, unknown> {
+  const strip = (value: unknown): unknown => {
+    if (Array.isArray(value)) return value.map(strip);
+    if (!value || typeof value !== 'object') return value;
+    const out: Record<string, unknown> = {};
+    for (const [name, inner] of Object.entries(value as Record<string, unknown>)) {
+      if (name === 'description' || name === 'examples') continue;
+      out[name] = strip(inner);
+    }
+    return out;
+  };
+  const shorten = (text: unknown) =>
+    typeof text === 'string' && text.length > TRIMMED_DESCRIPTION
+      ? `${text.slice(0, TRIMMED_DESCRIPTION - 1)}…`
+      : text;
+  const tool = (entry: unknown): unknown => {
+    if (!entry || typeof entry !== 'object') return entry;
+    const t = entry as Record<string, unknown>;
+    const out: Record<string, unknown> = { ...t };
+    if ('description' in t) out.description = shorten(t.description);
+    for (const field of ['input_schema', 'parameters', 'parametersJsonSchema']) {
+      if (field in t) out[field] = strip(t[field]);
+    }
+    if (t.function && typeof t.function === 'object') out.function = tool(t.function);
+    if (Array.isArray(t.functionDeclarations))
+      out.functionDeclarations = t.functionDeclarations.map(tool);
+    return out;
+  };
+  return Array.isArray(body.tools) ? { ...body, tools: body.tools.map(tool) } : body;
+}
+
+/**
+ * The lighter ways a refused Google model is asked again, in order, each with the ones before
+ * it; the log names the one that answered.
+ */
+export const SHAPES: readonly {
+  name: string;
+  apply(body: Record<string, unknown>): Record<string, unknown>;
+}[] = [
+  { name: 'thinking lowered', apply: lowerThinking },
+  { name: 'without thinking', apply: withoutThinking },
+  { name: 'without thinking, tools trimmed', apply: (body) => trimTools(withoutThinking(body)) },
+];
+
+/**
+ * A Google model (Gemini, Gemma), whoever serves it — Google's own API, Antigravity, Vertex or a
+ * proxy. The thinking retry is for these only: a Claude model, Claude Code's own, through
+ * Antigravity too, is always asked exactly as Claude Code asks (owner, 2026-10-01: «ما ابي نخرب
+ * كلود علشان جيميناي»).
+ */
+function googleModel(model: string): boolean {
+  return /^(?:models\/)?(?:gemini|gemma)\b/i.test(model.replace(/^.*\//, ''));
 }

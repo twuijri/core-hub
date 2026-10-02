@@ -112,18 +112,24 @@ jobs:
             test -n "${!name}" || { echo "::error::The secret behind $name is not set"; exit 1; }
           done
           pnpm --filter @corehub/desktop package --mac
+      # Both apps, Apple Silicon (release/mac-arm64) and Intel (release/mac; DECISIONS §152): each
+      # signed, notarised and stapled.
       - name: Check the signature, the notarisation and the app id
         run: |
           set -euo pipefail
-          app=$(ls -d apps/desktop/release/mac*/*.app | head -1)
-          test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$app/Contents/Info.plist")" = com.twuijri.corehub
-          codesign --verify --deep --strict --verbose=2 "$app"
-          codesign -dv "$app" 2>&1 | grep -E '^(Identifier|TeamIdentifier|Authority|Runtime Version)='
-          spctl --assess --type execute --verbose=2 "$app"
-          xcrun stapler validate "$app"
-          dmg=$(ls apps/desktop/release/*.dmg | head -1)
-          spctl --assess --type open --context context:primary-signature --verbose=2 "$dmg" || true
-          echo "Signed dmg: $(du -h "$dmg" | cut -f1)" | tee -a "$GITHUB_STEP_SUMMARY"
+          for app in apps/desktop/release/mac*/*.app; do
+            echo "== $app"
+            test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$app/Contents/Info.plist")" = com.twuijri.corehub
+            codesign --verify --deep --strict --verbose=2 "$app"
+            codesign -dv "$app" 2>&1 | grep -E '^(Identifier|TeamIdentifier|Authority|Runtime Version)='
+            spctl --assess --type execute --verbose=2 "$app"
+            xcrun stapler validate "$app"
+            lipo -archs "$app/Contents/MacOS/Core Hub"
+          done
+          for dmg in apps/desktop/release/*.dmg; do
+            spctl --assess --type open --context context:primary-signature --verbose=2 "$dmg" || true
+            echo "Signed $(basename "$dmg"): $(du -h "$dmg" | cut -f1)" | tee -a "$GITHUB_STEP_SUMMARY"
+          done
       # An installed copy updates from the zip of the same signed app, through latest-mac.yml
       # (DECISIONS §109); the feed must name the zip exactly as the release carries it.
       - name: Check the update zip and feed
@@ -131,14 +137,18 @@ jobs:
         run: |
           set -euo pipefail
           v="${COREHUB_VERSION:-$(node -p "require('./package.json').version")}"
-          zip=$(ls apps/desktop/release/*-mac.zip | head -1)
-          check="$RUNNER_TEMP/zip-check"
-          mkdir -p "$check"
-          ditto -x -k "$zip" "$check"
-          codesign --verify --deep --strict --verbose=2 "$check"/*.app
-          xcrun stapler validate "$check"/*.app
+          for zip in apps/desktop/release/*-mac.zip; do
+            check="$RUNNER_TEMP/zip-check/$(basename "$zip" .zip)"
+            mkdir -p "$check"
+            ditto -x -k "$zip" "$check"
+            codesign --verify --deep --strict --verbose=2 "$check"/*.app
+            xcrun stapler validate "$check"/*.app
+          done
           cat apps/desktop/release/latest-mac.yml
-          node apps/desktop/scripts/release-assets.mjs check-feeds "${v#v}" apps/desktop/release macos
+          # One feed names both zips; a tag before the Intel Mac app names the arm64 one only.
+          intel=''
+          test -f apps/desktop/scripts/argon2-darwin-x64.mjs || intel='--without=macos-x64'
+          node apps/desktop/scripts/release-assets.mjs check-feeds "${v#v}" apps/desktop/release macos $intel
       - uses: actions/upload-artifact@v4
         if: inputs.keep_artifacts
         with:

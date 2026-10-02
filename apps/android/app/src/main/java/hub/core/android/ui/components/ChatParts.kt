@@ -50,6 +50,9 @@ import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.liveRegion
@@ -133,9 +136,17 @@ fun TurnView(turn: Turn, youLabel: String, profile: String = "", mine: Boolean =
                         )
                     }
                 }
+                val reply = LocalMessageActions.current?.reply
                 turn.messages.forEach { message ->
                     CompositionLocalProvider(LocalLayoutDirection provides uiDirection) {
-                        if (mine) PersonBubble(message, Modifier.widthIn(max = maxBubble), profile) else AgentMessage(message, profile)
+                        // Swipe toward the reading start to reply (§150); never on a reply still
+                        // streaming or the empty shell a run opens with.
+                        SwipeToReply(
+                            enabled = reply != null && !message.streaming && !message.isEmpty,
+                            onReply = { reply?.invoke(message) },
+                        ) {
+                            if (mine) PersonBubble(message, Modifier.widthIn(max = maxBubble), profile) else AgentMessage(message, profile)
+                        }
                     }
                 }
             }
@@ -186,8 +197,19 @@ private fun AgentMessage(message: ChatMessage, profile: String) {
     val t = LocalTokens.current
     val clipboard = LocalClipboardManager.current
     val shape = AbsoluteRoundedCornerShape(topLeft = small, topRight = big, bottomRight = big, bottomLeft = big)
+    // A long press on a reply opens the same menu as a long press on yours (§150): copy, read
+    // aloud, reply, fork. The «…» under it stays; this is one more way in. Not while it streams.
+    val longPressActions = LocalMessageActions.current
+    var pressMenu by remember { mutableStateOf(false) }
+    val pressable = longPressActions != null && !message.streaming && message.text.isNotBlank()
+    Box {
     Column(
         Modifier.fillMaxWidth().background(t.agentBubble, shape).border(1.dp, t.agentBubbleBorder, shape)
+            .then(
+                if (pressable) {
+                    Modifier.pointerInput(message.id) { detectTapGestures(onLongPress = { pressMenu = true }) }
+                } else Modifier,
+            )
             .padding(if (hub.core.android.ui.screens.LocalChatDisplay.current.compact) 8.dp else 12.dp).testTag("message.agent"),
         verticalArrangement = Arrangement.spacedBy(if (hub.core.android.ui.screens.LocalChatDisplay.current.compact) 4.dp else 8.dp),
     ) {
@@ -222,6 +244,12 @@ private fun AgentMessage(message: ChatMessage, profile: String) {
                 }
             }
         }
+    }
+    if (pressable && longPressActions != null) {
+        hub.core.android.ui.kit.HubMenu(pressMenu, { pressMenu = false }) {
+            MessageActionItems(message, longPressActions, copy = { clipboard.setText(AnnotatedString(message.text)) }) { pressMenu = false }
+        }
+    }
     }
 }
 
@@ -493,6 +521,8 @@ fun Composer(
     trailing: @Composable () -> Unit = {},
     /** Files are attached and uploaded: the message may go without words. */
     hasAttachments: Boolean = false,
+    /** Lets the screen put the cursor in the field (a reply chosen from a message, §150). */
+    focus: androidx.compose.ui.focus.FocusRequester? = null,
 ) {
     val t = LocalTokens.current
     val canSend = (text.isNotBlank() || hasAttachments) && !sending
@@ -510,7 +540,8 @@ fun Composer(
             textStyle = style,
             maxLines = 6,
             cursorBrush = SolidColor(t.accent),
-            modifier = Modifier.weight(1f).defaultMinSize(minHeight = ControlTokens.heightMd.dp).testTag("composer.input"),
+            modifier = Modifier.weight(1f).defaultMinSize(minHeight = ControlTokens.heightMd.dp)
+                .then(if (focus != null) Modifier.focusRequester(focus) else Modifier).testTag("composer.input"),
             decorationBox = { inner ->
                 Box(Modifier.defaultMinSize(minHeight = ControlTokens.heightMd.dp).padding(horizontal = 6.dp, vertical = 6.dp), contentAlignment = Alignment.CenterStart) {
                     if (text.isEmpty()) Text(placeholder, style = style.copy(color = t.textFaint), maxLines = 1, overflow = TextOverflow.Ellipsis)

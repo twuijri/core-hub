@@ -18,6 +18,7 @@
  * the provider cards, which are drawn without asking), the recent failed calls, and the last
  * "check now" readings.
  */
+import type { FastifyBaseLogger } from 'fastify';
 import { HubError, notFound } from '../../lib/errors.js';
 import { redactSecrets } from '../../lib/redact-text.js';
 import { t, type UiLanguage } from '../../i18n/index.js';
@@ -26,6 +27,7 @@ import { upstreamPrefix } from './gateway/cliproxy-config.js';
 import type { CodexDeviceLogin } from './gateway/cliproxy-login.js';
 import {
   ManagementError,
+  type ManagementApiCallResult,
   type ManagementClient,
   type ManagementCredential,
   type ManagementErrorEvent,
@@ -153,7 +155,24 @@ export interface SubscriptionsOptions {
   now?: () => number;
   /** How long to wait for a ChatGPT device sign-in's account to appear in the store. */
   settleMs?: number;
+  /** Where a vendor's own words go when "Check now" read nothing (redacted, never to a client). */
+  log?: Pick<FastifyBaseLogger, 'warn'>;
 }
+
+/**
+ * Why "Check now" read nothing, as a code the dialog says in the person's language
+ * (`models.subscription.check.<code>`). The vendor's own answer never reaches a client: it is
+ * logged, redacted (the owner, 2026-10-01: a raw JSON body in the dialog).
+ */
+export type CheckFailure =
+  | 'no_address'
+  | 'no_index'
+  | 'not_shared'
+  | 'signed_out'
+  | 'rate_limited'
+  | 'vendor_error'
+  | 'unreachable'
+  | 'no_usage';
 
 export class Subscriptions {
   private snapshot: { at: number; credentials: ManagementCredential[] } | null = null;
@@ -164,7 +183,7 @@ export class Subscriptions {
       at: string;
       windows: ContractUsageWindow[];
       limitReached: boolean | null;
-      error: string | null;
+      error: { code: CheckFailure; company: string; status: number | null } | null;
     }
   >();
   private readonly now: () => number;
@@ -372,14 +391,22 @@ export class Subscriptions {
     await client.setFields(account.name, {
       prefix: upstreamPrefix(providerId),
       note: accountMarker(providerId),
-      disable_cooling: false,
+      // The hub's gateway decides what a refusal means and when to ask again (§142, §148): an
+      // account that cools itself down after one 429 refuses every later call locally, the
+      // gateway's own retry included ("All credentials … are cooling down", owner 2026-10-01),
+      // and this per-account field outranks the config's `disable-cooling`.
+      disable_cooling: true,
     });
+    this.uncooled.add(account.name);
     // The list the cards read, with the mark on it.
     this.remember(await client.credentials());
     return account.name;
   }
 
   // ------------------------------------------------------------------ accounts
+
+  /** Accounts whose cooling this process has turned off (`disable_cooling`). */
+  private readonly uncooled = new Set<string>();
 
   private remember(credentials: ManagementCredential[]): void {
     this.snapshot = { at: this.now(), credentials };
@@ -408,7 +435,18 @@ export class Subscriptions {
     if (reason) return { ok: false, reason };
     try {
       await this.withClient(async (client) => {
-        this.remember(await client.credentials());
+        const credentials = await client.credentials();
+        // Accounts signed in before the hub turned their cooling off (§148): once a process.
+        for (const entry of credentials) {
+          if (!entry.note?.startsWith('corehub:') || this.uncooled.has(entry.name)) continue;
+          try {
+            await client.setFields(entry.name, { disable_cooling: true });
+          } catch {
+            // Best effort: the account still works, it only cools itself down after a 429.
+          }
+          this.uncooled.add(entry.name);
+        }
+        this.remember(credentials);
         const failed = await client.drainErrors().catch(() => []);
         this.errors.push(...failed);
         if (this.errors.length > MAX_ERRORS) this.errors.splice(0, this.errors.length - MAX_ERRORS);
@@ -468,48 +506,103 @@ export class Subscriptions {
     });
   }
 
-  /** "Check now": the vendor's own usage address, asked with the account's token. */
+  /**
+   * "Check now": the vendor's own usage addresses, asked in order with the account's token; the
+   * first answer that carries usage wins (the requests CLIProxyAPI's management console makes,
+   * `GatewaySignIn.check`). When none does, the reading is one reason, in the person's language.
+   */
   async check(providerId: string, name: string, signIn: GatewaySignIn): Promise<void> {
     await this.refresh(true);
     const account = this.accountOf(providerId, name);
     const at = new Date(this.now()).toISOString();
-    const reading = (
-      error: string | null,
-      windows: ContractUsageWindow[] = [],
-      limit: boolean | null = null,
-    ) => this.checks.set(name, { at, windows, limitReached: limit, error });
-    if (!signIn.check) return void reading('this vendor has no usage address to ask');
-    if (!account.authIndex) return void reading('the account has no index to ask with');
-    const header: Record<string, string> = { ...(signIn.check.headers ?? {}) };
-    const accountId = account.idToken?.chatgpt_account_id;
-    if (signIn.vendor === 'codex' && typeof accountId === 'string') {
-      header['chatgpt-account-id'] = accountId;
+    const fail = (code: CheckFailure, status: number | null = null) =>
+      void this.checks.set(name, {
+        at,
+        windows: [],
+        limitReached: null,
+        error: { code, company: signIn.company, status },
+      });
+    if (!signIn.check || signIn.check.length === 0) return fail('no_address');
+    if (!account.authIndex) return fail('no_index');
+    const header = (extra: Record<string, string> | undefined) => {
+      const out: Record<string, string> = { ...(extra ?? {}) };
+      const accountId = account.idToken?.chatgpt_account_id;
+      if (signIn.vendor === 'codex' && typeof accountId === 'string') {
+        out['chatgpt-account-id'] = accountId;
+      }
+      return out;
+    };
+    // The account's Google Cloud project, for Google's quota addresses; none — an empty body.
+    const bodyOf = (body: string | undefined) =>
+      body === undefined
+        ? undefined
+        : account.projectId
+          ? body.replaceAll('$PROJECT$', JSON.stringify(account.projectId).slice(1, -1))
+          : body.includes('$PROJECT$')
+            ? '{}'
+            : body;
+    let answered = false;
+    let unreachable = false;
+    const statuses: number[] = [];
+    for (const request of signIn.check) {
+      let answer: ManagementApiCallResult;
+      try {
+        const data = bodyOf(request.body);
+        answer = await this.withClient((client) =>
+          client.apiCall({
+            authIndex: account.authIndex!,
+            method: request.method,
+            url: request.url,
+            header: header(request.headers),
+            ...(data === undefined ? {} : { data }),
+          }),
+        );
+      } catch (error) {
+        unreachable = true;
+        this.options.log?.warn(
+          { vendor: signIn.vendor, url: request.url, err: redactSecrets(String(error)) },
+          'subscriptions: "check now" could not reach the vendor',
+        );
+        continue;
+      }
+      if (answer.statusCode < 200 || answer.statusCode >= 300) {
+        statuses.push(answer.statusCode);
+        this.options.log?.warn(
+          {
+            vendor: signIn.vendor,
+            url: request.url,
+            status: answer.statusCode,
+            answer: redactSecrets(answer.body ?? '').slice(0, 500),
+          },
+          'subscriptions: the vendor refused "check now"',
+        );
+        continue;
+      }
+      answered = true;
+      let body: unknown;
+      try {
+        body = JSON.parse(answer.body);
+      } catch {
+        continue;
+      }
+      const read = readUsage(signIn.vendor, body, this.now());
+      if (read.windows.length === 0 && read.limitReached === null) continue;
+      this.checks.set(name, {
+        at,
+        windows: read.windows,
+        limitReached: read.limitReached,
+        error: null,
+      });
+      return;
     }
-    const answer = await this.withClient((client) =>
-      client.apiCall({
-        authIndex: account.authIndex!,
-        method: signIn.check!.method,
-        url: signIn.check!.url,
-        header,
-        ...(signIn.check!.body === undefined ? {} : { data: signIn.check!.body }),
-      }),
-    );
-    if (answer.statusCode < 200 || answer.statusCode >= 300) {
-      return void reading(
-        `the vendor answered ${answer.statusCode}${answer.body ? `: ${redactSecrets(answer.body).slice(0, 200)}` : ''}`,
-      );
-    }
-    let body: unknown;
-    try {
-      body = JSON.parse(answer.body);
-    } catch {
-      return void reading('the vendor answered with something that is not JSON');
-    }
-    const read = readUsage(signIn.vendor, body, this.now());
-    if (read.windows.length === 0 && read.limitReached === null) {
-      return void reading('the answer carried no usage this hub can read');
-    }
-    reading(null, read.windows, read.limitReached);
+    if (answered) return fail('no_usage');
+    // As CLIProxyAPI's console ranks them: a 403 or 404 says more than a later 5xx.
+    const status = statuses.find((code) => code === 403 || code === 404) ?? statuses[0] ?? null;
+    if (status === null) return fail(unreachable ? 'unreachable' : 'vendor_error');
+    if (status === 403 || status === 404) return fail('not_shared', status);
+    if (status === 401) return fail('signed_out', status);
+    if (status === 429) return fail('rate_limited', status);
+    return fail('vendor_error', status);
   }
 
   /** One account in the contract's words. */
@@ -518,7 +611,8 @@ export class Subscriptions {
     const checked = this.checks.get(account.name);
     const windows = mergeWindows(passive.windows, checked?.windows ?? []).map((window) => ({
       ...window,
-      label: windowLabel(window.id, window.window_minutes, language),
+      // A vendor that names its own windows (Antigravity's models) keeps its names.
+      label: window.label ?? windowLabel(window.id, window.window_minutes, language),
     }));
     return {
       id: account.name,
@@ -540,7 +634,7 @@ export class Subscriptions {
       limit_reached: checked?.limitReached ?? passive.limitReached,
       quota_observed_at: iso(account.quota.observedAt),
       checked_at: checked?.at ?? null,
-      check_error: checked?.error ?? null,
+      check_error: checked?.error ? checkFailure(checked.error, language) : null,
     };
   }
 
@@ -665,6 +759,20 @@ const number = (value: unknown): number | null => {
   return null;
 };
 
+/** A non-empty string, trimmed, or null. */
+const text = (value: unknown): string | null =>
+  typeof value === 'string' && value.trim() !== '' ? value.trim() : null;
+
+/** A fraction left (0–1) as the vendors say it: 0.85, "0.85" or "85%". */
+const fractionOf = (value: unknown): number | null => {
+  if (typeof value === 'string' && value.trim().endsWith('%')) {
+    const parsed = number(value);
+    return parsed === null ? null : Math.min(1, Math.max(0, parsed / 100));
+  }
+  const parsed = number(value);
+  return parsed === null ? null : Math.min(1, Math.max(0, parsed));
+};
+
 /** A reset time as the vendors say it: unix seconds (or ms), or a date. */
 function resetAt(value: unknown, now: number, afterSeconds?: unknown): string | null {
   const numeric = number(value);
@@ -687,6 +795,8 @@ const CLAUDE_WINDOWS: Record<string, { id: string; minutes: number }> = {
   '7d_opus': { id: 'seven_day_opus', minutes: 10_080 },
   '7d_sonnet': { id: 'seven_day_sonnet', minutes: 10_080 },
   '7d_oauth_apps': { id: 'seven_day_oauth_apps', minutes: 10_080 },
+  '7d_cowork': { id: 'seven_day_cowork', minutes: 10_080 },
+  '7d_fable': { id: 'seven_day_fable', minutes: 10_080 },
 };
 
 type Windows = { windows: ContractUsageWindow[]; limitReached: boolean | null };
@@ -744,6 +854,16 @@ export function observedWindows(account: ManagementCredential, now: number): Win
 
 const round = (value: number) => Math.round(value * 10) / 10;
 
+/** Why "Check now" read nothing, in the person's language (`models.subscription.check.*`). */
+function checkFailure(
+  error: { code: CheckFailure; company: string; status: number | null },
+  language: UiLanguage,
+): string {
+  return t(`models.subscription.check.${error.code}`, language)
+    .replaceAll('{company}', error.company)
+    .replaceAll('{status}', error.status === null ? '' : String(error.status));
+}
+
 /** What "check now" read from a vendor's usage answer. */
 export function readUsage(vendor: string, body: unknown, now: number): Windows {
   const object = (body && typeof body === 'object' ? body : {}) as Record<string, unknown>;
@@ -762,30 +882,51 @@ export function readUsage(vendor: string, body: unknown, now: number): Windows {
     (value && typeof value === 'object' ? value : null) as Record<string, unknown> | null;
 
   if (vendor === 'codex') {
-    const limit = record(object.rate_limit ?? object.rateLimit);
-    if (limit) {
-      if (typeof limit.limit_reached === 'boolean') limitReached = limit.limit_reached;
+    // The plan's limits, then Codex's code-review limits (CPAMC reads both from `wham/usage`).
+    for (const [prefix, raw] of [
+      ['', object.rate_limit ?? object.rateLimit],
+      ['code_review_', object.code_review_rate_limit ?? object.codeReviewRateLimit],
+    ] as const) {
+      const limit = record(raw);
+      if (!limit) continue;
+      const reached =
+        typeof limit.limit_reached === 'boolean'
+          ? limit.limit_reached
+          : typeof limit.limitReached === 'boolean'
+            ? limit.limitReached
+            : null;
+      if (prefix === '' && reached !== null) limitReached = reached;
       for (const [side, key] of [
         ['primary', 'primary_window'],
         ['secondary', 'secondary_window'],
       ] as const) {
         const window = record(limit[key] ?? limit[key.replace('_w', 'W')]);
         if (!window) continue;
-        const seconds = number(window.limit_window_seconds);
-        push(
-          side,
-          seconds === null ? null : Math.round(seconds / 60),
-          number(window.used_percent),
-          resetAt(window.reset_at, now, window.reset_after_seconds),
+        const seconds = number(window.limit_window_seconds ?? window.limitWindowSeconds);
+        const resets = resetAt(
+          window.reset_at ?? window.resetAt,
+          now,
+          window.reset_after_seconds ?? window.resetAfterSeconds,
         );
+        // A spent limit that says only when it comes back is 100% used.
+        const used =
+          number(window.used_percent ?? window.usedPercent) ?? (reached && resets ? 100 : null);
+        push(`${prefix}${side}`, seconds === null ? null : Math.round(seconds / 60), used, resets);
       }
     }
   } else if (vendor === 'claude') {
     for (const [key, value] of Object.entries(object)) {
       const window = record(value);
       if (!window || !('utilization' in window)) continue;
-      const known = Object.values(CLAUDE_WINDOWS).find((entry) => entry.id === key);
-      push(key, known?.minutes ?? null, number(window.utilization), resetAt(window.resets_at, now));
+      // Anthropic's code name for the weekly Fable limit (CPAMC `CLAUDE_USAGE_WINDOW_KEYS`).
+      const id = key === 'iguana_necktie' ? 'seven_day_fable' : key;
+      const known = Object.values(CLAUDE_WINDOWS).find((entry) => entry.id === id);
+      push(
+        id,
+        known?.minutes ?? (id.startsWith('seven_day') ? 10_080 : null),
+        number(window.utilization),
+        resetAt(window.resets_at, now),
+      );
     }
   } else if (vendor === 'kimi' || vendor === 'kimi-ai') {
     const usage = record(object.usage);
@@ -799,8 +940,14 @@ export function readUsage(vendor: string, body: unknown, now: number): Windows {
       if (remaining !== null) return ((limit - remaining) / limit) * 100;
       return null;
     };
-    if (usage)
-      push('total', null, fraction(usage), resetAt(usage.resetTime ?? usage.reset_time, now));
+    // Kimi says a reset as an instant or as seconds from now (CPAMC `kimiResetMs`).
+    const resetOf = (item: Record<string, unknown>) =>
+      resetAt(
+        item.reset_at ?? item.resetAt ?? item.reset_time ?? item.resetTime,
+        now,
+        item.reset_in ?? item.resetIn ?? item.ttl,
+      );
+    if (usage && fraction(usage) !== null) push('total', null, fraction(usage), resetOf(usage));
     const limits = Array.isArray(object.limits) ? object.limits : [];
     limits.forEach((raw, index) => {
       const item = record(raw);
@@ -821,12 +968,11 @@ export function readUsage(vendor: string, body: unknown, now: number): Windows {
                 : unit.includes('SECOND')
                   ? Math.round(duration / 60)
                   : duration;
-      push(
-        `limit_${index + 1}`,
-        minutes,
-        fraction(detail),
-        resetAt(detail.resetTime ?? detail.reset_time ?? detail.resetAt, now),
+      push(`limit_${index + 1}`, minutes, fraction(detail), resetOf(detail));
+      const named = [item.name, item.title, item.scope, detail.name, detail.title].find(
+        (value) => typeof value === 'string' && value.trim(),
       );
+      if (typeof named === 'string') windows[windows.length - 1]!.label = named.trim();
     });
   } else if (vendor === 'xai') {
     const config = record(object.config) ?? object;
@@ -847,22 +993,51 @@ export function readUsage(vendor: string, body: unknown, now: number): Windows {
     );
     if (used === null) windows.pop();
   } else if (vendor === 'antigravity') {
+    // `retrieveUserQuotaSummary`: groups of buckets, each with its window (`5h`, `weekly`).
     const groups = Array.isArray(object.groups) ? object.groups : [];
     for (const rawGroup of groups) {
-      const buckets = Array.isArray(record(rawGroup)?.buckets)
-        ? (record(rawGroup)!.buckets as unknown[])
-        : [];
+      const group = record(rawGroup);
+      const groupName = text(group?.displayName ?? group?.display_name);
+      const buckets = Array.isArray(group?.buckets) ? (group!.buckets as unknown[]) : [];
       for (const rawBucket of buckets) {
         const bucket = record(rawBucket);
         if (!bucket) continue;
-        const remaining = number(bucket.remainingFraction ?? bucket.remaining_fraction);
+        const remaining = fractionOf(bucket.remainingFraction ?? bucket.remaining_fraction);
+        if (remaining === null) continue;
+        const window = String(bucket.window ?? '').toLowerCase();
+        const minutes = ['5h', 'five-hour', 'five_hour'].includes(window)
+          ? 300
+          : ['weekly', 'week'].includes(window)
+            ? 10_080
+            : null;
         push(
-          String(bucket.bucketId ?? bucket.bucket_id ?? bucket.displayName ?? 'bucket'),
-          null,
-          remaining === null ? null : (1 - remaining) * 100,
+          String(bucket.bucketId ?? bucket.bucket_id ?? `${groupName ?? 'group'}-${window}`),
+          minutes,
+          (1 - remaining) * 100,
           resetAt(bucket.resetTime ?? bucket.reset_time, now),
         );
+        const label = text(bucket.displayName ?? bucket.display_name);
+        windows[windows.length - 1]!.label =
+          groupName && label ? `${groupName} · ${label}` : (label ?? groupName);
       }
+    }
+    // `fetchAvailableModels`: each model with its own quota (`quotaInfo.remainingFraction`,
+    // `resetTime`); a model that says only when it comes back has none left (CPAMC).
+    const models = record(object.models);
+    if (windows.length === 0 && models) {
+      for (const [id, rawModel] of Object.entries(models)) {
+        const model = record(rawModel);
+        const info = record(model?.quotaInfo ?? model?.quota_info);
+        if (!info) continue;
+        const resets = text(info.resetTime ?? info.reset_time);
+        const remaining =
+          fractionOf(info.remainingFraction ?? info.remaining_fraction ?? info.remaining) ??
+          (resets ? 0 : null);
+        if (remaining === null) continue;
+        push(id, null, (1 - remaining) * 100, resetAt(resets, now));
+        windows[windows.length - 1]!.label = text(model?.displayName ?? model?.display_name) ?? id;
+      }
+      windows.sort((a, b) => (a.label ?? a.id).localeCompare(b.label ?? b.id));
     }
   }
   return { windows, limitReached };

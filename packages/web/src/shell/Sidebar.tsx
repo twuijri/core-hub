@@ -307,26 +307,7 @@ export function Sidebar({
       {/* Slim by design (NAVIGATION §1): starting a chat, finding one, the agents, tasks,
           schedules, and the list. Everything configured once lives on a page inside
           Settings. */}
-      {agentPage !== null ? (
-        <AgentBackRow onNavigate={onNavigate} />
-      ) : settingsId !== null ? (
-        <SidebarGroup testId="settings-back">
-          <SidebarRow
-            icon={<IconArrowStart size={18} />}
-            label={t('shell.back_to_chats')}
-            render={({ className, children }) => (
-              <Link
-                to={backTo ?? routeOf('new_chat')}
-                onClick={onNavigate}
-                className={className}
-                data-testid="back-to-chats"
-              >
-                {children}
-              </Link>
-            )}
-          />
-        </SidebarGroup>
-      ) : (
+      {settingsId === null && agentPage === null && (
         <SidebarGroup testId="rail">{railRows}</SidebarGroup>
       )}
 
@@ -393,6 +374,30 @@ export function Sidebar({
           </p>
         )}
       </SidebarBody>
+
+      {/* «Back to chats» / «Back to agents» sits at the bottom, pinned above the footer, so it
+          stays in reach while the menu above it scrolls, and Tab reaches it just before the
+          footer (owner, 2026-10-01, DECISIONS §151; it was at the top, where the rail is). */}
+      {agentPage !== null ? (
+        <AgentBackRow onNavigate={onNavigate} />
+      ) : settingsId !== null ? (
+        <SidebarGroup testId="settings-back" pinned>
+          <SidebarRow
+            icon={<IconArrowStart size={18} />}
+            label={t('shell.back_to_chats')}
+            render={({ className, children }) => (
+              <Link
+                to={backTo ?? routeOf('new_chat')}
+                onClick={onNavigate}
+                className={className}
+                data-testid="back-to-chats"
+              >
+                {children}
+              </Link>
+            )}
+          />
+        </SidebarGroup>
+      ) : null}
 
       {folded ? (
         <SidebarFooter testId="footer">

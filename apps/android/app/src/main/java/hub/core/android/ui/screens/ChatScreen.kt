@@ -34,6 +34,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.lifecycle.repeatOnLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import hub.core.android.R
 import hub.core.android.chat.Turns
@@ -108,6 +109,24 @@ fun ChatScreen(
     }
     // Leaving the conversation drops the messages still waiting on the phone (MessageQueue.kt).
     androidx.compose.runtime.DisposableEffect(sessionId) { onDispose { vm.dropQueue() } }
+    // The person is looking at this conversation while it is on screen and the app is resumed:
+    // the hub skips the phone push for a reply here (DECISIONS §149).
+    if (sessionId != null) {
+        val lifecycle = androidx.lifecycle.compose.LocalLifecycleOwner.current.lifecycle
+        val realtime = context.graph.realtime
+        LaunchedEffect(sessionId, lifecycle) {
+            lifecycle.repeatOnLifecycle(androidx.lifecycle.Lifecycle.State.RESUMED) {
+                try {
+                    while (true) {
+                        realtime.viewing(sessionId)
+                        kotlinx.coroutines.delay(20_000)
+                    }
+                } finally {
+                    realtime.viewing(null)
+                }
+            }
+        }
+    }
     val listState = rememberLazyListState()
     val atBottom by remember { derivedStateOf { !listState.canScrollForward } }
     val youLabel = stringResource(R.string.chat_you)
@@ -136,10 +155,18 @@ fun ChatScreen(
     // Copy, read aloud, reply and fork under each message of this chat (apps batch 1).
     val chatAgent = agents.firstOrNull { it.id == chat.session?.agentId }
     val globalAgent = chat.session?.globalAgent == true
+    // A reply chosen from a message (its menu, or a swipe, §150) puts the cursor in the composer
+    // and brings the keyboard up.
+    val composerFocus = remember { androidx.compose.ui.focus.FocusRequester() }
+    val keyboard = androidx.compose.ui.platform.LocalSoftwareKeyboardController.current
     val messageActions = remember(sessionId, onOpenChat, globalAgent) {
         hub.core.android.ui.components.MessageActions(
             speak = { vm.speak(it.text) },
-            reply = { replyTo = it },
+            reply = {
+                replyTo = it
+                runCatching { composerFocus.requestFocus() }
+                keyboard?.show()
+            },
             fork = if (onOpenChat == null || globalAgent) null else { message -> vm.fork(message.id) { onOpenChat(it.id, it.profile) } },
         )
     }
@@ -326,6 +353,7 @@ fun ChatScreen(
             leading = { AttachButton(vm.tray) },
             trailing = { MicButton(dictation) },
             hasAttachments = ready,
+            focus = composerFocus,
         )
     }
 }

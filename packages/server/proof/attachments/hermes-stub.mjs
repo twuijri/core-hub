@@ -25,9 +25,7 @@ const runs = new Map();
 function answer(input) {
   // "- order.csv (text/csv; charset=utf-8, 21 bytes) — /data/.../in/order.csv"
   const attachment = /^- .*? — (\/\S+)$/m.exec(input);
-  const outputDir = /Write any file the user should be able to download into: (\/\S+)$/m.exec(
-    input,
-  );
+  const outputDir = /(?:download into|save it in this folder): (\/\S+)$/m.exec(input);
   const lines = [];
   let produced = null;
 

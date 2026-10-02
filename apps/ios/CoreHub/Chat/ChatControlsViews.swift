@@ -449,14 +449,30 @@ struct MessageActionsMenu: View {
     }
 }
 
-/// A long press on your own message: its menu, in a chat only (a room keeps plain selection).
+/// A long press on a message: its menu, in a chat only (a room keeps plain selection). An
+/// agent's reply can be long, so it shows its opening lines as the preview, not the whole card.
 struct MessageMenu: ViewModifier {
     let message: Message
     let actions: MessageActions?
+    var preview = false
 
     func body(content: Content) -> some View {
         if let actions {
-            content.contextMenu { MessageActionsMenu(message: message, actions: actions) }
+            if preview {
+                content.contextMenu {
+                    MessageActionsMenu(message: message, actions: actions)
+                } preview: {
+                    Text(message.text)
+                        .font(.system(size: FontSize.sizeMd))
+                        .lineLimit(12)
+                        .contentDirection(of: message.text, fill: false)
+                        .padding(Space.s3)
+                        .frame(maxWidth: 340, alignment: .leading)
+                        .background(Tone.agentBubble)
+                }
+            } else {
+                content.contextMenu { MessageActionsMenu(message: message, actions: actions) }
+            }
         } else {
             content
         }

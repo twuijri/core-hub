@@ -59,6 +59,7 @@ same token cannot bring it back.
 |---|---|---|---|
 | `/rt/sessions` | `subscribe` | `{ session_id, after_seq? }` | receive the session's message/run/tool events (profile-wide events need no subscription); with `after_seq`, resume — see below |
 | `/rt/sessions` | `unsubscribe` | `{ session_id }` | stop |
+| `/rt/sessions` | `viewing` | `{ session_id }` or `{ session_id: null }` | the person is looking at this conversation (open, page or app in front), or at none; repeat every 20 s while it holds, the hub forgets it after 45 s or when the socket closes. A finished run, a failed one or an approval in that conversation is still a notice but is not pushed to the person's phones (DECISIONS §149). Ack `{ ok: true }`; `bad_request` for anything but an id or null. An older hub has no handler and never acks |
 | `/rt/rooms` | `join` | `{ room_id }` | become present in the room (`member.joined` if not yet a member is **not** implied — join via HTTP first) and receive its events |
 | `/rt/rooms` | `leave` | `{ room_id }` | stop; presence goes offline |
 | `/rt/rooms` | `typing` | `{ room_id, typing: true|false }` | broadcast `member.typing` |
@@ -127,7 +128,7 @@ message.
 ## Catalogue
 
 
-### `/rt/sessions` — 21 events
+### `/rt/sessions` — 22 events
 
 | Event | Emitted by | Payload | Notes |
 |---|---|---|---|
@@ -152,6 +153,7 @@ message.
 | `subagent.updated` | sessions module from the agent's delegation reports | `subagent`: `Subagent` | A running subagent called a tool or stopped taking guidance; `subagent` is its whole state. Profile-wide. |
 | `subagent.completed` | sessions module from the agent's delegation reports, `sessions.interruptSubagent`, `background.stop` | `subagent`: `Subagent` | A subagent ended: `completed`, `failed` or `interrupted`. Profile-wide. |
 | `context.compression` | sessions module: `sessions.compress`, or the agent compressing on its own during a run | `session_id`: `Ulid`, `run_id`: `Ulid | null`, `phase`: `started` / `finished` / `failed`, `trigger`: `manual` / `auto`, `before_tokens`, `after_tokens`: `integer | null`, `message`: `string | null` | The agent is compressing (or finished compressing) the conversation's context; `context.updated` follows with the new window (decision §57). |
+| `run.status` | sessions module, from the model gateway during a run | `session_id`, `run_id`: `Ulid`, `phase`: `waiting` / `trying`, `provider`, `model`: `string`, `seconds`: `integer | null`, `reason`: `no_capacity` / `rate_limited` / `quota_exhausted` / `null` | What the gateway is doing while the agent says nothing: waiting out a provider's refusal once, or trying the chain's next model (DECISIONS §148). Never stored; the move itself is `Run.fallback`. |
 
 ### `/rt/rooms` — 25 events
 

@@ -224,6 +224,15 @@ describe("inside an agent's pages the sidebar is the agent's list", () => {
     const back = await within(sidebar).findByTestId('back-to-agents');
     expect(back.textContent).toBe('Back to agents');
     expect(back.getAttribute('href')).toBe('/agents');
+    // At the bottom, pinned above the footer: after the agent's list (outside its scrolling
+    // body), and the footer straight after it — Tab reaches it just before the footer (§151).
+    const backGroup = within(sidebar).getByTestId('agent-back');
+    const footer = within(sidebar).getByTestId('footer');
+    expect(backGroup.nextElementSibling).toBe(footer);
+    expect(
+      (await within(sidebar).findByTestId('agent-nav')).compareDocumentPosition(backGroup) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
     // The rail and the segment row step aside, as they do in Settings.
     expect(within(sidebar).queryByTestId('rail')).toBeNull();
     expect(within(sidebar).queryByTestId('segments')).toBeNull();

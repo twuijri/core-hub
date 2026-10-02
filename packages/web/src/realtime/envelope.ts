@@ -40,6 +40,7 @@ export const SESSION_EVENTS = [
   'approval.resolved',
   'context.updated',
   'context.compression',
+  'run.status',
 ] as const;
 
 /**

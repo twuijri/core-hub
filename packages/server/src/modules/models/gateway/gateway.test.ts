@@ -9,6 +9,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import pino from 'pino';
 import { parse } from 'yaml';
+import { capturingLogger } from '../../../../tests/unit/helpers.js';
 import { afterEach, describe, expect, it } from 'vitest';
 
 /** CLIProxyAPI's file, as far as these tests read it. */
@@ -27,6 +28,10 @@ import {
   ModelGateway,
   isLoopback,
   classifyLimit,
+  estimateTokens,
+  withoutThinking,
+  lowerThinking,
+  trimTools,
   scrubInternalNames,
   type GatewaySource,
 } from './gateway.js';
@@ -58,6 +63,19 @@ function upstream(overrides: Partial<GatewayUpstream> = {}): GatewayUpstream {
       { id: 'flash-spent', contextWindow: null },
       { id: 'flash-per-minute', contextWindow: null },
       { id: 'flash-per-day', contextWindow: null },
+      { id: 'flash-busy', contextWindow: null },
+      { id: 'gemini-thinks', contextWindow: null },
+      { id: 'claude-thinks', contextWindow: null },
+      { id: 'gemini-high-effort', contextWindow: null },
+      { id: 'gemini-big-tools', contextWindow: null },
+      { id: 'gemini-anthropic-route', contextWindow: null },
+      { id: 'gemini-refuses-billing', contextWindow: null },
+      { id: 'gemini-refuses-identity', contextWindow: null },
+      { id: 'gemini-refuses-schema', contextWindow: null },
+      { id: 'gemini-refuses-agent', contextWindow: null },
+      { id: 'claude-refuses-billing', contextWindow: null },
+      { id: 'gemini-tools-chat', contextWindow: null },
+      { id: 'claude-tools-chat', contextWindow: null },
     ],
     ...overrides,
   };
@@ -74,7 +92,12 @@ interface Harness {
 const open: Harness[] = [];
 
 function harness(
-  options: { binary?: string | null; enabled?: boolean; env?: NodeJS.ProcessEnv } = {},
+  options: {
+    binary?: string | null;
+    enabled?: boolean;
+    env?: NodeJS.ProcessEnv;
+    log?: typeof log;
+  } = {},
 ): Harness {
   const stateDir = mkdtempSync(path.join(tmpdir(), 'corehub-gw-test-'));
   const late: Harness['late'] = [];
@@ -105,7 +128,7 @@ function harness(
   const gateway = new ModelGateway({
     cliproxy,
     source,
-    log,
+    log: options.log ?? log,
     enabled: options.enabled ?? true,
     limitWait: { defaultMs: 20, maxMs: 1_000 },
   });
@@ -445,8 +468,14 @@ describe('the gateway', () => {
       expect(anthropic.headers.get('x-should-retry')).toBe('false');
       const said = (await anthropic.json()) as { error: { type: string; message: string } };
       expect(said.error.type).toBe('rate_limit_error');
-      expect(said.error.message).toMatch(/^The provider ran out of quota for Label flash-spent/);
+      // Google's bare RESOURCE_EXHAUSTED, waited out once and refused again: a limit for now,
+      // not a spent quota (owner, 2026-10-01: the account had just been signed in).
+      expect(said.error.message).toMatch(
+        /^The provider is limiting requests to Label flash-spent right now/,
+      );
       expect(said.error.message).toContain('Resource has been exhausted');
+      // The provider's words, never a vendor's raw JSON inside them.
+      expect(said.error.message).not.toContain('{"error"');
       // Never the hub's internal name for the provider row.
       expect(said.error.message).not.toMatch(/h01k/i);
       expect(exhausted).toEqual([
@@ -476,8 +505,9 @@ describe('the gateway', () => {
           details: [expect.objectContaining({ reason: 'MODEL_CAPACITY_EXHAUSTED' })],
         },
       });
-      // Asked once more after a wait (it might have been a passing limit), then never again.
-      expect((await calls(h))[spentModel]).toBe(2);
+      // Refused, asked on the Chat route what the refusal really is (CLIProxyAPI keeps only the
+      // message on Claude Code's wire), asked once more after a wait, then never again.
+      expect((await calls(h))[spentModel]).toBe(3);
       // A new turn asks the provider again: the quota may be back.
       grant.setTurn({
         runId: 'run-q2',
@@ -486,7 +516,7 @@ describe('the gateway', () => {
         report: () => {},
       });
       await post(`${grant.anthropicBaseUrl}/v1/messages`, grant.token, { model: 'corehub-main' });
-      expect((await calls(h))[spentModel]).toBe(4);
+      expect((await calls(h))[spentModel]).toBe(6);
     });
 
     it('moves the turn down the profile’s fallback chain, and keeps it there', async () => {
@@ -523,7 +553,7 @@ describe('the gateway', () => {
         model: 'corehub-main',
       });
       expect(next.headers.get('x-fake-model')).toBe(`${upstreamPrefix(PROVIDER)}/coder`);
-      expect((await calls(h))[spentModel]).toBe(2);
+      expect((await calls(h))[spentModel]).toBe(3);
     });
 
     it('waits out a per-minute limit once and answers; a per-day quota is spent at once', async () => {
@@ -564,6 +594,395 @@ describe('the gateway', () => {
       expect((await calls(h))[`${upstreamPrefix(PROVIDER)}/flash-per-day`]).toBe(1);
     });
 
+    it('reads the provider’s own reason where CLIProxyAPI keeps only the message: no capacity is not a spent quota', async () => {
+      const h = harness();
+      const grant = await grantOf(h);
+      const waits: unknown[] = [];
+      const moves: { failed: { reason: string; said: string } }[] = [];
+      grant.setTurn({
+        runId: 'run-busy',
+        providerId: PROVIDER,
+        model: 'flash-busy',
+        report: () => {},
+        fallbacks: [{ providerId: PROVIDER, model: 'coder' }],
+        waiting: (wait) => waits.push(wait),
+        fellBack: (move) => moves.push(move),
+      });
+      const answer = await post(`${grant.anthropicBaseUrl}/v1/messages`, grant.token, {
+        model: 'corehub-main',
+      });
+      expect(answer.status).toBe(200);
+      expect(answer.headers.get('x-fake-model')).toBe(`${upstreamPrefix(PROVIDER)}/coder`);
+      expect(waits).toEqual([expect.objectContaining({ reason: 'no_capacity' })]);
+      expect(moves[0]!.failed.reason).toBe('no_capacity');
+      // Google's own reason, in the words the chat shows.
+      expect(moves[0]!.failed.said).toContain('No capacity available for model');
+      expect(moves[0]!.failed.said).toContain('MODEL_CAPACITY_EXHAUSTED');
+      expect(moves[0]!.failed.said).not.toMatch(/h01k/i);
+    });
+
+    it('asks a Gemini model again without the agent’s thinking settings when it answers a plain request; never a Claude model', async () => {
+      const h = harness();
+      const grant = await grantOf(h);
+      const fellBack: unknown[] = [];
+      grant.setTurn({
+        runId: 'run-thinks',
+        providerId: PROVIDER,
+        model: 'gemini-thinks',
+        report: () => {},
+        fallbacks: [{ providerId: PROVIDER, model: 'coder' }],
+        fellBack: (move) => fellBack.push(move),
+      });
+      const thinking = {
+        model: 'corehub-main',
+        thinking: { type: 'adaptive' },
+        output_config: { effort: 'high' },
+      };
+      const first = await post(`${grant.anthropicBaseUrl}/v1/messages`, grant.token, thinking);
+      expect(first.status).toBe(200);
+      // The turn's own model answered, asked without the thinking settings; no fallback.
+      expect(first.headers.get('x-fake-model')).toBe(`${upstreamPrefix(PROVIDER)}/gemini-thinks`);
+      expect(first.headers.get('x-fake-thinking')).toBe('no');
+      expect(fellBack).toEqual([]);
+      // The next call of the session goes the same way at once.
+      const next = await post(`${grant.anthropicBaseUrl}/v1/messages`, grant.token, thinking);
+      expect(next.status).toBe(200);
+      expect(next.headers.get('x-fake-thinking')).toBe('no');
+      // A Claude model is never asked differently, refused or not («ما ابي نخرب كلود علشان جيميناي»):
+      // its request reaches the provider as Claude Code sent it, and the chain takes over.
+      const claude = await grantOf(h);
+      const claudeMoves: unknown[] = [];
+      claude.setTurn({
+        runId: 'run-claude',
+        providerId: PROVIDER,
+        model: 'claude-thinks',
+        report: () => {},
+        fallbacks: [{ providerId: PROVIDER, model: 'coder' }],
+        fellBack: (move) => claudeMoves.push(move),
+      });
+      const asked = await post(`${claude.anthropicBaseUrl}/v1/messages`, claude.token, thinking);
+      expect(asked.headers.get('x-fake-model')).toBe(`${upstreamPrefix(PROVIDER)}/coder`);
+      expect(asked.headers.get('x-fake-thinking')).toBe('yes');
+      expect(asked.headers.get('x-fake-effort')).toBe('high');
+      expect(claudeMoves).toHaveLength(1);
+      expect(
+        withoutThinking({
+          model: 'm',
+          thinking: {},
+          generationConfig: { thinkingConfig: {}, topP: 1 },
+        }),
+      ).toEqual({ model: 'm', generationConfig: { topP: 1 } });
+    });
+
+    it('lowers a Gemini model’s thinking first, and trims its tools only when nothing else answers', async () => {
+      const h = harness();
+      const ask = async (model: string, body: Record<string, unknown>) => {
+        const grant = await grantOf(h);
+        grant.setTurn({ runId: `run-${model}`, providerId: PROVIDER, model, report: () => {} });
+        const answer = await post(`${grant.anthropicBaseUrl}/v1/messages`, grant.token, body);
+        return { answer, grant };
+      };
+      const thinking = {
+        model: 'corehub-main',
+        thinking: { type: 'adaptive' },
+        output_config: { effort: 'high' },
+      };
+      // Refused only at high effort: answered with thinking still on, at low effort.
+      const high = await ask('gemini-high-effort', thinking);
+      expect(high.answer.status).toBe(200);
+      expect(high.answer.headers.get('x-fake-thinking')).toBe('yes');
+      expect(high.answer.headers.get('x-fake-effort')).toBe('low');
+      // Refused for its tools' size: answered with the same tools, their descriptions trimmed.
+      const tools = Array.from({ length: 6 }, (_, i) => ({
+        name: `tool_${i}`,
+        description: 'A long description of what this tool does. '.repeat(10),
+        input_schema: {
+          type: 'object',
+          properties: { path: { type: 'string', description: 'where' } },
+        },
+      }));
+      const big = await ask('gemini-big-tools', { ...thinking, tools });
+      expect(big.answer.status).toBe(200);
+      expect(big.answer.headers.get('x-fake-thinking')).toBe('no');
+      expect(trimTools({ tools }).tools).toEqual(
+        tools.map((tool) => ({
+          name: tool.name,
+          description: `${tool.description.slice(0, 159)}…`,
+          input_schema: { type: 'object', properties: { path: { type: 'string' } } },
+        })),
+      );
+      expect(lowerThinking(thinking)).toEqual({ ...thinking, output_config: { effort: 'low' } });
+    });
+
+    it('speaks Chat to CLIProxyAPI for a Google model on Claude’s wire, and answers in Anthropic’s stream', async () => {
+      const h = harness();
+      const grant = await grantOf(h);
+      grant.setTurn({
+        runId: 'run-chat',
+        providerId: PROVIDER,
+        model: 'gemini-tools-chat',
+        report: () => {},
+      });
+      const answer = await post(`${grant.anthropicBaseUrl}/v1/messages`, grant.token, {
+        model: 'corehub-main',
+        stream: true,
+        max_tokens: 32000,
+        thinking: { type: 'adaptive' },
+        output_config: { effort: 'high' },
+        system: [{ type: 'text', text: 'You are Claude Code.' }],
+        tools: [
+          {
+            name: 'Read',
+            description: 'Read a file',
+            input_schema: { type: 'object', properties: { path: { type: 'string' } } },
+          },
+        ],
+        messages: [
+          { role: 'user', content: [{ type: 'text', text: 'Read x.md' }] },
+          {
+            role: 'assistant',
+            content: [
+              { type: 'thinking', thinking: 'hm', signature: '' },
+              { type: 'text', text: 'Reading.' },
+              { type: 'tool_use', id: 'toolu_1', name: 'Read', input: { path: 'x.md' } },
+            ],
+          },
+          {
+            role: 'user',
+            content: [
+              {
+                type: 'tool_result',
+                tool_use_id: 'toolu_1',
+                content: [{ type: 'text', text: 'X' }],
+              },
+              { type: 'text', text: 'and a.md, b.md' },
+            ],
+          },
+        ],
+      });
+      expect(answer.status).toBe(200);
+      expect(answer.headers.get('content-type')).toContain('text/event-stream');
+      // The route CLIProxyAPI was asked on, and what it was sent.
+      expect(answer.headers.get('x-fake-path')).toBe('/v1/chat/completions');
+      expect(answer.headers.get('x-fake-roles')).toBe('system,user,assistant,tool,user');
+      expect(answer.headers.get('x-fake-tools')).toBe('1');
+      expect(answer.headers.get('x-fake-effort')).toBe('high');
+      const events = (await answer.text())
+        .split('\n')
+        .filter((line) => line.startsWith('data: '))
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Anthropic SSE events, read by path in assertions
+        .map((line) => JSON.parse(line.slice(6)) as Record<string, any>);
+      expect(events[0]!.type).toBe('message_start');
+      expect(events.at(-1)!.type).toBe('message_stop');
+      const text = events
+        .filter((e) => e.type === 'content_block_delta' && e.delta.type === 'text_delta')
+        .map((e) => e.delta.text)
+        .join('');
+      expect(text).toBe('هلا! Reading two files.');
+      const thought = events
+        .filter((e) => e.type === 'content_block_delta' && e.delta.type === 'thinking_delta')
+        .map((e) => e.delta.thinking)
+        .join('');
+      expect(thought).toBe('Let me look.');
+      const tools = events
+        .filter((e) => e.type === 'content_block_start' && e.content_block.type === 'tool_use')
+        .map((e) => [e.content_block.id, e.content_block.name]);
+      expect(tools).toEqual([
+        ['call_a', 'Read'],
+        ['call_b', 'Read'],
+      ]);
+      const inputs = events
+        .filter((e) => e.type === 'content_block_delta' && e.delta.type === 'input_json_delta')
+        .map((e) => JSON.parse(e.delta.partial_json));
+      expect(inputs).toEqual([{ path: 'a.md' }, { path: 'b.md' }]);
+      const delta = events.find((e) => e.type === 'message_delta')!;
+      expect(delta.delta.stop_reason).toBe('tool_use');
+      expect(delta.usage).toEqual({ input_tokens: 42, output_tokens: 7 });
+      // Every block opened is closed, in order.
+      const starts = events.filter((e) => e.type === 'content_block_start').map((e) => e.index);
+      const stops = events.filter((e) => e.type === 'content_block_stop').map((e) => e.index);
+      expect(starts).toEqual(stops);
+    });
+
+    it('keeps a Claude model, and any model on Anthropic’s route, byte for byte as the agent sent it', async () => {
+      const h = harness();
+      const grant = await grantOf(h);
+      grant.setTurn({
+        runId: 'run-claude-route',
+        providerId: PROVIDER,
+        model: 'claude-tools-chat',
+        report: () => {},
+      });
+      const answer = await post(`${grant.anthropicBaseUrl}/v1/messages`, grant.token, {
+        model: 'corehub-main',
+        thinking: { type: 'adaptive' },
+        output_config: { effort: 'high' },
+      });
+      expect(answer.headers.get('x-fake-path')).toBe('/v1/messages');
+      expect(answer.headers.get('x-fake-thinking')).toBe('yes');
+      expect(answer.headers.get('x-fake-effort')).toBe('high');
+    });
+
+    it('answers a Google model on the Chat route where CLIProxyAPI’s Anthropic route is refused', async () => {
+      const h = harness();
+      const grant = await grantOf(h);
+      grant.setTurn({
+        runId: 'run-route',
+        providerId: PROVIDER,
+        model: 'gemini-anthropic-route',
+        report: () => {},
+      });
+      const answer = await post(`${grant.anthropicBaseUrl}/v1/messages`, grant.token, {
+        model: 'corehub-main',
+        stream: true,
+        messages: [{ role: 'user', content: 'هلا' }],
+      });
+      expect(answer.status).toBe(200);
+      expect(answer.headers.get('x-fake-path')).toBe('/v1/chat/completions');
+      expect(await answer.text()).toContain('"text":"hello"');
+    });
+
+    describe('Claude Code refused by a Google model that answers a plain request', () => {
+      // As Claude Code asks: its billing line and identity first, a tool schema with `$schema`.
+      const claudeCode = {
+        model: 'corehub-main',
+        stream: true,
+        system: [
+          { type: 'text', text: 'x-anthropic-billing-header: cc_version=2.1; cc_entrypoint=cli;' },
+          { type: 'text', text: "You are Claude Code, Anthropic's official CLI for Claude." },
+          { type: 'text', text: 'Help with code.' },
+        ],
+        messages: [{ role: 'user', content: 'هلا' }],
+        tools: [
+          {
+            name: 'Read',
+            description: 'Read a file.',
+            input_schema: {
+              $schema: 'http://json-schema.org/draft-07/schema#',
+              type: 'object',
+              properties: { format: { type: 'string', format: 'uri' } },
+              additionalProperties: false,
+            },
+          },
+        ],
+      };
+      const ask = async (model: string, captured = capturingLogger()) => {
+        const h = harness({ log: captured.logger });
+        const grant = await grantOf(h);
+        grant.setTurn({ runId: 'run-bisect', providerId: PROVIDER, model, report: () => {} });
+        const first = await post(`${grant.anthropicBaseUrl}/v1/messages`, grant.token, claudeCode, {
+          'user-agent': 'claude-cli/2.1 (external, cli)',
+        });
+        const firstText = await first.text();
+        const second = await post(
+          `${grant.anthropicBaseUrl}/v1/messages`,
+          grant.token,
+          claudeCode,
+          {
+            'user-agent': 'claude-cli/2.1 (external, cli)',
+          },
+        );
+        await second.text();
+        const steps = captured.lines
+          .map((line) => String(line.msg))
+          .filter((msg) => msg.startsWith('gateway: bisect step'));
+        const kept = captured.lines.filter(
+          (line) =>
+            line.msg === 'gateway: the session keeps asking the model with this bisect step',
+        );
+        return { h, first, firstText, second, steps, kept };
+      };
+
+      it('keeps the billing line out for the session when that is what Google refuses', async () => {
+        const r = await ask('gemini-refuses-billing');
+        expect(r.first.status).toBe(200);
+        expect(r.firstText).toContain('message_stop');
+        expect(r.steps).toEqual([
+          'gateway: bisect step 1: answered',
+          'gateway: bisect step 2: refused',
+          'gateway: bisect step 3: refused',
+          'gateway: bisect step 4: refused',
+          'gateway: bisect step 5: refused',
+          'gateway: bisect step 6: refused',
+        ]);
+        expect(r.kept).toHaveLength(1);
+        expect(r.kept[0]!.step).toBe(1);
+        // Once a session: the second turn goes straight through with the step kept.
+        expect(r.second.status).toBe(200);
+      });
+
+      it('keeps tool schemas cleaned for Gemini when a schema keyword is what Google refuses', async () => {
+        const r = await ask('gemini-refuses-schema');
+        expect(r.first.status).toBe(200);
+        expect(r.steps).toEqual([
+          'gateway: bisect step 1: refused',
+          'gateway: bisect step 2: refused',
+          'gateway: bisect step 3: answered',
+          'gateway: bisect step 4: answered',
+          'gateway: bisect step 5: answered',
+          'gateway: bisect step 6: refused',
+        ]);
+        expect(r.kept[0]!.step).toBe(4);
+        expect(r.second.status).toBe(200);
+      });
+
+      it('leaves the agent’s own headers out when they are what Google refuses', async () => {
+        const r = await ask('gemini-refuses-agent');
+        expect(r.first.status).toBe(200);
+        expect(r.steps.at(-1)).toBe('gateway: bisect step 6: answered');
+        expect(r.kept[0]!.step).toBe(6);
+      });
+
+      it('only says it when the identity sentence is what Google refuses, and does not ask again', async () => {
+        const r = await ask('gemini-refuses-identity');
+        expect(r.steps).toEqual([
+          'gateway: bisect step 1: refused',
+          'gateway: bisect step 2: answered',
+          'gateway: bisect step 3: refused',
+          'gateway: bisect step 4: refused',
+          'gateway: bisect step 5: refused',
+          'gateway: bisect step 6: refused',
+        ]);
+        expect(r.kept).toHaveLength(0);
+        expect(r.first.status).not.toBe(200);
+      });
+
+      it('never diagnoses a Claude model: its request reaches the provider as sent', async () => {
+        const r = await ask('claude-refuses-billing');
+        expect(r.steps).toEqual([]);
+        expect(r.first.headers.get('x-fake-path')).toBe('/v1/messages');
+      });
+    });
+
+    it('counts tokens itself: Claude Code’s many count_tokens calls never reach the provider', async () => {
+      const h = harness();
+      const grant = await grantOf(h);
+      grant.setTurn({
+        runId: 'run-count',
+        providerId: PROVIDER,
+        model: 'flash-busy',
+        report: () => {},
+      });
+      const body = {
+        model: 'corehub-main',
+        system: 'You are Claude Code.',
+        messages: [{ role: 'user', content: 'هلا '.repeat(100) }],
+        tools: [{ name: 'Write', input_schema: { type: 'object' } }],
+      };
+      for (let i = 0; i < 15; i += 1) {
+        const counted = await post(
+          `${grant.anthropicBaseUrl}/v1/messages/count_tokens`,
+          grant.token,
+          body,
+        );
+        expect(counted.status).toBe(200);
+        const { input_tokens } = (await counted.json()) as { input_tokens: number };
+        expect(input_tokens).toBe(estimateTokens(body));
+        expect(input_tokens).toBeGreaterThan(100);
+      }
+      expect((await calls(h))[`${upstreamPrefix(PROVIDER)}/flash-busy`]).toBeUndefined();
+    });
+
     it('takes the hub’s internal names out of any other error it passes on', () => {
       const text = `unknown model ${upstreamPrefix(PROVIDER)}/coder, nor ${upstreamPrefix(OTHER)}/x`;
       expect(
@@ -584,21 +1003,51 @@ describe('the gateway', () => {
       expect(classifyLimit(500, 'quota')).toEqual({ kind: 'pass' });
       // Google's words are the same for both; its details and the headers tell them apart.
       const exhaustedWords = '{"error":{"status":"RESOURCE_EXHAUSTED","message":"check quota"}}';
-      expect(classifyLimit(429, exhaustedWords, {}, wait)).toEqual({ kind: 'wait', ms: 20_000 });
+      const limited = { kind: 'wait', reason: 'rate_limited' };
+      expect(classifyLimit(429, exhaustedWords, {}, wait)).toEqual({ ...limited, ms: 20_000 });
       expect(classifyLimit(429, exhaustedWords, { 'retry-after': '7' }, wait)).toEqual({
-        kind: 'wait',
+        ...limited,
         ms: 7_000,
       });
       expect(
         classifyLimit(429, `${exhaustedWords} "retryDelay": "12.5s" PerMinute`, {}, wait),
-      ).toEqual({ kind: 'wait', ms: 12_500 });
+      ).toEqual({ ...limited, ms: 12_500 });
       expect(classifyLimit(429, `${exhaustedWords} GenerateRequestsPerDay`, {}, wait)).toEqual({
         kind: 'spent',
       });
       expect(classifyLimit(429, 'Quota exceeded. Please retry in 3.2s.', {}, wait)).toEqual({
-        kind: 'wait',
+        ...limited,
         ms: 3_200,
       });
+      // Antigravity (2026-10-01): the server's capacity is not the account's quota.
+      const capacity = { kind: 'wait', reason: 'no_capacity' };
+      expect(
+        classifyLimit(
+          429,
+          '{"error":{"code":429,"message":"No capacity available for model gemini-3.8-flash-high on the server","status":"RESOURCE_EXHAUSTED","details":[{"reason":"MODEL_CAPACITY_EXHAUSTED"}]}}',
+          {},
+          wait,
+        ),
+      ).toEqual({ ...capacity, ms: 5_000 });
+      expect(
+        classifyLimit(503, 'The model is overloaded. Please try again later.', {}, wait),
+      ).toEqual({
+        ...capacity,
+        ms: 5_000,
+      });
+      expect(classifyLimit(503, 'upstream connect error', {}, wait)).toEqual({ kind: 'pass' });
+      // The account's own quota for the model, with when it comes back: spent for this turn.
+      expect(
+        classifyLimit(
+          429,
+          'You have exhausted your capacity on this model. Your quota will reset after 2h10m.',
+          {},
+          wait,
+        ),
+      ).toEqual({ kind: 'spent' });
+      expect(
+        classifyLimit(429, '{"error":{"details":[{"reason":"QUOTA_EXHAUSTED"}]}}', {}, wait),
+      ).toEqual({ kind: 'spent' });
     });
   });
 

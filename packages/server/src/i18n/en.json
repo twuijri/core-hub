@@ -107,6 +107,8 @@
     "approval_choice_deny": "Deny",
     "produced_refused": "{files} — too many or too large to attach here; they are still in the run folder.",
     "quota_exhausted": "{provider} ran out of quota for {model}. Pick another model for this chat.",
+    "no_capacity": "{provider} has no capacity for {model} right now. Try again in a moment, or pick another model for this chat.",
+    "rate_limited": "{provider} is limiting requests to {model} right now. Try again in a minute, or pick another model for this chat.",
     "category_name_taken": "This profile already has a category with that name.",
     "category_limit": "This profile already has 100 categories; delete one first.",
     "continue": {
@@ -214,7 +216,21 @@
         "seven_day_oauth_apps": "Weekly (apps)",
         "weekly": "Weekly",
         "monthly": "Monthly",
-        "total": "Plan total"
+        "total": "Plan total",
+        "seven_day_cowork": "Weekly (Cowork)",
+        "seven_day_fable": "Weekly (Fable)",
+        "code_review_primary": "Code review (5 hours)",
+        "code_review_secondary": "Code review (weekly)"
+      },
+      "check": {
+        "no_address": "{company} has no usage address Core Hub can ask.",
+        "no_index": "This account is not ready to be asked yet; try again in a minute.",
+        "not_shared": "{company} doesn't share usage for this account type.",
+        "signed_out": "{company} refused this account's sign-in. Renew the sign-in, then check again.",
+        "rate_limited": "{company} is limiting requests right now. Try again in a few minutes.",
+        "vendor_error": "{company} could not answer right now ({status}). Try again later.",
+        "unreachable": "Core Hub could not reach {company}. Check the hub's connection, then try again.",
+        "no_usage": "{company} answered, but without usage Core Hub can read."
       }
     }
   },

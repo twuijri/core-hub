@@ -18,6 +18,7 @@ const progress = (partial: Partial<RunProgress> = {}): RunProgress => ({
   step: null,
   stepIsIdentifier: false,
   queued: false,
+  modelStatus: null,
   ...partial,
 });
 

@@ -236,6 +236,18 @@ export type AgentEvent =
       failed: AgentFallbackAttempt[];
       answered: { model: string; provider: string | null };
     }
+  /**
+   * What the hub's model gateway is doing for the turn while nothing else is said (`run.status`):
+   * waiting out a provider's limit on a model, or trying the next model of the chain.
+   */
+  | {
+      type: 'model_status';
+      phase: 'waiting' | 'trying';
+      provider: string;
+      model: string;
+      seconds: number | null;
+      reason: 'no_capacity' | 'rate_limited' | 'quota_exhausted' | null;
+    }
   | { type: 'completed' }
   | {
       type: 'failed';

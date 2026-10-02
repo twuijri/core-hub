@@ -54,6 +54,8 @@ export interface ManagementCredential {
   modelQuotas: Record<string, { observedAt: string | null; signals: Record<string, string> }>;
   /** ChatGPT's id-token claims (its plan among them). */
   idToken: Record<string, unknown> | null;
+  /** The Google Cloud project a Google account (Antigravity) works in, when CLIProxyAPI has it. */
+  projectId: string | null;
 }
 
 /** An answer CLIProxyAPI gave a call made with an account's token (`/requests/api-call`). */
@@ -154,6 +156,7 @@ export function credentialOf(value: unknown): ManagementCredential | null {
       entry.id_token && typeof entry.id_token === 'object'
         ? (entry.id_token as Record<string, unknown>)
         : null,
+    projectId: str(entry.project_id),
   };
 }
 

@@ -5210,3 +5210,283 @@ Status: the owner's choices on preview.38, 2026-09-30.
   `provider-list-ar-light.png`), `zz-design.spec.ts` (screenshots of the chat, models, settings
   with the new triggers), `zzzzzzzzzzz-design-family.spec.ts`, and the pseudo-locale width pass
   (`zzzzzzzzzzzzzzzzz-pseudo-locales.spec.ts`, en-XA, ar-XB, zh-XC, th-XD, desktop and phone).
+
+## 147. "Check now" reads usage as CLIProxyAPI's console does, and says why in words; a restart on its way stays on its way
+
+Status: fixes from the owner's first real sign-in, 2026-10-01 (v1.1.6, preview.39).
+
+- **The requests are CPAMC's.** "Check now" asks, in order, the requests CLIProxyAPI's own
+  management console (CPAMC, "Quota Management", MIT) makes for the same accounts — verified
+  against its source (main at `a7ec312f`) and CLIProxyAPI 8.0.4's, not guessed:
+  - **Google Antigravity**: `v1internal:retrieveUserQuotaSummary` on the daily, sandbox and
+    production hosts (`daily-cloudcode-pa`, `daily-cloudcode-pa.sandbox`, `cloudcode-pa`), with the
+    account's Google Cloud project in the body (`{"project": …}`, CLIProxyAPI's `project_id` for
+    the account; `{}` when it has none) and Antigravity's client name
+    (`antigravity/cli/1.0.13 (aidev_client; …)`); then `v1internal:fetchAvailableModels` on the daily
+    and production hosts, whose `models.<id>.quotaInfo` (`remainingFraction`, `resetTime`) is what
+    CPAMC read before the summary existed and what CLIProxyAPI's own model list asks for every
+    consumer account. The hub asked only the production host, with `{}` and no client name; that
+    is what Google answered 403 "no valid license". The summary's buckets become windows
+    ("Gemini · 5-hour"); the model list becomes one window per model with its own name, what is
+    left and when it resets (a model that says only its reset time has none left).
+  - **ChatGPT** `wham/usage` with Codex's client name and the account id: the plan's windows and,
+    new, the code-review windows; a spent window with no percentage is 100%.
+  - **Claude** `api/oauth/usage`: every window, Anthropic's code name for the weekly Fable limit
+    (`iguana_necktie`) read as "Weekly (Fable)".
+  - **xAI**: the weekly credits (`v1/billing?format=credits`) first, then the monthly bill, with the
+    Grok CLI's headers.
+  - **Kimi** `coding/v1/usages`: time units as Kimi sends them (`TIME_UNIT_MINUTE`), a reset as an
+    instant or seconds from now, a limit's own name.
+  The first answer that carries usage wins.
+- **No vendor's raw answer in the dialog.** When nothing can be read, `ProviderAccount.check_error`
+  is one sentence in the person's language: "Google doesn't share usage for this account type."
+  (403/404, ranked first as CPAMC does), a refused sign-in (401), a rate limit (429), a vendor
+  error with its status, the vendor unreachable, or an answer without usage. The vendor's own
+  words go to the hub's log only, redacted (Google's `ya29.` tokens are now redacted too). No
+  contract change: `check_error` was always a sentence for the client to show.
+- **A restart on its way stays on its way.** §145's state ended when the hub asked Hermes to
+  restart, not when Hermes had started again; for those seconds the report said "did not restart"
+  with the button, and the page stopped asking, so it stayed red although Hermes restarted (the
+  owner, 2026-10-01). A restart the hub asked for now reports `scheduled` until the new process
+  has started (up to three minutes, then the button as the way out); a runtime that is not the
+  hub's to restart reports nothing coming. The wait itself: a 1.5-second debounce, then — only
+  while a **Hermes** turn is in flight, no longer any agent's (a coding agent's turn is not touched
+  by the restart) — up to two minutes (80 × 1.5 s) before the change wins, said as "once the reply
+  in progress ends"; then the seconds Hermes takes to start. Every path that changes the model
+  defaults already propagates and schedules the restart (audited: `setDefaults`,
+  `ensureChatDefault`, `moveUses`); none was missing.
+- **Proven.** `gateway/subscription-usage.test.ts` with recorded answer shapes (Google's 403,
+  `fetchAvailableModels`, the quota summary, `wham/usage`, `oauth/usage`, xAI's credits and bill,
+  Kimi's usages; the sentences in English and Arabic; Google's words and token absent from the
+  dialog and the token absent from the log); `gateway/hermes-restart.test.ts` (on its way while
+  Hermes starts again; nothing coming for a runtime that is not the hub's);
+  `update-policy.test.ts` (`busyWith`).
+
+## 148. A provider's refusal said for what it is: no capacity and a passing limit are not a spent quota; the chat hears what the gateway is doing
+
+The owner's Google Antigravity sign-in, 2026-10-01: Claude Code, on an account that Hermes used
+fine, was told "ran out of quota" for two models and answered by `openrouter/free` after 88 s of
+"Thinking", while Hermes on the same account answered. Proposed here — owner to confirm:
+
+**Live fact (owner, 2026-10-02).** Claude Code has never received an answer from any Google model in
+any live test, on any route or preview. Every live Google-model answer was from Hermes, Gemini CLI or
+the other Chat/Responses agents; Claude Code's live answers were only on ChatGPT (gpt-6-sol), through
+the owner's own proxy and through the ChatGPT subscription. Wherever a test below says Claude Code
+"answers" on a Google model, the answer came from a stand-in for Google, not from Google; each fix
+here removed one refusal the stand-in reproduces, and none is yet proven live.
+
+- **Google's reason is read, not guessed.** Google says `RESOURCE_EXHAUSTED` for a spent quota, for no
+  capacity and for a per-minute limit alike, and CLIProxyAPI 8.0.4 keeps only the message when it
+  answers the Anthropic, Responses and Gemini routes (checked in its source: the Claude handler builds
+  `{type, message}`; the OpenAI Chat handler returns the provider's JSON as it came). On such a refusal
+  the gateway asks the same model once per turn on CLIProxyAPI's Chat route (`max_tokens: 1`) and
+  classifies from that whole answer; if the model answers there, the limit has passed and the call is
+  asked again at once.
+- **Three reasons.** `quota_exhausted` — a 402, `insufficient_quota`, billing, payment, credit, a
+  usage limit, a daily/monthly quota, Antigravity's `QUOTA_EXHAUSTED` or "exhausted your capacity …
+  quota will reset": answered at once. `no_capacity` — `MODEL_CAPACITY_EXHAUSTED`, "No capacity
+  available for model … on the server", an overloaded model (429, 503, 529): waited once (the
+  provider's delay, else 5 s). `rate_limited` — any other quota word (a per-minute limit, Google's bare
+  "Resource has been exhausted (e.g. check quota)", `RATE_LIMIT_EXCEEDED`, CLIProxyAPI cooling down):
+  waited once (the provider's delay, else 20 s; at most 30 s). A second refusal ends that model's part
+  in the turn with its own reason; the chain moves on (§54, §142), else the run fails.
+- **Said plainly.** `Run.error` (`rate_limited`) carries `details.reason` — `quota_exhausted`,
+  `no_capacity` or `rate_limited` — and `details.said`, the provider's own words with Google's reason
+  codes, quota names and retry delay, redacted; the sentence is the reason's ("has no capacity for …
+  right now", "is limiting requests to … right now", "ran out of quota for …"). The fallback line's
+  "why" is the same sentence and the provider's words.
+- **`run.status`** (`/rt/sessions`, new and additive; an older client ignores it): while the gateway
+  waits (`phase: waiting`, `seconds`, `reason`) or tries the chain's next model (`phase: trying`), with
+  the provider's and model's names. Never stored. The web shows it in the live indicator and counts a
+  wait down; it clears with the model's first words or the run's end.
+- **The downloads-folder note is context, not a task.** A run's note of where files for the person go
+  was an order ("Write any file the user should be able to download into: …"), and a model answering
+  «هلا» wrote a file. It is now marked as Core Hub's (`<corehub-context>`), conditional ("Only if the
+  user asks for a file they can download …"), and says to create none otherwise. It stays in the turn:
+  the folder is the run's own, so no system prompt set when the agent started can carry it.
+- Checked and left as they are: CLIProxyAPI retries nothing itself (`request-retry: 0`,
+  `max-retry-interval: 0`, cooling off); a plain Claude Code turn makes one call, so parallel calls do
+  not explain the refusals.
+- **Second live test (preview.41).** Three more causes, found with the real CLIProxyAPI, a
+  Google Antigravity account file pointed at a stand-in for Google, and the real Claude Code:
+  - **Claude Code's token counts**: Claude Code asks `count_tokens` about fifteen times as a turn
+    starts (counted at the gateway); CLIProxyAPI turns each into Antigravity's `countTokens`, Google
+    refuses them with RESOURCE_EXHAUSTED, and the refusal cost the turn its model — one reason
+    Claude Code failed where Hermes and Gemini CLI on the same account and model answered, and not
+    the only one: live, Claude Code was still refused after this fix (preview.42 to .45). The
+    gateway now answers `/v1/messages/count_tokens` itself with an estimate (about four bytes of
+    system, messages and tools a token); none reaches a provider.
+  - **The account cooled itself down**: the sign-in set the account's own `disable_cooling: false`
+    (§143), which outranks the config's `disable-cooling: true`, so after one 429 CLIProxyAPI
+    refused every later call without asking Google ("All credentials … are cooling down"). Accounts
+    are now set `disable_cooling: true` at sign-in, and existing ones once per process.
+  - **No vendor's raw answer in the chat**: the fallback line's "why" and the failure notice say
+    only the hub's sentence; the provider's words (a message inside another answer read out of its
+    JSON) stay in `Run.error.details.said` and the hub's log.
+- **Changing Claude Code's request (the owner, 2026-10-01: «ما ابي نخرب كلود علشان جيميناي»).** Any
+  adjustment of what an agent asks — thinking level, tools, `max_tokens` — is scoped to exactly the
+  case a log proves fails: keyed on a Google model (Gemini, Gemma; Google's API, Antigravity, Vertex
+  or a proxy) and on that cause; the smallest change that works (a lower thinking level Google
+  accepts before "off"); a no-op for every Claude model, Claude models through Antigravity included,
+  whose request reaches the provider byte for byte as Claude Code sent it; tests prove both.
+- **A Google model refusing the agent's own request (the owner's log, preview.43).** Claude Code's
+  `/v1/messages` to Antigravity · gemini-3.8-flash-high was refused with "Resource has been
+  exhausted", while the same model answered the gateway's plain Chat request a moment later — so the
+  refusal is about the shape of Claude Code's request, not the account. When a Google model refuses
+  a call and answers the plain request, the gateway asks again one step lighter at a time, each step
+  with the ones before it: **its thinking lowered** (Anthropic `effort` → `low`, a thinking budget →
+  1024; Responses/Chat `effort` → `low`; Gemini `thinkingLevel` → `low`), then **without thinking**,
+  then **its tools' schema descriptions taken out** (the same tools and arguments; each tool's own
+  description cut to 160 characters). The step that answered is kept for the rest of the session and
+  the log names it; with every step refused, the usual wait and fallback follow. A Claude model and
+  every non-Google model are never changed (test: a refused `claude-*` model's request reaches the
+  provider with its thinking and effort as sent, and the chain takes over). The log says each refusal
+  as it came, the plain request's outcome, each lighter attempt, and the one that answered.
+- **Claude Code on a Google model goes the Chat way (the owner's log, preview.44).** Gemini CLI and
+  six Chat-wire agents answered on the same Antigravity row while every lighter step was refused on
+  `/v1/messages`, so the refusal is CLIProxyAPI's Claude handler, not the account or the request's
+  shape. What reaches Google from the two routes differs only a little: the Claude route adds
+  `thinkingConfig {thinkingLevel: "high"}`, drops the first system text (Claude Code's
+  `x-anthropic-billing-header`), injects a required `reason` parameter into parameterless tools,
+  merges the user's text blocks into one content, and derives `sessionId` another way. For a Google
+  model (`googleModel()`) on `/v1/messages`, the gateway now translates the request to OpenAI Chat
+  (system, images, `tool_use`/`tool_result`, `tool_choice`, effort or thinking budget →
+  `reasoning_effort`; thinking blocks and schema-less server tools dropped), sends it to CLIProxyAPI's
+  `/v1/chat/completions`, and answers Claude Code in Anthropic's shape — streamed as Anthropic SSE
+  (thinking and text streamed; each tool call gathered and sent whole as a `tool_use` block at the
+  end), as one JSON, or as an Anthropic error. A Claude model, through Antigravity too, still goes to
+  `/v1/messages` byte for byte (test).
+- **A one-off diagnosis when the Chat route is refused too (the owner's log, preview.45).** The
+  translated request was refused on `/v1/chat/completions` while the plain request answered there,
+  so something in Claude Code's content is refused. For Claude Code on a Google model only, refused
+  while the plain request answers, once a session per model, the gateway asks the refused request
+  again in six variants (stream, headers and `max_tokens` as sent; read to the first word or the
+  refusal, then let go), logging `gateway: bisect step N: answered|refused`: (1) without Claude
+  Code's `x-anthropic-billing-header` line; (2) its identity sentence made neutral; (3) without
+  tools; (4) tool schemas cleaned for Gemini (`$schema`, `additionalProperties`, `propertyNames`,
+  `patternProperties`, `format`, `exclusive*`, `const`, `examples`, `$ref`/`$defs` out, `allOf`
+  merged); (5) the system prompt alone; (6) without the agent's own request headers. The first of
+  (1), (4) or (6) that answers is kept for the session and the request asked again with it; (2),
+  (3) and (5) are only logged. With none kept, the lighter steps, the wait and the chain follow as
+  before. A Claude model is never diagnosed.
+- **An agent on the gateway asking for its own sign-in.** When an agent started on the gateway
+  refuses to start with an auth error (Codex: "Authentication required"), the turn fails with
+  `provider_not_configured` and says the agent did not take the hub's gateway, instead of the old
+  "needs an OpenAI key or a ChatGPT sign-in" card; the log names the model, the provider and the
+  names (not values) of the environment the agent was given.
+- **A turn that failed before it began** has no timeline: its trajectory says so instead of calling
+  the conversation older than step times.
+
+## 149. No phone push for a reply the person is watching
+
+Status: the owner's request, 2026-10-01 — «اي رد يوصلني تنبيه على جوالي… اني انا فاتح الصفحة
+المفروض ما يرسلي تنبيه» ("every reply sends me a phone notification… when I have the page open it
+should not"). Each push also costs a request on the push relay.
+
+- **Clients say what they are looking at.** A new command on `/rt/sessions`, `viewing
+  { session_id }` (or `null`), sent while a conversation is open and its page or app is in front —
+  the web: the tab visible (`document.visibilityState`) and focused; iOS: the chat on screen with
+  the scene `active`; Android: the chat on screen with the activity resumed — repeated every 20 s,
+  and `null` the moment that stops (hidden, blurred, another screen). The hub keeps it per socket
+  in memory for 45 s unless repeated, and drops it when the socket closes. Additive: no HTTP
+  operation, no event schema (commands are documented in `events/README.md`); an older hub never
+  acks it and pushes as before; an older app never says it and is pushed to as before.
+- **The hub skips only the push.** For `run_completed`, `run_failed` and `approval_requested` on a
+  session any of the person's clients is viewing, the notice is still written and announced in the
+  app (unread count and inbox unchanged); only the push to phones and browsers is skipped. Another
+  session's events, a workflow's approval, and everything when no client is viewing, push as
+  before. After a hub restart nobody is viewing until the clients say it again, which errs toward a
+  push.
+- **Proven.** `tests/unit/push-viewing.test.ts` (a real socket: viewing suppresses the push but
+  not the notice; another session, `null`, a closed socket and an older client push; 45 s expiry;
+  two screens), web `tests/viewing.test.tsx` (visible and focused says it and repeats it; blur,
+  hidden, another conversation, unmount say `null`; a reconnect says it again). iOS and Android
+  send it from their chat screens (Android compiled locally; iOS built by CI).
+
+## 150. Phones: swipe a message to reply, and a long press on the agent's reply opens its menu
+
+Status: the owner's requests, 2026-10-01 — «اذا المستخدم سحب المحادثة يسار يخليني كاني برد عليها
+نفس التيليقرام», and a long press on the agent's message should open the same menu as on his own.
+
+- **Swipe to reply (iOS and Android).** A horizontal drag on a message bubble — the person's or the
+  agent's — moves it toward the reading start, with the reply arrow appearing behind it: left in a
+  left-to-right interface (Telegram), right in Arabic. That is away from the system back gesture
+  (iOS's interactive pop starts at the leading edge and moves toward the trailing side; Android's
+  gesture navigation answers at the screen edges, where the system's own gesture wins), so the two
+  do not compete. Past 60 pt/dp a light haptic; letting go there replies. Beyond it the bubble
+  moves at a third of the finger's speed, up to 96. The axis is decided once, at the drag's first
+  move past the touch slop: only a mostly horizontal start (|dx| > 1.5 |dy|) toward the reading
+  start is a swipe; anything else is left to the list's scroll. Never on a reply still streaming or
+  the empty shell a run opens with. Reduce Motion: the bubble returns without animating.
+  VoiceOver and TalkBack get a «Reply» action on the bubble.
+- **One reply path.** The swipe calls the same reply as the message menu's «Reply to this»: the
+  quoted strip with its «×» over the composer, and the message sent with `RunCreate.reply_to_message_id`
+  — what the web sends, so every agent and runtime gets the same quote. Choosing a reply, by swipe
+  or menu, now also puts the cursor in the composer and brings the keyboard up.
+- **Long press on the agent's reply** opens the same menu as on the person's message — Copy, Read
+  aloud, Reply, Fork from here — the «…» under the reply staying as it is. iOS shows the reply's
+  opening twelve lines as the menu's preview, not the whole card; Android's menu has no preview,
+  as for the person's message. Not on a streaming reply.
+- **Proven.** Android `SwipeToReplyUiTest` (Compose, Robolectric): a left swipe replies in
+  English, a right one in Arabic, the other direction, a vertical drag and a short swipe do not,
+  the «Reply» accessibility action, a disabled row, the rules, and a long press on the agent's
+  reply opening the menu whose Reply answers it. iOS `SwipeToReplyTests` (XCTest): the same rules
+  and the action's name in both languages; SwiftUI's gesture itself is checked on a device.
+
+## 151. The sidebar's «Back to chats» / «Back to agents» row sits at the bottom, above the footer
+
+Status: the owner's decision, 2026-10-01. It supersedes where §33 (Agents at the top level,
+2026-09-24) and the Settings sidebar put the back row: at the top, where the rail is.
+
+- **Web, every nested sidebar that uses the back row** — Settings («رجوع إلى المحادثات» / "Back to
+  chats") and an agent's own pages («رجوع إلى الوكلاء» / "Back to agents"): the row is pinned at
+  the bottom of the sidebar, directly above the footer box (the connection, the person, the
+  gear and sign-out, then language, theme and version). It is outside the scrolling list, so it
+  stays in view however far the menu above it scrolls, and Tab reaches it just before the
+  footer. The same arrow, label and link; the arrow keeps pointing toward the reading start, so
+  it is right in Arabic. After preview.44 (the owner: it read as one more menu item) the pinned
+  zone has a thin divider above it and its row is drawn as a bordered button — the 1px border and
+  radius of the secondary buttons and dropdown triggers, spanning the sidebar with the usual
+  inset — with no second divider between it and the footer, so it reads as the footer's. The phone drawer is the same sidebar and follows. The phone apps' own
+  layout is unchanged.
+- **Proven.** Web `tests/agents-top-level.test.tsx` (the row comes after the agent's list and the
+  footer straight after it); Playwright `zzz-agents-top-level.spec.ts` (above the footer, below
+  the agent's pages) and `smoke.spec.ts` (Settings in a short window, its menu scrolled to the end:
+  the row still in view, directly above the footer); screenshots refreshed.
+
+## 152. Two macOS downloads: Apple Silicon and Intel
+
+Status: the owner's request for the next release, 2026-10-01 — an Intel build beside the Apple
+Silicon one, as separate downloads; he cares about download size.
+
+- **Two apps, not one universal app.** `electron-builder` builds the dmg and the zip for `arm64`
+  (as before) and `x64`: `Core-Hub-<v>-arm64.dmg` / `Core-Hub-<v>-arm64-mac.zip` and
+  `Core-Hub-<v>-x64.dmg` / `Core-Hub-<v>-x64-mac.zip`. A universal app carries both Electron
+  frameworks and both sets of native binaries: about 1.8 times the 139 MB dmg of 1.1.6 for every
+  Mac, where each separate app stays its own size. Both are built in one packaging run on the
+  Apple Silicon runner (x64 cross-built; no native module is rebuilt there), so one
+  `latest-mac.yml` lists both zips.
+- **Every binary for darwin-x64.** Electron (electron-builder downloads it per arch);
+  better-sqlite3 (its npm package ships darwin-x64); CLIProxyAPI (`scripts/cliproxy/pin.json`
+  already pins `darwin-x64`, `CLIProxyAPI_8.0.4_darwin_amd64.tar.gz` with its SHA-256); the
+  embedded hub runs on Electron's own Node (`ELECTRON_RUN_AS_NODE`), so per arch; Hermes and
+  Python are not bundled (the person's own install, ADR 0009). **argon2 0.45 ships no darwin-x64
+  binary** (0.44 did; 0.45.1's prebuilds are darwin-arm64, linux, win32, freebsd): the desktop
+  build compiles argon2's own sources for x86_64 on the Mac with `node-gyp --arch=x64` (Apple's
+  clang cross-compiles), checks it with `lipo`, and puts it at `prebuilds/darwin-x64/argon2.node`
+  (`apps/desktop/scripts/argon2-darwin-x64.mjs`); it is N-API, so not tied to one Node version.
+  `after-pack` keeps each app's own binaries and refuses an app without them, as before.
+- **Updates.** One `latest-mac.yml` names both zips; electron-updater gives an Apple Silicon Mac
+  (Rosetta included) the file whose name says `arm64` and an Intel Mac the others
+  (`MacUpdater.filterFilesForArch`). An installed Apple Silicon copy keeps updating to the arm64
+  zip, as before. The app's own update notice (`assetFor`) picks the dmg by `process.arch`.
+  `release-assets.mjs check-feeds … macos` now requires both zips in the feed; `--without=macos-x64`
+  (a tag before this, chosen by the workflows from whether the tag has
+  `scripts/argon2-darwin-x64.mjs`) expects the arm64 one only, so an older tag still releases.
+- **Signing and CI.** `desktop-signed.yml` signs, notarises, staples and checks both apps and both
+  zips in the same job. `desktop.yml` gains an **Intel Mac** job on `macos-15-intel`: the packaged
+  x64 app from the Apple Silicon build, checked to be x86_64 (its argon2 too), runs the three
+  desktop smoke journeys — remote mode, pairing, and local mode, whose embedded hub hashes the
+  owner's password with that argon2.
+- **The download page** shows both: «Apple Silicon (M1–M4)» and «Intel»; a release before this has
+  no Intel dmg and that button opens the release page.

@@ -1,0 +1,116 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/twuijri/core-hub/blob/main/packages/contracts/events/sessions/run.status.schema.json",
+  "title": "/rt/sessions · run.status",
+  "description": "What the hub's model gateway is doing for a run while the agent says nothing (DECISIONS §148): `waiting` — the provider refused the model for now (no capacity, or a limit that passes) and the gateway waits `seconds` once before asking again; `trying` — the model was refused for this turn and the next model of the profile's fallback chain is being asked. Emitted by: sessions module. Said as it happens and never stored: a client shows it beside the run's live indicator until the run's next text, the next `run.status`, or the run's end. The run's record of the move is `Run.fallback`.",
+  "type": "object",
+  "required": ["event", "namespace", "profile", "ts", "seq", "payload"],
+  "properties": {
+    "event": {
+      "const": "run.status"
+    },
+    "namespace": {
+      "const": "/rt/sessions"
+    },
+    "profile": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/ProfileSlug"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "ts": {
+      "$ref": "#/$defs/Timestamp"
+    },
+    "seq": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "payload": {
+      "type": "object",
+      "required": ["session_id", "run_id", "phase", "provider", "model", "seconds", "reason"],
+      "properties": {
+        "session_id": {
+          "$ref": "#/$defs/Ulid"
+        },
+        "run_id": {
+          "$ref": "#/$defs/Ulid"
+        },
+        "phase": {
+          "type": "string",
+          "enum": ["waiting", "trying"]
+        },
+        "provider": {
+          "type": "string",
+          "description": "The provider's name as the person gave it."
+        },
+        "model": {
+          "type": "string",
+          "description": "The model's name as the catalogue shows it."
+        },
+        "seconds": {
+          "type": ["integer", "null"],
+          "minimum": 0,
+          "description": "How long the gateway waits (`waiting`); `null` for `trying`."
+        },
+        "reason": {
+          "oneOf": [
+            {
+              "type": "string",
+              "enum": ["no_capacity", "rate_limited", "quota_exhausted"]
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Why the model is waited for, or why the previous one was left (`trying`)."
+        }
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false,
+  "examples": [
+    {
+      "event": "run.status",
+      "namespace": "/rt/sessions",
+      "profile": "work",
+      "ts": "2026-10-01T10:15:04Z",
+      "seq": 8813,
+      "payload": {
+        "session_id": "01J8QK3ZR2W7M5N4P6T8V9X0YA",
+        "run_id": "01J8QK3ZR2W7M5N4P6T8V9X0YB",
+        "phase": "waiting",
+        "provider": "Google Antigravity",
+        "model": "gemini-3.8-flash-high",
+        "seconds": 5,
+        "reason": "no_capacity"
+      }
+    }
+  ],
+  "$defs": {
+    "ProfileSlug": {
+      "type": "string",
+      "description": "Workspace (profile) slug — lowercase letters, digits and dashes.",
+      "pattern": "^[a-z0-9][a-z0-9-]{0,39}$",
+      "examples": ["work"]
+    },
+    "Timestamp": {
+      "type": "string",
+      "format": "date-time",
+      "description": "ISO-8601 UTC with `Z`.",
+      "examples": ["2026-09-21T10:15:00Z"]
+    },
+    "Ulid": {
+      "type": "string",
+      "description": "26-character Crockford base32 ULID, sortable by creation time.",
+      "pattern": "^[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+      "minLength": 26,
+      "maxLength": 26,
+      "examples": ["01J8QK3ZR2W7M5N4P6T8V9X0YA"]
+    }
+  }
+}

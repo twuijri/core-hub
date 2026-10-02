@@ -18,6 +18,12 @@ export interface ChatState {
    * `running` between `started` and its end, then the last outcome until the next one.
    */
   compression: Compression | null;
+  /**
+   * What the hub's model gateway is doing for the live run while the agent says nothing
+   * (`run.status`, DECISIONS §148): waiting out a provider's refusal, or trying the chain's next
+   * model. Gone with the run's next words, or its end.
+   */
+  modelStatus: ModelStatus | null;
   deleted: boolean;
   /**
    * Whether messages older than `messages[0]` exist on the hub (`MessagePage.has_more`).
@@ -26,6 +32,17 @@ export interface ChatState {
   hasOlder: boolean;
   /** Whether this view has loaded any page before the newest one. */
   pagedBack: boolean;
+}
+
+export interface ModelStatus {
+  runId: string;
+  phase: 'waiting' | 'trying';
+  provider: string;
+  model: string;
+  seconds: number | null;
+  reason: 'no_capacity' | 'rate_limited' | 'quota_exhausted' | null;
+  /** When it was heard, epoch ms: a wait counts down from here. */
+  atMs: number;
 }
 
 export interface Compression {
@@ -46,6 +63,7 @@ export function initialChat(): ChatState {
     approvals: {},
     context: null,
     compression: null,
+    modelStatus: null,
     deleted: false,
     hasOlder: false,
     pagedBack: false,
@@ -230,9 +248,31 @@ export function reduce(state: ChatState, envelope: Envelope, sessionId: string):
       const id = p.message_id as string;
       return {
         ...next,
+        // The model is answering: whatever the gateway was doing is over.
+        modelStatus: next.modelStatus?.runId === p.run_id ? null : next.modelStatus,
         messages: patchMessage(ensure(id, p.run_id as string), id, (m) =>
           appendText(m, p.delta as string),
         ),
+      };
+    }
+    case 'run.status': {
+      const phase = p.phase === 'waiting' ? 'waiting' : p.phase === 'trying' ? 'trying' : null;
+      if (!phase || typeof p.run_id !== 'string') return next;
+      const reason =
+        p.reason === 'no_capacity' || p.reason === 'rate_limited' || p.reason === 'quota_exhausted'
+          ? p.reason
+          : null;
+      return {
+        ...next,
+        modelStatus: {
+          runId: p.run_id,
+          phase,
+          provider: typeof p.provider === 'string' ? p.provider : '',
+          model: typeof p.model === 'string' ? p.model : '',
+          seconds: typeof p.seconds === 'number' ? p.seconds : null,
+          reason,
+          atMs: Date.parse(envelope.ts) || Date.now(),
+        },
       };
     }
     case 'reasoning.delta': {
@@ -278,13 +318,24 @@ export function reduce(state: ChatState, envelope: Envelope, sessionId: string):
                 : m,
             )
           : next.messages;
-      return { ...next, runs: { ...next.runs, [run.id]: run }, messages };
+      return {
+        ...next,
+        runs: { ...next.runs, [run.id]: run },
+        messages,
+        modelStatus:
+          envelope.event !== 'run.queued' &&
+          envelope.event !== 'run.started' &&
+          next.modelStatus?.runId === run.id
+            ? null
+            : next.modelStatus,
+      };
     }
     case 'run.completed': {
       const run = p.run as Run;
       const message = p.message as Message;
       return {
         ...next,
+        modelStatus: next.modelStatus?.runId === run.id ? null : next.modelStatus,
         runs: { ...next.runs, [run.id]: run },
         messages: upsertMessage(next.messages, message),
       };

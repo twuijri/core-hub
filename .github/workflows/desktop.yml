@@ -74,8 +74,11 @@ jobs:
         run: |
           v="${COREHUB_VERSION:-$(node -p "require('./package.json').version")}"
           case "$RUNNER_OS" in Windows) p=windows ;; macOS) p=macos ;; *) p=linux ;; esac
+          # A tag before the Intel Mac app (DECISIONS §152) builds the Apple Silicon one only.
+          intel=''
+          test -f apps/desktop/scripts/argon2-darwin-x64.mjs || intel='--without=macos-x64'
           cat apps/desktop/release/latest*.yml
-          node apps/desktop/scripts/release-assets.mjs check-feeds "${v#v}" apps/desktop/release "$p"
+          node apps/desktop/scripts/release-assets.mjs check-feeds "${v#v}" apps/desktop/release "$p" $intel
       # The name a person sees is "Core Hub" (1.1.1 shipped `corehub.app` in a `corehub
       # 1.1.1-arm64` DMG window, `corehub.exe`, `/opt/Core Hub/corehub`); the .deb package, the Linux
       # desktop entry and window class keep `corehub`. A release of an older tag
@@ -216,3 +219,72 @@ jobs:
             apps/desktop/release/sizes.md
           retention-days: 14
           if-no-files-found: error
+      # The Intel app alone, for the Intel Mac job below: a 146 MB download instead of the 570 MB
+      # of every Mac file, which download-artifact@v4 once ended without extracting (2026-10-01).
+      - uses: actions/upload-artifact@v4
+        if: runner.os == 'macOS'
+        with:
+          name: corehub-desktop-macOS-x64
+          path: apps/desktop/release/*-x64-mac.zip
+          retention-days: 3
+          if-no-files-found: error
+
+  # The Intel Mac app (DECISIONS §152), built above on an Apple Silicon runner, on an Intel Mac:
+  # the three smoke journeys against the packaged x64 app — remote mode, pairing, and local mode,
+  # whose embedded hub loads the argon2 compiled for x86_64.
+  intel-mac:
+    name: Intel Mac (x64 app smoke)
+    needs: installers
+    if: contains(inputs.targets || '--mac', '--mac')
+    runs-on: macos-15-intel
+    timeout-minutes: 40
+    # `actions: read` lets the GitHub CLI fetch this run's artifact again if the action did not.
+    permissions:
+      contents: read
+      actions: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref || '' }}
+      - run: corepack enable
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      # With its scripts: argon2 has no darwin-x64 binary and builds from source here.
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm --filter @corehub/contracts build && pnpm --filter @corehub/ui-tokens build && pnpm --filter @corehub/web build
+      # The x64 zip, and proof it arrived: on 2026-10-01 download-artifact@v4 (a Node 20 action the
+      # runner forces onto Node 24) ended its step after "Starting download", green, with nothing
+      # extracted. So the download is checked, and fetched again with the GitHub CLI if missing.
+      - uses: actions/download-artifact@v8
+        continue-on-error: true
+        with:
+          name: corehub-desktop-macOS-x64
+          path: ${{ runner.temp }}/mac
+      - name: The x64 zip is there
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          for attempt in 1 2 3; do
+            if ls "$RUNNER_TEMP"/mac/Core-Hub-*-x64-mac.zip > /dev/null 2>&1; then break; fi
+            echo "::warning::the x64 zip did not arrive (attempt $attempt); fetching it again"
+            rm -rf "$RUNNER_TEMP/mac"
+            gh run download "$GITHUB_RUN_ID" --repo "$GITHUB_REPOSITORY" -n corehub-desktop-macOS-x64 -D "$RUNNER_TEMP/mac" || sleep 10
+          done
+          ls -l "$RUNNER_TEMP"/mac/Core-Hub-*-x64-mac.zip
+      - name: Unpack the x64 app
+        run: |
+          set -euo pipefail
+          test "$(uname -m)" = x86_64
+          zip=$(ls "$RUNNER_TEMP"/mac/Core-Hub-*-x64-mac.zip | head -1)
+          echo "x64 zip: $(du -h "$zip" | cut -f1)" | tee -a "$GITHUB_STEP_SUMMARY"
+          ditto -x -k "$zip" "$RUNNER_TEMP/app"
+          app="$RUNNER_TEMP/app/Core Hub.app"
+          file "$app/Contents/MacOS/Core Hub" | tee /dev/stderr | grep -q x86_64
+          lipo -archs "$app/Contents/Resources/hub/node_modules/argon2/prebuilds/darwin-x64/argon2.node" | grep -q x86_64
+          xattr -cr "$app"
+          echo "COREHUB_DESKTOP_SMOKE_EXECUTABLE=$app/Contents/MacOS/Core Hub" >> "$GITHUB_ENV"
+      - name: Smoke test the x64 app
+        run: pnpm --filter @corehub/desktop test:smoke

@@ -505,4 +505,5 @@ export type {
 } from './service.js';
 export type { EngineScope } from './engine.js';
 export { runActivity } from './activity.js';
+export { VIEWING_HEARTBEAT_MS, VIEWING_TTL_MS, viewingFor } from './viewing.js';
 export { skillUseOf } from './skill-use.js';

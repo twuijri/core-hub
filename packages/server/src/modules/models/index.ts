@@ -321,8 +321,9 @@ function contextOf(app: FastifyInstance): ModelsService {
       return decided === 'undecided' ? 'absent' : decided;
     },
     reloadedAt: () => runtime.status().startedAt,
-    // A restart kills whatever turn is in flight; the runner is the only one who knows.
-    busy: () => agentRunnerFor(app).busy,
+    // A restart may cut short a Hermes turn in flight; the runner is the only one who knows. A
+    // coding agent's turn is not Hermes's and does not hold the restart back (DECISIONS §147).
+    busy: () => agentRunnerFor(app).busyWith('hermes'),
     applyEnvironment: (env) => runtime.setProviderEnv(env),
   };
   const service = new ModelsService({

@@ -69,13 +69,16 @@ module.exports = {
   },
   deb: { packageName: 'corehub', artifactName: 'corehub_${version}_${arch}.${ext}' },
   mac: {
-    // Apple silicon only: argon2 (the hub's password hashing) ships no darwin-x64 binary, so an
-    // Intel build could not run local mode. Proposed — owner to confirm (ADR 0023).
+    // Two downloads (owner, 2026-10-01, DECISIONS §152): Apple Silicon (arm64) and Intel (x64),
+    // each its own dmg and zip — not one universal app, which would be close to twice the size
+    // for everyone. argon2 0.45 ships no darwin-x64 binary: the build compiles one on the Mac
+    // (scripts/argon2-darwin-x64.mjs); after-pack keeps each app's own.
     // The dmg is the download; the zip of the same signed app is what an installed copy updates
-    // from (Squirrel.Mac takes only a zip; DECISIONS §109).
+    // from (Squirrel.Mac takes only a zip; DECISIONS §109). One latest-mac.yml lists both zips,
+    // and electron-updater gives each Mac the one for its processor (the arm64 name says so).
     target: [
-      { target: 'dmg', arch: ['arm64'] },
-      { target: 'zip', arch: ['arm64'] },
+      { target: 'dmg', arch: ['arm64', 'x64'] },
+      { target: 'zip', arch: ['arm64', 'x64'] },
     ],
     // The zip's name (the dmg has its own below).
     artifactName: 'Core-Hub-${version}-${arch}-mac.${ext}',

@@ -7,7 +7,7 @@
 // rename there fails here before the page offers a missing file.
 
 /**
- * @typedef {'windows-exe' | 'macos-dmg' | 'linux-appimage' | 'linux-deb' | 'android-apk'} AssetKey
+ * @typedef {'windows-exe' | 'macos-dmg' | 'macos-dmg-x64' | 'linux-appimage' | 'linux-deb' | 'android-apk'} AssetKey
  * @typedef {'windows' | 'macos' | 'linux' | 'android' | 'ios'} Platform
  * @typedef {{ name: string, url: string, size: number | null }} Download
  * @typedef {{
@@ -31,6 +31,8 @@ const V = String.raw`\d+\.\d+\.\d+(?:-[0-9A-Za-z.]+)?`;
 export const ASSET_PATTERNS = {
   'windows-exe': new RegExp(`^Core-Hub-Setup-${V}-x64\\.exe$`),
   'macos-dmg': new RegExp(`^Core-Hub-${V}-arm64\\.dmg$`),
+  // Intel Macs (DECISIONS §152); a release before it has none, and the button opens the release.
+  'macos-dmg-x64': new RegExp(`^Core-Hub-${V}-x64\\.dmg$`),
   'linux-appimage': new RegExp(`^Core-Hub-${V}-x86_64\\.AppImage$`),
   'linux-deb': new RegExp(`^corehub_${V}_amd64\\.deb$`),
   'android-apk': new RegExp(`^Core-Hub-${V}-android\\.apk$`),

@@ -346,6 +346,15 @@
     "no_key_action": "Open Settings → Models",
     "quota_exhausted": "{provider} ran out of quota for {model}. Pick another model for this chat.",
     "quota_pick_model": "Choose another model",
+    "no_capacity": "{provider} has no capacity for {model} right now. Try again in a moment, or pick another model for this chat.",
+    "rate_limited": "{provider} is limiting requests to {model} right now. Try again in a minute, or pick another model for this chat.",
+    "model_status": {
+      "trying": "Trying {model}…",
+      "waiting_capacity": "{model} has no capacity right now — asking again in {seconds}s",
+      "waiting_capacity_now": "{model} has no capacity right now — asking again",
+      "waiting_limit": "{model} is limiting requests — asking again in {seconds}s",
+      "waiting_limit_now": "{model} is limiting requests — asking again"
+    },
     "you": "You",
     "queued": "Queued",
     "seconds": "{seconds}s",
@@ -3484,6 +3493,7 @@
     "empty_title": "Nothing has happened yet",
     "empty_body": "Send a message and each step the agent takes appears here.",
     "untimed": "This conversation is from before the hub recorded step times, so there is no timeline — only the steps.",
+    "not_started": "The turn ended before the agent began, so there is no timeline — only what was sent.",
     "partial": "Earlier turns were recorded before the hub kept step times; the timeline shows the rest.",
     "unit": {
       "ms": "ms",

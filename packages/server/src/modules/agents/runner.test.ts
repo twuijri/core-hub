@@ -867,8 +867,25 @@ describe('agent runner: files the agent leaves for the person (reply files, 2026
       inputDir: '/w/.corehub/runs/R/in',
       outputDir: '/w/.corehub/runs/R/out',
     });
-    expect(text).toContain('download into: /w/.corehub/runs/R/out');
-    expect(text).toContain('Refer to such a file by its name only');
+    expect(text).toContain('save it in this folder: /w/.corehub/runs/R/out');
+    expect(text).toContain('refer to such a file by its name only');
+  });
+
+  it('gives the downloads folder as context, never as a task (owner, 2026-10-01)', () => {
+    const text = promptText([{ type: 'text', text: 'هلا' }], {
+      inputDir: '/w/.corehub/runs/R/in',
+      outputDir: '/w/.corehub/runs/R/out',
+    });
+    // The person's words first, whole; the note after them, marked as the hub's.
+    expect(text.startsWith('هلا\n\n<corehub-context>')).toBe(true);
+    expect(text.trimEnd().endsWith('</corehub-context>')).toBe(true);
+    // Conditional, and says what to do when no file is asked for.
+    expect(text).toMatch(/Only if the user asks for a file/);
+    expect(text).toMatch(/When the user asks for no file, ignore this note: do not create one\./);
+    // Never the old imperative that a model took for the task.
+    expect(text).not.toMatch(/Write any file/);
+    // No note at all when the run has no folder for the person.
+    expect(promptText([{ type: 'text', text: 'هلا' }], null)).toBe('هلا');
   });
 });
 

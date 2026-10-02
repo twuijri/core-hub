@@ -86,6 +86,11 @@ export interface HubNotifier {
     recipient: Recipient,
     event: NoticeEvent,
     resource: { kind: string; id: string } | null,
+    /**
+     * `push: false` — into the inbox, but not to the person's phones: they are looking at the
+     * conversation right now (DECISIONS §149). Absent: pushed as the person's switches allow.
+     */
+    options?: { push?: boolean },
   ): void;
 }
 
@@ -96,8 +101,13 @@ export function createNotifier(
   push: NoticePush | null = null,
 ): HubNotifier {
   return {
-    announce(recipient, event, resource) {
-      deliver({ db, io: io(), record, push }, recipient, event, resource);
+    announce(recipient, event, resource, options) {
+      deliver(
+        { db, io: io(), record, push: options?.push === false ? null : push },
+        recipient,
+        event,
+        resource,
+      );
     },
   };
 }

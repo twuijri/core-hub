@@ -55,7 +55,15 @@ interface Harness {
 }
 
 async function hub(
-  options: { restartDelayMs?: number; profiles?: string[]; gateway?: 'on' | 'off' } = {},
+  options: {
+    restartDelayMs?: number;
+    profiles?: string[];
+    gateway?: 'on' | 'off';
+    /** How long the new process takes to start after the hub asks (the real one: seconds). */
+    startMs?: number;
+    /** What the runtime answers: `false` — not the hub's to restart. */
+    restarts?: boolean;
+  } = {},
 ): Promise<Harness> {
   const home = mkdtempSync(path.join(tmpdir(), 'corehub-hermes-restart-'));
   cleanup.push(() => rmSync(home, { recursive: true, force: true }));
@@ -82,9 +90,14 @@ async function hub(
           reloadedAt: () => startedAt,
           busy: () => busy.value,
           restart: () => {
+            if (options.restarts === false) return Promise.resolve(false);
             // A real restart starts the process a moment later than the write it follows.
-            startedAt = Date.now() + 1;
-            restarts.push(startedAt);
+            const start = () => {
+              startedAt = Date.now() + 1;
+              restarts.push(startedAt);
+            };
+            if (options.startMs) setTimeout(start, options.startMs);
+            else start();
             return Promise.resolve(true);
           },
         },
@@ -295,5 +308,28 @@ describe('Hermes is restarted after every change it needs, with no restart butto
     await new Promise((resolve) => setTimeout(resolve, 400));
     expect(restarts.length).toBeGreaterThan(before);
     expect(check(await report(h), 'gateway_reloaded')).toMatchObject({ ok: true, detail: null });
+  });
+
+  it('while Hermes is starting again after the hub asked, the restart is still on its way (§147)', async () => {
+    // The owner, 2026-10-01: after changing the default model the card said "did not restart"
+    // with the button for the seconds Hermes took to start again, and then stayed so.
+    const { h } = await hub({ startMs: 500 });
+    await add(h, 'groq', 'gsk-starting');
+    await drainJobs(h.app);
+    await new Promise((resolve) => setTimeout(resolve, 100));
+    expect(check(await report(h), 'gateway_reloaded')).toMatchObject({
+      ok: false,
+      detail: 'scheduled',
+    });
+    await new Promise((resolve) => setTimeout(resolve, 600));
+    expect(check(await report(h), 'gateway_reloaded')).toMatchObject({ ok: true, detail: null });
+  });
+
+  it('says nothing is coming when the runtime is not the hub’s to restart', async () => {
+    const { h } = await hub({ restarts: false });
+    await add(h, 'groq', 'gsk-not-ours');
+    await drainJobs(h.app);
+    await new Promise((resolve) => setTimeout(resolve, 100));
+    expect(check(await report(h), 'gateway_reloaded')).toMatchObject({ ok: false, detail: null });
   });
 });

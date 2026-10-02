@@ -752,6 +752,20 @@ export class RunEngine {
           break;
         }
 
+        case 'model_status':
+          // The model gateway waiting out a provider's limit, or trying the chain's next model:
+          // a turn that is otherwise silent says what it is doing (owner, 2026-10-01).
+          this.emitToSession(scope, sessionId, 'run.status', {
+            session_id: sessionId,
+            run_id: run.runId,
+            phase: action.phase,
+            provider: action.provider,
+            model: action.model,
+            seconds: action.seconds,
+            reason: action.reason,
+          });
+          break;
+
         case 'fallback': {
           // The run is now the model that took it (contract decision §54): `Run.model` and
           // `Run.provider` name it, and `Run.fallback` what failed before it.
@@ -1277,11 +1291,17 @@ export function localisedError(
   language: Language,
 ): string {
   const details = error.details;
-  if (error.code !== 'rate_limited' || details?.reason !== 'quota_exhausted') return error.message;
-  const provider = typeof details.provider === 'string' ? details.provider : '';
-  const model = typeof details.model === 'string' ? details.model : '';
+  const reason = details?.reason;
+  if (
+    error.code !== 'rate_limited' ||
+    (reason !== 'quota_exhausted' && reason !== 'no_capacity' && reason !== 'rate_limited')
+  ) {
+    return error.message;
+  }
+  const provider = typeof details?.provider === 'string' ? details.provider : '';
+  const model = typeof details?.model === 'string' ? details.model : '';
   if (!provider || !model) return error.message;
-  return t('sessions.quota_exhausted', language)
+  return t(`sessions.${reason}`, language)
     .replace('{provider}', provider)
     .replace('{model}', model);
 }

@@ -46,8 +46,46 @@ describe('a spent quota', () => {
     expect(pick).toHaveBeenCalledOnce();
   });
 
+  it('tells no capacity and a passing limit from a spent quota, with the provider’s own words', () => {
+    const capacity = {
+      ...FAILURE,
+      details: {
+        ...FAILURE.details,
+        reason: 'no_capacity',
+        said: 'No capacity available for model gemini-3.8-flash-high on the server (MODEL_CAPACITY_EXHAUSTED)',
+      },
+    };
+    render(
+      <MemoryRouter>
+        <I18nProvider language="en">
+          <RunFailureNotice failure={capacity} />
+        </I18nProvider>
+      </MemoryRouter>,
+    );
+    expect(screen.getByTestId('run-failed-reason').textContent).toBe(
+      translate('en', 'chat.no_capacity', {
+        provider: 'CLI Proxy',
+        model: 'Gemini 3.8 Flash High',
+      }),
+    );
+    expect(screen.getByTestId('run-failed-reason').textContent).not.toMatch(/quota/);
+    // The provider's words are kept in the details, not shown.
+    expect(screen.queryByTestId('run-failed-detail')).toBeNull();
+    expect(screen.getByTestId('run-failed-quota').textContent).not.toContain('MODEL_CAPACITY');
+    expect(
+      quotaOf({ ...FAILURE, details: { ...FAILURE.details, reason: 'rate_limited' } }),
+    ).toMatchObject({
+      reason: 'rate_limited',
+    });
+  });
+
   it('is only what the hub recognised: an older hub’s rate limit keeps its one line', () => {
-    expect(quotaOf(FAILURE)).toEqual({ provider: 'CLI Proxy', model: 'Gemini 3.8 Flash High' });
+    expect(quotaOf(FAILURE)).toEqual({
+      provider: 'CLI Proxy',
+      model: 'Gemini 3.8 Flash High',
+      reason: 'quota_exhausted',
+      said: null,
+    });
     expect(quotaOf({ code: 'rate_limited', error: 'slow down' })).toBeNull();
     expect(quotaOf({ ...FAILURE, code: 'agent_error' })).toBeNull();
   });

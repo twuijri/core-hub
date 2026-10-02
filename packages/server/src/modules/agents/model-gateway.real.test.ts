@@ -36,6 +36,7 @@ import { Writable } from 'node:stream';
 import pino from 'pino';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import {
+  upstreamPrefix,
   CliproxySupervisor,
   GATEWAY_MAIN_MODEL,
   GATEWAY_SMALL_MODEL,
@@ -71,7 +72,101 @@ const MODEL = 'fake-coder';
  * as the owner's own proxy lists a Claude model: an agent that picks one of them by itself (Claude
  * Code's bridge matching "opus" in the list) must still be served the turn's model.
  */
-const OTHER_MODELS = ['claude-opus-4-6-thinking', 'gemini-3-flash'];
+const OTHER_MODELS = ['claude-opus-4-6-thinking', 'gemini-3-flash', 'gemini-coder'];
+/**
+ * A Google Antigravity subscription signed in through the bundled CLIProxyAPI (DECISIONS §143):
+ * its account file points CLIProxyAPI at a stand-in for Google's Cloud Code endpoint, which
+ * refuses `countTokens` as Google's limit does and answers `streamGenerateContent`.
+ */
+const ANTIGRAVITY_ID = '01KGATEWAYANTIGRAVITYROW01';
+const ANTIGRAVITY_MODEL = 'gemini-3-flash';
+/** What the stand-in was asked, by method. */
+const antigravityCalls: string[] = [];
+/** The thinking settings each generation asked Google for. */
+const antigravityThinking: (string | null)[] = [];
+/** While true, the stand-in refuses a generation that asks to think hard, as Google may. */
+let refuseThinking = false;
+/** Google refusing any request that carries Claude Code's billing line (§148 bisect). */
+let refuseBilling = false;
+
+async function fakeAntigravity(): Promise<{ server: Server; url: string }> {
+  const server = createServer((request, response) => {
+    let raw = '';
+    request.on('data', (chunk: Buffer) => (raw += chunk.toString('utf8')));
+    request.on('end', () => {
+      const method = /v1internal:(\w+)/.exec(request.url ?? '')?.[1] ?? request.url ?? '';
+      antigravityCalls.push(method);
+      if (method === 'countTokens') {
+        response.writeHead(429, { 'content-type': 'application/json' });
+        response.end(
+          JSON.stringify({
+            error: {
+              code: 429,
+              message: 'Resource has been exhausted (e.g. check quota).',
+              status: 'RESOURCE_EXHAUSTED',
+            },
+          }),
+        );
+        return;
+      }
+      if (method === 'streamGenerateContent' || method === 'generateContent') {
+        antigravityThinking.push(/"thinkingConfig":(\{[^}]*\})/.exec(raw)?.[1] ?? null);
+      }
+      const refusedBilling =
+        refuseBilling &&
+        (method === 'streamGenerateContent' || method === 'generateContent') &&
+        raw.includes('x-anthropic-billing-header');
+      if (refusedBilling) antigravityCalls.push('refused-billing');
+      if (
+        refusedBilling ||
+        (refuseThinking &&
+          (method === 'streamGenerateContent' || method === 'generateContent') &&
+          /"thinkingLevel":"high"/.test(raw))
+      ) {
+        if (!refusedBilling) antigravityCalls.push('refused-thinking');
+        response.writeHead(429, { 'content-type': 'application/json' });
+        response.end(
+          JSON.stringify({
+            error: {
+              code: 429,
+              message: 'Resource has been exhausted (e.g. check quota).',
+              status: 'RESOURCE_EXHAUSTED',
+            },
+          }),
+        );
+        return;
+      }
+      if (method === 'streamGenerateContent' || method === 'generateContent') {
+        const chunk = {
+          response: {
+            candidates: [
+              {
+                content: { role: 'model', parts: [{ text: 'pong from Antigravity' }] },
+                finishReason: 'STOP',
+              },
+            ],
+            usageMetadata: { promptTokenCount: 50, candidatesTokenCount: 4 },
+            modelVersion: ANTIGRAVITY_MODEL,
+          },
+        };
+        if (method === 'generateContent') {
+          response.writeHead(200, { 'content-type': 'application/json' });
+          response.end(JSON.stringify(chunk));
+          return;
+        }
+        response.writeHead(200, { 'content-type': 'text/event-stream' });
+        response.end(`data: ${JSON.stringify(chunk)}\n\n`);
+        return;
+      }
+      response.writeHead(200, { 'content-type': 'application/json' });
+      response.end('{}');
+    });
+  });
+  await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
+  const address = server.address();
+  const port = typeof address === 'object' && address ? address.port : 0;
+  return { server, url: `http://127.0.0.1:${port}` };
+}
 /** Every real provider says when an answer was made; Grok Build refuses a chunk without it. */
 const CREATED = 1_790_000_000;
 const PROOF_FILE = 'gateway-proof.txt';
@@ -375,6 +470,7 @@ const entryOf = (id: string): CatalogEntry => {
 
 describe.skipIf(!enabled)('the model gateway, for real (COREHUB_REAL_GATEWAY=1)', () => {
   let provider: Awaited<ReturnType<typeof fakeChatProvider>>;
+  let antigravity: Awaited<ReturnType<typeof fakeAntigravity>>;
   let gateway: ModelGateway;
   let logged = '';
   const late: AgentGatewayUsage[] = [];
@@ -385,6 +481,28 @@ describe.skipIf(!enabled)('the model gateway, for real (COREHUB_REAL_GATEWAY=1)'
       throw new Error(`no CLIProxyAPI at ${binary}: run node scripts/cliproxy/fetch.mjs`);
     }
     provider = await fakeChatProvider();
+    antigravity = await fakeAntigravity();
+    // The account the sign-in left, as CLIProxyAPI writes it, with the fields the hub sets.
+    const authDir = path.join(stateDir, 'cliproxy-auth');
+    mkdirSync(authDir, { recursive: true, mode: 0o700 });
+    writeFileSync(
+      path.join(authDir, 'antigravity-probe.json'),
+      JSON.stringify({
+        type: 'antigravity',
+        access_token: 'ya29.stand-in',
+        refresh_token: 'stand-in',
+        expires_in: 3600,
+        timestamp: Date.now(),
+        expired: '2099-01-01T00:00:00Z',
+        email: 'owner@example.com',
+        project_id: 'stand-in-project',
+        base_url: antigravity.url,
+        prefix: upstreamPrefix(ANTIGRAVITY_ID),
+        note: `corehub:${ANTIGRAVITY_ID.toLowerCase()}`,
+        disable_cooling: true,
+      }),
+      { mode: 0o600 },
+    );
     const log = pino(
       { level: 'debug' },
       new Writable({
@@ -404,22 +522,38 @@ describe.skipIf(!enabled)('the model gateway, for real (COREHUB_REAL_GATEWAY=1)'
           headers: {},
           models: [MODEL, ...OTHER_MODELS].map((id) => ({ id, contextWindow: 200_000 })),
         },
+        {
+          providerId: ANTIGRAVITY_ID,
+          kind: 'subscription',
+          baseUrl: '',
+          apiKey: null,
+          headers: {},
+          models: [{ id: ANTIGRAVITY_MODEL, contextWindow: 1_000_000 }],
+        },
       ],
       resolveKey: (_workspace, key) =>
         key.startsWith('fake/') ? { providerId: PROVIDER_ID, model: key.slice(5) } : null,
       target: (_workspace, providerId, model) =>
-        providerId === PROVIDER_ID && (model === MODEL || OTHER_MODELS.includes(model))
+        providerId === ANTIGRAVITY_ID && model === ANTIGRAVITY_MODEL
           ? {
               providerId,
               model,
-              modelLabel: model === MODEL ? 'Fake Coder' : model,
-              providerLabel: 'Fake Proxy',
-              price: (usage) => ({
-                costMicroUsd: usage.inputTokens + usage.outputTokens,
-                costSource: 'estimated',
-              }),
+              modelLabel: model,
+              providerLabel: 'Google Antigravity',
+              price: () => ({ costSource: 'unknown' }),
             }
-          : { refusal: `unknown model ${model}` },
+          : providerId === PROVIDER_ID && (model === MODEL || OTHER_MODELS.includes(model))
+            ? {
+                providerId,
+                model,
+                modelLabel: model === MODEL ? 'Fake Coder' : model,
+                providerLabel: 'Fake Proxy',
+                price: (usage) => ({
+                  costMicroUsd: usage.inputTokens + usage.outputTokens,
+                  costSource: 'estimated',
+                }),
+              }
+            : { refusal: `unknown model ${model}` },
       modelKeys: () => [...OTHER_MODELS, MODEL].map((id) => `fake/${id}`),
       recordLate: (_grant, _runId, usage) => late.push(usage),
     };
@@ -442,6 +576,7 @@ describe.skipIf(!enabled)('the model gateway, for real (COREHUB_REAL_GATEWAY=1)'
   afterAll(async () => {
     await gateway?.close();
     provider?.server.close();
+    antigravity?.server.close();
     rmSync(stateDir, { recursive: true, force: true });
     if (!process.env.COREHUB_REAL_ACP_DATA) rmSync(dataDir, { recursive: true, force: true });
   });
@@ -473,7 +608,7 @@ describe.skipIf(!enabled)('the model gateway, for real (COREHUB_REAL_GATEWAY=1)'
   });
 
   /** An agent installed, its home and its gateway grant, and the target the hub would start. */
-  async function prepareAgent(id: string) {
+  async function prepareAgent(id: string, model = MODEL) {
     const entry = entryOf(id);
     const installer = createNpmInstaller({
       dataDir,
@@ -507,7 +642,7 @@ describe.skipIf(!enabled)('the model gateway, for real (COREHUB_REAL_GATEWAY=1)'
     grant.setTurn({
       runId: `run-${id}`,
       providerId: PROVIDER_ID,
-      model: MODEL,
+      model,
       report: (usage) => reports.push(usage),
     });
     const context = {
@@ -573,6 +708,7 @@ describe.skipIf(!enabled)('the model gateway, for real (COREHUB_REAL_GATEWAY=1)'
   async function runAgent(
     id: string,
     prompt: string,
+    model = MODEL,
   ): Promise<{
     said: string;
     events: AgentEvent[];
@@ -581,7 +717,7 @@ describe.skipIf(!enabled)('the model gateway, for real (COREHUB_REAL_GATEWAY=1)'
     home: string;
     token: string;
   }> {
-    const { target, adapter, grant, reports, env, home } = await prepareAgent(id);
+    const { target, adapter, grant, reports, env, home } = await prepareAgent(id, model);
     const session: AgentSession = await adapter.start(target);
     const events: AgentEvent[] = [];
     const reading = (async () => {
@@ -854,6 +990,156 @@ describe.skipIf(!enabled)('the model gateway, for real (COREHUB_REAL_GATEWAY=1)'
           env: { ANTHROPIC_MODEL: 'fake/claude-opus-4-6-thinking' },
         },
       );
+    },
+    5 * 60_000,
+  );
+
+  it(
+    'Claude Code answers on a Google Antigravity subscription, its token counts never reaching Google',
+    async () => {
+      // The owner, 2026-10-01: Claude Code asks `count_tokens` some fifteen times as a turn starts;
+      // CLIProxyAPI turned each into Antigravity's `countTokens`, Google refused them with
+      // RESOURCE_EXHAUSTED, and the turn lost its model. The gateway counts them itself.
+      antigravityCalls.length = 0;
+      await withRunner(
+        'claude-code',
+        async (turn) => {
+          const events = await turn('run-antigravity', 'Say pong.');
+          expect(events.at(-1)).toMatchObject({ type: 'completed' });
+          expect(saidIn(events)).toContain('pong from Antigravity');
+        },
+        {
+          selection: () => ({
+            model: ANTIGRAVITY_MODEL,
+            provider: null,
+            providerId: ANTIGRAVITY_ID,
+          }),
+        },
+      );
+      expect(antigravityCalls).not.toContain('countTokens');
+      expect(
+        antigravityCalls.filter((call) => /generateContent/i.test(call)).length,
+      ).toBeGreaterThan(0);
+    },
+    5 * 60_000,
+  );
+
+  it(
+    'Claude Code still answers on Antigravity when Google refuses its high thinking, at a lower level',
+    async () => {
+      antigravityCalls.length = 0;
+      antigravityThinking.length = 0;
+      refuseThinking = true;
+      try {
+        await withRunner(
+          'claude-code',
+          async (turn) => {
+            const events = await turn('run-antigravity-thinking', 'Say pong.');
+            expect(events.at(-1)).toMatchObject({ type: 'completed' });
+            expect(saidIn(events)).toContain('pong from Antigravity');
+          },
+          {
+            selection: () => ({
+              model: ANTIGRAVITY_MODEL,
+              provider: null,
+              providerId: ANTIGRAVITY_ID,
+            }),
+          },
+        );
+      } finally {
+        refuseThinking = false;
+      }
+      expect(antigravityCalls).toContain('refused-thinking');
+      // Answered with its thinking lowered, not turned off: the smallest change that works.
+      const answered = antigravityThinking.at(-1);
+      expect(answered, JSON.stringify(antigravityThinking)).toMatch(/thinkingLevel/);
+      expect(answered).not.toMatch(/"high"/);
+    },
+    5 * 60_000,
+  );
+
+  it(
+    'Claude Code answers on Antigravity when Google refuses its billing line: the bisect keeps it out',
+    async () => {
+      antigravityCalls.length = 0;
+      refuseBilling = true;
+      try {
+        await withRunner(
+          'claude-code',
+          async (turn) => {
+            const events = await turn('run-antigravity-billing', 'Say pong.');
+            expect(events.at(-1)).toMatchObject({ type: 'completed' });
+            expect(saidIn(events)).toContain('pong from Antigravity');
+          },
+          {
+            selection: () => ({
+              model: ANTIGRAVITY_MODEL,
+              provider: null,
+              providerId: ANTIGRAVITY_ID,
+            }),
+          },
+        );
+      } finally {
+        refuseBilling = false;
+      }
+      // The real CLIProxyAPI carries the billing line to Google on the Chat route; refused once
+      // as Claude Code sent it, then answered without it.
+      expect(antigravityCalls).toContain('refused-billing');
+    },
+    5 * 60_000,
+  );
+
+  it.each(['codex', 'gemini-cli'])(
+    '%s answers on a Google Antigravity subscription (the profile default)',
+    async (id) => {
+      if (id !== 'codex' && process.env.COREHUB_REAL_GATEWAY_ALL !== '1') return;
+      antigravityCalls.length = 0;
+      await withRunner(
+        id,
+        async (turn) => {
+          const events = await turn(`run-antigravity-${id}`, 'Say pong.');
+          expect(events.at(-1), JSON.stringify(events.at(-1))).toMatchObject({ type: 'completed' });
+          expect(saidIn(events)).toContain('pong from Antigravity');
+        },
+        {
+          selection: () => ({
+            model: ANTIGRAVITY_MODEL,
+            provider: null,
+            providerId: ANTIGRAVITY_ID,
+          }),
+        },
+      );
+    },
+    5 * 60_000,
+  );
+
+  it(
+    'Claude Code on a Google model goes the Chat way, and round-trips a tool call and Arabic',
+    async () => {
+      // §148: for a Google model the gateway speaks Chat to CLIProxyAPI itself and answers Claude
+      // Code in Anthropic's shape, tool calls and their results included.
+      const before = provider.seen.length;
+      const result = await runAgent(
+        'claude-code',
+        `Create the file ${PROOF_FILE} in the working directory with the Write tool.`,
+        'gemini-coder',
+      );
+      const proof = path.join(result.home, PROOF_FILE);
+      expect(existsSync(proof)).toBe(true);
+      expect(readFileSync(proof, 'utf8')).toBe(PROOF_TEXT);
+      expect(result.said).toContain('The proof file is written.');
+      const calls = provider.seen.slice(before);
+      expect(calls.every((call) => call.body.model === 'gemini-coder')).toBe(true);
+      // The tool's result went back to the model as Chat's own `tool` message.
+      expect(
+        calls.some((call) =>
+          ((call.body.messages ?? []) as { role: string }[]).some((m) => m.role === 'tool'),
+        ),
+      ).toBe(true);
+      rmSync(result.home, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 });
+      const arabic = await runAgent('claude-code', ARABIC_PROMPT, 'gemini-coder');
+      expect(arabic.said).toBe(ARABIC_TOKENS.join(''));
+      rmSync(arabic.home, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 });
     },
     5 * 60_000,
   );

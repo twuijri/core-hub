@@ -19,8 +19,10 @@
  *   one of the socket's workspaces, exactly as `GET /sessions/{id}` would;
  *   carries the transcript events of one session.
  *
- * Commands (client -> server) are only `subscribe` / `unsubscribe`: every
- * mutation goes over HTTP (events/README.md §Connecting and subscribing).
+ * Commands (client -> server) are `subscribe` / `unsubscribe`, and `viewing` — which
+ * conversation the person is looking at, so a finished reply there is not pushed to their
+ * phone (`viewing.ts`, DECISIONS §149). Every mutation goes over HTTP (events/README.md
+ * §Connecting and subscribing).
  *
  * Authentication is `auth`'s (`modules/auth/sockets.ts`): a socket reaches
  * this namespace only with a verified principal. Until the module wires the
@@ -30,6 +32,7 @@ import type { Namespace, Server as SocketServer, Socket } from 'socket.io';
 import { REALTIME_NAMESPACES } from '../../lib/module.js';
 import { publishToTaps } from '../../lib/realtime.js';
 import { ResumeJournal, type JournalEntry } from './journal.js';
+import { viewingFor } from './viewing.js';
 
 export const SESSIONS_NAMESPACE = REALTIME_NAMESPACES.sessions;
 
@@ -52,6 +55,7 @@ export type SessionEventName =
   | 'approval.resolved'
   | 'context.updated'
   | 'context.compression'
+  | 'run.status'
   | 'subagent.started'
   | 'subagent.updated'
   | 'subagent.completed';
@@ -207,6 +211,25 @@ export class SessionsRealtime {
           () => reply(ack, notFound(sessionId)),
         );
       });
+
+      // Which conversation this client is looking at (null: none). Only its own person's
+      // pushes are affected, so no follow check is needed: an id that is not theirs matches
+      // nothing they are notified about.
+      socket.on('viewing', (payload: unknown, ack?: (reply: SubscribeAck | ErrorAck) => void) => {
+        const userId = (socket.data as { principal?: { user?: { id?: string } } }).principal?.user
+          ?.id;
+        if (!userId) return reply(ack, badRequest('not signed in'));
+        const raw =
+          payload && typeof payload === 'object'
+            ? (payload as { session_id?: unknown }).session_id
+            : undefined;
+        if (raw !== null && (typeof raw !== 'string' || raw.trim() === '')) {
+          return reply(ack, badRequest('session_id is a session id or null'));
+        }
+        viewingFor(this.nsp.server).set(socket.id, userId, raw);
+        reply(ack, { ok: true, replayed: 0, truncated: false });
+      });
+      socket.on('disconnect', () => viewingFor(this.nsp.server).forget(socket.id));
 
       socket.on(
         'unsubscribe',

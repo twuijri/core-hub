@@ -142,7 +142,14 @@ export interface AgentGatewayTurn {
   /** The turn moved on down the chain after its model ran out of quota. */
   fellBack?(move: {
     failed: AgentGatewayQuotaFailure;
-    answered: { providerId: string; model: string; modelLabel: string };
+    answered: { providerId: string; model: string; modelLabel: string; providerLabel?: string };
+  }): void;
+  /** The provider refused the model for now: the gateway waits this long once, then asks again. */
+  waiting?(wait: {
+    providerLabel: string;
+    modelLabel: string;
+    seconds: number;
+    reason: 'no_capacity' | 'rate_limited';
   }): void;
 }
 
@@ -150,6 +157,8 @@ export interface AgentGatewayTurn {
 export interface AgentGatewayQuotaFailure {
   providerId: string;
   model: string;
+  /** Why: its quota is spent, it has no capacity for the model now, or it limits for a while. */
+  reason?: 'quota_exhausted' | 'no_capacity' | 'rate_limited';
   providerLabel: string;
   modelLabel: string;
   /** The provider's own words, without the hub's internal names. */
@@ -393,6 +402,18 @@ export type RunnerEvent =
       type: 'model_fallback';
       failed: RunnerFallbackAttempt[];
       answered: { model: string; provider: string | null };
+    }
+  /**
+   * What the hub's model gateway is doing for the turn while nothing else is said (`run.status`):
+   * waiting out a provider's limit on a model, or trying the next model of the chain.
+   */
+  | {
+      type: 'model_status';
+      phase: 'waiting' | 'trying';
+      provider: string;
+      model: string;
+      seconds: number | null;
+      reason: 'no_capacity' | 'rate_limited' | 'quota_exhausted' | null;
     }
   | { type: 'completed' }
   | {

@@ -16,6 +16,7 @@ import { createRequire } from 'node:module';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { build } from 'esbuild';
+import { ensureArgon2DarwinX64 } from './argon2-darwin-x64.mjs';
 
 const here = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const repo = path.resolve(here, '../..');
@@ -103,5 +104,13 @@ function copyPackage(name, from) {
     if (!['node-addon-api', 'cross-env'].includes(dep)) copyPackage(dep, pkgFile);
 }
 for (const name of NATIVE) copyPackage(name, requireFromServer.resolve(`${name}/package.json`));
+
+// The Intel Mac app (DECISIONS §152): argon2 0.45 ships no darwin-x64 binary; on a Mac it is
+// compiled from argon2's own sources (scripts/argon2-darwin-x64.mjs).
+ensureArgon2DarwinX64({
+  source: path.dirname(requireFromServer.resolve('argon2/package.json')),
+  into: path.join(out, 'node_modules', 'argon2'),
+  log: (line) => console.log(`desktop build: ${line}`),
+});
 
 console.log(`desktop build: ${path.relative(repo, out)} ready (${[...copied].join(', ')})`);
