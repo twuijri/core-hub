@@ -28,6 +28,9 @@ $ gh api repos/twuijri/core-hub/actions/runs/37050711395 --jq '{status,conclusio
 ```
 لم يُشغَّل Publish release نفسه بعد التعديل (يعمل على وسم فقط)؛ التحقق الحقيقي تشغيله يدويًا على v1.1.7 بعد الدمج.
 
+## تصدير مفتاح التوقيع لجوجل بلاي (2026-10-04)
+قرار المالك: Play App Signing بمفتاحنا الحالي (مفتاح APK في GitHub) لا بمفتاح يولّده Google. المفتاح موجود فقط في أسرار GitHub (`ANDROID_TEST_*`)، فأُضيف `.github/workflows/play-signing-key.yml` (يدوي فقط): يأخذ مفتاح التشفير العام من Play Console كمدخل (يعيد بناء PEM إن ضاعت الأسطر)، ينزّل PEPK من Google ويتحقق من sha256 مثبّت (`aaccc077…e24e`، نُزّل وفُحص محليًا: خيارات `--keystore-pass` و`--key-pass` و`--rsa-aes-encryption` و`--include-cert` من help.txt داخل الحزمة)، ويخرج zip مشفّرًا لا يفتحه إلا Google Play، يُحفظ artifact ليوم واحد. لم يُشغَّل بعد؛ يُشغَّل بعد الدمج بمفتاح Play Console.
+
 ## المخاطر والرجوع
 صلاحية قراءة فقط لسجلات Actions للمستودع نفسه. الرجوع: حذف الكتلة.
 
