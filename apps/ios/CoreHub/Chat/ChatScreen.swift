@@ -30,6 +30,8 @@ struct ChatScreen: View {
     @State private var replyTo: Message?
     /// Bumped to put the cursor in the composer when a reply is chosen (§150).
     @State private var composerFocus = 0
+    /// The message whose time shows under it after a light tap; one at a time (tester feedback).
+    @State private var timeShown: String?
     /// `/clear-screen`: the messages shown before it stay in the conversation, hidden here.
     @State private var clearedBefore: String?
     @State private var pickingModel = false
@@ -163,7 +165,9 @@ struct ChatScreen: View {
                             profile: model.profile,
                             sessionID: model.sessionID,
                             agent: message.role == .assistant ? identity(of: message) : nil,
-                            actions: messageActions
+                            actions: messageActions,
+                            timeShown: timeShown == message.id,
+                            onTap: { timeShown = timeShown == message.id ? nil : message.id }
                         )
                         .id(message.id)
                     }
@@ -513,8 +517,13 @@ struct MessageRow: View {
     var agent: AgentIdentity? = nil
     /// What the message offers in a chat (copy, read aloud, reply, fork); `nil` in a room.
     var actions: MessageActions? = nil
+    /// Whether its time shows under it (a light tap toggles it; tester feedback, 2026-10-05).
+    var timeShown = false
+    /// A light tap on the message: the screen shows its time, or hides it again.
+    var onTap: (() -> Void)? = nil
     @Environment(\.l10n) private var l10n
     @Environment(\.layoutDirection) private var uiDirection
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     /// Settings → Display: reasoning and tool steps shown or not, compact, the text size.
     @Environment(\.chatLook) private var look
 
@@ -524,6 +533,7 @@ struct MessageRow: View {
         VStack(alignment: .leading, spacing: Space.s1) {
             if startsTurn { header }
             if isPerson { personBubble } else { agentCard }
+            if timeShown { timeLine }
         }
         .padding(.top, look.gap(startsTurn: startsTurn))
         // The side says who is speaking, and does not turn with the language.
@@ -561,6 +571,7 @@ struct MessageRow: View {
                 if !message.text.isEmpty { personText }
                 MessageAttachments(content: message.content, profile: profile)
             }
+            .simultaneousGesture(TapGesture().onEnded { toggleTime() })
             .modifier(MessageMenu(message: message, actions: message.text.isEmpty ? nil : actions))
             .modifier(swipeToReply)
         }
@@ -593,6 +604,10 @@ struct MessageRow: View {
                 // A link in the reply that names one of its files opens it (FileLinkOpener).
                 MarkdownView(text: message.text)
                     .modifier(FileLinkOpener(own: MessageAttachments.files(message.content), profile: profile, sessionID: sessionID))
+                    // A light tap on the reply's words shows its time. Beside the text's own
+                    // gestures, so links and selection keep working; its buttons, files and steps
+                    // under it keep doing only their own thing.
+                    .simultaneousGesture(TapGesture().onEnded { toggleTime() })
             }
             MessageAttachments(content: message.content, profile: profile)
             if let actions, message.status != .streaming, !message.text.isEmpty {
@@ -622,6 +637,27 @@ struct MessageRow: View {
         ))
         .modifier(swipeToReply)
         .accessibilityIdentifier("message.agent")
+    }
+
+    /// The time it was said, small and faint, under the message on its own side.
+    private var timeLine: some View {
+        HStack {
+            if isPerson { Spacer(minLength: 0) }
+            Text(MessageTime.text(message.createdAt, l10n: l10n))
+                .font(.system(size: FontSize.sizeXs))
+                .monospacedDigit()
+                .foregroundStyle(Tone.textFaint)
+                .environment(\.layoutDirection, uiDirection)
+                .accessibilityIdentifier("message.time")
+            if !isPerson { Spacer(minLength: 0) }
+        }
+        .padding(.horizontal, Space.s1)
+        .transition(.opacity)
+    }
+
+    private func toggleTime() {
+        guard let onTap else { return }
+        withAnimation(reduceMotion ? nil : .easeOut(duration: Motion.fast)) { onTap() }
     }
 
     /// Swipe toward the reading start to reply (§150); never on a reply still streaming.

@@ -109,6 +109,8 @@ fun RoomScreen(roomId: String, profile: String, subtitle: String?, onMenu: () ->
     val state = ui.state
     var draft by rememberSaveable(roomId) { mutableStateOf("") }
     var members by remember { mutableStateOf(false) }
+    // The message whose time shows under it after a light tap; one at a time (tester feedback).
+    var timeShown by remember(roomId) { mutableStateOf<String?>(null) }
     val t = LocalTokens.current
 
     // Present in the room while it is on screen; typing and presence stop when it is not.
@@ -169,7 +171,10 @@ fun RoomScreen(roomId: String, profile: String, subtitle: String?, onMenu: () ->
                         // A seat keeps its own name in the room, and wears its agent's face.
                         val agent = if (turn.turn.role != hub.core.client.model.MessageRole.ASSISTANT) null
                         else hub.core.android.ui.components.AgentIdentity.of(turn.turn.messages.first().authorId, turn.turn.authorName, agents, agentFallback)
-                        TurnView(turn.turn, youLabel, profile, mine = turn.mine, agent = agent)
+                        TurnView(
+                            turn.turn, youLabel, profile, mine = turn.mine, agent = agent, timeShown = timeShown,
+                            onTapMessage = { message -> timeShown = if (timeShown == message.id) null else message.id },
+                        )
                     }
                 }
             }

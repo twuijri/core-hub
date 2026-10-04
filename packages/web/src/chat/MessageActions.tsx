@@ -16,16 +16,41 @@ import { Button } from '../ui/Button.js';
 import { IconCheck, IconCopy, IconFork, IconReply } from '../ui/icons.js';
 import { SpeakButton } from '../voice/SpeakButton.js';
 import { textOf } from './transcript.js';
-import { intlLocale } from '../i18n/index.js';
+import { intlLocale, type Translator } from '../i18n/index.js';
 
-/** The clock time of a message, in the reading language. */
-export function messageTime(message: Message, language: string): string {
+/** Whole calendar days from the day of `then` to the day of `now`, in the reader's own zone. */
+function daysBetween(then: Date, now: Date): number {
+  const start = (d: Date) => new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
+  return Math.round((start(now) - start(then)) / 86_400_000);
+}
+
+/**
+ * When a message was said, in the reading language and with Latin digits (`intlLocale`): the
+ * clock time today, «Yesterday» and the time yesterday, and the short date and the time before
+ * that (the year only when it is not this year). The phones follow the same rule (tester
+ * feedback, 2026-10-05: «when did this arrive?»).
+ */
+export function messageTime(
+  message: Pick<Message, 'created_at'>,
+  language: string,
+  t: Translator,
+  now: Date = new Date(),
+): string {
   const stamp = Date.parse(message.created_at);
   if (Number.isNaN(stamp)) return '';
-  return new Intl.DateTimeFormat(intlLocale(language), {
-    hour: '2-digit',
-    minute: '2-digit',
-  }).format(stamp);
+  const locale = intlLocale(language);
+  const clock: Intl.DateTimeFormatOptions = { hour: '2-digit', minute: '2-digit' };
+  const date = new Date(stamp);
+  const days = daysBetween(date, now);
+  const time = new Intl.DateTimeFormat(locale, clock).format(date);
+  if (days <= 0) return time;
+  if (days === 1) return t('chat.time_yesterday', { time });
+  return new Intl.DateTimeFormat(locale, {
+    day: 'numeric',
+    month: 'short',
+    ...(date.getFullYear() === now.getFullYear() ? {} : { year: 'numeric' }),
+    ...clock,
+  }).format(date);
 }
 
 export function MessageActions({
@@ -57,7 +82,7 @@ export function MessageActions({
 
   return (
     <div className="msg-actions" data-testid="message-actions">
-      <span className="msg-time">{messageTime(message, language)}</span>
+      <span className="msg-time">{messageTime(message, language, t)}</span>
       {speak && <SpeakButton message={message} />}
       <Button
         variant="ghost"

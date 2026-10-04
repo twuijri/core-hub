@@ -13,6 +13,8 @@ struct RoomScreen: View {
     @Environment(AppModel.self) private var app
     @Environment(\.l10n) private var l10n
     @State private var draft = ""
+    /// The message whose time shows under it after a light tap; one at a time (tester feedback).
+    @State private var timeShown: String?
     @State private var tray: AttachmentTray?
     @State private var showingMembers = false
     /// The room action asked from the «⋯» (a sheet or a question).
@@ -90,7 +92,9 @@ struct RoomScreen: View {
                                     authorID: message.author.id, shownName: message.author.name,
                                     agents: app.agentDirectory.agents(model.profile), fallback: l10n("chat.agent")
                                 )
-                                : nil
+                                : nil,
+                            timeShown: timeShown == message.id,
+                            onTap: { timeShown = timeShown == message.id ? nil : message.id }
                         )
                         .id(message.id)
                     }

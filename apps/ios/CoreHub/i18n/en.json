@@ -145,7 +145,8 @@
     "deleted": "This conversation was deleted.",
     "start_hint": "Ask anything. The conversation starts with your first message.",
     "more": "More",
-    "export": "Export"
+    "export": "Export",
+    "time_yesterday": "Yesterday {time}"
   },
   "tool": {
     "running": "Running",

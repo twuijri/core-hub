@@ -58,6 +58,7 @@
   "chat_seconds_short": "%1$ds",
   "chat_seconds": "%1$.1f s",
   "chat_thought_for": "Thought for %1$ds",
+  "chat_time_yesterday": "Yesterday %1$s",
   "chat_reasoning": "Reasoning",
   "chat_loading_older": "Loading earlier messages…",
   "chat_run_failed": "The run failed.",

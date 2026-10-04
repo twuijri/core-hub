@@ -369,6 +369,7 @@
     "copy": "Copy",
     "reply": "Reply to this",
     "fork_here": "Fork from here",
+    "time_yesterday": "Yesterday {time}",
     "replying_to": "Replying to: {text}",
     "estimated": "≈ {amount}",
     "anchor_missing": "The message this search pointed to is no longer in this conversation.",

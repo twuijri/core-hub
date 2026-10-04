@@ -58,6 +58,7 @@
   "chat_seconds_short": "%1$d ث",
   "chat_seconds": "%1$.1f ث",
   "chat_thought_for": "فكّر %1$d ث",
+  "chat_time_yesterday": "أمس %1$s",
   "chat_reasoning": "التفكير",
   "chat_loading_older": "جارٍ تحميل الرسائل الأقدم…",
   "chat_run_failed": "فشل التشغيل.",
