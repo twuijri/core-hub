@@ -31,6 +31,8 @@
 لا شيء.
 
 ## الملفات والتأثير
+الوثائق:
+- `docs/store/google/closed-test-feedback.md`: صف ملاحظة الوقت (من مختبر في الاختبار المغلق) صار يشير إلى #236.
 الويب:
 - `packages/web/src/chat/MessageActions.tsx`: `messageTime(message, language, t, now)` يطبّق القاعدة
   (الساعة / أمس + الساعة / التاريخ القصير + الساعة) عبر `intlLocale` (أرقام لاتينية).
