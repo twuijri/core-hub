@@ -19,6 +19,7 @@ builds; Play's questions are about the closed test, so report those rows as earl
 | 2026-09-26 | The Arabic interface and the download page read unnaturally | aboawadh (opened the PR) | Arabic UI and download-page wording rewritten | #167 |
 | 2026-09-27 | Thinking and tool calls scattered through the reply are distracting; group them | tester | A turn's tool calls fold into one live window and a summary row (web, iOS, Android) | #178 |
 | 2026-10-01 | Tapping a message in the chat doesn't let me copy it | tester | A long press on the agent's reply opens its menu (copy and more); swipe to reply | 42061d15, 1.1.7 (#233) |
+| 2026-10-05 | I can't tell when a message arrived; show its time under it (on a light tap, or always) | tester (closed test) | In progress on the phones (the web already shows it on hover) | — |
 
 ## Our own changes during the test
 
