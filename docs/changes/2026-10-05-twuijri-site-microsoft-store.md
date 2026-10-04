@@ -13,6 +13,7 @@
 ## الملفات والتأثير
 - `site/src/config.js`: `microsoftStore.enabled = true`.
 - `site/tests/releases.test.ts`: اختبار أن زر المتجر صار رابطًا إلى صفحة المنتج.
+- `README.md`: سطر ويندوز يربط المتجر بدل «coming».
 
 ## الفحوص (الأوامر ونواتجها الفعلية)
 ```
