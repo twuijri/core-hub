@@ -1,0 +1,86 @@
+name: Google Play signing key export
+
+# One-off, by hand: export the Android release key (the GitHub APK's key, secrets ANDROID_TEST_*)
+# for Play App Signing, so Play installs and the GitHub APK carry one signature (owner's choice,
+# 2026-10-04; docs/store/google/README.md "Play App Signing"). Play Console → Test and release →
+# App integrity → Play app signing → "Use a different app signing key" → "Export and upload a key
+# from Java keystore" gives an encryption public key: paste it as the input (newlines may be lost;
+# the PEM is rebuilt). Google's PEPK tool (checksum pinned) encrypts the private key with that
+# public key, so the artifact can only be opened by Google Play. Upload the artifact's zip in Play
+# Console. The keystore and its passwords exist only in the runner's temp folder and are never
+# printed.
+on:
+  workflow_dispatch:
+    inputs:
+      encryption_public_key:
+        description: 'The encryption public key Play Console gives (PEM, -----BEGIN PUBLIC KEY----- …)'
+        required: true
+
+permissions:
+  contents: read
+
+jobs:
+  export:
+    name: Export the encrypted signing key
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      PEPK_URL: https://www.gstatic.com/play-apps-publisher-rapid/signing-tool/prod/pepk.jar
+      PEPK_SHA256: aaccc0774b240aa5304bdad2a49865e92f229ca73209ecb6eaafe75dc858e24e
+    steps:
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - name: PEPK
+        run: |
+          set -euo pipefail
+          curl -fsSL -o "$RUNNER_TEMP/pepk.jar" "$PEPK_URL"
+          echo "$PEPK_SHA256  $RUNNER_TEMP/pepk.jar" | sha256sum --check --quiet || {
+            echo '::error::pepk.jar does not match the pinned checksum; Google may have updated it. Check the new tool and update PEPK_SHA256.'
+            exit 1
+          }
+      - name: The encryption public key
+        env:
+          KEY_INPUT: ${{ inputs.encryption_public_key }}
+        run: |
+          set -euo pipefail
+          body=$(printf %s "$KEY_INPUT" | sed -e 's/-----BEGIN PUBLIC KEY-----//' -e 's/-----END PUBLIC KEY-----//' | tr -d ' \r\n\t')
+          test -n "$body" || { echo '::error::The encryption public key is empty.'; exit 1; }
+          { echo '-----BEGIN PUBLIC KEY-----'; printf %s "$body" | fold -w 64; echo; echo '-----END PUBLIC KEY-----'; } \
+            | sed '/^$/d' > "$RUNNER_TEMP/encryption_public_key.pem"
+          openssl pkey -pubin -in "$RUNNER_TEMP/encryption_public_key.pem" -noout || {
+            echo '::error::That is not a valid PEM public key. Copy it again from Play Console.'
+            exit 1
+          }
+      - name: Export
+        env:
+          ANDROID_TEST_KEYSTORE_B64: ${{ secrets.ANDROID_TEST_KEYSTORE_B64 }}
+          ANDROID_TEST_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_TEST_KEYSTORE_PASSWORD }}
+          ANDROID_TEST_KEY_ALIAS: ${{ secrets.ANDROID_TEST_KEY_ALIAS }}
+          ANDROID_TEST_KEY_PASSWORD: ${{ secrets.ANDROID_TEST_KEY_PASSWORD }}
+        run: |
+          set -euo pipefail
+          for name in ANDROID_TEST_KEYSTORE_B64 ANDROID_TEST_KEYSTORE_PASSWORD ANDROID_TEST_KEY_ALIAS ANDROID_TEST_KEY_PASSWORD; do
+            test -n "${!name}" || { echo "::error::$name is not set"; exit 1; }
+          done
+          printf %s "$ANDROID_TEST_KEYSTORE_B64" | base64 --decode --ignore-garbage > "$RUNNER_TEMP/corehub-release.jks"
+          mkdir -p out
+          java -jar "$RUNNER_TEMP/pepk.jar" \
+            --keystore="$RUNNER_TEMP/corehub-release.jks" \
+            --alias="$ANDROID_TEST_KEY_ALIAS" \
+            --keystore-pass="$ANDROID_TEST_KEYSTORE_PASSWORD" \
+            --key-pass="$ANDROID_TEST_KEY_PASSWORD" \
+            --output=out/corehub-signing-key.zip \
+            --include-cert \
+            --rsa-aes-encryption \
+            --encryption-key-path="$RUNNER_TEMP/encryption_public_key.pem"
+          rm -f "$RUNNER_TEMP/corehub-release.jks"
+          test -s out/corehub-signing-key.zip
+          # The certificate's fingerprint, to compare with Play Console after the upload.
+          unzip -p out/corehub-signing-key.zip '*.pem' 2>/dev/null | openssl x509 -noout -fingerprint -sha256 || true
+      - uses: actions/upload-artifact@v4
+        with:
+          name: corehub-signing-key
+          path: out/corehub-signing-key.zip
+          retention-days: 1
