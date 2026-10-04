@@ -240,6 +240,11 @@ describe('store buttons', () => {
   it('config.js: each store turns on with its flag alone, the App Store once it has a link', () => {
     expect(STORES.microsoftStore.url).toBe('https://apps.microsoft.com/detail/9MT62R5V3P5N');
     expect(storeLink({ ...STORES.microsoftStore, enabled: true }).available).toBe(true);
+    // Live in the Store since 2026-09-29: the page links it next to the direct .exe.
+    expect(storeLink(STORES.microsoftStore)).toMatchObject({
+      available: true,
+      href: 'https://apps.microsoft.com/detail/9MT62R5V3P5N',
+    });
     expect(storeLink({ ...STORES.googlePlay, enabled: true }).available).toBe(true);
     expect(storeLink({ ...STORES.appStore, enabled: true }).available).toBe(
       STORES.appStore.url !== '',

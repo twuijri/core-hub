@@ -15,8 +15,9 @@ export const REPO = 'twuijri/core-hub';
 
 /** @type {StoreFlags} */
 export const STORES = {
-  // Partner Center product 9MT62R5V3P5N (docs/RELEASING.md §Windows). Waiting for certification.
-  microsoftStore: { enabled: false, url: 'https://apps.microsoft.com/detail/9MT62R5V3P5N' },
+  // Partner Center product 9MT62R5V3P5N (docs/RELEASING.md §Windows). Certified and live since
+  // 2026-09-29.
+  microsoftStore: { enabled: true, url: 'https://apps.microsoft.com/detail/9MT62R5V3P5N' },
   // Google Play comes after the APK (docs/RELEASING.md, "Where each platform ships").
   googlePlay: {
     enabled: false,
