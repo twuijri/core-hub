@@ -53,6 +53,8 @@ data class ChatMessage(
     val streaming: Boolean,
     /** Who wrote it: a person's user id, or the agent's; in a room, which person is you. */
     val authorId: String? = null,
+    /** When it was said (the contract's `created_at`); null on a shell the hub has not sent yet. */
+    val createdAt: java.time.OffsetDateTime? = null,
 ) {
     /** The hub opens a run with an empty assistant shell; until something lands in it, it is not a turn. */
     val isEmpty: Boolean get() = text.isBlank() && toolCalls.isEmpty() && attachments.isEmpty() && reasoning.isBlank()
@@ -72,6 +74,7 @@ data class ChatMessage(
             runId = message.runId,
             streaming = message.status == hub.core.client.model.MessageStatus.STREAMING,
             authorId = message.author.id,
+            createdAt = message.createdAt,
         )
     }
 }

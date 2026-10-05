@@ -110,7 +110,17 @@ private val small = RadiusTokens.sm.dp
  * agent's face and name — then the person's filled bubbles or the agent's solid cards.
  */
 @Composable
-fun TurnView(turn: Turn, youLabel: String, profile: String = "", mine: Boolean = turn.fromPerson, agent: AgentIdentity? = null) {
+fun TurnView(
+    turn: Turn,
+    youLabel: String,
+    profile: String = "",
+    mine: Boolean = turn.fromPerson,
+    agent: AgentIdentity? = null,
+    /** The message whose time shows under it (a light tap toggles it; tester feedback, 2026-10-05). */
+    timeShown: String? = null,
+    /** A light tap on a message: the screen shows its time, or hides it again. */
+    onTapMessage: ((ChatMessage) -> Unit)? = null,
+) {
     val t = LocalTokens.current
     val uiDirection = LocalLayoutDirection.current
     CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Ltr) {
@@ -145,8 +155,11 @@ fun TurnView(turn: Turn, youLabel: String, profile: String = "", mine: Boolean =
                             enabled = reply != null && !message.streaming && !message.isEmpty,
                             onReply = { reply?.invoke(message) },
                         ) {
-                            if (mine) PersonBubble(message, Modifier.widthIn(max = maxBubble), profile) else AgentMessage(message, profile)
+                            val onTap = onTapMessage?.let { tap -> { tap(message) } }
+                            if (mine) PersonBubble(message, Modifier.widthIn(max = maxBubble), profile, onTap) else AgentMessage(message, profile, onTap)
                         }
+                        val createdAt = message.createdAt
+                        if (timeShown == message.id && createdAt != null) MessageTimeLine(createdAt)
                     }
                 }
             }
@@ -156,7 +169,7 @@ fun TurnView(turn: Turn, youLabel: String, profile: String = "", mine: Boolean =
 
 @OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
 @Composable
-private fun PersonBubble(message: ChatMessage, modifier: Modifier, profile: String) {
+private fun PersonBubble(message: ChatMessage, modifier: Modifier, profile: String, onTap: (() -> Unit)?) {
     val t = LocalTokens.current
     // The corner nearest the person's own side (the right, always) is the tightened one.
     val shape = AbsoluteRoundedCornerShape(topLeft = big, topRight = small, bottomRight = big, bottomLeft = big)
@@ -170,7 +183,9 @@ private fun PersonBubble(message: ChatMessage, modifier: Modifier, profile: Stri
             modifier.background(t.userBubble, shape).border(1.dp, t.userBubbleBorder, shape)
                 .then(
                     if (actions != null && message.text.isNotEmpty()) {
-                        Modifier.clip(shape).combinedClickable(onClick = {}, onLongClick = { menu = true })
+                        Modifier.clip(shape).combinedClickable(onClick = { onTap?.invoke() }, onLongClick = { menu = true })
+                    } else if (onTap != null) {
+                        Modifier.clip(shape).clickable(onClick = onTap)
                     } else Modifier,
                 )
                 .padding(horizontal = 12.dp, vertical = 8.dp).testTag("message.user"),
@@ -193,7 +208,7 @@ private fun PersonBubble(message: ChatMessage, modifier: Modifier, profile: Stri
 }
 
 @Composable
-private fun AgentMessage(message: ChatMessage, profile: String) {
+private fun AgentMessage(message: ChatMessage, profile: String, onTap: (() -> Unit)?) {
     val t = LocalTokens.current
     val clipboard = LocalClipboardManager.current
     val shape = AbsoluteRoundedCornerShape(topLeft = small, topRight = big, bottomRight = big, bottomLeft = big)
@@ -202,12 +217,22 @@ private fun AgentMessage(message: ChatMessage, profile: String) {
     val longPressActions = LocalMessageActions.current
     var pressMenu by remember { mutableStateOf(false) }
     val pressable = longPressActions != null && !message.streaming && message.text.isNotBlank()
+    // A light tap shows its time (tester feedback, 2026-10-05). Its buttons, links, files and
+    // steps take their own taps first, so this is only the card and its words.
+    val tap by androidx.compose.runtime.rememberUpdatedState(onTap)
+    val tappable = onTap != null
     Box {
     Column(
         Modifier.fillMaxWidth().background(t.agentBubble, shape).border(1.dp, t.agentBubbleBorder, shape)
             .then(
-                if (pressable) {
-                    Modifier.pointerInput(message.id) { detectTapGestures(onLongPress = { pressMenu = true }) }
+                if (pressable || tappable) {
+                    Modifier.pointerInput(message.id, pressable, tappable) {
+                        val longPress: ((androidx.compose.ui.geometry.Offset) -> Unit)? =
+                            if (pressable) { _ -> pressMenu = true } else null
+                        val lightTap: ((androidx.compose.ui.geometry.Offset) -> Unit)? =
+                            if (tappable) { _ -> tap?.invoke() } else null
+                        detectTapGestures(onLongPress = longPress, onTap = lightTap)
+                    }
                 } else Modifier,
             )
             .padding(if (hub.core.android.ui.screens.LocalChatDisplay.current.compact) 8.dp else 12.dp).testTag("message.agent"),
@@ -251,6 +276,19 @@ private fun AgentMessage(message: ChatMessage, profile: String) {
         }
     }
     }
+}
+
+/** The time a message was said, small and faint, under it on its own side (MessageTime). */
+@Composable
+private fun MessageTimeLine(createdAt: java.time.OffsetDateTime) {
+    val t = LocalTokens.current
+    // «Yesterday %1$s», filled with the clock time once the rule knows it is yesterday.
+    val yesterday = stringResource(R.string.chat_time_yesterday)
+    val text = hub.core.android.chat.MessageTime.text(createdAt) { clock -> String.format(java.util.Locale.getDefault(), yesterday, clock) }
+    Text(
+        text, fontSize = FontTokens.sizeXs.sp, color = t.textFaint,
+        modifier = Modifier.padding(horizontal = 4.dp).testTag("message.time"),
+    )
 }
 
 /** After a run, the reasoning is history: one quiet line, the text behind a closed disclosure. */

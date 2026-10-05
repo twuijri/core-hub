@@ -270,7 +270,7 @@ class ChatViewModel(
                         authorName = graph.store.current?.user?.displayName.orEmpty(), text = body, reasoning = "", reasoningMs = null,
                         toolCalls = emptyList(),
                         attachments = outgoing.blocks().filter { it.attachmentId != null }.map { ChatAttachment(it.type, it.name, it.url, it.attachmentId, it.mime, it.sizeBytes) },
-                        runId = accepted.runId, streaming = false,
+                        runId = accepted.runId, streaming = false, createdAt = java.time.OffsetDateTime.now(),
                     )
                     ui.copy(sending = false, chat = chat.copy(messages = echo, failure = null))
                 }

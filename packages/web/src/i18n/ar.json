@@ -369,6 +369,7 @@
     "copy": "نسخ",
     "reply": "الرد على هذه الرسالة",
     "fork_here": "فرّع من هنا",
+    "time_yesterday": "أمس {time}",
     "replying_to": "ردًّا على: {text}",
     "estimated": "≈ {amount}",
     "anchor_missing": "الرسالة التي أشار إليها البحث لم تعد في هذه المحادثة.",

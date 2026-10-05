@@ -83,6 +83,8 @@ fun ChatScreen(
     val ui by vm.ui.collectAsState()
     val signedIn by context.graph.store.session.collectAsState()
     var replyTo by remember(sessionId) { mutableStateOf<hub.core.android.chat.ChatMessage?>(null) }
+    // The message whose time shows under it after a light tap; one at a time (tester feedback).
+    var timeShown by remember(sessionId) { mutableStateOf<String?>(null) }
     var draft by rememberSaveable(sessionId) { mutableStateOf("") }
     if (sessionId == null) {
         // Text shared from another app lands in the new chat's draft, once.
@@ -214,7 +216,10 @@ fun ChatScreen(
                             hub.core.android.ui.components.LocalChatSession provides sessionId,
                             hub.core.android.ui.components.LocalMessageActions provides messageActions,
                         ) {
-                            TurnView(turn, youLabel, profile, agent = agent)
+                            TurnView(
+                                turn, youLabel, profile, agent = agent, timeShown = timeShown,
+                                onTapMessage = { message -> timeShown = if (timeShown == message.id) null else message.id },
+                            )
                         }
                     }
                 }
