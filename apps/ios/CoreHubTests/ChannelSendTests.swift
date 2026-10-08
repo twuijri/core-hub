@@ -35,7 +35,7 @@ final class ChannelSendTests: XCTestCase {
     }
 
     private func message(_ id: String, role: ChannelMessage.Role = .user, origin: ChannelMessage.Origin? = nil) -> ChannelMessage {
-        ChannelMessage(id: id, role: role, text: "t", createdAt: Fixtures.date, origin: origin)
+        ChannelMessage(id: id, role: role, text: "t", createdAt: Fixture.date, origin: origin)
     }
 
     private func object(_ json: String) -> [String: Any] {
@@ -168,7 +168,7 @@ final class ChannelSendTests: XCTestCase {
     private func update(_ reason: String, _ status: String? = nil, conversation: String = "T1") -> ChannelUpdate? {
         var payload: [String: Any] = ["conversation_id": conversation, "channel": "telegram", "reason": reason, "outgoing": NSNull()]
         if let status { payload["outgoing"] = object(outgoingJSON(ulid, status)) }
-        return ChannelSendRules.parse(Fixtures.envelope("channel_conversation.updated", seq: 7, profile: "work", payload: payload))
+        return ChannelSendRules.parse(Fixture.envelope("channel_conversation.updated", seq: 7, profile: "work", payload: payload))
     }
 
     func testChannelConversationUpdatedIsReadAndNothingElseIs() throws {
@@ -177,8 +177,8 @@ final class ChannelSendTests: XCTestCase {
         XCTAssertEqual(turn.reason, "turn_started")
         XCTAssertNil(turn.outgoing)
         XCTAssertEqual(try XCTUnwrap(update("outgoing", "delivered")).outgoing?.status, .delivered)
-        XCTAssertNil(ChannelSendRules.parse(Fixtures.envelope("session.updated", seq: 8, payload: ["session_id": "S1"])))
-        XCTAssertNil(ChannelSendRules.parse(Fixtures.envelope("channel_conversation.updated", seq: 9, payload: ["conversation_id": "T1"])), "no reason, no update")
+        XCTAssertNil(ChannelSendRules.parse(Fixture.envelope("session.updated", seq: 8, payload: ["session_id": "S1"])))
+        XCTAssertNil(ChannelSendRules.parse(Fixture.envelope("channel_conversation.updated", seq: 9, payload: ["conversation_id": "T1"])), "no reason, no update")
     }
 
     func testAStepInBetweenMovesTheLineAndATurnOrTheEndReadsAgain() throws {
