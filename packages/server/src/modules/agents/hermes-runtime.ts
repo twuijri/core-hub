@@ -723,7 +723,7 @@ export class HermesRuntime {
    */
   private managedEnv(
     role: HermesProcessRole,
-    inherited: NodeJS.ProcessEnv = this.options.host.inherited ?? process.env,
+    inherited: NodeJS.ProcessEnv = this.options.host.inherited ?? {},
     values: Record<string, string> = {},
   ): Record<string, string> {
     return hermesManagedEnv({ dataDir: this.options.dataDir, role, inherited, values });
