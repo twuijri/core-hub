@@ -4246,7 +4246,10 @@ paths:
         read (ADR 0016), each item naming its `profile`, and the whole list is ordered by
         `last_message_at`. The hub keeps what it read for a short while and asks Hermes again
         only when Hermes's store has been written since (contract decision §61); clients poll
-        this every 30–60 s while the list is on screen, since Hermes announces nothing.
+        this every 30–60 s while the list is on screen. Where the hub's bridge in Hermes's
+        gateway is connected (`live_updates: true`), each turn on a channel is announced as
+        `channel_conversation.updated` and polling is only a slow fallback (contract decision
+        §153).
 
         Where the hub cannot read them — it does not supervise Hermes, a profile has no Hermes
         profile, or Hermes did not answer — the answer is still `200`: `items` holds what could
@@ -4303,6 +4306,13 @@ paths:
                     description: >-
                       Some profile has older conversations than `limit` let through (Hermes's
                       own count). Always sent by the hub (contract decision §103).
+                  live_updates:
+                    type: boolean
+                    description: >-
+                      The hub hears every profile listed here as its messages happen — its
+                      bridge in Hermes's gateway is connected — and says so with
+                      `channel_conversation.updated` (contract decision §153); a client then polls
+                      only as a slow fallback. Absent or `false`: poll as before.
                   items:
                     type: array
                     items:
@@ -4463,7 +4473,7 @@ paths:
     get:
       operationId: sessions.listChannelMessages
       tags: [sessions]
-      summary: Read one channel conversation (read-only)
+      summary: Read one channel conversation
       description: |
         The conversation, as Hermes keeps it, in the profile named by `X-Hub-Profile`: what the
         person on the channel wrote and what the agent answered, oldest first — a page of Hermes's
@@ -4517,6 +4527,21 @@ paths:
                     description: >-
                       The `offset` that reads the page before this one, or `null` when there is
                       none. Always sent by the hub (contract decision §103).
+                  outgoing:
+                    type: array
+                    description: >-
+                      What the hub's people wrote into this conversation from the hub and the hub
+                      is still following (contract decision §153), oldest first: one Hermes does
+                      not have yet, or whose turn has not ended. Once Hermes has it, its
+                      `message_id` names the item of `items` it became. Only on the latest page
+                      (`offset` 0); absent from an older hub.
+                    items:
+                      $ref: '#/components/schemas/ChannelOutgoing'
+                  live_updates:
+                    type: boolean
+                    description: >-
+                      As in `sessions.listChannelConversations`: the hub announces this
+                      conversation's changes with `channel_conversation.updated`.
               example:
                 conversation:
                   id: 20260925_091500_3f9a1c2b
@@ -4547,6 +4572,96 @@ paths:
           $ref: '#/components/responses/Unauthorized'
         '404':
           $ref: '#/components/responses/NotFound'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
+    post:
+      operationId: sessions.sendChannelMessage
+      tags: [sessions]
+      summary: Write into a channel conversation from the hub (admin)
+      description: |
+        An admin writes into a Telegram or WhatsApp conversation from the hub (contract decision
+        §153). The conversation stays the channel's: it is not turned into a hub chat, and
+        "Continue in Core Hub" (`sessions.continueChannelConversation`) stays a separate action.
+
+        In order:
+        1. The hub posts the words on the channel first, prefixed with who wrote them
+           («من كور هب (<name>): …»): Telegram through the profile's bot, WhatsApp through the
+           profile's WhatsApp bridge. Hermes's own `send` is not used: it would write the words
+           into the conversation a second time, as the agent's.
+        2. Only when the channel took them are they handed to the hub's bridge inside Hermes's
+           messaging gateway, which puts them into this conversation as a new turn (Hermes's
+           plugin API `inject_message`). The agent answers on the channel, as it answers a
+           message sent there, with the conversation's whole history.
+
+        When the channel refuses (step 1) nothing reaches the agent: `503 service_unavailable`
+        with `details.reason: channel_send_failed` and the platform's own words in
+        `details.message`. Otherwise `202` with the `ChannelOutgoing` the hub follows: `posted`,
+        then `delivered` (Hermes took it), `answering` (the agent's turn began), `answered`, or
+        `failed` with why — each change also announced as `channel_conversation.updated`. The
+        reply is read with `sessions.listChannelMessages` when the turn ends; it is not
+        streamed.
+
+        Refused before anything is posted: a member (`403`, only an owner or admin writes), an
+        unknown conversation (`404`), a platform other than Telegram and WhatsApp's bridge, a
+        conversation that is not its chat's current one, or one Hermes keeps no route for
+        (`409 state_invalid`, `details.reason`: `platform_unsupported`, `not_current` with
+        `details.current_id`, `no_route`), and no Hermes or no bridge to hand it to (`503`,
+        `details.reason`: `hermes_not_managed`, `bridge_offline`). `ChannelConversation.can_send`
+        says the same beforehand.
+      x-roles: [owner, admin]
+      parameters:
+        - $ref: '#/components/parameters/Profile'
+        - name: conversation_id
+          in: path
+          required: true
+          description: Hermes's own session id.
+          schema:
+            type: string
+            pattern: '^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ChannelSendRequest'
+            example:
+              text: 'أرسل له موعد التسليم الجديد، يوم الأحد.'
+              client_message_id: 'c-7f3a1e'
+      x-rt-events: [channel_conversation.updated]
+      responses:
+        '202':
+          description: Posted on the channel and handed to Hermes; the agent's turn follows.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [outgoing]
+                properties:
+                  outgoing:
+                    $ref: '#/components/schemas/ChannelOutgoing'
+              example:
+                outgoing:
+                  id: 01J8QK3ZR2W7M5N4P6T8V9X0QG
+                  conversation_id: 20260925_091500_3f9a1c2b
+                  client_message_id: 'c-7f3a1e'
+                  text: 'أرسل له موعد التسليم الجديد، يوم الأحد.'
+                  author_name: 'طارق'
+                  status: posted
+                  error: null
+                  message_id: null
+                  session_id: null
+                  created_at: '2026-10-08T09:15:00Z'
+                  updated_at: '2026-10-08T09:15:00Z'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
         '503':
           $ref: '#/components/responses/ServiceUnavailable'
   /channel-conversations/{conversation_id}/continue:
@@ -6977,6 +7092,125 @@ paths:
               example:
                 handled: true
                 message: 'Linked: this Telegram account now acts as Tariq in Core Hub.'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+  /hub-mcp/channel-bridge/outbox:
+    get:
+      operationId: agents.channelBridgeOutbox
+      tags: [agents]
+      summary: What the hub's bridge in Hermes's gateway is to put into channel conversations
+      description: >-
+        Not a client API: the Hermes plugin the hub keeps in each Hermes home
+        (`plugins/corehub-bridge/`, contract decision §153) long-polls it from inside Hermes's
+        messaging gateway, with the bearer the hub wrote beside it (`hub.json`). It answers the
+        messages written from the hub that are waiting for a conversation that gateway serves —
+        each with Hermes's `session_key` and the words to put in as the next turn — at once when
+        there are some, else when one arrives or `wait` seconds pass (`items: []`). Each item is
+        answered once; the plugin acknowledges it with `agents.channelBridgeAck`.
+      security: []
+      x-scope: global
+      parameters:
+        - name: wait
+          in: query
+          required: false
+          description: How long to wait for an item before answering an empty list, in seconds.
+          schema:
+            type: integer
+            minimum: 0
+            maximum: 25
+            default: 0
+      x-rt-events: []
+      responses:
+        '200':
+          description: The items waiting, possibly none.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/ChannelBridgeItem'
+              example:
+                items:
+                  - id: 01J8QK3ZR2W7M5N4P6T8V9X0QG
+                    session_key: 'agent:main:telegram:dm:5550001'
+                    text: 'من كور هب (طارق): أرسل له موعد التسليم الجديد، يوم الأحد.'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+  /hub-mcp/channel-bridge/outbox/{item_id}/ack:
+    post:
+      operationId: agents.channelBridgeAck
+      tags: [agents]
+      summary: Whether Hermes took an item of the bridge's outbox
+      description: >-
+        Not a client API: the hub's plugin in Hermes's gateway says whether Hermes accepted the
+        item for its conversation (`ctx.inject_message` answered true) or why not (contract
+        decision §153). An item already answered, or not the caller's, is `404`.
+      security: []
+      x-scope: global
+      parameters:
+        - name: item_id
+          in: path
+          required: true
+          schema:
+            $ref: '#/components/schemas/Ulid'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ChannelBridgeAck'
+            example:
+              accepted: true
+              reason: null
+      x-rt-events: [channel_conversation.updated]
+      responses:
+        '204':
+          description: Noted.
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /hub-mcp/channel-bridge/events:
+    post:
+      operationId: agents.channelBridgeEvent
+      tags: [agents]
+      summary: A turn began or ended in one of Hermes's channel conversations
+      description: >-
+        Not a client API: the hub's plugin in Hermes's gateway reports each agent turn of a
+        messaging channel — when it begins (with the words that started it) and when it ends —
+        from Hermes's plugin hooks `pre_llm_call` and `on_session_end` (contract decision §153).
+        The hub follows its own messages by them and announces every one as
+        `channel_conversation.updated`, so clients need not poll. The bearer is the one the hub
+        wrote beside that profile's copy of the plugin, so it names the profile.
+      security: []
+      x-scope: global
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ChannelBridgeEvent'
+            example:
+              event: turn_started
+              platform: telegram
+              session_id: 20260925_091500_3f9a1c2b
+              sender_id: '5550001'
+              text: 'متى موعد التسليم؟'
+              outcome: null
+      x-rt-events: [channel_conversation.updated]
+      responses:
+        '204':
+          description: Noted.
         '400':
           $ref: '#/components/responses/BadRequest'
         '401':
@@ -19932,6 +20166,57 @@ components:
           type: [string, 'null']
           maxLength: 200
           description: The `/start` argument (`link` only).
+    ChannelBridgeItem:
+      type: object
+      required: [id, session_key, text]
+      properties:
+        id:
+          $ref: '#/components/schemas/Ulid'
+        session_key:
+          type: string
+          maxLength: 400
+          description: Hermes's routing key of the conversation (its `session_key`).
+        text:
+          type: string
+          description: What goes in as the turn's words — the same words posted on the channel.
+    ChannelBridgeAck:
+      type: object
+      required: [accepted]
+      properties:
+        accepted:
+          type: boolean
+        reason:
+          type: [string, 'null']
+          maxLength: 500
+          description: Why Hermes did not take it, in the plugin's words.
+    ChannelBridgeEvent:
+      type: object
+      required: [event, platform, session_id]
+      properties:
+        event:
+          type: string
+          enum: [turn_started, turn_ended]
+        platform:
+          type: string
+          pattern: '^[a-z0-9_]{1,40}$'
+          description: Hermes's name of the platform (`telegram`, `whatsapp`, …).
+        session_id:
+          type: [string, 'null']
+          maxLength: 200
+          description: The Hermes conversation the turn runs in.
+        sender_id:
+          type: [string, 'null']
+          maxLength: 320
+        text:
+          type: [string, 'null']
+          maxLength: 8000
+          description: '`turn_started`: the words that started the turn, cut at 4 000 characters.'
+        outcome:
+          oneOf:
+            - type: string
+              enum: [completed, failed, interrupted]
+            - type: 'null'
+          description: '`turn_ended`: how Hermes says the turn ended.'
     HubChannelEventResult:
       type: object
       required: [handled, message]
@@ -20714,7 +20999,8 @@ components:
       type: object
       description: |
         A conversation held on a messaging channel, read from Hermes's session store (contract
-        decision §61). Not a `Session`: the hub does not own it and cannot write to it.
+        decision §61). Not a `Session`: the hub does not own it. An admin may write into a
+        Telegram or WhatsApp one from the hub (`can_send`, contract decision §153).
       required:
         [
           id,
@@ -20781,6 +21067,125 @@ components:
             The caller hid it from their list (`sessions.hideChannelConversation`, contract
             decision §88). Only a list asked with `hidden=include` carries hidden ones; absent
             means `false`.
+        can_send:
+          type: boolean
+          description: >-
+            The caller may write into it from the hub now (`sessions.sendChannelMessage`,
+            contract decision §153). Always sent by a hub that has the operation; absent from an
+            older hub, which means read-only.
+        send_unavailable:
+          oneOf:
+            - $ref: '#/components/schemas/ChannelSendUnavailable'
+            - type: 'null'
+          description: Why `can_send` is `false`; `null` when it is `true`.
+        current_id:
+          type: [string, 'null']
+          pattern: '^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$'
+          description: >-
+            With `send_unavailable: not_current`: the conversation of the same chat that is
+            current, where a message from the hub would go. `null` otherwise.
+    ChannelSendUnavailable:
+      type: string
+      enum:
+        [not_admin, platform_unsupported, hermes_not_managed, bridge_offline, not_current, no_route]
+      description: |
+        Why a channel conversation cannot be written into from the hub (contract decision §153).
+        `not_admin`: only an owner or admin writes. `platform_unsupported`: only Telegram and
+        WhatsApp's bridge so far. `hermes_not_managed`: the hub does not run Hermes. `bridge_offline`:
+        the hub's bridge in Hermes's messaging gateway is not connected (the gateway is down or
+        still starting). `not_current`: the chat has gone on in a newer conversation
+        (`current_id`) — a message would go there, not here. `no_route`: Hermes keeps no route
+        back to the chat for it.
+    ChannelSendRequest:
+      type: object
+      required: [text]
+      properties:
+        text:
+          type: string
+          minLength: 1
+          maxLength: 4000
+          description: The words, as the person typed them; the hub adds who wrote them on the channel.
+        client_message_id:
+          type: [string, 'null']
+          maxLength: 64
+          description: The client's own id for the message, given back in `ChannelOutgoing`.
+    ChannelOutgoing:
+      type: object
+      description: |
+        Something a person wrote into a channel conversation from the hub, as the hub follows it
+        (contract decision §153). Kept in the hub's memory while it is followed, not stored.
+      required:
+        [
+          id,
+          conversation_id,
+          client_message_id,
+          text,
+          author_name,
+          status,
+          error,
+          message_id,
+          session_id,
+          created_at,
+          updated_at,
+        ]
+      properties:
+        id:
+          $ref: '#/components/schemas/Ulid'
+        conversation_id:
+          type: string
+          pattern: '^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$'
+        client_message_id:
+          type: [string, 'null']
+          maxLength: 64
+        text:
+          type: string
+          description: The words as the person typed them, without the prefix the channel shows.
+        author_name:
+          type: string
+          description: "The person's name as the channel shows it in «من كور هب (<name>): …»."
+        status:
+          type: string
+          enum: [posted, delivered, answering, answered, failed]
+          description: |
+            `posted`: on the channel, waiting for Hermes's gateway to take it. `delivered`: Hermes
+            took it (it may wait behind a turn already running). `answering`: the agent's turn
+            with it began. `answered`: that turn ended — the reply is in the transcript and on
+            the channel (a message from the channel during the turn can redirect it, as two
+            channel messages would). `failed`: see `error`.
+        error:
+          oneOf:
+            - $ref: '#/components/schemas/ChannelSendFailure'
+            - type: 'null'
+        message_id:
+          type: [string, 'null']
+          description: >-
+            The `ChannelMessage.id` it became in Hermes's transcript, once the hub has seen it
+            there.
+        session_id:
+          type: [string, 'null']
+          description: >-
+            The Hermes conversation the agent's turn ran in, once it began — this one unless
+            the chat moved on to a newer conversation meanwhile.
+        created_at:
+          $ref: '#/components/schemas/Timestamp'
+        updated_at:
+          $ref: '#/components/schemas/Timestamp'
+    ChannelSendFailure:
+      type: object
+      required: [reason, message]
+      properties:
+        reason:
+          type: string
+          enum: [bridge_no_answer, not_accepted, not_picked_up]
+          description: |
+            The words are on the channel, but: `bridge_no_answer` — Hermes's gateway did not
+            take them in time (it stopped or restarted); `not_accepted` — Hermes refused them
+            (the chat's route or its permission changed); `not_picked_up` — Hermes took them but
+            no turn followed (it dropped them; its log says why). Sending again posts them on the
+            channel again.
+        message:
+          type: [string, 'null']
+          description: Hermes's own words, when it said something.
     ChannelMessagePreview:
       type: object
       required: [role, text]
@@ -20827,7 +21232,9 @@ components:
         role:
           type: string
           enum: [user, assistant]
-          description: '`user` is the person on the channel; `assistant` is the agent.'
+          description: >-
+            `user` is the person on the channel (or, with `origin: hub`, a person writing from
+            the hub); `assistant` is the agent.
         text:
           type: string
           description: >-
@@ -20843,6 +21250,17 @@ components:
             Always sent by the hub; empty when there are none.
           items:
             $ref: '#/components/schemas/ChannelAttachment'
+        origin:
+          type: string
+          enum: [channel, hub]
+          description: >-
+            `hub`: a person wrote it from the hub (`sessions.sendChannelMessage`, contract
+            decision §153) — `role` is still `user`, `text` is their words without the prefix the
+            channel shows, and `author_name` says who. `channel`: written on the channel or by
+            the agent. Always sent by a hub that has the operation; absent means `channel`.
+        author_name:
+          type: [string, 'null']
+          description: 'With `origin: hub`, who wrote it; `null` otherwise.'
     ChannelAttachment:
       type: object
       description: >-

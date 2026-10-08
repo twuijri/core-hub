@@ -5490,3 +5490,99 @@ Silicon one, as separate downloads; he cares about download size.
   owner's password with that argon2.
 - **The download page** shows both: «Apple Silicon (M1–M4)» and «Intel»; a release before this has
   no Intel dmg and that button opens the release page.
+
+## 153. Two-way channel conversations: an admin writes into a Telegram or WhatsApp conversation from the hub
+
+Status: the owner's decisions of 2026-10-08 (approved), on the research of the same day
+(Hermes v2026.9.24 `0.21.5` and the floor v2026.9.14 `0.21.3`, MIT, read in our words). Phase 1 is
+the hub, its Hermes plugin, the contract and the web; the phones follow (phase 2) on the same
+contract. Supersedes the "read-only" half of §61; §62 ("Continue in Core Hub") stays as it is.
+
+- **What the owner asked.** He can write from the hub into **any** channel conversation — his own
+  chat with the bot, a chat with somebody else, a group — and the message on the channel says it
+  comes from the hub's person: «من كور هب (<name>): <text>». Only owners and admins may write
+  (`403` with `details.reason: not_admin` for anybody else, who keeps the read-only view). The
+  words go **on the channel first**; when the channel refuses, nothing reaches the agent and the
+  person is told in the platform's words. Telegram and WhatsApp (the bridge the hub runs) only;
+  every other platform, and WhatsApp's cloud API, stays read-only with the reason. The
+  conversation **stays the channel's** — same group in the list, same label, same screen; it never
+  becomes a hub chat. The reply appears when the agent's turn ends (no streaming in v1). The
+  30–45 s polling of §61 gives way to an event, with polling as a slow fallback.
+- **How Hermes is reached: a plugin of the hub's.** Hermes offers one supported way to put a
+  message into an existing gateway conversation: a plugin's `ctx.inject_message(text,
+  role="user", session_key=…)`, granted by `plugins.entries.<id>.allow_gateway_injection: true`.
+  Hermes restores the conversation's own route, checks its allowlists again, queues behind a
+  running turn, runs the turn with the whole history and sends the reply to the platform — exactly
+  as for a message typed there; the source stays `telegram` / `whatsapp`. There is no HTTP or CLI
+  way in. So the hub keeps a plugin, `plugins/corehub-bridge/` (`plugin.yaml`, `__init__.py`,
+  `hub.json` with the hub's loopback address and a key of that home's own, 0600), in **every home
+  of a Hermes it runs** — the root and each named profile — written before each gateway starts and
+  at boot, switched on in that home's `config.yaml` (`plugins.enabled` gains it, `plugins.disabled`
+  loses it, `plugins.entries.corehub-bridge.allow_gateway_injection: true`; nothing else in the file
+  is touched, a file the hub cannot parse is left alone). On the Hermes volume: no Compose, volume or
+  PATH change, and an upgrade is replacing the image.
+- **The plugin, only in a gateway the hub started** (`COREHUB_MCP_ORIGIN=gateway`, §79): it reports
+  each channel turn from Hermes's plugin hooks `pre_llm_call` (start, with the words that started
+  it) and `on_session_end` (end) to `agents.channelBridgeEvent`, off the turn's thread; and in the
+  copy whose plugin manager holds the live gateway's injector — the root's on a Hermes with one
+  gateway per host (§129), each profile's own gateway's on the floor — one thread long-polls
+  `agents.channelBridgeOutbox` (25 s), injects each item and answers `agents.channelBridgeAck`. Every
+  other copy waits and does nothing. The key names the profile; the hub hands the root's poller every
+  profile's items on one gateway per host and each poller its own profile's otherwise. The hub reads
+  the keys back at boot, so a gateway already running keeps working across a hub restart.
+- **The order on the hub** (`sessions.sendChannelMessage`, `POST
+  /channel-conversations/{id}/messages`, `202 {outgoing}`): read the conversation afresh; refuse
+  before anything is posted — a platform other than the two (`409 platform_unsupported`), a chat
+  Hermes keeps no route for (`409 no_route`: no `session_key` or chat id), a conversation that is
+  not its chat's newest (`409 not_current`, `details.current_id`: Hermes would put the message in
+  the newer one), no Hermes the hub runs (`503 hermes_not_managed`), no gateway listening
+  (`503 bridge_offline`); post the mirror — Telegram's `sendMessage` with the profile's bot token
+  (in the forum topic when there is one), WhatsApp's bridge `POST /send` on the profile's bridge
+  port — and on a refusal answer `503 channel_send_failed` with the platform's words and hand
+  nothing on; then queue the same words for the plugin. Hermes's own `hermes send` /
+  `send_message` is not used: it writes what it sends into the conversation as the **agent's**
+  message, so the agent would read the words twice. The hub has no language setting of its own, so
+  the prefix is Arabic as the owner wrote it (`sessions.channel_send.prefix`, also in English for
+  reading back). In WhatsApp self-chat mode the bridge puts the agent's reply title in front of it.
+- **What the hub follows** (`ChannelOutgoing`, in memory while it matters, never stored): `posted`
+  → `delivered` (the plugin's ack) → `answering` (a `turn_started` whose words are the message's)
+  → `answered` (that session's `turn_ended`), or `failed` with `bridge_no_answer` (no ack in 30 s:
+  the item is withdrawn), `not_accepted` (Hermes said no — route or permission changed),
+  `not_picked_up` (accepted, but no turn within two minutes while the conversation was not busy —
+  Hermes drops a rotated or no-longer-authorised route with a log line only). Each change is
+  `channel_conversation.updated` with the message. `sessions.listChannelMessages` lists the ones
+  still followed as `outgoing`, each with the transcript message it became (`message_id`) once Hermes
+  has it; one that is answered and in the transcript is dropped.
+- **Reading it back.** Hermes stores an injected turn as the user's with `display_kind:
+  internal_notification`; such a row that starts with the hub's prefix is `origin: hub` with
+  `author_name`, its words without the prefix (`ChannelMessage.origin`, `author_name`; somebody
+  typing the prefix on the channel is still the person on the channel). The list's preview shows it
+  with the prefix. Hermes's own note in front of a channel message that redirected a running turn
+  ("Gateway message origin (JSON data, …)") is left out of the person's words.
+- **Live, without polling.** Every channel turn the plugin reports — typed on the channel or written
+  from the hub — is announced as `channel_conversation.updated` (`turn_started`, `turn_ended`) to the
+  profiles that Hermes profile is, and the hub forgets what it read of that profile, so the next read
+  asks Hermes. The list and the transcript say `live_updates: true` while the bridge serving every
+  listed profile is connected; the web then polls every 5 and 2 minutes instead of 45 and 30 s.
+- **`can_send`** on every `ChannelConversation` (with `send_unavailable` and `current_id`) says the
+  same as the operation would, for the caller, before they type. All additive: an older hub sends
+  none of it (read-only, as before); an older app ignores it and keeps polling.
+- **Proven against the real Hermes** (`sessions/channel-sends.real.test.ts`, on `0.21.5` and
+  `0.21.3`, real gateway, fake Telegram Bot API, scripted model, conversations read through
+  `hermes serve`): the hooks fire for injected turns as for typed ones; the root's plugin reaches a
+  named profile's conversation on one gateway per host, and the profile's own gateway does on the
+  floor; the mirror is posted before the agent's reply, the turn runs in the same Hermes session
+  whose source stays `telegram`, the transcript shows the admin's message (`origin: hub`) then the
+  reply; a refused post reaches no agent. **Observed, not asserted:** a channel message arriving
+  while the hub's turn runs **redirects** that turn on both versions (Hermes answers «↪ Redirected
+  current run…», the hub's turn ends with an empty hidden reply, and the next reply answers with
+  both in view) — the same as two channel messages in a row; the hub's message ends `answered`.
+  WhatsApp's `/send` is proven against a fake bridge only (`channel-bridge.test.ts`).
+
+Rejected: Hermes's TUI `session.resume` or the API server's `/api/sessions/{id}/chat` (the reply
+never reaches the platform, and the turn runs outside the gateway's queue — two writers on one
+transcript); webhook or cron delivery (a different session, without the chat's history);
+`hermes send` for the mirror (an assistant-role copy in the transcript); posting the mirror from the
+`turn_started` hook (a failed mirror could not stop the turn, against the owner's order); the
+existing `hooks/corehub/` for the turn reports (it exists only where the hub's tools are switched
+on); the private `_send_to_platform` (ADR 0015's rule against private surfaces).

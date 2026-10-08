@@ -128,7 +128,7 @@ message.
 ## Catalogue
 
 
-### `/rt/sessions` — 22 events
+### `/rt/sessions` — 23 events
 
 | Event | Emitted by | Payload | Notes |
 |---|---|---|---|
@@ -154,6 +154,7 @@ message.
 | `subagent.completed` | sessions module from the agent's delegation reports, `sessions.interruptSubagent`, `background.stop` | `subagent`: `Subagent` | A subagent ended: `completed`, `failed` or `interrupted`. Profile-wide. |
 | `context.compression` | sessions module: `sessions.compress`, or the agent compressing on its own during a run | `session_id`: `Ulid`, `run_id`: `Ulid | null`, `phase`: `started` / `finished` / `failed`, `trigger`: `manual` / `auto`, `before_tokens`, `after_tokens`: `integer | null`, `message`: `string | null` | The agent is compressing (or finished compressing) the conversation's context; `context.updated` follows with the new window (decision §57). |
 | `run.status` | sessions module, from the model gateway during a run | `session_id`, `run_id`: `Ulid`, `phase`: `waiting` / `trying`, `provider`, `model`: `string`, `seconds`: `integer | null`, `reason`: `no_capacity` / `rate_limited` / `quota_exhausted` / `null` | What the gateway is doing while the agent says nothing: waiting out a provider's refusal once, or trying the chain's next model (DECISIONS §148). Never stored; the move itself is `Run.fallback`. |
+| `channel_conversation.updated` | sessions module, from what the hub's bridge in Hermes's messaging gateway reports (`agents.channelBridgeEvent`, `agents.channelBridgeAck`) and from `sessions.sendChannelMessage` | `conversation_id`: Hermes's session id, `channel`: `string`, `reason`: `turn_started` / `turn_ended` / `outgoing`, `outgoing`: `ChannelOutgoing | null` | A channel conversation changed: a turn began or ended in it (a message on the channel, or one written from the hub), or a message written from the hub moved on (DECISIONS §153). Profile-wide. Clients refetch the conversation and the list instead of waiting for their poll. |
 
 ### `/rt/rooms` — 25 events
 
