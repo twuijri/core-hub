@@ -561,6 +561,8 @@ fun Composer(
     hasAttachments: Boolean = false,
     /** Lets the screen put the cursor in the field (a reply chosen from a message, §150). */
     focus: androidx.compose.ui.focus.FocusRequester? = null,
+    /** Send's spoken name, when it says more than «Send» (e.g. «Send on Telegram», §153). */
+    sendLabel: String? = null,
 ) {
     val t = LocalTokens.current
     val canSend = (text.isNotBlank() || hasAttachments) && !sending
@@ -592,7 +594,7 @@ fun Composer(
             StopButton(stringResource(R.string.chat_stop), onStop, Modifier.testTag("composer.stop"))
         } else {
             HubIconButton(
-                Lucide.ArrowUp, stringResource(R.string.chat_send), onSend,
+                Lucide.ArrowUp, sendLabel ?: stringResource(R.string.chat_send), onSend,
                 kind = IconKind.Accent, enabled = canSend, size = ControlTokens.heightMd.dp, iconSize = 18.dp,
                 modifier = Modifier.testTag("composer.send"),
             )

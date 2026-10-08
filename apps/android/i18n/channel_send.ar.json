@@ -1,0 +1,22 @@
+{
+  "chcv_send_placeholder": "اكتب إلى %2$s على %1$s…",
+  "chcv_send_send": "أرسل على %1$s",
+  "chcv_send_hint": "تُنشر أولًا على %1$s بصيغة «من كور هب (اسمك): …»، ثم تصل إلى الوكيل فيرد هناك. يظهر الرد هنا حين ينتهي الوكيل.",
+  "chcv_send_from_hub": "%1$s · من كور هب",
+  "chcv_send_you": "أنت · من كور هب",
+  "chcv_send_open_current": "افتح المحادثة الحالية",
+  "chcv_send_error_channel": "رفض %1$s الرسالة، فلم تصل إلى الوكيل: %2$s",
+  "chcv_send_status_sending": "تُرسل على %1$s…",
+  "chcv_send_status_posted": "نُشرت على %1$s · بانتظار أن يستلمها الوكيل",
+  "chcv_send_status_delivered": "وصلت الوكيل · يرد حين ينتهي دوره الحالي",
+  "chcv_send_status_answering": "الوكيل يرد على %1$s…",
+  "chcv_send_failed_bridge_no_answer": "نُشرت على %1$s، لكن Hermes لم يستلمها في الوقت (ربما يُعاد تشغيل بوابة المراسلة). إرسالها من جديد ينشرها على %1$s مرة أخرى.",
+  "chcv_send_failed_not_accepted": "نُشرت على %1$s، لكن Hermes رفض أن يسلّمها للوكيل.",
+  "chcv_send_failed_not_picked_up": "نُشرت على %1$s، لكن الوكيل لم يستلمها أبدًا. سجل Hermes يذكر السبب.",
+  "chcv_send_unavailable_not_admin": "محادثة من %1$s. الكتابة فيها من هنا للمشرف فقط؛ والرد يكون من %1$s.",
+  "chcv_send_unavailable_platform_unsupported": "محادثة من %1$s — للقراءة فقط هنا حاليًا. الكتابة من كور هب متاحة لتيليجرام وواتساب.",
+  "chcv_send_unavailable_hermes_not_managed": "محادثة من %1$s — للقراءة فقط: هذا المركز لا يشغّل Hermes، فلا يستطيع الكتابة فيها.",
+  "chcv_send_unavailable_bridge_offline": "محادثة من %1$s — الكتابة من هنا غير متاحة ما دامت بوابة المراسلة في Hermes تبدأ أو متوقفة.",
+  "chcv_send_unavailable_not_current": "انتقلت محادثة %1$s هذه إلى محادثة أحدث؛ ما تكتبه من هنا يذهب إليها.",
+  "chcv_send_unavailable_no_route": "محادثة من %1$s — لا يحتفظ Hermes بطريق للرد على هذه المحادثة، فلا يمكن الكتابة فيها من هنا."
+}

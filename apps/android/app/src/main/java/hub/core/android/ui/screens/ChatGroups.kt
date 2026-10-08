@@ -28,8 +28,8 @@ import kotlinx.coroutines.launch
 /*
  * The chats list in groups, as on the web (contract decisions §60, §61, §88, §103): the profile's
  * categories first, in their order, then one group per messaging channel — the hub's chats that
- * came from Telegram, WhatsApp… together with the conversations Hermes keeps for that channel,
- * read-only — then everything else. The pinned chats keep their own section at the top on the
+ * came from Telegram, WhatsApp… together with the conversations Hermes keeps for that channel
+ * (an admin may write into a Telegram or WhatsApp one, §153) — then everything else. The pinned chats keep their own section at the top on the
  * phone. Native since 2026-09-27: before, the phone had neither categories nor channel
  * conversations. The rules are here, apart from the Compose (ChatGroupsUi.kt), so
  * SelfSufficientTest checks them.
@@ -210,6 +210,13 @@ class ChatGroupsOps(private val apis: () -> HubApis?) {
     suspend fun unhide(conversation: ChannelConversation): Result<Unit> = hubCall { api().sessions.sessionsUnhideChannelConversation(conversation.profile, conversation.id) }
     suspend fun delete(conversation: ChannelConversation): Result<Unit> = hubCall { api().sessions.sessionsDeleteChannelConversation(conversation.profile, conversation.id) }
 
+    /** Writes into a Telegram or WhatsApp conversation from the hub (§153): on the channel first, then to the agent. */
+    suspend fun send(profile: String, conversationId: String, text: String, clientId: String): Result<hub.core.client.model.ChannelOutgoing> = hubCall {
+        api().sessions.sessionsSendChannelMessage(
+            profile, conversationId, hub.core.client.model.ChannelSendRequest(text = text, clientMessageId = clientId),
+        ).outgoing
+    }
+
     suspend fun picture(profile: String, conversationId: String, pictureId: String): Result<java.io.File> =
         hubCall { api().sessions.sessionsGetChannelPicture(profile, conversationId, pictureId) }
 
@@ -235,6 +242,8 @@ data class ChatExtrasState(
     val unreachable: Boolean = false,
     val channelLimit: Int = ChatGroupsRules.CHANNEL_PAGE,
     val hasMoreConversations: Boolean = false,
+    /** The hub announces each channel turn (`channel_conversation.updated`, §153): the polling slows down. */
+    val liveUpdates: Boolean = false,
     val showHidden: Boolean = false,
     val collapsed: Set<String> = emptySet(),
     val error: HubError? = null,
@@ -265,21 +274,38 @@ class ChatExtras(private val scope: CoroutineScope, val ops: ChatGroupsOps) {
                     it.copy(
                         conversations = if (ChatGroupsRules.unreachable(page.unavailable) && page.items.isEmpty()) it.conversations else page.items,
                         unreachable = ChatGroupsRules.unreachable(page.unavailable), hasMoreConversations = page.hasMore == true,
+                        liveUpdates = page.liveUpdates == true,
                     )
                 }
             }
         }
     }
 
-    /** While the drawer's list is on screen, the conversations are read again every [ChatGroupsRules.POLL_MS]. */
+    /**
+     * While the drawer's list is on screen, the conversations are read again every
+     * [ChatGroupsRules.POLL_MS] — or every few minutes while the hub announces each channel turn
+     * itself ([ChannelSendRules.listPollMs]).
+     */
     fun watch(on: Boolean) {
         poll?.cancel()
         if (!on) return
         poll = scope.launch {
             while (isActive) {
-                delay(ChatGroupsRules.POLL_MS)
+                delay(ChannelSendRules.listPollMs(_state.value.liveUpdates))
                 readConversations()
             }
+        }
+    }
+
+    private var heardJob: Job? = null
+
+    /** A channel conversation changed (`channel_conversation.updated`): the list is read again, once per burst. */
+    fun heard(update: ChannelUpdate) {
+        if (!ChannelSendRules.settled(update)) return
+        heardJob?.cancel()
+        heardJob = scope.launch {
+            delay(500)
+            readConversations()
         }
     }
 

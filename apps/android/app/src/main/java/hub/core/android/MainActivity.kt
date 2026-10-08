@@ -267,12 +267,13 @@ private fun Destination(route: Route, nav: Navigator, shell: ShellViewModel, ope
                 )
             }
             is Route.ChannelChat -> {
-                // A Telegram or WhatsApp conversation Hermes keeps: read-only, with Continue in Core Hub.
+                // A Telegram or WhatsApp conversation Hermes keeps: an admin writes into it (§153), with Continue in Core Hub.
                 hub.core.android.ui.screens.ChannelChatScreen(
                     route.conversationId, route.profile, shell, onMenu = openDrawer,
                     onOpenChat = { id, profile -> nav.go(Route.Chat(id, profile)) },
                     onGone = { nav.go(Route.NewChat) },
                     subtitleProfile = if (route.profile != s.profile) shell.profileName(route.profile) else null,
+                    onOpenConversation = { id, profile -> nav.go(Route.ChannelChat(id, profile)) },
                 )
             }
             is Route.Room -> {

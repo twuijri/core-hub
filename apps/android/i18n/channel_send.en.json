@@ -1,0 +1,22 @@
+{
+  "chcv_send_placeholder": "Write to %2$s on %1$s…",
+  "chcv_send_send": "Send on %1$s",
+  "chcv_send_hint": "Goes out on %1$s first, as “من كور هب (your name): …”, then to the agent, which answers there. The reply shows here when the agent finishes.",
+  "chcv_send_from_hub": "%1$s · from Core Hub",
+  "chcv_send_you": "You · from Core Hub",
+  "chcv_send_open_current": "Open the current conversation",
+  "chcv_send_error_channel": "%1$s refused the message, so it did not reach the agent: %2$s",
+  "chcv_send_status_sending": "Sending on %1$s…",
+  "chcv_send_status_posted": "Posted on %1$s · waiting for the agent to take it",
+  "chcv_send_status_delivered": "With the agent · it answers when its current turn ends",
+  "chcv_send_status_answering": "The agent is answering on %1$s…",
+  "chcv_send_failed_bridge_no_answer": "Posted on %1$s, but Hermes did not take it in time (its messaging gateway may be restarting). Sending again posts it on %1$s again.",
+  "chcv_send_failed_not_accepted": "Posted on %1$s, but Hermes refused to hand it to the agent.",
+  "chcv_send_failed_not_picked_up": "Posted on %1$s, but the agent never picked it up. Hermes’s log says why.",
+  "chcv_send_unavailable_not_admin": "A conversation from %1$s. Only an admin can write into it from here; replies are made in %1$s.",
+  "chcv_send_unavailable_platform_unsupported": "A conversation from %1$s — read-only here for now. Writing from Core Hub works for Telegram and WhatsApp.",
+  "chcv_send_unavailable_hermes_not_managed": "A conversation from %1$s — read-only: this hub does not run Hermes, so it cannot write into it.",
+  "chcv_send_unavailable_bridge_offline": "A conversation from %1$s — writing from here is unavailable while Hermes’s messaging gateway is starting or stopped.",
+  "chcv_send_unavailable_not_current": "This %1$s chat has moved on to a newer conversation; a message from here would go there.",
+  "chcv_send_unavailable_no_route": "A conversation from %1$s — Hermes keeps no way back to this chat, so it cannot be written into from here."
+}
