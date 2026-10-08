@@ -56,6 +56,30 @@ describe('parseVersion', () => {
   it("reads Hermes's own line, `v` and build suffix included", () => {
     expect(parseVersion(VERSION_LINE)).toBe('0.21.5+3397.gd25bbd0');
     expect(parseVersion('Hermes Agent v0.12.0 (2026.9.14)')).toBe('0.12.0');
+    expect(parseVersion('Hermes Agent v0.21.6 (2026.9.24)')).toBe('0.21.6');
+  });
+
+  it('never takes the release date or Python for the version of a Hermes that knows none', () => {
+    // v0.21.6 on, with no install stamp and no git tag (a copied checkout): the date is the
+    // last release's, and the next lines are about Python.
+    expect(
+      parseVersion('Hermes Agent vunknown (2026.9.24)\nInstall directory: /opt/x\nPython: 3.14.7'),
+    ).toBeNull();
+    expect(parseVersion('Hermes Agent vgit.1a2b3c4 (2026.9.24)')).toBeNull();
+  });
+
+  it('reads no version, and says why, from a Hermes that names no release', async () => {
+    const dir = binDir(
+      'hermes',
+      "#!/bin/sh\necho 'Hermes Agent vunknown (2026.9.24)'\necho 'Python: 3.14.7'\nsleep 30\n",
+    );
+    const started = Date.now();
+    const reading = await readVersion([path.join(dir, 'hermes'), '--version'], {
+      timeoutMs: 20_000,
+    });
+    expect(reading.version).toBeNull();
+    expect(reading.error).toMatch(/names no release: Hermes Agent vunknown/);
+    expect(Date.now() - started).toBeLessThan(10_000);
   });
 });
 

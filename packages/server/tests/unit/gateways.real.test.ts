@@ -188,6 +188,11 @@ describe.skipIf(!image)(
         'API_SERVER_KEY',
         'API_SERVER_HOST',
         'API_SERVER_PORT',
+        // The process's managed scope (`hermes-managed-env.ts`): its origin, and the root
+        // gateway's API key, in every profile it serves — without it a v0.21.6 multiplexer never
+        // opens its API server.
+        'HERMES_MANAGED_DIR',
+        'COREHUB_MCP_ORIGIN',
       ];
       return inBox(options.cwd, args, Object.fromEntries(pick.map((name) => [name, env[name]])));
     };
@@ -232,6 +237,9 @@ describe.skipIf(!image)(
     beforeAll(async () => {
       mkdirSync(root, { recursive: true });
       chmodSync(root, 0o777);
+      // Where the hub writes each process's managed scope, seen at the same path inside.
+      const managed = path.join(dataDir, 'hermes-managed');
+      mkdirSync(managed, { recursive: true });
       execFileSync('docker', [
         'run',
         '-d',
@@ -246,6 +254,8 @@ describe.skipIf(!image)(
         'HOME=/tmp',
         '-v',
         `${root}:${root}`,
+        '-v',
+        `${managed}:${managed}`,
         '--entrypoint',
         'sleep',
         image!,

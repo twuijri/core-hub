@@ -84,6 +84,19 @@ describe('the latest Hermes release', () => {
     assert.equal(releaseVersion(releases[4]), null);
   });
 
+  it('reads a version tag (v0.21.6 on) but never a date tag as a version', () => {
+    assert.equal(releaseVersion({ tag_name: 'v0.21.6', name: 'Hermes Agent v0.21.6' }), '0.21.6');
+    assert.equal(
+      releaseVersion({ tag_name: 'v0.22.0', name: 'Something else', body: '' }),
+      '0.22.0',
+    );
+    assert.equal(releaseVersion({ tag_name: 'v2026.9.24', name: 'x', body: '' }), null);
+    assert.deepEqual(
+      pickLatest([...releases, { tag_name: 'v0.21.6', name: 'Hermes Agent v0.21.6', body: '' }]),
+      { ref: 'v0.21.6', version: '0.21.6' },
+    );
+  });
+
   it('takes the newest published release, never a draft or a pre-release', () => {
     assert.deepEqual(pickLatest(releases), { ref: 'v2026.9.24', version: '0.21.5' });
     assert.equal(pickLatest([]), null);

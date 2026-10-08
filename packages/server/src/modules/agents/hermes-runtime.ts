@@ -34,7 +34,7 @@ import {
 } from 'node:fs';
 import path from 'node:path';
 import { createInterface } from 'node:readline';
-import { HUB_ORIGIN_ENV } from './hub-tools/block.js';
+import { hermesManagedEnv, type HermesProcessRole } from './hermes-managed-env.js';
 import type { FastifyBaseLogger } from 'fastify';
 import { parse as parseYaml } from 'yaml';
 import { probeHttp, readVersion, whichSync, type HostEnvironment } from './adapters/host.js';
@@ -285,7 +285,7 @@ export class HermesRuntime {
       // Only a Hermes this hub runs: an external gateway's profiles are somebody else's.
       root: () => (this.mode === 'managed' ? this.home : null),
       executable: () => this.executable(),
-      env: () => this.cliEnv(),
+      env: () => ({ ...this.cliEnv(), ...this.managedEnv('profile-gateway') }),
       spawnImpl: this.spawnImpl,
       log: this.log,
       prepare: (profile, home) => this.options.prepareGateway?.(profile, home),
@@ -583,7 +583,7 @@ export class HermesRuntime {
       command: python,
       args: ['-m', 'tui_gateway.entry'],
       // The hub's own conversations run here: their calls to the hub's tools say so (§79).
-      env: { ...this.cliEnv(), [HUB_ORIGIN_ENV]: 'hub' },
+      env: { ...this.cliEnv(), ...this.managedEnv('tui') },
       cwd: home,
       ...(this.options.tuiSpawn ? { spawn: this.options.tuiSpawn } : {}),
       ...(this.options.tuiLogLine ? { onStderrLine: this.options.tuiLogLine } : {}),
@@ -717,6 +717,18 @@ export class HermesRuntime {
    * The environment a one-off `hermes` command runs in (the kanban and cron bridges): the
    * host's, the shared provider keys — `specify` asks a model — and this Hermes's home.
    */
+  /**
+   * The managed scope of one kind of Hermes process this hub starts (`hermes-managed-env.ts`):
+   * its origin for the hub's tools (§79), and `values`, reaching every profile it serves.
+   */
+  private managedEnv(
+    role: HermesProcessRole,
+    inherited: NodeJS.ProcessEnv = this.options.host.inherited ?? process.env,
+    values: Record<string, string> = {},
+  ): Record<string, string> {
+    return hermesManagedEnv({ dataDir: this.options.dataDir, role, inherited, values });
+  }
+
   cliEnv(): NodeJS.ProcessEnv {
     return {
       ...(this.options.host.inherited ?? {}),
@@ -1057,9 +1069,11 @@ export class HermesRuntime {
       API_SERVER_PORT: url.port || '8642',
       HERMES_DASHBOARD: '0',
       PYTHONUNBUFFERED: '1',
-      // A messaging gateway: its calls to the hub's tools are its channel turns' (§79).
-      [HUB_ORIGIN_ENV]: 'gateway',
     };
+    // A messaging gateway: its calls to the hub's tools are its channel turns' (§79). The origin
+    // and the API server's key reach every profile it serves (`hermes-managed-env.ts`).
+    const apiKey = this.apiKey();
+    Object.assign(env, this.managedEnv('gateway', env, apiKey ? { API_SERVER_KEY: apiKey } : {}));
     let child: SpawnedProcess;
     try {
       child = this.spawnImpl(binary, ['gateway', 'run'], { env, cwd: this.home });
