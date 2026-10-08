@@ -55,6 +55,8 @@ import {
   registerAgentAttachments,
   registerHubToolsHandOver,
   registerHubToolsNotify,
+  registerChannelBridgeListener,
+  channelBridgePortFor,
   seedSkillLibraryOf,
   telegramToken,
 } from './agents/index.js';
@@ -64,6 +66,8 @@ import {
   attachmentReferences,
   createSessionsModule,
   registerChannelSource,
+  registerChannelSender,
+  channelBridgeListenerFor,
   registerRoomOfSeat,
   registerWorkflowGate,
   runActivity,
@@ -368,6 +372,30 @@ registerChannelSource((app) => {
     return row.isDefault ? RUNTIME_DEFAULT_PROFILE : row.slug;
   });
 });
+
+/**
+ * Writing into a channel conversation from the hub (contract decision §153): `sessions` follows
+ * the message, `agents`' bridge posts it on the channel and hands it to the plugin in Hermes's
+ * gateway, `auth` names the person and which hub profiles a Hermes profile is. Only where the hub
+ * runs Hermes itself.
+ */
+registerChannelSender((app) => {
+  const bridge = channelBridgePortFor(app);
+  if (!bridge) return null;
+  const db = requireSqlite(app.hub.database);
+  return {
+    ...bridge,
+    profilesOf: (hermesProfile) =>
+      listWorkspacesFor(db, { id: '', role: 'owner' })
+        .filter((row) => (row.isDefault ? RUNTIME_DEFAULT_PROFILE : row.slug) === hermesProfile)
+        .map((row) => row.slug),
+    personName: (userId) => {
+      const person = findUser(db, userId);
+      return person ? person.displayName?.trim() || person.username : null;
+    },
+  };
+});
+registerChannelBridgeListener((app) => channelBridgeListenerFor(app));
 
 /**
  * Channel conversations over one dashboard server and Hermes's root home (the real-Hermes test

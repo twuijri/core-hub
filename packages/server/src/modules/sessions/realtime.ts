@@ -58,7 +58,8 @@ export type SessionEventName =
   | 'run.status'
   | 'subagent.started'
   | 'subagent.updated'
-  | 'subagent.completed';
+  | 'subagent.completed'
+  | 'channel_conversation.updated';
 
 export interface Envelope {
   event: string;

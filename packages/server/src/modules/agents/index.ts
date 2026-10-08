@@ -83,6 +83,9 @@ import {
   type SwapFs,
 } from './hermes-default-swap.js';
 import { registerHubToolRoutes } from './hub-tools/routes.js';
+import { ChannelBridge, type BridgeListener } from './channel-bridge/bridge.js';
+import { registerChannelBridgeRoutes } from './channel-bridge/routes.js';
+import { postMirror, type MirrorResult, type MirrorTarget } from './channel-bridge/mirror.js';
 import {
   HubToolsService,
   type HubToolsHandOver,
@@ -160,6 +163,7 @@ import {
   cleanReplyTitle,
   telegramToken,
   TELEGRAM_TOKEN,
+  whatsappBridgePort,
   whatsappLink,
   whatsappSessionDir,
   type Channel,
@@ -212,6 +216,8 @@ import {
 export { AgentsService } from './service.js';
 /** The Hermes profile's Telegram bot token, for a workflow's "Send message" step (§124). */
 export { telegramToken } from './channels.js';
+export type { BridgeEvent, BridgeListener } from './channel-bridge/bridge.js';
+export type { MirrorResult, MirrorTarget } from './channel-bridge/mirror.js';
 export type { AgentPatchInput, AgentsServiceOptions, ReconcileReport } from './service.js';
 export { createAdapterSet } from './adapters/index.js';
 export type { AdapterSet, AdapterSetOptions } from './adapters/index.js';
@@ -385,6 +391,11 @@ export interface AgentsOverrides {
   agentHome?: string;
   /** How an agent's own sign-in command is started (`agent-sign-in.ts`), scripted in tests. */
   signIn?: { spawnImpl?: SpawnSignIn; promptTimeoutMs?: number };
+  /**
+   * The Hermes root the channel bridge (§153) treats as the hub's own, for a real-Hermes test
+   * whose gateway runs in a container: the runtime there is `external`, the home is the test's.
+   */
+  channelBridgeRoot?: string;
 }
 
 /** Platforms linked by pasting a bot token (`agents.linkChannel`). */
@@ -468,6 +479,8 @@ interface AgentsContext {
   leases: RunLeases;
   /** The hub's own tools: settings, the profile block, the MCP endpoint (§67). */
   hubTools: HubToolsService;
+  /** The hub's plugin in Hermes's messaging gateway: two-way channel conversations (§153). */
+  channelBridge: ChannelBridge;
   /** The six-hourly registry check and the idle-only auto-update. */
   updates: AgentUpdateChecker;
   /** Whether `updates` should arm its timer when the hub is ready. */
@@ -561,6 +574,62 @@ export function registerHubToolsHandOver(
   factory: (app: FastifyInstance) => HubToolsHandOver | null,
 ): void {
   hubToolsHandOverFactory = factory;
+}
+
+let channelBridgeListenerFactory: ((app: FastifyInstance) => BridgeListener | null) | null = null;
+
+/**
+ * Who hears the hub's plugin in Hermes's gateway (§153): `sessions` follows the messages written
+ * from the hub and announces each channel turn. The composition root lends it.
+ */
+export function registerChannelBridgeListener(
+  factory: ((app: FastifyInstance) => BridgeListener | null) | null,
+): void {
+  channelBridgeListenerFactory = factory;
+}
+
+/** What `sessions` needs of the bridge to write into a channel conversation (§153). */
+export interface ChannelBridgePort {
+  /** Whether a gateway serving this Hermes profile is listening for the bridge's items. */
+  connected(hermesProfile: string): boolean;
+  /** Posts the words on the channel, as the profile's bot or WhatsApp bridge. */
+  post(hermesProfile: string, target: MirrorTarget, text: string): Promise<MirrorResult>;
+  /** Hands the words to the gateway, to be put into the conversation as its next turn. */
+  enqueue(hermesProfile: string, item: { id: string; session_key: string; text: string }): void;
+  /** Takes back an item nobody took. */
+  withdraw(itemId: string): void;
+}
+
+/**
+ * The bridge as `sessions` uses it, or `null` where the hub does not run Hermes. `fetchImpl` and
+ * the Bot API's origin come from the hub's config (`COREHUB_TELEGRAM_API_BASE`, as "Send
+ * message" steps use).
+ */
+export function channelBridgePortFor(app: FastifyInstance): ChannelBridgePort | null {
+  const ctx = contextOf(app);
+  const root = ctx.channelBridge.root();
+  if (!root) return null;
+  const homeOf = (profile: string) =>
+    profile === 'default' ? root : path.join(root, 'profiles', profile);
+  return {
+    connected: (profile) => ctx.channelBridge.connected(profile),
+    post: (profile, target, text) => {
+      const home = homeOf(profile);
+      return postMirror(target, text, {
+        fetchImpl: (input, init) => fetch(input, init),
+        telegramApi: app.hub.config.telegramApiBase ?? 'https://api.telegram.org',
+        telegramToken: () => telegramToken(home),
+        whatsappPort: () => whatsappBridgePort(home),
+      });
+    },
+    enqueue: (profile, item) => ctx.channelBridge.enqueue(profile, item),
+    withdraw: (itemId) => ctx.channelBridge.withdraw(itemId),
+  };
+}
+
+/** The bridge itself, for a test that drives a real gateway (`*.real.test.ts`). */
+export function channelBridgeFor(app: FastifyInstance): ChannelBridge {
+  return contextOf(app).channelBridge;
 }
 
 /**
@@ -689,6 +758,9 @@ function contextOf(app: FastifyInstance): AgentsContext {
     },
     prepareGateway: (profile: string, home: string) => {
       modelsPorts.get(hub.io)?.prepareGatewayProfile?.(profile, home);
+      // The bridge for two-way channel conversations (§153) is loaded when a gateway starts.
+      if (runtime.status().mode === 'managed')
+        contexts.get(hub.io)?.channelBridge.install(profile, home);
     },
     onState: (status: HermesRuntimeStatus) => {
       const ctx = contexts.get(hub.io);
@@ -854,12 +926,25 @@ function contextOf(app: FastifyInstance): AgentsContext {
       );
     },
   });
+  const channelBridge = new ChannelBridge({
+    managedRoot: () => {
+      if (own.channelBridgeRoot) return own.channelBridgeRoot;
+      const { mode, home } = runtime.status();
+      return mode === 'managed' && home ? home : null;
+    },
+    namedProfiles: (root) => namedHermesProfiles(root),
+    topology: () => runtime.profileGateways.topology(),
+    mcpUrl: () => hubMcpUrl(app),
+    listener: () => channelBridgeListenerFactory?.(app) ?? null,
+    log: app.log,
+  });
   const created: AgentsContext = {
     service,
     adapters,
     runner,
     leases,
     hubTools,
+    channelBridge,
     updates,
     updatesArmed: own.updates?.intervalMs !== null,
     runtime,
@@ -1212,6 +1297,8 @@ export const agentsModule = defineModule({
       migrateMemoryOfEveryProfile(ctx.runtime.status().home, app.log);
       // The hub's own tools go back into every profile that has them on (§67).
       ctx.hubTools.syncAll();
+      // The bridge for two-way channel conversations into every profile of a Hermes it runs.
+      ctx.channelBridge.syncAll();
       if (ctx.updatesArmed) ctx.updates.start();
       // Only into a Hermes this hub runs itself: an external gateway's home is somebody else's,
       // and there the Skills page installs the library when asked (`agents.updateSkillLibrary`).
@@ -1220,6 +1307,7 @@ export const agentsModule = defineModule({
     // Again once the port is known for certain (a hub on port 0 learns it only now).
     app.addHook('onListen', async () => {
       ctx.hubTools.syncAll();
+      ctx.channelBridge.syncAll();
     });
     app.addHook('onClose', async () => {
       ctx.updates.stop();
@@ -2195,6 +2283,7 @@ export const agentsModule = defineModule({
         ),
     });
 
+    registerChannelBridgeRoutes(app, deps, (request) => contextOf(request.server).channelBridge);
     registerHubToolRoutes(app, deps, {
       service: (server) => contextOf(server).hubTools,
       scopeOf,

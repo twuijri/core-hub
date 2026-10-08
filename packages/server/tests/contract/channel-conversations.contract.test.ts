@@ -15,7 +15,11 @@ import {
 import { modules as defaultModules } from '../../src/modules/index.js';
 import { listWorkspacesFor, principalScopeResolver } from '../../src/modules/auth/index.js';
 import { requireSqlite } from '../../src/lib/db.js';
-import { createSessionsModule, registerChannelSource } from '../../src/modules/sessions/index.js';
+import {
+  createSessionsModule,
+  registerChannelSender,
+  registerChannelSource,
+} from '../../src/modules/sessions/index.js';
 import { attachmentsPort } from '../../src/modules/knowledge/index.js';
 import {
   FakeAgentDirectory,
@@ -109,6 +113,7 @@ describe.skipIf(!doc)('contract: channel conversations', () => {
       items: [],
       unavailable: [{ profile: null, reason: 'hermes_not_managed', message: null }],
       has_more: false,
+      live_updates: false,
     });
     const opened = await call('sessions.listChannelMessages', 503, {
       params: { conversation_id: CONVERSATION },
@@ -135,6 +140,7 @@ describe.skipIf(!doc)('contract: channel conversations', () => {
             {
               id: CONVERSATION,
               source: 'telegram',
+              session_key: 'agent:main:telegram:dm:5550001',
               user_id: '5550001',
               chat_id: '5550001',
               chat_type: 'dm',
@@ -219,5 +225,63 @@ describe.skipIf(!doc)('contract: channel conversations', () => {
       params: { conversation_id: CONVERSATION },
     });
     expect(down).toMatchObject({ details: { reason: 'hermes_api_unavailable' } });
+    hermes.down = false;
+  });
+
+  it('writes into a Telegram conversation from the hub, and says why not (§153)', async () => {
+    // No Hermes the hub runs: nothing to post through.
+    const unmanaged = await call('sessions.sendChannelMessage', 503, {
+      params: { conversation_id: CONVERSATION },
+      body: { text: 'مرحبًا' },
+    });
+    expect(unmanaged).toMatchObject({ details: { reason: 'hermes_not_managed' } });
+
+    const sent: string[] = [];
+    let refuse: string | null = null;
+    const previousSender = registerChannelSender(() => ({
+      connected: () => true,
+      post: async (_hermes, _target, text) => {
+        if (refuse) return { ok: false, message: refuse };
+        sent.push(text);
+        return { ok: true };
+      },
+      enqueue: () => undefined,
+      withdraw: () => undefined,
+      profilesOf: () => ['default'],
+      personName: () => 'Admin',
+    }));
+    try {
+      const listed = await call('sessions.listChannelConversations', 200);
+      expect(listed.live_updates).toBe(true);
+      expect(listed.items).toEqual([
+        expect.objectContaining({ id: CONVERSATION, can_send: true, send_unavailable: null }),
+      ]);
+      const accepted = await call('sessions.sendChannelMessage', 202, {
+        params: { conversation_id: CONVERSATION },
+        body: { text: 'مرحبًا', client_message_id: 'c-1' },
+      });
+      expect(accepted.outgoing).toMatchObject({ status: 'posted', author_name: 'Admin' });
+      expect(sent).toEqual(['من كور هب (Admin): مرحبًا']);
+      const opened = await call('sessions.listChannelMessages', 200, {
+        params: { conversation_id: CONVERSATION },
+      });
+      expect(opened.outgoing).toEqual([expect.objectContaining({ status: 'posted' })]);
+      refuse = 'Forbidden: bot was blocked by the user';
+      const refused = await call('sessions.sendChannelMessage', 503, {
+        params: { conversation_id: CONVERSATION },
+        body: { text: 'مرحبًا' },
+      });
+      expect(refused).toMatchObject({ details: { reason: 'channel_send_failed' } });
+      await call('sessions.sendChannelMessage', 400, {
+        params: { conversation_id: CONVERSATION },
+        body: { text: '' },
+      });
+      await call('sessions.sendChannelMessage', 404, {
+        params: { conversation_id: '20260925_070000_ee55ff66' },
+        body: { text: 'x' },
+      });
+    } finally {
+      registerChannelSender(previousSender);
+    }
   });
 });
