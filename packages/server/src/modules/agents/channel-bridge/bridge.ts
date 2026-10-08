@@ -79,6 +79,7 @@ export class ChannelBridge {
   private readonly pollers = new Map<string, { seen: number; open: number }>();
   /** Items handed out and not acknowledged yet: id → the profile it is for. */
   private readonly handed = new Map<string, { profile: string; poller: string }>();
+  private closed = false;
 
   constructor(private readonly deps: ChannelBridgeDeps) {
     this.now = deps.now ?? Date.now;
@@ -195,7 +196,9 @@ export class ChannelBridge {
     state.seen = this.now();
     this.pollers.set(poller, state);
     let items = this.take(serves);
-    const wait = Math.max(0, Math.min(MAX_WAIT_SECONDS, Math.trunc(waitSeconds) || 0));
+    const wait = this.closed
+      ? 0
+      : Math.max(0, Math.min(MAX_WAIT_SECONDS, Math.trunc(waitSeconds) || 0));
     if (items.length === 0 && wait > 0) {
       state.open += 1;
       try {
@@ -221,6 +224,12 @@ export class ChannelBridge {
     }
     for (const item of items) this.handed.set(item.id, { profile: item.profile, poller });
     return { items: items.map(({ id, session_key, text }) => ({ id, session_key, text })) };
+  }
+
+  /** The hub is closing: every poll held open is answered now, so nothing holds the close up. */
+  close(): void {
+    this.closed = true;
+    for (const waiter of [...this.waiters]) waiter.wake();
   }
 
   /** `agents.channelBridgeAck`: Hermes took the item, or why not. */

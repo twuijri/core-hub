@@ -218,6 +218,15 @@ describe('the bridge', () => {
     expect((await bridge.outbox(keys.default, 0)).items).toEqual([]);
   });
 
+  it('answers the polls it holds when the hub closes, and holds no new one', async () => {
+    const started = Date.now();
+    const waiting = bridge.outbox(keys.default, 25);
+    bridge.close();
+    expect((await waiting).items).toEqual([]);
+    expect((await bridge.outbox(keys.default, 25)).items).toEqual([]);
+    expect(Date.now() - started).toBeLessThan(2_000);
+  });
+
   it('passes acknowledgements and turns on, once, to whoever handed the item out', async () => {
     bridge.enqueue('work', item('a'));
     await bridge.outbox(keys.work, 0);

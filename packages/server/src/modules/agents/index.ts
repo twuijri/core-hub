@@ -1309,6 +1309,10 @@ export const agentsModule = defineModule({
       ctx.hubTools.syncAll();
       ctx.channelBridge.syncAll();
     });
+    // A poll the hub's plugin holds open must not hold the hub's close up (§153).
+    app.addHook('preClose', async () => {
+      ctx.channelBridge.close();
+    });
     app.addHook('onClose', async () => {
       ctx.updates.stop();
       ctx.signIns.close();
