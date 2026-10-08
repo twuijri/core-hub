@@ -1,0 +1,24 @@
+{
+  "channel_send": {
+    "placeholder": "اكتب إلى {peer} على {channel}…",
+    "send": "أرسل على {channel}",
+    "hint": "تُنشر أولًا على {channel} بصيغة «من كور هب (اسمك): …»، ثم تصل إلى الوكيل فيرد هناك. يظهر الرد هنا حين ينتهي الوكيل.",
+    "from_hub": "{name} · من كور هب",
+    "you": "أنت · من كور هب",
+    "open_current": "افتح المحادثة الحالية",
+    "error_channel": "رفض {channel} الرسالة، فلم تصل إلى الوكيل: {message}",
+    "status_sending": "تُرسل على {channel}…",
+    "status_posted": "نُشرت على {channel} · بانتظار أن يستلمها الوكيل",
+    "status_delivered": "وصلت الوكيل · يرد حين ينتهي دوره الحالي",
+    "status_answering": "الوكيل يرد على {channel}…",
+    "failed_bridge_no_answer": "نُشرت على {channel}، لكن Hermes لم يستلمها في الوقت (ربما يُعاد تشغيل بوابة المراسلة). إرسالها من جديد ينشرها على {channel} مرة أخرى.",
+    "failed_not_accepted": "نُشرت على {channel}، لكن Hermes رفض أن يسلّمها للوكيل.",
+    "failed_not_picked_up": "نُشرت على {channel}، لكن الوكيل لم يستلمها أبدًا. سجل Hermes يذكر السبب.",
+    "unavailable_not_admin": "محادثة من {channel}. الكتابة فيها من هنا للمشرف فقط؛ والرد يكون من {channel}.",
+    "unavailable_platform_unsupported": "محادثة من {channel} — للقراءة فقط هنا حاليًا. الكتابة من كور هب متاحة لتيليجرام وواتساب.",
+    "unavailable_hermes_not_managed": "محادثة من {channel} — للقراءة فقط: هذا المركز لا يشغّل Hermes، فلا يستطيع الكتابة فيها.",
+    "unavailable_bridge_offline": "محادثة من {channel} — الكتابة من هنا غير متاحة ما دامت بوابة المراسلة في Hermes تبدأ أو متوقفة.",
+    "unavailable_not_current": "انتقلت محادثة {channel} هذه إلى محادثة أحدث؛ ما تكتبه من هنا يذهب إليها.",
+    "unavailable_no_route": "محادثة من {channel} — لا يحتفظ Hermes بطريق للرد على هذه المحادثة، فلا يمكن الكتابة فيها من هنا."
+  }
+}

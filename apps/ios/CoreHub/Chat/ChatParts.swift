@@ -299,6 +299,8 @@ struct Composer: View {
     /// Bumped when a reply is chosen from a message (its menu, or a swipe, §150): the cursor goes
     /// into the field and the keyboard comes up.
     var focusRequest: Int = 0
+    /// Send's spoken name, when it says more than «Send» (e.g. «Send on Telegram», §153).
+    var sendLabel: String? = nil
     @Environment(\.l10n) private var l10n
     @Environment(AppModel.self) private var app
     @FocusState private var focused: Bool
@@ -415,7 +417,7 @@ struct Composer: View {
                         .animation(.easeOut(duration: Motion.fast), value: canSend)
                 }
                 .disabled(!canSend && !dictating)
-                .accessibilityLabel(l10n("chat.send"))
+                .accessibilityLabel(sendLabel ?? l10n("chat.send"))
                 .accessibilityIdentifier("composer.send")
             }
         }
