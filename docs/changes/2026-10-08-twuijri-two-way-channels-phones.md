@@ -139,13 +139,21 @@ nav:check  OK — 41 destinations, 2 pre-auth screens (login, setup), 47 terms, 
 
 $ node scripts/check-change-record.mjs --base origin/main
 change-record  OK — 2 record(s) valid
+
+CI على طلب الدمج #240 (الالتزام ba02e56c):
+  Build and test on the iOS simulator              pass  5m19s   (run 37842580247)
+    Test Case '-[CoreHubTests.ChannelSendTests …]' passed — الثلاثة عشر كلها
+  Android build, unit tests, lint                  pass  7m29s   (run 37842580164)
+  Lint, typecheck, contracts, client tests, build  pass  5m24s   (run 37842580334)
 ```
-لم تُشغَّل محليًا: بناء iOS واختباراته (لا Xcode على لينكس؛ CI يبني ويشغّل `ChannelSendTests` وبقية
-`CoreHubTests`)، وأجنحة أندرويد كاملة (`./gradlew test lint` في CI)، والتجربة على جهاز حقيقي مع مركز
-حقيقي وتيليجرام/واتساب حقيقيين.
+أول تشغيل لـiOS في CI فشل في الاختبارات فقط (`cannot find 'Fixtures' in scope`: اسم المساعد `Fixture`)،
+والتطبيق نفسه بُني؛ أُصلح في ba02e56c.
+
+لم تُشغَّل محليًا: بناء iOS (لا Xcode على لينكس؛ CI بناه وشغّل الاختبارات)، والتجربة على جهاز حقيقي مع
+مركز حقيقي وتيليجرام/واتساب حقيقيين.
 
 ## المخاطر والرجوع
-- iOS لم يُبنَ محليًا: أي خطأ ترجمة يظهر في CI لـiOS قبل المراجعة.
+- iOS بُني واختُبر في CI فقط (على المحاكي)، لا على جهاز.
 - سباق صغير: قراءة بدأت قبل الإرسال وانتهت بعده قد تخفي الرسالة لحظة حتى الحدث التالي أو القراءة
   التالية (كما في الويب).
 - `HubError` يقرأ الآن تفاصيل 5xx: شاشات أخرى كانت تتجاهل `reason` في 5xx قد تعرض الآن سببها الصحيح
