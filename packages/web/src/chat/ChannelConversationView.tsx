@@ -1,11 +1,15 @@
 // A conversation held on Telegram, WhatsApp… as Hermes keeps it (contract decision §61), in
 // the chat screen's own look — the person on the channel on one side, the agent's replies on the
-// other — but read-only: the hub cannot write to it, so where the composer would be there is the
-// banner saying where the reply is made. It is read again every half minute while open.
-// "Continue in Core Hub" (§62) carries it into a new hub chat with the transcript attached.
-// Older messages are read a page at a time when asked, and the pictures the person sent are
-// drawn in their bubble while Hermes still keeps them (§103).
+// other. An admin may write into a Telegram or WhatsApp one from here (§153): the composer posts
+// on the channel first, as «من كور هب (<name>): …», then the agent answers there; the message
+// shows at once and says what became of it, and the reply appears when the agent's turn ends.
+// Where it cannot be written into, the composer's place says why, in plain words. The
+// conversation stays the channel's: same label, same group in the list. "Continue in Core Hub"
+// (§62) stays a separate action. The hub announces each turn (`channel_conversation.updated`);
+// the polling is only a fallback. Older messages are read a page at a time when asked, and the
+// pictures the person sent are drawn in their bubble while Hermes still keeps them (§103).
 import { useEffect, useState } from 'react';
+import { useNavigate } from 'react-router';
 import { describeError } from '../auth/client.js';
 import { useAuth } from '../auth/context.js';
 import { useI18n } from '../i18n/context.js';
@@ -14,12 +18,15 @@ import { AppShell } from '../shell/AppShell.js';
 import { ProfileBadge } from '../shell/ProfileBadge.js';
 import { useManyProfiles } from '../shell/profiles.js';
 import {
+  channelHref,
   channelName,
   conversationTitle,
   useChannelConversation,
   useChannelPicture,
+  useChannelUpdates,
   useOlderChannelMessages,
   type ChannelMessage,
+  type ChannelOutgoing,
 } from '../sessions/channels.js';
 import { useChannelActions } from '../sessions/ChannelActions.js';
 import { TopBarActions } from '../shell/topBarSlot.js';
@@ -37,13 +44,19 @@ import {
 import { IconEyeOff, IconGlobe, IconMore, IconTrash } from '../ui/icons.js';
 import { Markdown } from './Markdown.js';
 import { ContinueChannel } from './ContinueChannel.js';
+import { ChannelComposer, sendUnavailableText } from './ChannelComposer.js';
 
 export function ChannelConversationView({ id }: { id: string }) {
   const { t } = useI18n();
   const { profile, homeProfile } = useAuth();
   const actions = useChannelActions({ openId: id });
   const manyProfiles = useManyProfiles();
+  const navigate = useNavigate();
+  useChannelUpdates();
   const read = useChannelConversation(id);
+  // The words on their way to the channel, shown before the hub answers.
+  const [sending, setSending] = useState<{ key: string; text: string } | null>(null);
+  useEffect(() => setSending(null), [id]);
   const conversation = read.data?.conversation;
   const channel = conversation ? channelName(conversation.channel, t) : '';
   const peer = conversation ? conversationTitle(conversation, t) : '';
@@ -54,6 +67,16 @@ export function ChannelConversationView({ id }: { id: string }) {
   const latest = read.data?.items ?? [];
   const seen = new Set(latest.map((message) => message.id));
   const messages = [...(older?.items ?? []).filter((message) => !seen.has(message.id)), ...latest];
+  // What the hub's people wrote from here and the hub still follows (§153): a message the
+  // transcript has shows its state under it; one it does not have yet is drawn after the rest.
+  const outgoing = (read.data as { outgoing?: ChannelOutgoing[] } | undefined)?.outgoing ?? [];
+  const shownIds = new Set(messages.map((message) => message.id));
+  const followed = new Map(
+    outgoing
+      .filter((each) => each.message_id && shownIds.has(each.message_id))
+      .map((each) => [each.message_id!, each]),
+  );
+  const pending = outgoing.filter((each) => !each.message_id || !shownIds.has(each.message_id));
   const nextOffset = older ? older.next : (read.data?.next_offset ?? null);
   const hasMore = older ? older.next !== null : read.data?.has_more === true;
   const readOlder = () => {
@@ -172,16 +195,57 @@ export function ChannelConversationView({ id }: { id: string }) {
               conversationId={id}
               message={message}
               peer={peer}
-              grouped={index > 0 && messages[index - 1]?.role === message.role}
+              channel={channel}
+              followed={followed.get(message.id) ?? null}
+              grouped={
+                index > 0 &&
+                messages[index - 1]?.role === message.role &&
+                (messages[index - 1]?.origin ?? 'channel') === (message.origin ?? 'channel')
+              }
             />
           ))}
+          {pending.map((each) => (
+            <HubMessage
+              key={each.id}
+              name={each.author_name}
+              text={each.text}
+              channel={channel}
+              status={each}
+            />
+          ))}
+          {sending && !pending.some((each) => each.client_message_id === sending.key) && (
+            <HubMessage name={null} text={sending.text} channel={channel} status={null} />
+          )}
         </div>
-        {/* Where the composer would be: why there is none, and where the reply is made. */}
+        {/* The composer for an admin; otherwise in its place: why not, and where to reply. */}
         {conversation && (
           <div className="composer-dock flex flex-col gap-2">
-            <div data-testid="channel-readonly">
-              <Notice tone="info">{t('sessions.channels.readonly_banner', { channel })}</Notice>
-            </div>
+            {conversation.can_send ? (
+              <ChannelComposer id={id} channel={channel} peer={peer} onSending={setSending} />
+            ) : (
+              <div data-testid="channel-readonly">
+                <Notice tone="info">
+                  {/* A hub that does not run Hermes reads as it always did (§61). */}
+                  {conversation.send_unavailable &&
+                  conversation.send_unavailable !== 'hermes_not_managed'
+                    ? sendUnavailableText(conversation.send_unavailable, channel, t)
+                    : t('sessions.channels.readonly_banner', { channel })}
+                </Notice>
+                {conversation.send_unavailable === 'not_current' && conversation.current_id && (
+                  <Button
+                    size="sm"
+                    variant="secondary"
+                    className="mt-2"
+                    onClick={() =>
+                      navigate(channelHref(conversation.current_id!, conversation.profile))
+                    }
+                    data-testid="channel-open-current"
+                  >
+                    {t('sessions.channels.send.open_current')}
+                  </Button>
+                )}
+              </div>
+            )}
             <ContinueChannel id={id} channel={channel} />
           </div>
         )}
@@ -190,20 +254,102 @@ export function ChannelConversationView({ id }: { id: string }) {
   );
 }
 
+/** What became of a message written from the hub, in a line under it (§153). */
+function OutgoingStatus({ status, channel }: { status: ChannelOutgoing | null; channel: string }) {
+  const { t } = useI18n();
+  if (status?.status === 'answered') return null;
+  const failed = status?.status === 'failed';
+  const text = !status
+    ? t('sessions.channels.send.status.sending', { channel })
+    : failed
+      ? t(`sessions.channels.send.failed.${status.error?.reason ?? 'not_picked_up'}`, { channel })
+      : t(`sessions.channels.send.status.${status.status}`, { channel });
+  return (
+    <p
+      className={`text-xs ${failed ? 'text-danger' : 'text-muted'}`}
+      role="status"
+      dir="auto"
+      data-testid="channel-outgoing-status"
+      data-status={status?.status ?? 'sending'}
+    >
+      {text}
+      {failed && status.error?.message ? ` (${status.error.message})` : ''}
+    </p>
+  );
+}
+
+/** A message written from the hub: the hub person's bubble, named, with what became of it. */
+function HubMessage({
+  name,
+  text,
+  channel,
+  status,
+  messageId,
+}: {
+  name: string | null;
+  text: string;
+  channel: string;
+  /** `null` while the hub has not answered yet; absent for one the hub no longer follows. */
+  status?: ChannelOutgoing | null;
+  messageId?: string;
+}) {
+  const { t } = useI18n();
+  return (
+    <article
+      className="msg"
+      data-side="user"
+      data-grouped="false"
+      data-origin="hub"
+      data-testid="message-hub"
+      {...(messageId ? { 'data-message-id': messageId } : {})}
+    >
+      <div className="msg-stack">
+        <header className="msg-head">
+          <span className="msg-name" dir="auto">
+            {name
+              ? t('sessions.channels.send.from_hub', { name })
+              : t('sessions.channels.send.you')}
+          </span>
+        </header>
+        <div className="msg-bubble msg-user" data-role="user">
+          <p dir="auto">{text}</p>
+        </div>
+        {status !== undefined && <OutgoingStatus status={status} channel={channel} />}
+      </div>
+    </article>
+  );
+}
+
 /** One message: the person on the channel as a bubble, the agent's reply as the chat draws it. */
 function ChannelMessageView({
   conversationId,
   message,
   peer,
+  channel,
+  followed,
   grouped,
 }: {
   conversationId: string;
   message: ChannelMessage;
   peer: string;
+  channel: string;
+  /** For a message written from the hub that the hub still follows: what became of it. */
+  followed: ChannelOutgoing | null;
   grouped: boolean;
 }) {
   const { t } = useI18n();
   const pictures = message.attachments ?? [];
+  if (message.role === 'user' && message.origin === 'hub') {
+    return (
+      <HubMessage
+        name={message.author_name ?? null}
+        text={message.text}
+        channel={channel}
+        messageId={message.id}
+        {...(followed ? { status: followed } : {})}
+      />
+    );
+  }
   if (message.role === 'user') {
     return (
       <article
