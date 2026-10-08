@@ -126,6 +126,9 @@
         "email": "Email",
         "sms": "SMS"
       }
+    },
+    "channel_send": {
+      "prefix": "From Core Hub ({name}): "
     }
   },
   "jobs": {

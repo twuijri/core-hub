@@ -294,7 +294,37 @@
       "show_older": "Older channel conversations",
       "load_older": "Load older messages",
       "picture": "Picture sent on the channel",
-      "picture_gone": "A picture was sent here. Hermes keeps channel pictures for a day, and this one is gone."
+      "picture_gone": "A picture was sent here. Hermes keeps channel pictures for a day, and this one is gone.",
+      "send": {
+        "label": "Write into this {channel} conversation",
+        "placeholder": "Write to {peer} on {channel}…",
+        "send": "Send on {channel}",
+        "hint": "Goes out on {channel} first, as “من كور هب (your name): …”, then to the agent, which answers there. The reply shows here when the agent finishes.",
+        "from_hub": "{name} · from Core Hub",
+        "you": "You · from Core Hub",
+        "open_current": "Open the current conversation",
+        "error_channel": "{channel} refused the message, so it did not reach the agent: {message}",
+        "status": {
+          "sending": "Sending on {channel}…",
+          "posted": "Posted on {channel} · waiting for the agent to take it",
+          "delivered": "With the agent · it answers when its current turn ends",
+          "answering": "The agent is answering on {channel}…",
+          "answered": "Answered on {channel}"
+        },
+        "failed": {
+          "bridge_no_answer": "Posted on {channel}, but Hermes did not take it in time (its messaging gateway may be restarting). Sending again posts it on {channel} again.",
+          "not_accepted": "Posted on {channel}, but Hermes refused to hand it to the agent.",
+          "not_picked_up": "Posted on {channel}, but the agent never picked it up. Hermes’s log says why."
+        },
+        "unavailable": {
+          "not_admin": "A conversation from {channel}. Only an admin can write into it from here; replies are made in {channel}.",
+          "platform_unsupported": "A conversation from {channel} — read-only here for now. Writing from Core Hub works for Telegram and WhatsApp.",
+          "hermes_not_managed": "A conversation from {channel} — read-only: this hub does not run Hermes, so it cannot write into it.",
+          "bridge_offline": "A conversation from {channel} — writing from here is unavailable while Hermes’s messaging gateway is starting or stopped.",
+          "not_current": "This {channel} chat has moved on to a newer conversation; a message from here would go there.",
+          "no_route": "A conversation from {channel} — Hermes keeps no way back to this chat, so it cannot be written into from here."
+        }
+      }
     }
   },
   "search": {

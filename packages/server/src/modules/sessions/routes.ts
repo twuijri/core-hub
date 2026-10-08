@@ -31,6 +31,7 @@ import type { EngineScope } from './engine.js';
 import type { ScopeResolver } from './scope.js';
 import type { SessionsService } from './service.js';
 import { CONVERSATION_ID, type ChannelConversations } from './channel-conversations.js';
+import type { ChannelSends } from './channel-sends.js';
 import { DEFAULT_LIMIT, MAX_LIMIT } from './store.js';
 import { toSubagent } from './subagents.js';
 
@@ -131,11 +132,25 @@ function pathId(params: unknown, name: string, resource: string): string {
   return value;
 }
 
+/** The contract's `ChannelSendRequest`. */
+const channelSend = z.object({
+  text: z.string().min(1).max(4000),
+  client_message_id: z.string().max(64).nullish(),
+});
+
+/** An owner or an admin (§88, §153). */
+function isAdmin(request: FastifyRequest): boolean {
+  const role = request.principal?.user.role;
+  return role === 'owner' || role === 'admin';
+}
+
 export interface RouteDeps {
   service(request: FastifyRequest): SessionsService;
   scopes: ScopeResolver;
   /** Channel conversations read from Hermes (§61). */
   channels(request: FastifyRequest): ChannelConversations;
+  /** Messages written into them from the hub (§153). */
+  sends(request: FastifyRequest): ChannelSends;
 }
 
 export function registerSessionRoutes(app: FastifyInstance, deps: RouteDeps): void {
@@ -610,7 +625,14 @@ export function registerSessionRoutes(app: FastifyInstance, deps: RouteDeps): vo
             profile: entry.profile,
           }))
         : [{ workspace: scope.workspace, profile: scope.profile }];
-    const read = await deps.channels(request).list(scopes, query.channel, query.limit);
+    const admin = isAdmin(request);
+    const sends = deps.sends(request);
+    const read = await deps
+      .channels(request)
+      .list(scopes, query.channel, query.limit, sends.checkFor(admin));
+    const hermesProfiles = scopes
+      .map((each) => deps.channels(request).hermesProfileOf(each.workspace))
+      .filter((each): each is string => !!each);
     // What this person hid stays out of their list unless asked for (§88).
     const workspaceOf = new Map(scopes.map((each) => [each.profile, each.workspace]));
     const hidden = deps.service(request).channelHides.hiddenIn(
@@ -625,6 +647,7 @@ export function registerSessionRoutes(app: FastifyInstance, deps: RouteDeps): vo
         query.hidden === 'include'
           ? read.items.map((item) => (isHidden(item) ? { ...item, hidden: true } : item))
           : read.items.filter((item) => !isHidden(item)),
+      live_updates: sends.live(hermesProfiles),
     };
   });
 
@@ -690,13 +713,60 @@ export function registerSessionRoutes(app: FastifyInstance, deps: RouteDeps): vo
       request.query,
       'query',
     );
-    return deps
+    const sends = deps.sends(request);
+    const read = await deps
       .channels(request)
       .messages(
         { workspace: scope.workspace, profile: scope.profile },
         typeof id === 'string' ? id : '',
         query.offset ?? 0,
+        sends.checkFor(isAdmin(request)),
       );
+    const hermes = deps.channels(request).hermesProfileOf(scope.workspace);
+    return {
+      ...read,
+      // What was written from the hub and is still followed (§153): on the latest page only.
+      ...((query.offset ?? 0) === 0
+        ? { outgoing: sends.outgoingFor(scope.profile, read.conversation.id, read.items) }
+        : {}),
+      live_updates: hermes ? sends.live([hermes]) : false,
+    };
+  });
+
+  // Write into it from the hub (§153; admins): on the channel first, then to Hermes.
+  app.post('/channel-conversations/:conversation_id/messages', async (request, reply) => {
+    const scope = await scopeOf(request);
+    const id = (request.params as { conversation_id?: unknown }).conversation_id;
+    const body = parse(channelSend, request.body);
+    const admin = isAdmin(request);
+    if (!admin) {
+      throw new HubError('forbidden', {
+        messageKey: 'auth.admin_only',
+        details: { required_role: 'admin', reason: 'not_admin' },
+      });
+    }
+    const sends = deps.sends(request);
+    const outgoing = await sends.send(
+      { workspace: scope.workspace, profile: scope.profile },
+      typeof id === 'string' ? id : '',
+      body,
+      {
+        name: sends.personName(scope.userId) ?? request.principal?.user.username ?? 'Core Hub',
+        admin,
+      },
+    );
+    deps.service(request).audit.record({
+      actorKind: 'user',
+      actorId: scope.userId,
+      ownerId: scope.userId,
+      workspace: scope.workspace,
+      action: 'sessions.channel_message_sent',
+      entityKind: 'channel_conversation',
+      entityId: outgoing.conversation_id,
+      summary: 'Wrote into a channel conversation from the hub',
+      requestId: request.id,
+    });
+    return reply.status(202).send({ outgoing });
   });
 
   // A picture the person sent on the channel (§103), from Hermes's image cache only.

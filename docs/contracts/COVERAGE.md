@@ -113,6 +113,7 @@ because the web/desktop clients or adapters need them.
 | Operation | Who uses it |
 |---|---|
 | `devices.createRequest` | agent adapters and integrations with the `device` scope (the phone only answers) |
+| `agents.channelBridgeOutbox`, `agents.channelBridgeAck`, `agents.channelBridgeEvent` | the hub's own plugin inside Hermes's messaging gateway (`plugins/corehub-bridge/`, DECISIONS §153), with the key the hub wrote beside it; never a client |
 | `agents.receiveWebhook` | outside services (GitHub, a form, a script) POSTing to an agent's webhook route; the hub passes it to Hermes (DECISIONS §97) |
 | `devices.peerJoin`, `devices.peerNotice`, `devices.peerAgents`, `devices.peerAsk` | another Core Hub, signed (ADR 0026): redeeming an invite, saying it approved or unlinked, listing the shared agents, asking one a question |
 | `updates.listReleases`, `updates.publishRelease`, `updates.deleteRelease`, `updates.getSettings`, `updates.setSettings` | the web admin "Updates" page (Phase 2) and CI publishing the `test` channel |

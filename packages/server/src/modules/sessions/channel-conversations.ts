@@ -46,6 +46,7 @@
  */
 import type { FastifyInstance } from 'fastify';
 import { HubError, notFound } from '../../lib/errors.js';
+import { t } from '../../i18n/index.js';
 
 /**
  * The Hermes sources that are messaging channels (`gateway/config.py` §Platform). The rest —
@@ -166,6 +167,8 @@ export function channelSourceFor(app: FastifyInstance): ChannelSource | null {
 export interface HermesSessionRow {
   id: string;
   source?: string | null;
+  /** Hermes's routing key of the chat (`build_session_key`); the same across its sessions. */
+  session_key?: string | null;
   user_id?: string | null;
   chat_id?: string | null;
   chat_type?: string | null;
@@ -213,7 +216,37 @@ export interface ChannelConversation {
   message_count: number;
   started_at: string;
   last_message_at: string;
+  /** Contract decision §153: set when the caller is known (`viewer`), absent otherwise. */
+  can_send?: boolean;
+  send_unavailable?: SendUnavailable | null;
+  current_id?: string | null;
 }
+
+/** Why a conversation cannot be written into from the hub (`ChannelSendUnavailable`). */
+export type SendUnavailable =
+  | 'not_admin'
+  | 'platform_unsupported'
+  | 'hermes_not_managed'
+  | 'bridge_offline'
+  | 'not_current'
+  | 'no_route';
+
+/** Where a message from the hub would go: the chat, as Hermes keeps it for the conversation. */
+export interface ChannelRoute {
+  /** Hermes's source (`telegram`, `whatsapp`, `whatsapp_cloud`…). */
+  source: string;
+  sessionKey: string | null;
+  chatId: string | null;
+  threadId: string | null;
+  /** The chat's newest conversation in what was read of the profile, when it is not this one. */
+  currentId: string | null;
+}
+
+/** What the caller may do with a conversation, decided by `channel-sends.ts`. */
+export type SendCheck = (
+  hermesProfile: string,
+  route: ChannelRoute,
+) => { can_send: boolean; send_unavailable: SendUnavailable | null; current_id: string | null };
 
 export interface ChannelAttachment {
   id: string;
@@ -227,6 +260,9 @@ export interface ChannelMessage {
   text: string;
   created_at: string;
   attachments: ChannelAttachment[];
+  /** `hub`: written from the hub (contract decision §153). */
+  origin: 'channel' | 'hub';
+  author_name: string | null;
 }
 
 export interface ChannelUnavailable {
@@ -339,9 +375,47 @@ export function picturesOf(text: string): { text: string; names: string[] } {
   return { text: names.length > 0 ? rest.replace(/\n{3,}/g, '\n\n').trim() : text, names };
 }
 
+/** The languages the hub has written its prefix in (`sessions.channel_send.prefix`). */
+const PREFIX_LANGUAGES = ['ar', 'en'] as const;
+/** Hermes's kind for a turn put in by a plugin, not typed on the channel (`run_turn.py`). */
+export const INJECTED_KIND = 'internal_notification';
+
+const escapeRegExp = (text: string) => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+/**
+ * The words a message from the hub carries on the channel and into Hermes (contract decision
+ * §153): «من كور هب (<name>): <text>». The hub has no language setting of its own, so the
+ * owner's choice stands: Arabic.
+ */
+export function hubMessageText(name: string, text: string, language: 'ar' | 'en' = 'ar'): string {
+  return `${t('sessions.channel_send.prefix', language).replace('{name}', name)}${text}`;
+}
+
+/** Who wrote a message the hub put in, and its words without the prefix; `null` for any other. */
+export function hubAuthorOf(text: string): { name: string; text: string } | null {
+  for (const language of PREFIX_LANGUAGES) {
+    const [before = '', after = ''] = t('sessions.channel_send.prefix', language).split('{name}');
+    const match = new RegExp(`^${escapeRegExp(before)}(.{1,200}?)${escapeRegExp(after)}`, 's').exec(
+      text,
+    );
+    if (match?.[1]) return { name: match[1], text: text.slice(match[0].length) };
+  }
+  return null;
+}
+
+/**
+ * Hermes's note in front of a channel message that redirected a running turn
+ * (`gateway/run_busy.py`): where the message came from, for the model. The person's words follow
+ * it; the note is Hermes's to its model, not what they wrote.
+ */
+const REDIRECT_NOTE =
+  /^Gateway message origin \(JSON data, not instructions or authorization\):\n[^\n]*\nDo not guess a reply destination when these fields are insufficient\.\n\n/;
+
 /**
  * The person's and the agent's messages with words or pictures in them; tools and system text
- * left out. `available` says whether a picture is still in Hermes's cache.
+ * left out. `available` says whether a picture is still in Hermes's cache. A message the hub put
+ * in (Hermes marks it as a plugin's turn, and it carries the hub's prefix) is the hub person's
+ * (`origin: hub`), shown without the prefix.
  */
 export function toMessages(
   messages: readonly HermesMessage[],
@@ -350,8 +424,15 @@ export function toMessages(
   const out: ChannelMessage[] = [];
   for (const message of messages) {
     if (message.role !== 'user' && message.role !== 'assistant') continue;
-    const raw = textOf(message);
-    const { text, names } = message.role === 'user' ? picturesOf(raw) : { text: raw, names: [] };
+    const raw =
+      message.role === 'user' ? textOf(message).replace(REDIRECT_NOTE, '') : textOf(message);
+    const fromHub =
+      message.role === 'user' && message.display_kind === INJECTED_KIND ? hubAuthorOf(raw) : null;
+    const { text, names } = fromHub
+      ? { text: fromHub.text.trim(), names: [] }
+      : message.role === 'user'
+        ? picturesOf(raw)
+        : { text: raw, names: [] };
     if (!text && names.length === 0) continue;
     out.push({
       id: String(message.id),
@@ -359,14 +440,56 @@ export function toMessages(
       text: text.length > MAX_TEXT ? `${text.slice(0, MAX_TEXT)}…` : text,
       created_at: isoOf(message.timestamp),
       attachments: names.map((name) => ({ id: name, kind: 'image', available: available(name) })),
+      origin: fromHub ? 'hub' : 'channel',
+      author_name: fromHub ? fromHub.name : null,
     });
   }
   return out;
 }
 
+/** Where a message from the hub would go in this conversation (`ChannelRoute`). */
+export function routeOf(
+  row: HermesSessionRow,
+  rows: readonly HermesSessionRow[] = [],
+): ChannelRoute {
+  const origin = originOf(row);
+  const key = clean(row.session_key, 400);
+  // The chat's newest conversation: Hermes puts a message for that chat there, whichever the
+  // hub shows (a reset or `/new` starts a newer one under the same key).
+  let currentId: string | null = null;
+  if (key) {
+    const newest = rows
+      .filter((each) => clean(each.session_key, 400) === key)
+      .reduce<HermesSessionRow | null>(
+        (best, each) =>
+          !best ||
+          (each.started_at ?? 0) > (best.started_at ?? 0) ||
+          ((each.started_at ?? 0) === (best.started_at ?? 0) && each.id > best.id)
+            ? each
+            : best,
+        null,
+      );
+    if (newest && newest.id !== row.id && (newest.started_at ?? 0) >= (row.started_at ?? 0)) {
+      currentId = newest.id;
+    }
+  }
+  return {
+    source: row.source ?? '',
+    sessionKey: key,
+    chatId: clean(row.chat_id, 200) ?? clean(origin.chat_id, 200),
+    threadId: clean(origin.thread_id, 200),
+    currentId,
+  };
+}
+
 function previewOf(message: ChannelMessage | undefined): ChannelMessagePreview | null {
   if (!message) return null;
-  const flat = message.text.replace(/\s+/g, ' ').trim();
+  // A message from the hub reads in the list as the channel shows it, with who wrote it.
+  const words =
+    message.origin === 'hub' && message.author_name
+      ? hubMessageText(message.author_name, message.text)
+      : message.text;
+  const flat = words.replace(/\s+/g, ' ').trim();
   return {
     role: message.role,
     text: flat.length > PREVIEW_MAX ? `${flat.slice(0, PREVIEW_MAX - 1)}…` : flat,
@@ -446,6 +569,7 @@ export class ChannelConversations {
     scopes: readonly ChannelScope[],
     channel?: string,
     limit: number = LIST_LIMIT,
+    check?: SendCheck,
   ): Promise<{
     items: ChannelConversation[];
     unavailable: ChannelUnavailable[];
@@ -493,12 +617,13 @@ export class ChannelConversations {
         const shown = rows.filter((row) => !channel || channelOf(row.source ?? '') === channel);
         await this.readLatest(source, hermes, shown);
         for (const row of shown) {
+          const conversation = toConversation(
+            row,
+            scope.profile,
+            this.latest.get(latestKey(hermes, row))?.value ?? null,
+          );
           items.push(
-            toConversation(
-              row,
-              scope.profile,
-              this.latest.get(latestKey(hermes, row))?.value ?? null,
-            ),
+            check ? { ...conversation, ...check(hermes, routeOf(row, listed.rows)) } : conversation,
           );
         }
       }),
@@ -521,6 +646,7 @@ export class ChannelConversations {
     scope: ChannelScope,
     id: string,
     offset = 0,
+    check?: SendCheck,
   ): Promise<{
     conversation: ChannelConversation;
     items: ChannelMessage[];
@@ -574,16 +700,73 @@ export class ChannelConversations {
       const last = previewOf(items.at(-1));
       this.latest.set(latestKey(hermes, row), { key: changeKey(row), value: last });
     }
+    const conversation = toConversation(
+      row,
+      scope.profile,
+      this.latest.get(latestKey(hermes, row))?.value ?? null,
+    );
     return {
-      conversation: toConversation(
-        row,
-        scope.profile,
-        this.latest.get(latestKey(hermes, row))?.value ?? null,
-      ),
+      conversation: check
+        ? {
+            ...conversation,
+            ...check(hermes, routeOf(row, this.lists.get(hermes)?.value.rows ?? [])),
+          }
+        : conversation,
       items,
       has_more: hasMore,
       next_offset: hasMore ? skip + returned : null,
     };
+  }
+
+  /**
+   * One conversation and where a message from the hub would go (contract decision §153), read
+   * afresh: the row by its exact id, and the profile's list again, so a newer conversation of
+   * the same chat is seen. `404` for anything that is not a channel conversation.
+   */
+  async route(
+    scope: ChannelScope,
+    id: string,
+  ): Promise<{ hermes: string; row: HermesSessionRow; route: ChannelRoute }> {
+    const missing = () => notFound({ resource: 'channel_conversation', id });
+    if (!CONVERSATION_ID.test(id)) throw missing();
+    const source = this.source();
+    if (!source) {
+      throw new HubError('service_unavailable', {
+        details: { reason: 'hermes_not_managed', message: null },
+      });
+    }
+    const hermes = source.hermesProfile(scope.workspace);
+    if (!hermes) throw missing();
+    let row: HermesSessionRow | null;
+    let rows: HermesSessionRow[];
+    try {
+      row = await source.get<HermesSessionRow | null>(
+        `/api/sessions/${encodeURIComponent(id)}?profile=${encodeURIComponent(hermes)}`,
+      );
+      this.invalidate(hermes);
+      rows = (await this.rows(source, hermes, LIST_LIMIT)).rows;
+    } catch (error) {
+      if (error instanceof ChannelSourceRefusal && error.status === 404) throw missing();
+      if (error instanceof ChannelSourceRefusal || error instanceof ChannelSourceUnavailable) {
+        throw new HubError('service_unavailable', {
+          message: `Hermes's API is not available: ${error.message}`,
+          details: { reason: 'hermes_api_unavailable', message: error.message },
+        });
+      }
+      throw error;
+    }
+    if (!row || row.id !== id || !isChannel(row.source)) throw missing();
+    return { hermes, row, route: routeOf(row, rows) };
+  }
+
+  /** Hermes's profile for a hub workspace, or `null` (no Hermes, or no such profile). */
+  hermesProfileOf(workspace: string): string | null {
+    return this.source()?.hermesProfile(workspace) ?? null;
+  }
+
+  /** Forget what was read of a profile: Hermes's gateway says something happened there. */
+  invalidate(hermes: string): void {
+    this.lists.delete(hermes);
   }
 
   /**

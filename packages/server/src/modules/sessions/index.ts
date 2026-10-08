@@ -22,6 +22,7 @@ import {
 } from './realtime.js';
 import { registerSessionRoutes } from './routes.js';
 import { ChannelConversations, channelSourceFor } from './channel-conversations.js';
+import { ChannelSends, channelSenderFor, type TurnEvent } from './channel-sends.js';
 import { derivedScopeResolver, type ScopeCaller, type ScopeResolver } from './scope.js';
 import {
   SessionsService,
@@ -86,14 +87,34 @@ export function createSessionsModule(options: SessionsModuleOptions = {}): HubMo
   const services = new WeakMap<SocketServer, SessionsService>();
   // One reader per app: what it read of Hermes is kept per app, never shared between hubs.
   const channelReaders = new WeakMap<SocketServer, ChannelConversations>();
-  const channels = (request: FastifyRequest): ChannelConversations => {
-    const app = request.server;
+  const readerFor = (app: FastifyInstance): ChannelConversations => {
     let reader = channelReaders.get(app.hub.io);
     if (!reader) {
       reader = new ChannelConversations(() => channelSourceFor(app));
       channelReaders.set(app.hub.io, reader);
     }
     return reader;
+  };
+  const channels = (request: FastifyRequest): ChannelConversations => readerFor(request.server);
+  // The messages written into a channel conversation from the hub, followed per app (§153).
+  const sendsFor = (app: FastifyInstance): ChannelSends => {
+    let sends = channelSends.get(app.hub.io);
+    if (!sends) {
+      const created = new ChannelSends({
+        reader: () => readerFor(app),
+        sender: () => channelSenderFor(app),
+        emit: (profile, payload) =>
+          sessionsRealtimeFor(app.hub.io)?.emitToProfile(
+            profile,
+            'channel_conversation.updated',
+            payload,
+          ),
+      });
+      channelSends.set(app.hub.io, created);
+      app.addHook('onClose', async () => created.close());
+      sends = created;
+    }
+    return sends;
   };
 
   const service = (request: FastifyRequest): SessionsService =>
@@ -131,7 +152,23 @@ export function createSessionsModule(options: SessionsModuleOptions = {}): HubMo
     name: 'sessions',
     registerRoutes(app: FastifyInstance) {
       const scopes = scopesFor(app);
-      registerSessionRoutes(app, { service, scopes, channels });
+      // Made now: its timers stop with the app (`onClose` is not taken once it listens).
+      sendsFor(app);
+      registerSessionRoutes(app, {
+        service,
+        scopes,
+        channels,
+        sends: (request) => sendsFor(request.server),
+      });
+      bridgeListeners.set(app, {
+        acknowledged: (hermes, itemId, accepted, reason) =>
+          sendsFor(app).acknowledged(hermes, itemId, accepted, reason),
+        turn: (hermes, event) => {
+          // Hermes's store changed: the next read of that profile asks it again.
+          readerFor(app).invalidate(hermes);
+          sendsFor(app).turn(hermes, event);
+        },
+      });
       sessionsRealtimeFor(app.hub.io)?.authorizeFollowWith(followCheck(app, scopes));
       turns.set(app, (scope, input) => serviceFor(app, app.log).oneTurn(scope, input));
       handOvers.set(app, (workspace, runId, attachment) =>
@@ -212,6 +249,24 @@ export function createSessionsModule(options: SessionsModuleOptions = {}): HubMo
       attachSessionsRealtime(io);
     },
   });
+}
+
+/** What `agents`' bridge in Hermes's gateway tells this module (§153), per app. */
+export interface ChannelBridgeListener {
+  acknowledged(
+    hermesProfile: string,
+    itemId: string,
+    accepted: boolean,
+    reason: string | null,
+  ): void;
+  turn(hermesProfile: string, event: TurnEvent): void;
+}
+const bridgeListeners = new WeakMap<FastifyInstance, ChannelBridgeListener>();
+const channelSends = new WeakMap<SocketServer, ChannelSends>();
+
+/** The listener the composition root hands `agents`' bridge; `null` before routes mount. */
+export function channelBridgeListenerFor(app: FastifyInstance): ChannelBridgeListener | null {
+  return bridgeListeners.get(app) ?? null;
 }
 
 /**
@@ -492,6 +547,7 @@ export {
   registerChannelSource,
   type ChannelSource,
 } from './channel-conversations.js';
+export { registerChannelSender, type ChannelSender } from './channel-sends.js';
 export { RUN_FILES_DIR, collectOutputs, ensureRunFolders, runFolders } from './run-files.js';
 export type { ProducedFile, ProducedFiles, ProducedRefusal } from './run-files.js';
 export type { ScopeResolver, RequestScope } from './scope.js';
