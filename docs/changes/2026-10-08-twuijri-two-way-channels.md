@@ -221,7 +221,7 @@ $ npx eslint <الملفات المعدّلة> ; npx prettier --check <المج�
 (eslint بلا مخرجات، EXIT 0) · All matched files use Prettier code style!
 
 $ node scripts/check-change-record.mjs --base origin/main
-(انظر أسفل)
+change-record  OK — 1 record(s) valid
 ```
 لم تُشغَّل محليًا: الأجنحة الكاملة (CI يشغّلها)، وكل أجنحة Hermes الحقيقي الأخرى، وصورة المركز
 كاملة في حاوية واحدة (الاختبار الحقيقي يشغّل البوابة في الحاوية والمركز على الجهاز). واتساب: مسار
