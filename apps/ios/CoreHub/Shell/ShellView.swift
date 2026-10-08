@@ -226,7 +226,8 @@ struct ShellView: View {
                     firstMessages.put(sessionID, first)
                     main = .chat(sessionID: sessionID, profile: profile)
                 },
-                gone: { navigate(.newChat) }
+                gone: { navigate(.newChat) },
+                openConversation: { id, profile in navigate(.channel(conversationID: id, profile: profile)) }
             )
             .id(conversationID)
         case .destination(.tasks):

@@ -65,19 +65,26 @@ import hub.core.android.ui.theme.LocalTokens
 import hub.core.client.model.ChannelAttachment
 import hub.core.client.model.ChannelConversation
 import hub.core.client.model.ChannelMessage
+import hub.core.client.model.ChannelOutgoing
 import hub.core.client.model.ContentBlock
-import kotlinx.coroutines.delay
+import kotlinx.coroutines.channels.Channel as KChannel
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeoutOrNull
 
 /*
  * A conversation held on Telegram, WhatsApp… as Hermes keeps it (contract decision §61), in the
- * chat's own look — the person on the channel on one side, the agent's replies on the other — but
- * read-only: where the composer would be, a line says where the reply is made, and «Continue in
- * Core Hub» (§62) carries it into a new hub chat with the transcript attached. Older messages are
- * read a page at a time (§103), pictures the person sent are drawn while Hermes keeps them, and
- * the transcript is read again every half minute while it is open. The web's
- * ChannelConversationView; native on the phone since 2026-09-27.
+ * chat's own look — the person on the channel on one side, the agent's replies on the other. An
+ * admin may write into a Telegram or WhatsApp one from here (§153): the composer posts on the
+ * channel first, as «من كور هب (<name>): …», then the agent answers there; the words show at once
+ * with what became of them, and the reply appears when the agent's turn ends (ChannelSend.kt).
+ * Where it cannot be written into, the composer's place says why, and «Continue in Core Hub» (§62)
+ * carries it into a new hub chat with the transcript attached. The conversation stays the
+ * channel's: same label, same group in the list. Older messages are read a page at a time (§103),
+ * pictures the person sent are drawn while Hermes keeps them, and the transcript is read again as
+ * the hub announces each turn (`channel_conversation.updated`), with a poll as the fallback —
+ * every half minute on an older hub. The web's ChannelConversationView; native on the phone since
+ * 2026-09-27.
  */
 
 /** The platform's name in the reader's language: Telegram and WhatsApp translated, others as they are. */
@@ -110,6 +117,8 @@ fun ChannelChatScreen(
     onOpenChat: (sessionId: String, profile: String) -> Unit,
     onGone: () -> Unit,
     subtitleProfile: String?,
+    /** Another channel conversation: the current one of this chat, where a message from here would go (§153). */
+    onOpenConversation: (conversationId: String, profile: String) -> Unit = { _, _ -> },
 ) {
     val t = LocalTokens.current
     val graph = LocalContext.current.graph
@@ -128,19 +137,63 @@ fun ChannelChatScreen(
     var menu by remember { mutableStateOf(false) }
     var deleting by remember { mutableStateOf(false) }
     var continuing by remember { mutableStateOf(false) }
+    // What the hub's people wrote from here and the hub still follows (§153), and whether the hub
+    // announces each turn itself (then the poll below is only a slow fallback).
+    var outgoing by remember(conversationId) { mutableStateOf<List<ChannelOutgoing>>(emptyList()) }
+    var liveUpdates by remember(conversationId) { mutableStateOf(false) }
+    var draft by remember(conversationId) { mutableStateOf("") }
+    var sending by remember(conversationId) { mutableStateOf<ChannelSending?>(null) }
+    var refusal by remember(conversationId) { mutableStateOf<ChannelSendRefusal?>(null) }
+    // Read again now (an announced turn, a refused send) instead of at the next poll.
+    val again = remember(conversationId) { KChannel<Unit>(KChannel.CONFLATED) }
     LaunchedEffect(conversationId, profile) {
         while (isActive) {
             ops.messages(profile, conversationId).onSuccess { page ->
                 conversation = page.conversation
                 latest = page.items
+                outgoing = page.outgoing.orEmpty()
+                liveUpdates = page.liveUpdates == true
                 if (!olderRead) { nextOffset = page.nextOffset; hasMore = page.hasMore }
                 error = null
             }.onFailure { error = it as HubError }
             loading = false
-            delay(ChatGroupsRules.TRANSCRIPT_POLL_MS)
+            withTimeoutOrNull(ChannelSendRules.transcriptPollMs(liveUpdates)) { again.receive() }
+        }
+    }
+    // `channel_conversation.updated` (§153): the message's state moves in place; a turn that began
+    // or ended, or the message's end, reads the transcript again.
+    LaunchedEffect(conversationId) {
+        graph.realtime.events.collect { envelope ->
+            val update = ChannelSendRules.parse(envelope) ?: return@collect
+            val applied = ChannelSendRules.apply(conversationId, outgoing, update)
+            outgoing = applied.outgoing
+            if (applied.refetch) again.trySend(Unit)
+        }
+    }
+    val send: () -> Unit = send@{
+        val words = ChannelSendRules.words(draft) ?: return@send
+        if (sending != null) return@send
+        val key = ChannelSendRules.clientId()
+        refusal = null
+        draft = ""
+        sending = ChannelSending(key, words)
+        scope.launch {
+            ops.send(profile, conversationId, words, key)
+                .onSuccess { made -> outgoing = ChannelSendRules.upsert(outgoing, made) }
+                .onFailure { e ->
+                    // Nothing reached the agent: the words go back where they were typed.
+                    if (draft.isBlank()) draft = words
+                    val why = ChannelSendRules.failure(e as HubError)
+                    refusal = why
+                    // The hub's reason may be news (the chat moved on, the gateway stopped): the bottom follows.
+                    if (why is ChannelSendRefusal.Unavailable) again.trySend(Unit)
+                }
+            sending = null
         }
     }
     val messages = ChannelTranscript.merge(older, latest)
+    val split = ChannelSendRules.split(messages, outgoing)
+    val showSending = ChannelSendRules.showSending(sending, split.pending)
     val peer = conversation?.let { conversationTitle(it) } ?: term("chat")
     val channel = conversation?.let { channelName(it.channel) }.orEmpty()
     Column(Modifier.fillMaxSize().testTag("channel.screen")) {
@@ -171,7 +224,9 @@ fun ChannelChatScreen(
             Text(it, fontSize = FontTokens.sizeSm.sp, color = t.textMuted, modifier = Modifier.padding(horizontal = 16.dp), style = TextStyle(textDirection = TextDirection.Content))
         }
         val list = rememberLazyListState()
-        LaunchedEffect(latest.size) { if (messages.isNotEmpty() && !loadingOlder) list.scrollToItem(messages.size) }
+        val rows = messages.size + split.pending.size + (if (showSending) 1 else 0)
+        // To the end (the list clamps an index past its last row, the header rows included).
+        LaunchedEffect(latest.size, split.pending.size, showSending) { if (rows > 0 && !loadingOlder) list.scrollToItem(rows + 4) }
         LazyColumn(
             Modifier.weight(1f).fillMaxWidth().testTag("channel.transcript"), state = list,
             contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 16.dp, vertical = 8.dp),
@@ -209,17 +264,26 @@ fun ChannelChatScreen(
             if (!loading && messages.isEmpty() && error == null) {
                 item(key = "empty") { EmptyState(stringResource(R.string.chcv_no_messages), icon = Lucide.Globe) }
             }
-            items(messages, key = { it.id }) { message -> ChannelMessageView(message, peer, conversationId, profile, ops) }
+            items(messages, key = { it.id }) { message ->
+                if (ChannelSendRules.fromHub(message)) {
+                    val followed = split.followed[message.id]
+                    HubMessageView(message.authorName, message.text, channel, followed = followed != null, status = followed)
+                } else {
+                    ChannelMessageView(message, peer, conversationId, profile, ops)
+                }
+            }
+            // Written from here and not in the transcript yet: after the rest, with what became of it.
+            items(split.pending, key = { "outgoing:${it.id}" }) { each -> HubMessageView(each.authorName, each.text, channel, followed = true, status = each) }
+            sending?.takeIf { showSending }?.let { words ->
+                item(key = "sending:${words.key}") { HubMessageView(null, words.text, channel, followed = true, status = null) }
+            }
         }
         val c = conversation
         if (c != null) {
-            Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Notice(stringResource(R.string.chcv_readonly_banner, channel, channel), Tone.INFO, Modifier.testTag("channel.readonly"))
-                HubButton(
-                    stringResource(R.string.chcv_continue_button), { continuing = true }, size = ControlSize.Md, icon = Lucide.MessagesSquare,
-                    modifier = Modifier.testTag("channel.continue"),
-                )
-            }
+            ChannelSendBottom(
+                ChannelSendRules.bottom(c), channel, peer, draft, onDraft = { draft = it }, busy = sending != null, failure = refusal,
+                onSend = send, onOpenCurrent = { id -> onOpenConversation(id, c.profile) }, onContinue = { continuing = true },
+            )
         }
     }
     val c = conversation

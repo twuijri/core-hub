@@ -142,6 +142,8 @@ class ShellViewModel(private val graph: AppGraph) : ViewModel() {
                     }
                     // The sessions socket hears every profile: a room seat's questions arrive here too.
                     "approval.requested", "approval.resolved" -> schedulePending()
+                    // A Telegram or WhatsApp conversation changed (§153): the drawer's list reads again.
+                    ChannelSendRules.EVENT -> ChannelSendRules.parse(envelope)?.let(extras::heard)
                 }
             }
         }

@@ -48,6 +48,8 @@ final class SessionListModel {
     private(set) var channelsUnavailable = false
     /// Hidden channel conversations shown too ("Show hidden chats").
     var showHidden = false
+    /// The hub announces each channel turn (`channel_conversation.updated`, §153): the polling slows down.
+    private(set) var channelsLive = false
     /// Categories folded shut, by id (this phone's own choice).
     var folded: Set<String> = []
     /// The order the person dragged the chats into, for this view (SessionOrder.swift).
@@ -73,6 +75,7 @@ final class SessionListModel {
     @ObservationIgnored private var listener: UUID?
     @ObservationIgnored private var reloadTask: Task<Void, Never>?
     @ObservationIgnored private var poller: Task<Void, Never>?
+    @ObservationIgnored private var channelReload: Task<Void, Never>?
     @ObservationIgnored private var generation = 0
 
     init(app: AppModel) {
@@ -102,8 +105,14 @@ final class SessionListModel {
             return
         }
         listener = namespace.onEvent { [weak self] name, argument in
+            if name == ChannelSendRules.event {
+                // A Telegram or WhatsApp conversation changed (§153): the channel groups read again.
+                guard let envelope = Envelope.parse(argument), let update = ChannelSendRules.parse(envelope),
+                      ChannelSendRules.settled(update) else { return }
+                self?.scheduleConversations()
+                return
+            }
             guard name.hasPrefix("session.") else { return }
-            _ = argument
             self?.scheduleReload()
         }
         reload()
@@ -114,15 +123,28 @@ final class SessionListModel {
         listener = nil
         poller?.cancel()
         poller = nil
+        channelReload?.cancel()
+        channelReload = nil
     }
 
-    /// Hermes announces nothing when a channel message arrives: the list asks again now and then
-    /// while it is on screen (the web's 45 seconds).
+    /// The channel conversations again, once per burst of announced turns.
+    private func scheduleConversations() {
+        channelReload?.cancel()
+        channelReload = Task { [weak self] in
+            try? await Task.sleep(nanoseconds: 500_000_000)
+            guard !Task.isCancelled else { return }
+            await self?.loadConversations()
+        }
+    }
+
+    /// The list asks again now and then while it is on screen: the web's 45 seconds where Hermes
+    /// announces nothing, every 5 minutes as a fallback where the hub announces each turn (§153).
     private func startPolling() {
         guard poller == nil else { return }
         poller = Task { [weak self] in
             while !Task.isCancelled {
-                try? await Task.sleep(nanoseconds: 45_000_000_000)
+                let wait = ChannelSendRules.listPoll(live: self?.channelsLive)
+                try? await Task.sleep(nanoseconds: wait)
                 guard !Task.isCancelled else { return }
                 await self?.loadConversations()
             }
@@ -148,6 +170,7 @@ final class SessionListModel {
             }
             conversations = list.items
             channelsUnavailable = list.unavailable.contains { $0.reason == .hermesUnreachable }
+            channelsLive = list.liveUpdates == true
         } catch {
             // No Hermes, or not reachable: the chats list stands on its own.
             channelsUnavailable = !conversations.isEmpty

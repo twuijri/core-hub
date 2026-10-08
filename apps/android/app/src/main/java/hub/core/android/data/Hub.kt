@@ -117,8 +117,10 @@ data class HubError(
                 HubError(error.statusCode, code, text, reasonOf(body), maxBytesOf(body), timezoneOf(body), detailMessageOf(body), peerCodeOf(body))
             }
             is ServerException -> {
-                val (code, text) = bodyFields((error.response as? ServerError<*>)?.body as? String)
-                HubError(error.statusCode, code, text)
+                // A 503 names why too (`details.reason`, and the refusing side's own words, §153).
+                val body = (error.response as? ServerError<*>)?.body as? String
+                val (code, text) = bodyFields(body)
+                HubError(error.statusCode, code, text, reasonOf(body), detailMessage = detailMessageOf(body), peerCode = peerCodeOf(body))
             }
             is IOException -> HubError(0, "offline", null)
             else -> HubError(-1, null, error.message)
