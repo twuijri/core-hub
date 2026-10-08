@@ -165,7 +165,18 @@ $ node scripts/hermes-watch.mjs current
 {"floor":{"ref":"v2026.9.14","version":"0.21.3"},"tested":{"ref":"v0.21.6","version":"0.21.6"},"dockerfileRef":"v0.21.6"}
 $ npx prettier --check <changed files> && npx eslint <changed ts/mjs>   → clean
 ```
-نتائج CI تُضاف بعد التشغيل على طلب الدمج.
+نتائج CI على طلب الدمج #243 (التشغيل 37860112367، الالتزام 8f2dddea): كل الوظائف ناجحة.
+
+```
+Real Hermes suites (pinned, v0.21.6):  Test Files  33 passed | 4 skipped (37) — Tests  97 passed | 47 skipped (144)
+Real Hermes suites (floor, v2026.9.14): Test Files  33 passed | 4 skipped (37) — Tests  92 passed | 52 skipped (144)
+Docker image builds and answers /health (يشمل image-sealed-check على صورة v0.21.6): success
+Server unit tests 1/3 · 2/3 · 3/3, Lint/typecheck/contracts/build, Web smoke, Desktop smoke,
+Model gateway real, migrations, translations, change record, graphify-out: success
+```
+أول تشغيل (37859554652) فشل في `tests/unit/config.test.ts` («the only source file that touches
+process.env»): قيمة افتراضية `process.env` في `hermes-runtime.ts` §managedEnv؛ صارت `{}` (الالتزام
+8f2dddea).
 
 ## المخاطر والرجوع
 - يعتمد كود الصورة على أسماء في Hermes ليست عقدًا معلنًا: `pm.extras.ensure_import`/`available`،
