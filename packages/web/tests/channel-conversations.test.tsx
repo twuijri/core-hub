@@ -504,6 +504,28 @@ describe('a channel conversation opens read-only', () => {
     expect(hub.seen.some((c) => c.path === `/sessions/${TG.id}`)).toBe(false);
   });
 
+  it('says when each message was sent, with the full date for a hover and a screen reader', async () => {
+    const hub = fakeHub();
+    render(
+      <Providers fetchImpl={hub.fetchImpl} path={`/chat/${TG.id}?source=channel`}>
+        <Routes>
+          <Route path="/chat/:sessionId?" element={<ChatScreen />} />
+        </Routes>
+      </Providers>,
+    );
+    const screenEl = await screen.findByTestId('channel-screen');
+    await within(screenEl).findByText('متى موعد التسليم؟');
+    const times = within(screenEl).getAllByTestId('channel-message-time');
+    expect(times.map((each) => each.getAttribute('datetime'))).toEqual([
+      TG.started_at,
+      TG.last_message_at,
+    ]);
+    for (const each of times) {
+      expect(each.textContent).not.toBe('');
+      expect(each.getAttribute('aria-label')).toMatch(/2026/);
+    }
+  });
+
   it('says it is not there when the id is not a channel conversation of this profile', async () => {
     const hub = fakeHub();
     render(
