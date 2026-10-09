@@ -11,7 +11,8 @@
 //   - makes the app free (price point 0.00, base territory USA) when no price is set, and
 //     available in every territory but EXCLUDED_TERRITORIES when no availability is set;
 //   - declares "does not use third-party content" when nothing is declared;
-//   - sets the release to manual after approval (releaseType MANUAL);
+//   - releases the version as soon as Apple approves it (releaseType AFTER_APPROVAL; owner,
+//     2026-10-09: «ابي على طول ينزل»);
 // then prints what the owner still has to do in App Store Connect.
 //
 // With --submit it does the same, and only when nothing is missing it adds the version to a
@@ -421,14 +422,14 @@ export async function prepare({
     }
   }
 
-  // (e) Manual release after approval.
-  if (v.attributes?.releaseType === 'MANUAL') {
-    note(already, 'Release: manual after approval.');
+  // (e) Released by Apple as soon as it is approved (owner, 2026-10-09).
+  if (v.attributes?.releaseType === 'AFTER_APPROVAL') {
+    note(already, 'Release: automatic after approval.');
   } else {
     await api('PATCH', `/appStoreVersions/${q(v.id)}`, {
-      data: { type: 'appStoreVersions', id: v.id, attributes: { releaseType: 'MANUAL' } },
+      data: { type: 'appStoreVersions', id: v.id, attributes: { releaseType: 'AFTER_APPROVAL' } },
     });
-    note(applied, 'Release set to manual after approval.');
+    note(applied, 'Release set to automatic after approval.');
   }
   if (!String(v.attributes?.copyright ?? '').trim()) {
     note(
