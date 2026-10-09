@@ -13,7 +13,7 @@
 ## الملفات والتأثير
 - `apps/ios/scripts/asc-prepare-submission.mjs`
 - `apps/ios/scripts/asc-prepare-submission.test.mjs`
-- `docs/RELEASING.md`
+- `docs/RELEASING.md`، `docs/store/apple/README.md`
 
 ## الفحوص (الأوامر ونواتجها الفعلية)
 ```

@@ -99,7 +99,7 @@ submission* → Run workflow (by hand only; inputs `version`, `build`, `submit`)
   Apple adds them (proposed — owner to confirm: China mainland needs an ICP filing number and a
   permit for generative AI features, and without them App Review holds the version up);
 - declares "does not use third-party content" when nothing is declared, and sets the release to
-  **manual** after approval;
+  **automatic** after approval (owner, 2026-10-09: the version goes out as soon as Apple approves it);
 - prints what is still missing: App Review contact, "Sign-in required" with the demo account, the
   notes, copyright, primary category and privacy policy URLs when empty. App Privacy is always
   listed: the public App Store Connect API has no endpoint for it (checked 2026-09-26), so it is
