@@ -159,8 +159,10 @@ describe("a person's own Hermes and Hermes's newer releases", () => {
   });
 
   it('says a Hermes past the tested release may not be supported yet', async () => {
+    // One patch release past whatever the image is tested with.
+    const past = HERMES_TESTED.version.replace(/\d+$/, (patch) => String(Number(patch) + 1));
     const hub = await hubWith({
-      version: '0.21.6',
+      version: past,
       ownHermes: true,
       registry: createPackageRegistry({ fetchImpl: fakeGitHub(() => json(RELEASES)).fetchImpl }),
     });

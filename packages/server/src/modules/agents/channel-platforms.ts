@@ -16,9 +16,12 @@
  *   Discord's does (`_is_allowed_user`: nobody without an allowlist, a role or a channel) and so does
  *   Email's (`_sender_accepted`: only the allowlist, and Hermes defaults email to "ignore" anyway).
  *   Those two say `allowlist: true` and the dialog asks for the people up front;
- * - **packages**: `tools/lazy_deps.py` lists what Hermes downloads the first time a platform runs.
+ * - **packages**: `tools/lazy_deps.py` lists what Hermes downloads the first time a platform runs
+ *   (from v0.21.6, the pyproject extra of the platform's name, through its package manager).
  *   Telegram's, Discord's and Slack's are in the image (`packages/server/Dockerfile`); Matrix's are
- *   not — they did not fit in the image-size budget (the change record has the numbers);
+ *   not — they did not fit in the image-size budget (the change record has the numbers), and go to
+ *   `/data/hermes-packages` on first use (`scripts/hermes-image/corehub_hermes_packages.py` from
+ *   v0.21.6);
  *   Mattermost and Email need nothing beyond Hermes (aiohttp, the standard library). Photon's
  *   Node bridge is installed with npm the first time it starts (`plugins/platforms/photon`);
  * - **programs**: Raft and Buzz run a command-line program of their own (`raft agent bridge`, the

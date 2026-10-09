@@ -20,6 +20,9 @@
  *    Hermes with one gateway per host, through the profile's own gateway on an older one;
  * 5. a message on the channel while the hub's turn runs: what Hermes does is recorded.
  *
+ * On a Hermes that has it (v0.21.6 on), all of it again with `plugins.isolation: host`, where the
+ * hub's plugin runs in Hermes's plugin-host process.
+ *
  * Name the image to run it; without one it is skipped:
  *
  *   COREHUB_HERMES_IMAGE=core-hub:local pnpm --filter @corehub/server exec \
@@ -36,6 +39,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { authed, capturingLogger, signedInHub, type TestHub } from '../../../tests/unit/helpers.js';
 import {
   imageHermesVersion,
+  runsPluginsInAHost,
   servesEveryProfileFromOneGateway,
 } from '../../../tests/unit/hermes-real.js';
 import { requireSqlite } from '../../lib/db.js';
@@ -255,194 +259,38 @@ interface Updated {
 
 const plain = (text: string) => text.replace(/\\/g, '');
 
-describe.skipIf(!image)(
-  'writing into a channel conversation from the hub (real Hermes; set COREHUB_HERMES_IMAGE)',
-  () => {
-    const home = mkdtempSync(path.join(tmpdir(), 'corehub-twoway-home-'));
-    const dashboardData = mkdtempSync(path.join(tmpdir(), 'corehub-twoway-dash-'));
-    chmodSync(home, 0o777);
-    const telegram = new FakeTelegram();
-    let model: http.Server;
-    let hub: TestHub & { token: string; userId: string };
-    let socket: Socket;
-    let previous: ReturnType<typeof registerChannelSource>;
-    let dashboard: HermesDashboard;
-    const updates: Updated[] = [];
-    /** The admin's name as the channel shows it (their display name). */
-    let NAME = '';
-    const gateways: ChildProcess[] = [];
-    const containers: string[] = [];
-    const log: string[] = [];
-    const { uid, gid } = userInfo();
-    const onePerHost = image ? servesEveryProfileFromOneGateway(image) : false;
+/**
+ * Every case twice on a Hermes that can run a third-party plugin in its plugin host
+ * (`plugins.isolation: host`, v0.21.6 on): once in-process, Hermes's default, and once there —
+ * the hub's plugin is such a plugin. An older Hermes has no such setting: in-process only.
+ */
+const ISOLATIONS = ['in_process', 'host'] as const;
 
-    const docker = (name: string, args: readonly string[]): ChildProcess => {
-      containers.push(name);
-      const child = spawn(
-        'docker',
-        [
-          'run',
-          '--rm',
-          '--name',
-          name,
-          '--network',
-          'host',
-          '--user',
-          `${uid}:${gid}`,
-          '-v',
-          `${home}:${home}`,
-          '-e',
-          `HERMES_HOME=${home}`,
-          '-e',
-          'HOME=/tmp',
-          '-e',
-          'COREHUB_FAKE_KEY=fake-key-000000000000',
-          '-e',
-          'COREHUB_MCP_ORIGIN=gateway',
-          '-e',
-          'HERMES_DASHBOARD=0',
-          '-e',
-          'PYTHONUNBUFFERED=1',
-          '--entrypoint',
-          HERMES,
-          image!,
-          ...args,
-        ],
-        { stdio: ['ignore', 'pipe', 'pipe'] },
-      );
-      for (const stream of [child.stdout, child.stderr]) {
-        stream?.on('data', (chunk: Buffer) =>
-          log.push(
-            ...chunk
-              .toString()
-              .split('\n')
-              .map((line) => `${name}: ${line}`),
-          ),
-        );
-      }
-      return child;
-    };
-    const inImage = (argv: readonly string[]) =>
-      execFileSync(
-        'docker',
-        [
-          'run',
-          '--rm',
-          '--user',
-          `${uid}:${gid}`,
-          '-v',
-          `${home}:${home}`,
-          '-e',
-          `HERMES_HOME=${home}`,
-          '-e',
-          'HOME=/tmp',
-          '--entrypoint',
-          HERMES,
-          image!,
-          ...argv,
-        ],
-        { encoding: 'utf8', timeout: 180_000 },
-      );
+for (const isolation of ISOLATIONS)
+  describe.skipIf(!image || (isolation === 'host' && !runsPluginsInAHost(image)))(
+    `writing into a channel conversation from the hub (real Hermes, plugins ${isolation}; set COREHUB_HERMES_IMAGE)`,
+    () => {
+      const home = mkdtempSync(path.join(tmpdir(), 'corehub-twoway-home-'));
+      const dashboardData = mkdtempSync(path.join(tmpdir(), 'corehub-twoway-dash-'));
+      chmodSync(home, 0o777);
+      const telegram = new FakeTelegram();
+      let model: http.Server;
+      let hub: TestHub & { token: string; userId: string };
+      let socket: Socket;
+      let previous: ReturnType<typeof registerChannelSource>;
+      let dashboard: HermesDashboard;
+      const updates: Updated[] = [];
+      /** The admin's name as the channel shows it (their display name). */
+      let NAME = '';
+      const gateways: ChildProcess[] = [];
+      const containers: string[] = [];
+      const log: string[] = [];
+      const { uid, gid } = userInfo();
+      const onePerHost = image ? servesEveryProfileFromOneGateway(image) : false;
 
-    const hint = () =>
-      [
-        telegram.sent
-          .map((s) => `${s.via} ${s.bot}→${s.chatId}: ${s.text.slice(0, 120)}`)
-          .join('\n'),
-        JSON.stringify(updates.slice(-20)),
-        log
-          .filter((line) => line.trim())
-          .slice(-60)
-          .join('\n'),
-      ].join('\n---\n');
-
-    const waitUntil = async <T>(probe: () => T | null | undefined | false, ms: number) => {
-      const until = Date.now() + ms;
-      while (Date.now() < until) {
-        const value = probe();
-        if (value) return value;
-        await new Promise((resolve) => setTimeout(resolve, 250));
-      }
-      return null;
-    };
-
-    const configFor = (modelPort: number, telegramPort: number) =>
-      [
-        '# written by the real-Hermes test',
-        'providers:',
-        '  corehub-fake:',
-        '    name: corehub-fake',
-        `    base_url: http://127.0.0.1:${modelPort}/v1`,
-        '    key_env: COREHUB_FAKE_KEY',
-        '    api_mode: chat_completions',
-        'model:',
-        '  default: fake-1',
-        '  provider: corehub-fake',
-        'platforms:',
-        '  telegram:',
-        '    enabled: true',
-        '    extra:',
-        `      base_url: http://127.0.0.1:${telegramPort}/bot`,
-        '',
-      ].join('\n');
-
-    beforeAll(async () => {
-      model = scriptedModel();
-      await new Promise<void>((resolve) => model.listen(0, '127.0.0.1', resolve));
-      await new Promise<void>((resolve) => telegram.server.listen(0, '127.0.0.1', resolve));
-      const modelPort = (model.address() as AddressInfo).port;
-      const telegramPort = (telegram.server.address() as AddressInfo).port;
-
-      // Hermes's homes: the root and a named profile, each with its own bot.
-      inImage(['profile', 'create', 'work', '--no-alias']);
-      const work = path.join(home, 'profiles', 'work');
-      for (const [dir, token, allowed] of [
-        [home, TOKEN_ROOT, PERSON],
-        [work, TOKEN_WORK, WORKER],
-      ] as const) {
-        mkdirSync(dir, { recursive: true });
-        writeFileSync(path.join(dir, 'config.yaml'), configFor(modelPort, telegramPort));
-        writeFileSync(
-          path.join(dir, '.env'),
-          `TELEGRAM_BOT_TOKEN=${token}\nTELEGRAM_ALLOWED_USERS=${String(allowed)}\n`,
-        );
-      }
-
-      hub = await signedInHub(
-        { COREHUB_TELEGRAM_API_BASE: `http://127.0.0.1:${telegramPort}/hub` },
-        {
-          agents: {
-            adapterOptions: {
-              hermes: {
-                fetchImpl: async () =>
-                  new Response('{"status":"ok"}', {
-                    status: 200,
-                    headers: { 'content-type': 'application/json' },
-                  }),
-                ensureProfile: async () => undefined,
-              },
-            },
-            channelBridgeRoot: home,
-          },
-        },
-      );
-      await hub.app.listen({ port: 0, host: '127.0.0.1' });
-      const me = await authed(hub, hub.token, { method: 'GET', url: '/api/v1/auth/me' });
-      NAME = (me.json() as { display_name: string }).display_name;
-      const made = await authed(hub, hub.token, {
-        method: 'POST',
-        url: '/api/v1/profiles',
-        payload: { slug: 'work', name: 'work' },
-      });
-      expect(made.statusCode, made.body).toBe(201);
-      // The hub knows which Hermes it runs: one gateway per host from 0.21.4 (§129).
-      await hermesRuntimeFor(hub.app).profileGateways.noteVersion(imageHermesVersion(image!));
-
-      // The conversations, read through `hermes serve` as in production (§61).
-      const spawnImpl: DashboardSpawner = (_command, args, options) => {
-        const name = `corehub-twoway-dash-${process.pid}-${containers.length}`;
+      const docker = (name: string, args: readonly string[]): ChildProcess => {
         containers.push(name);
-        return spawn(
+        const child = spawn(
           'docker',
           [
             'run',
@@ -460,349 +308,529 @@ describe.skipIf(!image)(
             '-e',
             'HOME=/tmp',
             '-e',
-            'HERMES_DASHBOARD_SESSION_TOKEN',
+            'COREHUB_FAKE_KEY=fake-key-000000000000',
+            '-e',
+            'COREHUB_MCP_ORIGIN=gateway',
+            '-e',
+            'HERMES_DASHBOARD=0',
+            '-e',
+            'PYTHONUNBUFFERED=1',
             '--entrypoint',
             HERMES,
             image!,
             ...args,
           ],
+          { stdio: ['ignore', 'pipe', 'pipe'] },
+        );
+        for (const stream of [child.stdout, child.stderr]) {
+          stream?.on('data', (chunk: Buffer) =>
+            log.push(
+              ...chunk
+                .toString()
+                .split('\n')
+                .map((line) => `${name}: ${line}`),
+            ),
+          );
+        }
+        return child;
+      };
+      const inImage = (argv: readonly string[]) =>
+        execFileSync(
+          'docker',
+          [
+            'run',
+            '--rm',
+            '--user',
+            `${uid}:${gid}`,
+            '-v',
+            `${home}:${home}`,
+            '-e',
+            `HERMES_HOME=${home}`,
+            '-e',
+            'HOME=/tmp',
+            '--entrypoint',
+            HERMES,
+            image!,
+            ...argv,
+          ],
+          { encoding: 'utf8', timeout: 180_000 },
+        );
+
+      const hint = () =>
+        [
+          telegram.sent
+            .map((s) => `${s.via} ${s.bot}→${s.chatId}: ${s.text.slice(0, 120)}`)
+            .join('\n'),
+          JSON.stringify(updates.slice(-20)),
+          log
+            .filter((line) => line.trim())
+            .slice(-60)
+            .join('\n'),
+        ].join('\n---\n');
+
+      const waitUntil = async <T>(probe: () => T | null | undefined | false, ms: number) => {
+        const until = Date.now() + ms;
+        while (Date.now() < until) {
+          const value = probe();
+          if (value) return value;
+          await new Promise((resolve) => setTimeout(resolve, 250));
+        }
+        return null;
+      };
+
+      const configFor = (modelPort: number, telegramPort: number) =>
+        [
+          '# written by the real-Hermes test',
+          'providers:',
+          '  corehub-fake:',
+          '    name: corehub-fake',
+          `    base_url: http://127.0.0.1:${modelPort}/v1`,
+          '    key_env: COREHUB_FAKE_KEY',
+          '    api_mode: chat_completions',
+          'model:',
+          '  default: fake-1',
+          '  provider: corehub-fake',
+          'platforms:',
+          '  telegram:',
+          '    enabled: true',
+          '    extra:',
+          `      base_url: http://127.0.0.1:${telegramPort}/bot`,
+          ...(isolation === 'host' ? ['plugins:', '  isolation: host'] : []),
+          '',
+        ].join('\n');
+
+      beforeAll(async () => {
+        model = scriptedModel();
+        await new Promise<void>((resolve) => model.listen(0, '127.0.0.1', resolve));
+        await new Promise<void>((resolve) => telegram.server.listen(0, '127.0.0.1', resolve));
+        const modelPort = (model.address() as AddressInfo).port;
+        const telegramPort = (telegram.server.address() as AddressInfo).port;
+
+        // Hermes's homes: the root and a named profile, each with its own bot.
+        inImage(['profile', 'create', 'work', '--no-alias']);
+        const work = path.join(home, 'profiles', 'work');
+        for (const [dir, token, allowed] of [
+          [home, TOKEN_ROOT, PERSON],
+          [work, TOKEN_WORK, WORKER],
+        ] as const) {
+          mkdirSync(dir, { recursive: true });
+          writeFileSync(path.join(dir, 'config.yaml'), configFor(modelPort, telegramPort));
+          writeFileSync(
+            path.join(dir, '.env'),
+            `TELEGRAM_BOT_TOKEN=${token}\nTELEGRAM_ALLOWED_USERS=${String(allowed)}\n`,
+          );
+        }
+
+        hub = await signedInHub(
+          { COREHUB_TELEGRAM_API_BASE: `http://127.0.0.1:${telegramPort}/hub` },
           {
-            stdio: ['ignore', 'pipe', 'pipe'],
-            env: {
-              ...process.env,
-              HERMES_DASHBOARD_SESSION_TOKEN: options.env.HERMES_DASHBOARD_SESSION_TOKEN,
+            agents: {
+              adapterOptions: {
+                hermes: {
+                  fetchImpl: async () =>
+                    new Response('{"status":"ok"}', {
+                      status: 200,
+                      headers: { 'content-type': 'application/json' },
+                    }),
+                  ensureProfile: async () => undefined,
+                },
+              },
+              channelBridgeRoot: home,
             },
           },
-        ) as unknown as SpawnedProcess;
-      };
-      dashboard = new HermesDashboard({
-        host: {
-          status: () => ({ mode: 'managed', home }),
-          executable: () => HERMES,
-          cliEnv: () => ({}),
-        },
-        dataDir: dashboardData,
-        log: capturingLogger().logger,
-        spawnImpl,
-        startTimeoutMs: 180_000,
-      });
-      const db = requireSqlite(hub.app.hub.database);
-      const source = hermesChannelSourceOver(dashboard, home, (workspace) => {
-        const row = listWorkspacesFor(db, { id: '', role: 'owner' }).find(
-          (w) => w.id === workspace,
         );
-        return row ? (row.isDefault ? 'default' : row.slug) : null;
-      });
-      previous = registerChannelSource(() => source);
+        await hub.app.listen({ port: 0, host: '127.0.0.1' });
+        const me = await authed(hub, hub.token, { method: 'GET', url: '/api/v1/auth/me' });
+        NAME = (me.json() as { display_name: string }).display_name;
+        const made = await authed(hub, hub.token, {
+          method: 'POST',
+          url: '/api/v1/profiles',
+          payload: { slug: 'work', name: 'work' },
+        });
+        expect(made.statusCode, made.body).toBe(201);
+        // The hub knows which Hermes it runs: one gateway per host from 0.21.4 (§129).
+        await hermesRuntimeFor(hub.app).profileGateways.noteVersion(imageHermesVersion(image!));
 
-      // The plugin, as the hub writes it into every home of the Hermes it runs.
-      channelBridgeFor(hub.app).syncAll();
+        // The conversations, read through `hermes serve` as in production (§61).
+        const spawnImpl: DashboardSpawner = (_command, args, options) => {
+          const name = `corehub-twoway-dash-${process.pid}-${isolation}-${containers.length}`;
+          containers.push(name);
+          return spawn(
+            'docker',
+            [
+              'run',
+              '--rm',
+              '--name',
+              name,
+              '--network',
+              'host',
+              '--user',
+              `${uid}:${gid}`,
+              '-v',
+              `${home}:${home}`,
+              '-e',
+              `HERMES_HOME=${home}`,
+              '-e',
+              'HOME=/tmp',
+              '-e',
+              'HERMES_DASHBOARD_SESSION_TOKEN',
+              '--entrypoint',
+              HERMES,
+              image!,
+              ...args,
+            ],
+            {
+              stdio: ['ignore', 'pipe', 'pipe'],
+              env: {
+                ...process.env,
+                HERMES_DASHBOARD_SESSION_TOKEN: options.env.HERMES_DASHBOARD_SESSION_TOKEN,
+              },
+            },
+          ) as unknown as SpawnedProcess;
+        };
+        dashboard = new HermesDashboard({
+          host: {
+            status: () => ({ mode: 'managed', home }),
+            executable: () => HERMES,
+            cliEnv: () => ({}),
+          },
+          dataDir: dashboardData,
+          log: capturingLogger().logger,
+          spawnImpl,
+          startTimeoutMs: 180_000,
+        });
+        const db = requireSqlite(hub.app.hub.database);
+        const source = hermesChannelSourceOver(dashboard, home, (workspace) => {
+          const row = listWorkspacesFor(db, { id: '', role: 'owner' }).find(
+            (w) => w.id === workspace,
+          );
+          return row ? (row.isDefault ? 'default' : row.slug) : null;
+        });
+        previous = registerChannelSource(() => source);
 
-      const port = (hub.app.server.address() as AddressInfo).port;
-      socket = connect(`http://127.0.0.1:${port}/rt/sessions`, {
-        path: '/rt',
-        transports: ['websocket'],
-        auth: { token: hub.token, profile: 'default', profiles: 'all' },
-      });
-      socket.on('channel_conversation.updated', (envelope: Updated) => updates.push(envelope));
-      await new Promise<void>((resolve, reject) => {
-        socket.once('connect', () => resolve());
-        socket.once('connect_error', reject);
-      });
+        // The plugin, as the hub writes it into every home of the Hermes it runs.
+        channelBridgeFor(hub.app).syncAll();
 
-      gateways.push(docker(`corehub-twoway-root-${process.pid}`, ['gateway', 'run']));
-      if (!onePerHost) {
+        const port = (hub.app.server.address() as AddressInfo).port;
+        socket = connect(`http://127.0.0.1:${port}/rt/sessions`, {
+          path: '/rt',
+          transports: ['websocket'],
+          auth: { token: hub.token, profile: 'default', profiles: 'all' },
+        });
+        socket.on('channel_conversation.updated', (envelope: Updated) => updates.push(envelope));
+        await new Promise<void>((resolve, reject) => {
+          socket.once('connect', () => resolve());
+          socket.once('connect_error', reject);
+        });
+
         gateways.push(
-          docker(`corehub-twoway-work-${process.pid}`, ['-p', 'work', 'gateway', 'run']),
+          docker(`corehub-twoway-root-${process.pid}-${isolation}`, ['gateway', 'run']),
         );
-      }
-      const polling = await waitUntil(
-        () =>
-          telegram.methods.includes('111111:getUpdates') &&
-          telegram.methods.includes('222222:getUpdates') &&
-          channelBridgeFor(hub.app).connected('default') &&
-          channelBridgeFor(hub.app).connected('work'),
-        240_000,
-      );
-      expect(polling, hint()).toBeTruthy();
-    }, 420_000);
-
-    afterAll(async () => {
-      socket?.disconnect();
-      for (const name of containers) {
-        try {
-          execFileSync('docker', ['rm', '-f', name], { stdio: 'ignore' });
-        } catch {
-          // gone with --rm
+        if (!onePerHost) {
+          gateways.push(
+            docker(`corehub-twoway-work-${process.pid}-${isolation}`, [
+              '-p',
+              'work',
+              'gateway',
+              'run',
+            ]),
+          );
         }
-      }
-      for (const gateway of gateways) gateway.kill();
-      await dashboard?.close().catch(() => undefined);
-      registerChannelSource(previous);
-      await hub?.close().catch(() => undefined);
-      model?.close();
-      telegram.server.close();
-      try {
-        execFileSync('docker', [
-          'run',
-          '--rm',
-          '-v',
-          `${home}:${home}`,
-          '--entrypoint',
-          '/bin/sh',
-          image!,
-          '-c',
-          `rm -rf ${home}/* ${home}/.[!.]* 2>/dev/null; true`,
-        ]);
-      } catch {
-        // best effort
-      }
-      rmSync(home, { recursive: true, force: true });
-      rmSync(dashboardData, { recursive: true, force: true });
-    });
+        const polling = await waitUntil(
+          () =>
+            telegram.methods.includes('111111:getUpdates') &&
+            telegram.methods.includes('222222:getUpdates') &&
+            channelBridgeFor(hub.app).connected('default') &&
+            channelBridgeFor(hub.app).connected('work'),
+          240_000,
+        );
+        expect(polling, hint()).toBeTruthy();
+      }, 420_000);
 
-    const listIn = async (profile: string) => {
-      const listed = await authed(hub, hub.token, {
-        method: 'GET',
-        url: '/api/v1/channel-conversations',
-        profile,
+      afterAll(async () => {
+        socket?.disconnect();
+        for (const name of containers) {
+          try {
+            execFileSync('docker', ['rm', '-f', name], { stdio: 'ignore' });
+          } catch {
+            // gone with --rm
+          }
+        }
+        for (const gateway of gateways) gateway.kill();
+        await dashboard?.close().catch(() => undefined);
+        registerChannelSource(previous);
+        await hub?.close().catch(() => undefined);
+        model?.close();
+        telegram.server.close();
+        try {
+          execFileSync('docker', [
+            'run',
+            '--rm',
+            '-v',
+            `${home}:${home}`,
+            '--entrypoint',
+            '/bin/sh',
+            image!,
+            '-c',
+            `rm -rf ${home}/* ${home}/.[!.]* 2>/dev/null; true`,
+          ]);
+        } catch {
+          // best effort
+        }
+        rmSync(home, { recursive: true, force: true });
+        rmSync(dashboardData, { recursive: true, force: true });
       });
-      expect(listed.statusCode, listed.body).toBe(200);
-      return listed.json() as {
-        items: Array<{ id: string; channel: string; can_send?: boolean; peer_id: string | null }>;
-        live_updates?: boolean;
+
+      const listIn = async (profile: string) => {
+        const listed = await authed(hub, hub.token, {
+          method: 'GET',
+          url: '/api/v1/channel-conversations',
+          profile,
+        });
+        expect(listed.statusCode, listed.body).toBe(200);
+        return listed.json() as {
+          items: Array<{ id: string; channel: string; can_send?: boolean; peer_id: string | null }>;
+          live_updates?: boolean;
+        };
       };
-    };
-    const transcript = async (profile: string, id: string) => {
-      const read = await authed(hub, hub.token, {
-        method: 'GET',
-        url: `/api/v1/channel-conversations/${id}/messages`,
-        profile,
-      });
-      expect(read.statusCode, read.body).toBe(200);
-      return read.json() as {
-        conversation: { id: string; channel: string; can_send?: boolean };
-        items: Array<{
-          id: string;
-          role: string;
-          text: string;
-          origin?: string;
-          author_name?: string | null;
-        }>;
-        outgoing?: Array<{ id: string; status: string; message_id: string | null }>;
+      const transcript = async (profile: string, id: string) => {
+        const read = await authed(hub, hub.token, {
+          method: 'GET',
+          url: `/api/v1/channel-conversations/${id}/messages`,
+          profile,
+        });
+        expect(read.statusCode, read.body).toBe(200);
+        return read.json() as {
+          conversation: { id: string; channel: string; can_send?: boolean };
+          items: Array<{
+            id: string;
+            role: string;
+            text: string;
+            origin?: string;
+            author_name?: string | null;
+          }>;
+          outgoing?: Array<{ id: string; status: string; message_id: string | null }>;
+        };
       };
-    };
-    const statusOf = (outgoingId: string) =>
-      updates
-        .filter((u) => u.payload.outgoing?.id === outgoingId)
-        .map((u) => u.payload.outgoing!.status);
+      const statusOf = (outgoingId: string) =>
+        updates
+          .filter((u) => u.payload.outgoing?.id === outgoingId)
+          .map((u) => u.payload.outgoing!.status);
 
-    let rootConversation = '';
+      let rootConversation = '';
 
-    it('hears a Telegram turn as it happens, without polling', async () => {
-      telegram.say('111111', PERSON, 'hello from Telegram');
-      const reply = await telegram.waitFor(
-        (s) =>
-          s.via === 'hermes' &&
-          s.chatId === String(PERSON) &&
-          s.text.includes('hello from Telegram'),
-        180_000,
-      );
-      expect(reply, hint()).not.toBeNull();
-      const listed = await listIn('default');
-      const conversation = listed.items.find((c) => c.peer_id === String(PERSON));
-      expect(conversation, JSON.stringify(listed)).toMatchObject({
-        channel: 'telegram',
-        can_send: true,
-      });
-      expect(listed.live_updates).toBe(true);
-      rootConversation = conversation!.id;
-      const heard = await waitUntil(
-        () =>
-          updates.find(
-            (u) =>
-              u.profile === 'default' &&
-              u.payload.conversation_id === rootConversation &&
-              u.payload.reason === 'turn_ended',
-          ),
-        30_000,
-      );
-      expect(heard, hint()).toBeTruthy();
-    }, 300_000);
+      it('hears a Telegram turn as it happens, without polling', async () => {
+        telegram.say('111111', PERSON, 'hello from Telegram');
+        const reply = await telegram.waitFor(
+          (s) =>
+            s.via === 'hermes' &&
+            s.chatId === String(PERSON) &&
+            s.text.includes('hello from Telegram'),
+          180_000,
+        );
+        expect(reply, hint()).not.toBeNull();
+        const listed = await listIn('default');
+        const conversation = listed.items.find((c) => c.peer_id === String(PERSON));
+        expect(conversation, JSON.stringify(listed)).toMatchObject({
+          channel: 'telegram',
+          can_send: true,
+        });
+        expect(listed.live_updates).toBe(true);
+        rootConversation = conversation!.id;
+        const heard = await waitUntil(
+          () =>
+            updates.find(
+              (u) =>
+                u.profile === 'default' &&
+                u.payload.conversation_id === rootConversation &&
+                u.payload.reason === 'turn_ended',
+            ),
+          30_000,
+        );
+        expect(heard, hint()).toBeTruthy();
+      }, 300_000);
 
-    it('posts on Telegram first, then the agent answers there in the same conversation', async () => {
-      const before = await transcript('default', rootConversation);
-      const sent = await authed(hub, hub.token, {
-        method: 'POST',
-        url: `/api/v1/channel-conversations/${rootConversation}/messages`,
-        payload: { text: 'ما آخر الأخبار؟', client_message_id: 'c-1' },
-      });
-      expect(sent.statusCode, sent.body).toBe(202);
-      const outgoing = sent.json().outgoing as { id: string; status: string; author_name: string };
-      expect(outgoing).toMatchObject({
-        status: 'posted',
-        author_name: NAME,
-        client_message_id: 'c-1',
-      });
-
-      const mirror = await telegram.waitFor(
-        (s) => s.via === 'hub' && s.chatId === String(PERSON) && s.text.includes('ما آخر الأخبار؟'),
-        30_000,
-      );
-      expect(mirror?.text).toBe(`من كور هب (${NAME}): ما آخر الأخبار؟`);
-      const reply = await telegram.waitFor(
-        (s) =>
-          s.via === 'hermes' &&
-          s.chatId === String(PERSON) &&
-          plain(s.text).includes(`من كور هب (${NAME}): ما آخر الأخبار؟`),
-        180_000,
-      );
-      expect(reply, hint()).not.toBeNull();
-      expect(mirror!.at).toBeLessThanOrEqual(reply!.at);
-
-      const answered = await waitUntil(() => statusOf(outgoing.id).includes('answered'), 60_000);
-      expect(answered, hint()).toBeTruthy();
-      expect(statusOf(outgoing.id)).toEqual(['posted', 'delivered', 'answering', 'answered']);
-      const ran = updates.find(
-        (u) => u.payload.outgoing?.id === outgoing.id && u.payload.outgoing.session_id,
-      );
-      expect(ran?.payload.outgoing?.session_id).toBe(rootConversation);
-
-      // The same conversation, still Telegram's: the admin's message and the agent's reply.
-      let read = await transcript('default', rootConversation);
-      for (let i = 0; i < 20 && !read.items.some((m) => m.origin === 'hub'); i += 1) {
-        await new Promise((resolve) => setTimeout(resolve, 500));
-        read = await transcript('default', rootConversation);
-      }
-      expect(read.conversation).toMatchObject({ id: rootConversation, channel: 'telegram' });
-      const added = read.items.slice(before.items.length);
-      expect(
-        added.map((m) => [m.role, m.origin, m.author_name ?? null, m.text.split('\n')[0]]),
-        JSON.stringify(read.items),
-      ).toEqual([
-        ['user', 'hub', NAME, 'ما آخر الأخبار؟'],
-        ['assistant', 'channel', null, `echo: من كور هب (${NAME}): ما آخر الأخبار؟`],
-      ]);
-      // Matched to the transcript and done: the hub stops listing it as pending.
-      expect(read.outgoing ?? []).toEqual([]);
-      const listed = await listIn('default');
-      expect(listed.items.find((c) => c.id === rootConversation)).toMatchObject({
-        channel: 'telegram',
-      });
-    }, 300_000);
-
-    it('does not hand anything to the agent when Telegram refuses the post', async () => {
-      const turnsBefore = updates.filter((u) => u.payload.reason === 'turn_started').length;
-      const before = await transcript('default', rootConversation);
-      telegram.refusing.add(String(PERSON));
-      try {
-        const refused = await authed(hub, hub.token, {
+      it('posts on Telegram first, then the agent answers there in the same conversation', async () => {
+        const before = await transcript('default', rootConversation);
+        const sent = await authed(hub, hub.token, {
           method: 'POST',
           url: `/api/v1/channel-conversations/${rootConversation}/messages`,
-          payload: { text: 'this must not reach the agent' },
+          payload: { text: 'ما آخر الأخبار؟', client_message_id: 'c-1' },
         });
-        expect(refused.statusCode, refused.body).toBe(503);
-        expect(refused.json()).toMatchObject({
-          code: 'service_unavailable',
-          details: {
-            reason: 'channel_send_failed',
-            message: 'Forbidden: bot was blocked by the user',
-          },
+        expect(sent.statusCode, sent.body).toBe(202);
+        const outgoing = sent.json().outgoing as {
+          id: string;
+          status: string;
+          author_name: string;
+        };
+        expect(outgoing).toMatchObject({
+          status: 'posted',
+          author_name: NAME,
+          client_message_id: 'c-1',
         });
-      } finally {
-        telegram.refusing.delete(String(PERSON));
-      }
-      await new Promise((resolve) => setTimeout(resolve, 8_000));
-      expect(updates.filter((u) => u.payload.reason === 'turn_started').length).toBe(turnsBefore);
-      const after = await transcript('default', rootConversation);
-      expect(after.items.length).toBe(before.items.length);
-      expect(telegram.sent.some((s) => s.text.includes('this must not reach the agent'))).toBe(
-        false,
-      );
-    }, 120_000);
 
-    it("reaches a named profile's conversation", async () => {
-      telegram.say('222222', WORKER, 'hello from work');
-      const first = await telegram.waitFor(
-        (s) => s.via === 'hermes' && s.bot === '222222' && s.text.includes('hello from work'),
-        180_000,
-      );
-      expect(first, hint()).not.toBeNull();
-      const conversation = (await listIn('work')).items.find((c) => c.peer_id === String(WORKER));
-      expect(conversation, hint()).toMatchObject({ channel: 'telegram', can_send: true });
-      const sent = await authed(hub, hub.token, {
-        method: 'POST',
-        url: `/api/v1/channel-conversations/${conversation!.id}/messages`,
-        profile: 'work',
-        payload: { text: 'from the hub to work' },
-      });
-      expect(sent.statusCode, sent.body).toBe(202);
-      const id = (sent.json().outgoing as { id: string }).id;
-      const mirror = await telegram.waitFor(
-        (s) =>
-          s.via === 'hub' &&
-          s.bot === '222222' &&
-          s.text === `من كور هب (${NAME}): from the hub to work`,
-        30_000,
-      );
-      expect(mirror, hint()).not.toBeNull();
-      const reply = await telegram.waitFor(
-        (s) =>
-          s.via === 'hermes' &&
-          s.bot === '222222' &&
-          plain(s.text).includes('from the hub to work'),
-        180_000,
-      );
-      expect(reply, hint()).not.toBeNull();
-      expect(await waitUntil(() => statusOf(id).includes('answered'), 60_000), hint()).toBeTruthy();
-      expect(updates.find((u) => u.payload.outgoing?.id === id)?.profile).toBe('work');
-    }, 300_000);
+        const mirror = await telegram.waitFor(
+          (s) =>
+            s.via === 'hub' && s.chatId === String(PERSON) && s.text.includes('ما آخر الأخبار؟'),
+          30_000,
+        );
+        expect(mirror?.text).toBe(`من كور هب (${NAME}): ما آخر الأخبار؟`);
+        const reply = await telegram.waitFor(
+          (s) =>
+            s.via === 'hermes' &&
+            s.chatId === String(PERSON) &&
+            plain(s.text).includes(`من كور هب (${NAME}): ما آخر الأخبار؟`),
+          180_000,
+        );
+        expect(reply, hint()).not.toBeNull();
+        expect(mirror!.at).toBeLessThanOrEqual(reply!.at);
 
-    it('records what Hermes does with a channel message during the hub’s turn', async () => {
-      const sent = await authed(hub, hub.token, {
-        method: 'POST',
-        url: `/api/v1/channel-conversations/${rootConversation}/messages`,
-        payload: { text: 'SLOW question from the hub' },
-      });
-      expect(sent.statusCode, sent.body).toBe(202);
-      const id = (sent.json().outgoing as { id: string }).id;
-      expect(
-        await waitUntil(() => statusOf(id).includes('answering'), 60_000),
-        hint(),
-      ).toBeTruthy();
-      const startedAt = Date.now();
-      await new Promise((resolve) => setTimeout(resolve, 1_500));
-      telegram.say('111111', PERSON, 'a message typed on Telegram meanwhile');
-      // Whatever Hermes does, the hub's message ends, and the person on Telegram is answered.
-      expect(
-        await waitUntil(() => statusOf(id).includes('answered'), 120_000),
-        hint(),
-      ).toBeTruthy();
-      const answer = await telegram.waitFor(
-        (s) => s.via === 'hermes' && s.chatId === String(PERSON) && s.at > startedAt + 1_500,
-        120_000,
-      );
-      expect(answer, hint()).not.toBeNull();
-      await new Promise((resolve) => setTimeout(resolve, 12_000));
-      const after = telegram.sent
-        .filter((s) => s.via === 'hermes' && s.chatId === String(PERSON) && s.at > startedAt)
-        .map((s) => plain(s.text).split('\n')[0]!.slice(0, 120));
-      const read = await transcript('default', rootConversation);
-      // Observed, for the change record: Hermes's default busy mode with a turn put in by a
-      // plugin. Printed, not asserted beyond the above, so a Hermes that queues instead of
-      // redirecting does not fail the suite.
-      const report = [
-        `[two-way mid-turn] Hermes ${String(imageHermesVersion(image!))}: replies after the channel message:`,
-        JSON.stringify(after),
-        'statuses:',
-        JSON.stringify(statusOf(id)),
-        'last transcript items:',
-        JSON.stringify(read.items.slice(-4).map((m) => [m.role, m.origin, m.text.slice(0, 80)])),
-      ].join('\n');
-      console.log(report);
-      if (process.env.COREHUB_TWOWAY_REPORT) {
-        appendFileSync(process.env.COREHUB_TWOWAY_REPORT, `${report}\n`);
-      }
-    }, 300_000);
-  },
-);
+        const answered = await waitUntil(() => statusOf(outgoing.id).includes('answered'), 60_000);
+        expect(answered, hint()).toBeTruthy();
+        expect(statusOf(outgoing.id)).toEqual(['posted', 'delivered', 'answering', 'answered']);
+        const ran = updates.find(
+          (u) => u.payload.outgoing?.id === outgoing.id && u.payload.outgoing.session_id,
+        );
+        expect(ran?.payload.outgoing?.session_id).toBe(rootConversation);
+
+        // The same conversation, still Telegram's: the admin's message and the agent's reply.
+        let read = await transcript('default', rootConversation);
+        for (let i = 0; i < 20 && !read.items.some((m) => m.origin === 'hub'); i += 1) {
+          await new Promise((resolve) => setTimeout(resolve, 500));
+          read = await transcript('default', rootConversation);
+        }
+        expect(read.conversation).toMatchObject({ id: rootConversation, channel: 'telegram' });
+        const added = read.items.slice(before.items.length);
+        expect(
+          added.map((m) => [m.role, m.origin, m.author_name ?? null, m.text.split('\n')[0]]),
+          JSON.stringify(read.items),
+        ).toEqual([
+          ['user', 'hub', NAME, 'ما آخر الأخبار؟'],
+          ['assistant', 'channel', null, `echo: من كور هب (${NAME}): ما آخر الأخبار؟`],
+        ]);
+        // Matched to the transcript and done: the hub stops listing it as pending.
+        expect(read.outgoing ?? []).toEqual([]);
+        const listed = await listIn('default');
+        expect(listed.items.find((c) => c.id === rootConversation)).toMatchObject({
+          channel: 'telegram',
+        });
+      }, 300_000);
+
+      it('does not hand anything to the agent when Telegram refuses the post', async () => {
+        const turnsBefore = updates.filter((u) => u.payload.reason === 'turn_started').length;
+        const before = await transcript('default', rootConversation);
+        telegram.refusing.add(String(PERSON));
+        try {
+          const refused = await authed(hub, hub.token, {
+            method: 'POST',
+            url: `/api/v1/channel-conversations/${rootConversation}/messages`,
+            payload: { text: 'this must not reach the agent' },
+          });
+          expect(refused.statusCode, refused.body).toBe(503);
+          expect(refused.json()).toMatchObject({
+            code: 'service_unavailable',
+            details: {
+              reason: 'channel_send_failed',
+              message: 'Forbidden: bot was blocked by the user',
+            },
+          });
+        } finally {
+          telegram.refusing.delete(String(PERSON));
+        }
+        await new Promise((resolve) => setTimeout(resolve, 8_000));
+        expect(updates.filter((u) => u.payload.reason === 'turn_started').length).toBe(turnsBefore);
+        const after = await transcript('default', rootConversation);
+        expect(after.items.length).toBe(before.items.length);
+        expect(telegram.sent.some((s) => s.text.includes('this must not reach the agent'))).toBe(
+          false,
+        );
+      }, 120_000);
+
+      it("reaches a named profile's conversation", async () => {
+        telegram.say('222222', WORKER, 'hello from work');
+        const first = await telegram.waitFor(
+          (s) => s.via === 'hermes' && s.bot === '222222' && s.text.includes('hello from work'),
+          180_000,
+        );
+        expect(first, hint()).not.toBeNull();
+        const conversation = (await listIn('work')).items.find((c) => c.peer_id === String(WORKER));
+        expect(conversation, hint()).toMatchObject({ channel: 'telegram', can_send: true });
+        const sent = await authed(hub, hub.token, {
+          method: 'POST',
+          url: `/api/v1/channel-conversations/${conversation!.id}/messages`,
+          profile: 'work',
+          payload: { text: 'from the hub to work' },
+        });
+        expect(sent.statusCode, sent.body).toBe(202);
+        const id = (sent.json().outgoing as { id: string }).id;
+        const mirror = await telegram.waitFor(
+          (s) =>
+            s.via === 'hub' &&
+            s.bot === '222222' &&
+            s.text === `من كور هب (${NAME}): from the hub to work`,
+          30_000,
+        );
+        expect(mirror, hint()).not.toBeNull();
+        const reply = await telegram.waitFor(
+          (s) =>
+            s.via === 'hermes' &&
+            s.bot === '222222' &&
+            plain(s.text).includes('from the hub to work'),
+          180_000,
+        );
+        expect(reply, hint()).not.toBeNull();
+        expect(
+          await waitUntil(() => statusOf(id).includes('answered'), 60_000),
+          hint(),
+        ).toBeTruthy();
+        expect(updates.find((u) => u.payload.outgoing?.id === id)?.profile).toBe('work');
+      }, 300_000);
+
+      it('records what Hermes does with a channel message during the hub’s turn', async () => {
+        const sent = await authed(hub, hub.token, {
+          method: 'POST',
+          url: `/api/v1/channel-conversations/${rootConversation}/messages`,
+          payload: { text: 'SLOW question from the hub' },
+        });
+        expect(sent.statusCode, sent.body).toBe(202);
+        const id = (sent.json().outgoing as { id: string }).id;
+        expect(
+          await waitUntil(() => statusOf(id).includes('answering'), 60_000),
+          hint(),
+        ).toBeTruthy();
+        const startedAt = Date.now();
+        await new Promise((resolve) => setTimeout(resolve, 1_500));
+        telegram.say('111111', PERSON, 'a message typed on Telegram meanwhile');
+        // Whatever Hermes does, the hub's message ends, and the person on Telegram is answered.
+        expect(
+          await waitUntil(() => statusOf(id).includes('answered'), 120_000),
+          hint(),
+        ).toBeTruthy();
+        const answer = await telegram.waitFor(
+          (s) => s.via === 'hermes' && s.chatId === String(PERSON) && s.at > startedAt + 1_500,
+          120_000,
+        );
+        expect(answer, hint()).not.toBeNull();
+        await new Promise((resolve) => setTimeout(resolve, 12_000));
+        const after = telegram.sent
+          .filter((s) => s.via === 'hermes' && s.chatId === String(PERSON) && s.at > startedAt)
+          .map((s) => plain(s.text).split('\n')[0]!.slice(0, 120));
+        const read = await transcript('default', rootConversation);
+        // Observed, for the change record: Hermes's default busy mode with a turn put in by a
+        // plugin. Printed, not asserted beyond the above, so a Hermes that queues instead of
+        // redirecting does not fail the suite.
+        const report = [
+          `[two-way mid-turn] Hermes ${String(imageHermesVersion(image!))}: replies after the channel message:`,
+          JSON.stringify(after),
+          'statuses:',
+          JSON.stringify(statusOf(id)),
+          'last transcript items:',
+          JSON.stringify(read.items.slice(-4).map((m) => [m.role, m.origin, m.text.slice(0, 80)])),
+        ].join('\n');
+        console.log(report);
+        if (process.env.COREHUB_TWOWAY_REPORT) {
+          appendFileSync(process.env.COREHUB_TWOWAY_REPORT, `${report}\n`);
+        }
+      }, 300_000);
+    },
+  );

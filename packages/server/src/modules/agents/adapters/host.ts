@@ -153,11 +153,19 @@ export async function runCommand(
   });
 }
 
+/** Hermes's version line when Hermes itself does not know which release it is. */
+const UNKNOWN_HERMES_VERSION = /\bHermes Agent v(?!\d)/;
+
 /**
  * Pulls a version out of `--version` output: agents print anything from `1.2.3` to
  * `claude-code/2.1.0 (darwin-arm64)` and `Hermes Agent v0.21.5+3397.gd25bbd0 (2026.9.24)`.
  */
 export function parseVersion(output: string): string | null {
+  // A Hermes that does not know its release prints `Hermes Agent vunknown (2026.9.24)` (no
+  // install stamp and no git tag, v0.21.6 on) or `Hermes Agent vgit.1a2b3c4 (…)`: the date in
+  // brackets is when its code was last released, not its version, and the lines after it name
+  // Python's (`Python: 3.14.7`). No version, then, rather than a wrong one.
+  if (UNKNOWN_HERMES_VERSION.test(output)) return null;
   // A `v` glued to the number (`Hermes Agent v0.21.5`) is not a word boundary: without the
   // first branch that line read as `21.5`.
   const match = /(?:\bv(?=\d)|\b)(\d+\.\d+(?:\.\d+)?(?:[-+][0-9A-Za-z.-]+)?)\b/.exec(output);
@@ -227,6 +235,10 @@ export function readVersion(
         buffer.pending = lines.pop() ?? '';
         for (const line of lines) {
           buffer.text += `${line}\n`;
+          if (early && UNKNOWN_HERMES_VERSION.test(line)) {
+            finish({ version: null, error: `${shown} names no release: ${line.trim()}` });
+            return;
+          }
           const version = early ? parseVersion(line) : null;
           if (version) {
             finish({ version, error: null });

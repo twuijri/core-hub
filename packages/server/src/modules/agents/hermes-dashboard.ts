@@ -41,6 +41,7 @@ import {
   type HermesRuntimeMode,
   type SpawnedProcess,
 } from './hermes-runtime.js';
+import { hermesManagedEnv } from './hermes-managed-env.js';
 
 /** What the dashboard needs from the runtime: where Hermes lives and how it is run. */
 export interface HermesDashboardHost {
@@ -322,8 +323,11 @@ export class HermesDashboard {
     const home = host.status().home!;
     if (!this.token) this.token = loadOrCreateSecret(this.options.dataDir, DASHBOARD_TOKEN_FILE);
     const token = this.token;
+    const inherited = host.cliEnv();
     const env: NodeJS.ProcessEnv = {
-      ...host.cliEnv(),
+      ...inherited,
+      // Its MCP tests reach the hub's tools too; it is neither a gateway nor the hub's runs (§79).
+      ...hermesManagedEnv({ dataDir: this.options.dataDir, role: 'dashboard', inherited }),
       HERMES_HOME: home,
       HERMES_DASHBOARD_SESSION_TOKEN: token,
       PYTHONUNBUFFERED: '1',

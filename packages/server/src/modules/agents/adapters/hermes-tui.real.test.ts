@@ -36,9 +36,18 @@ function scriptedModel(): http.Server {
       const tool = [...(body.messages ?? [])].reverse().find((m) => m.role === 'tool');
       const ask = !tool && JSON.stringify(body.tools ?? []).includes('clarify');
       // "batch" in the prompt: the shape Hermes's clarify tool advertises to a model
-      // (`questions`), two of them; otherwise the single shape it also accepts.
+      // (`questions`), two of them; otherwise one question — in the single shape where the
+      // offered tool still takes it (up to v2026.9.24), else as a batch of one, the only shape
+      // from v0.21.6 ("questions must be a non-empty array").
       const lastUser = [...(body.messages ?? [])].reverse().find((m) => m.role === 'user');
       const batch = JSON.stringify(lastUser?.content ?? '').includes('batch');
+      const clarify = (
+        (body.tools ?? []) as Array<{
+          function?: { name?: string; parameters?: { properties?: Record<string, unknown> } };
+        }>
+      ).find((offered) => offered.function?.name === 'clarify');
+      const single = { question: 'Which device?', choices: ['Mac', 'Windows', 'Linux'] };
+      const takesSingle = Boolean(clarify?.function?.parameters?.properties?.question);
       const result = tool
         ? (JSON.parse(String(tool.content)) as {
             user_response?: string;
@@ -66,7 +75,9 @@ function scriptedModel(): http.Server {
                             { question: 'Which shell?', choices: ['zsh', 'bash'] },
                           ],
                         }
-                      : { question: 'Which device?', choices: ['Mac', 'Windows', 'Linux'] },
+                      : takesSingle
+                        ? single
+                        : { questions: [single] },
                   ),
                 },
               },
@@ -194,7 +205,12 @@ describe.skipIf(!image)('Hermes TUI gateway (real Hermes; set COREHUB_HERMES_IMA
       await session.answer(question.id, 'Mac (Recommended)');
     });
     const tool = events.find((e) => e.type === 'tool.started');
-    expect(tool).toMatchObject({ name: 'clarify', input: { question: 'Which device?' } });
+    expect(tool).toMatchObject({ name: 'clarify' });
+    // One question in the single shape up to v2026.9.24, a batch of one from v0.21.6.
+    const input = (
+      tool as { input?: { question?: string; questions?: Array<{ question?: string }> } }
+    ).input;
+    expect(input?.question ?? input?.questions?.[0]?.question).toBe('Which device?');
     const done = events.find((e) => e.type === 'tool.completed');
     // The mark Hermes added to its suggestion is gone from the answer it receives.
     expect(done && 'output' in done ? done.output : '').toContain('"user_response":"Mac"');

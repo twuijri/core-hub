@@ -26,6 +26,7 @@ import { authed, signedInHub, type TestHub } from '../../../../tests/unit/helper
 import { capturingLogger } from '../../../../tests/unit/helpers.js';
 import { stdioTuiChannel, type TuiChannel } from '../adapters/hermes-tui.js';
 import { HermesDashboard, type DashboardSpawner } from '../hermes-dashboard.js';
+import { hermesManagedEnv } from '../hermes-managed-env.js';
 import type { SpawnedProcess } from '../hermes-runtime.js';
 import { testMcpServer } from '../hermes-tools.js';
 
@@ -158,6 +159,11 @@ describe.skipIf(!image)("the hub's own tools (real Hermes; set COREHUB_HERMES_IM
                     `${uid}:${gid}`,
                     '-v',
                     `${dataDir}:${dataDir}`,
+                    // What the hub gives the TUI it starts (`hermes-runtime.ts` §tuiChannel): its
+                    // origin, in every profile's scope (`hermes-managed-env.ts`).
+                    ...Object.entries(
+                      hermesManagedEnv({ dataDir, role: 'tui', inherited: {} }),
+                    ).flatMap(([key, value]) => ['-e', `${key}=${value}`]),
                     '-e',
                     `HERMES_HOME=${path.join(dataDir, 'hermes')}`,
                     '-e',
@@ -316,6 +322,11 @@ describe.skipIf(!image)("the hub's own tools (real Hermes; set COREHUB_HERMES_IM
           'HOME=/tmp',
           '-e',
           'HERMES_DASHBOARD_SESSION_TOKEN',
+          // The dashboard's managed scope, as `HermesDashboard` sets it (`hermes-managed-env.ts`).
+          '-e',
+          'HERMES_MANAGED_DIR',
+          '-e',
+          'COREHUB_MCP_ORIGIN',
           '--entrypoint',
           '/opt/hermes/.venv/bin/hermes',
           image!,
@@ -326,6 +337,8 @@ describe.skipIf(!image)("the hub's own tools (real Hermes; set COREHUB_HERMES_IM
           env: {
             ...process.env,
             HERMES_DASHBOARD_SESSION_TOKEN: options.env.HERMES_DASHBOARD_SESSION_TOKEN,
+            HERMES_MANAGED_DIR: options.env.HERMES_MANAGED_DIR,
+            COREHUB_MCP_ORIGIN: options.env.COREHUB_MCP_ORIGIN,
           },
         },
       ) as unknown as SpawnedProcess;

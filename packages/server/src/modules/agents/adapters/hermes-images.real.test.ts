@@ -259,7 +259,12 @@ describe.skipIf(!image)('the image model in a real Hermes turn (set COREHUB_HERM
       expect(produced).toHaveLength(1);
       const picture = produced[0]!.path;
       console.log(`${model}: Hermes saved ${picture}`);
-      expect(picture.startsWith(path.join(home, 'cache', 'images'))).toBe(true);
+      // `cache/images/` up to v2026.9.24, `cache/generated/images/` from v0.21.6.
+      expect(
+        [path.join(home, 'cache', 'images'), path.join(home, 'cache', 'generated', 'images')].some(
+          (folder) => picture.startsWith(`${folder}${path.sep}`),
+        ),
+      ).toBe(true);
       expect(readFileSync(picture).subarray(0, 4).equals(PNG_MAGIC)).toBe(true);
       // … drawn by the upstream's image model, as its protocol says …
       expect(heard.filter((line) => line.includes(reached)).length).toBe(before + 1);

@@ -123,6 +123,23 @@ shell.onData((data) => (out += data));
 shell.onExit(() => console.log(out.trim()));
 `;
 
+/**
+ * Hermes's own call that makes an optional feature available, as a Python line for both layouts
+ * it has shipped (docs/changes/2026-10-09-twuijri-hermes-0-21-6.md): `tools.lazy_deps.ensure` with
+ * its feature name up to v2026.9.24, its package manager's `ensure_import` with the pyproject
+ * extra's name from v0.21.6 (whose `tools/lazy_deps.py` is a retired stub). Then `import module`
+ * and print where it came from.
+ */
+const ensureLine = (feature, extra, module) =>
+  [
+    'import importlib',
+    'from tools import lazy_deps',
+    "legacy = hasattr(lazy_deps, 'LAZY_DEPS')",
+    `lazy_deps.ensure(${JSON.stringify(feature)}, prompt=False) if legacy else importlib.import_module('pm').ensure_import(${JSON.stringify(extra)})`,
+    `import ${module}`,
+    `print(${module}.__file__)`,
+  ].join('\n');
+
 const first = `${tag}-a`;
 const second = `${tag}-b`;
 try {
@@ -180,9 +197,8 @@ try {
   );
   check('hermes writes a profile to its home in /data', Boolean(created?.includes('sealed-check')));
 
-  const installed = run(
-    first,
-    'python -c "from tools import lazy_deps; lazy_deps.ensure(\'tts.edge\', prompt=False); import edge_tts; print(edge_tts.__file__)"',
+  const installed = docker(
+    ['exec', first, 'python', '-c', ensureLine('tts.edge', 'edge-tts', 'edge_tts')],
     { allowFail: true },
   );
   check(
@@ -202,7 +218,10 @@ try {
       image,
       'python',
       '-c',
-      "from tools import lazy_deps; lazy_deps.ensure('platform.telegram', prompt=False); import telegram, telegram.ext; print(telegram.__file__)",
+      ensureLine('platform.telegram', 'telegram', 'telegram.ext').replace(
+        'print(telegram.ext.__file__)',
+        'import telegram; print(telegram.__file__)',
+      ),
     ],
     { allowFail: true },
   );
@@ -213,9 +232,9 @@ try {
   );
 
   // Discord and Slack ship in the image the same way (docs/changes/2026-09-25-twuijri-more-channels.md).
-  for (const [feature, module, label] of [
-    ['platform.discord', 'discord', 'Discord'],
-    ['platform.slack', 'slack_bolt', 'Slack'],
+  for (const [feature, extra, module, label] of [
+    ['platform.discord', 'discord', 'discord', 'Discord'],
+    ['platform.slack', 'slack', 'slack_bolt', 'Slack'],
   ]) {
     const found = docker(
       [
@@ -226,7 +245,7 @@ try {
         image,
         'python',
         '-c',
-        `from tools import lazy_deps; lazy_deps.ensure('${feature}', prompt=False); import ${module}; print(${module}.__file__)`,
+        ensureLine(feature, extra, module),
       ],
       { allowFail: true },
     );
@@ -236,6 +255,38 @@ try {
       found ?? 'import failed',
     );
   }
+
+  // From v0.21.6 Hermes runs Node only from its package manager's pinned copy (a bare `npx`
+  // MCP server, the WhatsApp bridge): the image carries it, found with no network at all. An
+  // older Hermes runs the image's own Node from PATH.
+  const pmNode = docker(
+    [
+      'run',
+      '--rm',
+      '--network',
+      'none',
+      image,
+      'python',
+      '-c',
+      [
+        'import os',
+        "print('legacy') if not os.path.exists('/opt/hermes/src/pm/install.py') else None",
+        'from hermes_constants import find_node_executable',
+        'import subprocess, sys',
+        "found = [find_node_executable(c) for c in ('node', 'npx')] if os.path.exists('/opt/hermes/src/pm/install.py') else []",
+        "print(*found, subprocess.run([found[0], '--version'], capture_output=True, text=True).stdout.strip()) if found else None",
+      ].join('\n'),
+    ],
+    { allowFail: true },
+  );
+  check(
+    'the Node Hermes insists on is in the image (no network, nothing installed)',
+    pmNode === 'legacy' ||
+      /^\/opt\/hermes\/pm-tools\/store\/node-[^ ]+\/bin\/node \/opt\/hermes\/pm-tools\/store\/npm-[^ ]+\/bin\/npx v\d+/.test(
+        pmNode ?? '',
+      ),
+    pmNode ?? 'not found',
+  );
 
   // WhatsApp ships in the image: a profile's bridge, prepared the way the hub prepares it before
   // the profile's gateway starts (modules/agents/whatsapp-bridge.ts), is the bridge's own files
@@ -283,6 +334,35 @@ try {
     baileys === 'function',
     baileys ?? 'import failed',
   );
+  // From v0.21.6 Hermes starts the bridge with its own Node, not the image's: the same imports
+  // must load there too (an older Hermes has no such Node, and runs the one checked above).
+  const hermesNode = run(
+    first,
+    'ls -d /opt/hermes/pm-tools/store/node-*/bin/node 2>/dev/null | head -1',
+    {
+      allowFail: true,
+    },
+  );
+  if (hermesNode) {
+    const withHermesNode = docker(
+      [
+        'exec',
+        '-w',
+        bridge,
+        first,
+        hermesNode,
+        '--input-type=module',
+        '-e',
+        "const m = await import('@whiskeysockets/baileys'); await Promise.all(['express', 'pino', 'qrcode-terminal', '@hapi/boom'].map((x) => import(x))); console.log(typeof m.makeWASocket);",
+      ],
+      { allowFail: true },
+    );
+    check(
+      "the bridge's imports load with the Node Hermes starts it with",
+      withHermesNode === 'function',
+      withHermesNode ?? 'import failed',
+    );
+  }
 
   // Hermes's dashboard API (ADR 0015): the hub runs `hermes serve` on demand, as the hub's
   // user, against the sealed code. It must start, refuse a call without the token and answer
