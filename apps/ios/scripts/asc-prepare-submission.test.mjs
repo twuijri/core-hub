@@ -42,7 +42,7 @@ function reset() {
       attributes: {
         versionString: '1.1.1',
         appVersionState: 'PREPARE_FOR_SUBMISSION',
-        releaseType: 'AFTER_APPROVAL',
+        releaseType: 'MANUAL',
         copyright: '2026 twuijri',
       },
     },
@@ -283,14 +283,14 @@ async function run({ buildNumber = '110', submit = false } = {}) {
 const sent = (method, path) => fake.requests.filter((r) => r.method === method && r.path === path);
 
 describe('asc-prepare-submission', () => {
-  it('attaches the given build, sets manual release and content rights, and never submits', async () => {
+  it('attaches the given build, sets automatic release and content rights, and never submits', async () => {
     const { code, text } = await run();
     assert.equal(code, 0);
     assert.equal(fake.attached, 'b-110');
     assert.deepEqual(sent('PATCH', '/v1/appStoreVersions/ver-1/relationships/build')[0].body, {
       data: { type: 'builds', id: 'b-110' },
     });
-    assert.equal(fake.version.attributes.releaseType, 'MANUAL');
+    assert.equal(fake.version.attributes.releaseType, 'AFTER_APPROVAL');
     assert.equal(fake.app.attributes.contentRightsDeclaration, 'DOES_NOT_USE_THIRD_PARTY_CONTENT');
     assert.match(text, /applied {2}Attached build 110 to 1\.1\.1\./);
     assert.equal(sent('POST', '/v1/reviewSubmissions').length, 0);
@@ -314,7 +314,7 @@ describe('asc-prepare-submission', () => {
 
   it('leaves an attached build, release type and content rights alone', async () => {
     fake.attached = 'b-110';
-    fake.version.attributes.releaseType = 'MANUAL';
+    fake.version.attributes.releaseType = 'AFTER_APPROVAL';
     fake.app.attributes.contentRightsDeclaration = 'USES_THIRD_PARTY_CONTENT';
     await run();
     assert.equal(sent('PATCH', '/v1/appStoreVersions/ver-1/relationships/build').length, 0);

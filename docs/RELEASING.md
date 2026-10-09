@@ -251,7 +251,7 @@ Owner's decision (2026-09-25): the iPhone app goes to the App Store (no Mac App 
 later). The listing, screenshots, privacy policy and review notes are prepared in the repository
 ([docs/store/apple/README.md](store/apple/README.md)). On the owner's request (2026-09-26),
 Actions → *iOS App Store submission* (`ios-submit.yml`) readies a version through the App Store
-Connect API (build, age rating, price and availability, content rights, manual release) and lists
+Connect API (build, age rating, price and availability, content rights, release as soon as Apple approves it — owner, 2026-10-09) and lists
 what only the owner can enter; with **submit** ticked it submits for review, and only when nothing
 is missing. App Privacy and the demo account are always the owner's own entries in App Store
 Connect.
