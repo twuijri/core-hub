@@ -73,6 +73,9 @@ import { HubError } from '../../lib/errors.js';
 
 export type HermesRuntimeMode = 'undecided' | 'external' | 'managed' | 'absent';
 
+/** A Hermes start slower than this is logged as a warning (the timeouts are longer). */
+const SLOW_START_MS = 30_000;
+
 export interface HermesRuntimeStatus {
   mode: HermesRuntimeMode;
   state: RuntimeState;
@@ -131,6 +134,11 @@ export interface HermesRuntimeOptions {
   tuiRetireIntervalMs?: number;
   /** Each line of the TUI gateway's stderr (Hermes's log), for the Logs screen's ring. */
   tuiLogLine?: (line: string) => void;
+  /**
+   * How long the TUI gateway may take to say it is ready (`COREHUB_HERMES_TUI_START_TIMEOUT_MS`).
+   * Absent: the channel's own default.
+   */
+  tuiReadyTimeoutMs?: number;
   /** Called on every state change (the registry row follows it). */
   onState?: (status: HermesRuntimeStatus) => void;
   /** Injected in tests: a scripted `hermes <argv>` instead of the executable. */
@@ -587,6 +595,16 @@ export class HermesRuntime {
       cwd: home,
       ...(this.options.tuiSpawn ? { spawn: this.options.tuiSpawn } : {}),
       ...(this.options.tuiLogLine ? { onStderrLine: this.options.tuiLogLine } : {}),
+      ...(this.options.tuiReadyTimeoutMs !== undefined
+        ? { readyTimeoutMs: this.options.tuiReadyTimeoutMs }
+        : {}),
+      // A slow start is the first sign of a host too busy for the timeout: say how slow.
+      onReady: (elapsedMs) => {
+        const detail = { elapsedMs, timeoutMs: this.options.tuiReadyTimeoutMs ?? null };
+        if (elapsedMs > SLOW_START_MS)
+          this.log.warn(detail, 'hermes: the TUI gateway was slow to start');
+        else this.log.info(detail, 'hermes: the TUI gateway started');
+      },
     });
     const channel = this.tui;
     channel.onExit((reason) => {

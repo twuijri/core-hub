@@ -33,6 +33,8 @@ export const ENV_KEYS = [
   'COREHUB_MODELS_CATALOG_URL',
   'COREHUB_TELEGRAM_API_BASE',
   'COREHUB_PLUGIN_TIMEOUT_MS',
+  'COREHUB_HERMES_DASHBOARD_START_TIMEOUT_MS',
+  'COREHUB_HERMES_TUI_START_TIMEOUT_MS',
   'COREHUB_MODEL_GATEWAY',
   'COREHUB_CLIPROXY_BIN',
   'COREHUB_AGENT_MODEL_SOURCE',
@@ -111,6 +113,31 @@ const envSchema = z.object({
     .min(0, 'COREHUB_TASK_STUCK_MINUTES must be 0 (off) or more')
     .max(10_080, 'COREHUB_TASK_STUCK_MINUTES must be at most 10080 (a week)')
     .default(30),
+  /**
+   * How long Hermes's internal API (`hermes serve`, behind channel conversations and kanban) may take to say it is ready, in milliseconds. Hermes is heavy to start, and
+   * on a busy host its imports alone can pass a minute; past this the hub stops the process and
+   * says so. Raise it on slow hosts.
+   */
+  COREHUB_HERMES_DASHBOARD_START_TIMEOUT_MS: z.coerce
+    .number()
+    .int('COREHUB_HERMES_DASHBOARD_START_TIMEOUT_MS must be a whole number')
+    .min(10_000, 'COREHUB_HERMES_DASHBOARD_START_TIMEOUT_MS must be at least 10000 (ten seconds)')
+    .max(
+      1_800_000,
+      'COREHUB_HERMES_DASHBOARD_START_TIMEOUT_MS must be at most 1800000 (half an hour)',
+    )
+    .default(180_000),
+  /**
+   * How long the Hermes TUI gateway (every chat from the hub) may take to say it is ready, in milliseconds. Hermes is heavy to start, and
+   * on a busy host its imports alone can pass a minute; past this the hub stops the process and
+   * says so. Raise it on slow hosts.
+   */
+  COREHUB_HERMES_TUI_START_TIMEOUT_MS: z.coerce
+    .number()
+    .int('COREHUB_HERMES_TUI_START_TIMEOUT_MS must be a whole number')
+    .min(10_000, 'COREHUB_HERMES_TUI_START_TIMEOUT_MS must be at least 10000 (ten seconds)')
+    .max(1_800_000, 'COREHUB_HERMES_TUI_START_TIMEOUT_MS must be at most 1800000 (half an hour)')
+    .default(120_000),
   /**
    * How long Fastify lets a plugin mount (its `pluginTimeout`), in milliseconds. Mounting the
    * API should take well under a second; the margin is for a slow or busy host, so a hub that
@@ -350,6 +377,10 @@ export interface HubConfig {
   taskStuckMinutes: number;
   /** Fastify's `pluginTimeout` (`COREHUB_PLUGIN_TIMEOUT_MS`, 120000; 0 = no limit). */
   pluginTimeoutMs?: number;
+  /** Start allowance of Hermes's internal API (`COREHUB_HERMES_DASHBOARD_START_TIMEOUT_MS`, 180000). */
+  hermesDashboardStartTimeoutMs?: number;
+  /** Start allowance of the Hermes TUI gateway (`COREHUB_HERMES_TUI_START_TIMEOUT_MS`, 120000). */
+  hermesTuiStartTimeoutMs?: number;
   /** Push senders' credentials from the environment (all optional). */
   push?: PushEnv;
   /** The owner's web terminal: off unless `COREHUB_WEB_TERMINAL=1` (DECISIONS §70). */
@@ -425,6 +456,8 @@ export function loadConfig(
     taskAutoStartMax: env.COREHUB_TASK_AUTO_START_MAX,
     taskStuckMinutes: env.COREHUB_TASK_STUCK_MINUTES,
     pluginTimeoutMs: env.COREHUB_PLUGIN_TIMEOUT_MS,
+    hermesDashboardStartTimeoutMs: env.COREHUB_HERMES_DASHBOARD_START_TIMEOUT_MS,
+    hermesTuiStartTimeoutMs: env.COREHUB_HERMES_TUI_START_TIMEOUT_MS,
     push: {
       contact: env.COREHUB_PUSH_CONTACT,
       fcmServiceAccount: env.COREHUB_FCM_SERVICE_ACCOUNT,

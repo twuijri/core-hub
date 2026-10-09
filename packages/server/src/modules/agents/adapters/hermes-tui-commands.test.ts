@@ -381,3 +381,64 @@ describe('steering', () => {
     await Promise.all([sent, reading]);
   });
 });
+
+describe('hermes tui: a start that never becomes ready', () => {
+  /** A child that says nothing on stdout until told to. */
+  function silentChild() {
+    const stdout = new PassThrough();
+    const exits = new EventEmitter();
+    let killed = 0;
+    const spawned: Spawned = {
+      stdin: new PassThrough(),
+      stdout,
+      stderr: new PassThrough(),
+      kill: () => {
+        killed += 1;
+        exits.emit('exit', null, 'SIGTERM');
+      },
+      on: (event, listener) => exits.on(event, listener),
+    };
+    const ready = () =>
+      stdout.write(
+        `${JSON.stringify({ jsonrpc: '2.0', method: 'event', params: { type: 'gateway.ready', payload: {} } })}\n`,
+      );
+    return { spawned, ready, killed: () => killed };
+  }
+
+  it('is stopped at the timeout, so the next call starts a fresh one instead of failing at once', async () => {
+    const child = silentChild();
+    const channel = stdioTuiChannel({
+      command: 'python',
+      args: [],
+      env: {},
+      spawn: () => child.spawned,
+      readyTimeoutMs: 20,
+    });
+    const exited = new Promise<string>((resolve) => channel.onExit(resolve));
+    await expect(channel.request('session.create', {})).rejects.toThrow(
+      'the Hermes TUI gateway did not start',
+    );
+    expect(await exited).toBe('the Hermes TUI gateway did not start');
+    expect(channel.alive).toBe(false);
+    expect(child.killed()).toBe(1);
+  });
+
+  it('says how long a start took when it does become ready', async () => {
+    const child = silentChild();
+    const took: number[] = [];
+    const channel = stdioTuiChannel({
+      command: 'python',
+      args: [],
+      env: {},
+      spawn: () => child.spawned,
+      readyTimeoutMs: 5_000,
+      onReady: (ms) => took.push(ms),
+    });
+    child.ready();
+    await new Promise((resolve) => setImmediate(resolve));
+    expect(took).toHaveLength(1);
+    expect(took[0]).toBeGreaterThanOrEqual(0);
+    expect(channel.alive).toBe(true);
+    void channel.close();
+  });
+});

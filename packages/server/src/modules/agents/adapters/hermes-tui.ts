@@ -108,8 +108,13 @@ export interface StdioChannelOptions {
     env: NodeJS.ProcessEnv,
     cwd?: string,
   ) => Spawned;
-  /** How long to wait for `gateway.ready` before calls fail. */
+  /**
+   * How long to wait for `gateway.ready`. Past it the child is stopped, so the next call starts
+   * a fresh one instead of every later call failing on a start that was given up on.
+   */
   readyTimeoutMs?: number;
+  /** Told once, when `gateway.ready` arrives, how long the start took. */
+  onReady?: (elapsedMs: number) => void;
   /**
    * How long, after the process exits, to wait for its last stderr lines — Node can report
    * the exit before the pipe is drained, and the line that says why is the last one.
@@ -159,10 +164,14 @@ export function stdioTuiChannel(options: StdioChannelOptions): TuiChannel {
   });
   // A rejection nobody awaits yet (the process died before the first call) must not crash.
   ready.catch(() => undefined);
-  const readyTimer = setTimeout(
-    () => failReady(new Error('the Hermes TUI gateway did not start')),
-    options.readyTimeoutMs ?? 60_000,
-  );
+  const startedAt = Date.now();
+  const readyTimer = setTimeout(() => {
+    // A child that never said ready is given up on for good: left alive, it would be handed to
+    // every later call with this rejected start, and each would fail at once until it exited.
+    const reason = 'the Hermes TUI gateway did not start';
+    gone(reason);
+    child.kill();
+  }, options.readyTimeoutMs ?? 60_000);
   readyTimer.unref?.();
 
   const write = (frame: TuiFrame) => {
@@ -211,6 +220,7 @@ export function stdioTuiChannel(options: StdioChannelOptions): TuiChannel {
       if (params.type === 'gateway.ready') {
         clearTimeout(readyTimer);
         markReady();
+        options.onReady?.(Date.now() - startedAt);
         return;
       }
       const target = params.session_id ? sessions.get(params.session_id) : undefined;
