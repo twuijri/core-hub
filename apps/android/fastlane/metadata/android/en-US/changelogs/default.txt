@@ -1,8 +1,6 @@
-The first release of Core Hub on Google Play.
+Core Hub 1.1.8
 
-• Sign in to your own Core Hub server with its address, username and password, or scan the pairing code it shows on the web
-• Chat with your agents: streamed replies, tools, approvals and questions
-• Photos, files, dictation and replies read aloud
-• Chats, rooms, tasks and schedules across every profile
-• Notifications when a reply is ready or an agent is waiting for you
-• English and Arabic, light and dark
+• Reply to Telegram and WhatsApp conversations from the app: your message reaches the chat and the agent answers there and here
+• Tap a message to see when it was sent
+• Faster updates when a channel message arrives
+• Newer Hermes Agent with security fixes

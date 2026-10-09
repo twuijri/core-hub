@@ -1,8 +1,9 @@
-The first release of Core Hub on the App Store.
+Core Hub 1.1.8
 
-• Sign in to your own Core Hub server with its address, username and password, or by scanning the pairing code it shows on the web
-• Chat with your agents: replies stream in, with Markdown, tools, thinking time, approvals and questions
-• Attach photos and files, dictate messages and hear replies read aloud
-• Chats, tasks and schedules across every profile, with search
-• Notifications when a reply is ready or an agent is waiting for you
-• English and Arabic, light and dark
+• Reply to Telegram and WhatsApp conversations from the app: your message reaches the chat and the agent answers there and here
+• Tap a message to see when it was sent
+• Swipe a message to reply, and long-press an agent's reply for copy and more
+• Workflows and the Tools section on the phone
+• Every agent can use any model your hub connects, including subscriptions
+• No notification for a chat you are looking at
+• Faster updates and many fixes
