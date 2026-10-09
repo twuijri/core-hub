@@ -38,6 +38,38 @@ export function imageHermesVersion(image: string): string | null {
   return versions.get(image) ?? null;
 }
 
+const pluginHosts = new Map<string, boolean>();
+
+/**
+ * The image's Hermes can run a plugin that is not its own in a plugin-host process
+ * (`plugins.isolation: host`, `hermes_cli/plugin_isolation.py`, v0.21.6 and later).
+ */
+export function runsPluginsInAHost(image: string): boolean {
+  if (!pluginHosts.has(image)) {
+    let found = false;
+    try {
+      execFileSync(
+        'docker',
+        [
+          'run',
+          '--rm',
+          '--entrypoint',
+          '/bin/sh',
+          image,
+          '-c',
+          'test -f /opt/hermes/src/hermes_cli/plugin_isolation.py',
+        ],
+        { stdio: 'ignore', timeout: 120_000 },
+      );
+      found = true;
+    } catch {
+      // not there: an older Hermes
+    }
+    pluginHosts.set(image, found);
+  }
+  return pluginHosts.get(image) ?? false;
+}
+
 /** The image's Hermes runs one gateway per host (v2026.9.21 and later). */
 export function servesEveryProfileFromOneGateway(image: string): boolean {
   return topologyForVersion(imageHermesVersion(image)) === 'one-per-host';

@@ -85,9 +85,11 @@ jobs:
           uv_version=$(sed -n 's/^ARG UV_VERSION=//p' packages/server/Dockerfile)
           curl -LsSf "https://github.com/astral-sh/uv/releases/download/${uv_version}/uv-installer.sh" | sh
           export PATH="$HOME/.local/bin:$PATH"
-          uv python install 3.12
-          uv venv --python 3.12 "$RUNNER_TEMP/hermes/.venv"
           git clone --depth 1 --branch "$REF" https://github.com/NousResearch/hermes-agent "$RUNNER_TEMP/hermes/src"
+          # The Python that release was made for, as the image picks it (3.12 to v2026.9.24, 3.14 from v0.21.6).
+          python_version=$(node scripts/hermes-image/python-version.mjs "$RUNNER_TEMP/hermes/src")
+          uv python install "$python_version"
+          uv venv --python "$python_version" "$RUNNER_TEMP/hermes/.venv"
           cd "$RUNNER_TEMP/hermes/src"
           uv pip install --python "$RUNNER_TEMP/hermes/.venv/bin/python" -e ".[cron,mcp]" "aiohttp==3.14.3"
           docker run --rm --entrypoint /opt/hermes/.venv/bin/hermes core-hub:hermes-candidate --version

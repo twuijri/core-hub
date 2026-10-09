@@ -5586,3 +5586,88 @@ transcript); webhook or cron delivery (a different session, without the chat's h
 `turn_started` hook (a failed mirror could not stop the turn, against the owner's order); the
 existing `hooks/corehub/` for the turn reports (it exists only where the hub's tools are switched
 on); the private `_send_to_platform` (ADR 0015's rule against private surfaces).
+
+## 154. Hermes v0.21.6 in the image: its Python, its Node, its optional packages, and what each Hermes process carries into every profile
+
+Status: proposed — owner to confirm (2026-10-09). The image's pin moves from v2026.9.24 (`0.21.5`) to
+v0.21.6 (`0.21.6`), the first stable release cut by Hermes's new release pipeline (a roll-up of about
+2,100 pull requests); the floor stays v2026.9.14 (`0.21.3`) and every real-Hermes suite still passes
+on it. What follows was read from Hermes's MIT source (v0.21.6 against v2026.9.24) and observed
+against the built image, in our words. No operation, event or migration changes; an upgrade is still
+replacing the image.
+
+- **What changed in Hermes that the hub meets.**
+  - The release is tagged with its version (`v0.21.6`, no date tag) and named "Hermes Agent v0.21.6";
+    its `pyproject.toml` says `0.0.0`. A Hermes knows its version from an install stamp
+    (`install-stamp.json`, written by its packagers with `scripts/write_install_stamp.py`) or from its
+    git tags; with neither, `hermes --version` prints `Hermes Agent vunknown (2026.9.24)`.
+  - It runs on Python 3.14 only (its core dependencies are declared for `python_version >= '3.14'`;
+    on 3.12 they install as nothing), and its package manager (`pm/`, `pm/lock.json`) pins the exact
+    CPython (3.14.7, whose SQLite has no WAL-reset bug; 3.14.4's has, and Hermes then keeps its
+    databases out of WAL mode) and uv (0.12.3).
+  - `tools/lazy_deps.py` is retired: an optional feature is a pyproject extra its package manager
+    installs on first use — never in a sealed image (`HERMES_DISABLE_LAZY_INSTALLS=1`), and otherwise
+    by building a whole new environment generation under the Hermes home, keyed by the code's path,
+    which an image upgrade keeps (the next Hermes would boot into the previous one's packages). The
+    durable store `/data/hermes-packages` (`HERMES_LAZY_INSTALL_TARGET`) is gone with it.
+  - Node comes only from its package manager's pinned copy (Node 26.7.0, npm 12): a bare `npx`,
+    `node` or `npm` MCP server and the WhatsApp bridge never run the Node on `PATH`.
+  - A credential is read from the scope of the profile a turn runs for — its `.env`, its secret
+    sources, and the administrator-managed `.env` of `HERMES_MANAGED_DIR` (else `/etc/hermes`), the
+    last winning — and never from the process environment under the gateway's multiplexer or for a
+    profile the process serves but is not. So an MCP header naming `${COREHUB_MCP_ORIGIN}` (§79) left
+    unresolved now refuses the server ("… is not set in this profile's .env or secret source"), and
+    under one gateway per host the root gateway's `API_SERVER_KEY` from its environment no longer
+    reaches its API server, which then never listens.
+  - A plugin that is not Hermes's own may run in a plugin-host process per profile
+    (`plugins.isolation: host`; the default stays in-process): hooks and `ctx.inject_message` work
+    from there, the plugin manager is out of reach.
+  - Smaller: `clarify` takes a `questions` batch only; `image_generate` saves under
+    `cache/generated/images/`; a Journey memory's id ends with a hash of its text
+    (`memory:memory:0:f1e76a9cc750`).
+- **What the hub does, for every Hermes it supports.**
+  - **The image** (`packages/server/Dockerfile`, `scripts/hermes-image/`) builds each release on the
+    Python it was made for (3.12 without `pm/`, else the exact pinned CPython), with Hermes's own uv
+    pin; writes the install stamp Hermes's packagers write when the tag is `vX.Y.Z` and the pyproject
+    has no version; installs the Telegram, Discord and Slack clients from `LAZY_DEPS` or, from v0.21.6,
+    from the `messaging` extra Hermes's own image bakes; stages Hermes's pinned Node and npm as
+    Hermes's own image does, without Node's C headers and docs, in Hermes's sealed layout
+    (`/opt/hermes/pm-tools/store`, `HERMES_RUNTIME_DIR`, with a `manifest.json` beside it: only read,
+    while whatever its package manager writes — its locks, a plugin's environment — goes to the
+    Hermes home's `tools/`), plus the `libatomic1` that Node needs. Hermes's pinned ffmpeg (126 MB;
+    the image never carried one) and ripgrep (the image keeps Debian's; Hermes's pulls in a second
+    390 MB CPython) are not staged, so each `hermes` command prints its package manager's
+    `⚠ install out of sync (ffmpeg: …; ripgrep: …)`, which the hub leaves out when it reads Hermes's
+    reason for a refusal (`hermes-profiles.ts` §lastLine); and, for a Hermes that has dropped it,
+    keeps the
+    `/data/hermes-packages` store working with a small module of its own
+    (`corehub_hermes_packages`, loaded by a `.pth`): the store goes on the end of `sys.path` when it
+    was filled for this interpreter, and when Hermes's package manager declines an extra the extra's
+    requirements — read from Hermes's `pyproject.toml` — are installed there with `pip --target`, the
+    venv's versions as constraints, unless `security.allow_lazy_installs: false`. Packages installed
+    for 3.12 are dropped and installed again the first time they are needed.
+  - **A managed scope per Hermes process the hub starts** (`modules/agents/hermes-managed-env.ts`):
+    `HERMES_MANAGED_DIR=<data>/hermes-managed/<role>` with a `.env` holding `COREHUB_MCP_ORIGIN` —
+    `gateway` (the root gateway and a profile's), `hub` (the TUI its chats run in), and `dashboard`
+    for `hermes serve`, whose MCP tests now resolve the header too (a value the hub reads as "unknown
+    origin", as the literal placeholder was before) — and, for the root gateway only, the hub's
+    `API_SERVER_KEY`. The same values stay in the process environment, for an older Hermes. An
+    administrator's own managed scope (the `HERMES_MANAGED_DIR` the hub was started with, else
+    `/etc/hermes`) is copied in first and keeps its policy; the hub's names come last.
+  - **The bridge plugin (§153) in a plugin host**: the copy written for `default` — the root home,
+    whose manager holds the injector on a Hermes with one gateway per host, which every Hermes with a
+    plugin host is — polls the outbox; every other copy does nothing there.
+  - **Versions**: a Hermes that names no release (`vunknown`, `vgit.<sha>`) has no version on its card
+    rather than its last release date for one; the Hermes watch reads a `vX.Y.Z` tag as the version
+    when the release's name does not say it.
+- **Proof.** Every `*.real.test.ts` against images built from this Dockerfile with v0.21.6 and with
+  the floor, the two-way channel suite (`channel-sends.real.test.ts`) a second time with
+  `plugins.isolation: host` on v0.21.6, a real WhatsApp pairing (its first QR code) on both, and
+  `scripts/image-sealed-check.mjs` on both (now also: Hermes's own Node is in the image and the
+  WhatsApp bridge's imports load with it).
+- **Rejected**: letting Hermes's package manager install on demand in the image (a whole environment
+  generation per first install, ~700 MB, keyed by a path the next image keeps); giving Hermes the
+  image's own Node 24 by writing its package manager's records (a lie about the version it pins, and
+  Hermes refuses mixed toolchains on purpose); writing the hub's API key into the root home's `.env`
+  (any process reading that home would open an API server); naming the origin variable with one of
+  Hermes's process-wide prefixes (its private allow-list, not a contract).

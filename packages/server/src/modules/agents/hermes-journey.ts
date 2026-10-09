@@ -18,8 +18,9 @@
  *   seconds: the newest of its recorded use/view/patch/creation times, else the file's time;
  * - **every memory entry**: `MEMORY.md` and `USER.md` split on their `§` lines, one node each,
  *   id `memory:<memory|profile>:<n>` where `n` counts both files together (`MEMORY.md` first,
- *   so a lone `USER.md` entry after two memories is `memory:profile:2`), labelled with the
- *   entry's first line (80 characters);
+ *   so a lone `USER.md` entry after two memories is `memory:profile:2`; from v0.21.6 a hash of
+ *   the entry's text follows, `memory:profile:2:fef84634ac04`), labelled with the entry's first
+ *   line (80 characters);
  * - **edges**: a skill's `related_skills` when both ends are nodes, and each memory to at most
  *   four skills whose names or words it shares. Hermes compares Latin letters and digits only,
  *   so an Arabic memory links to nothing unless it names a skill;

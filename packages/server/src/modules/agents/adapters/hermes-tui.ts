@@ -405,7 +405,8 @@ function text(value: unknown): string | null {
  * The picture Hermes's own `image_generate` tool drew, or null. Its answer is
  * `{"success": true, "image": "<path>", …}` (Hermes's MIT source, `tools/image_generation_tool.py`
  * and `agent/image_gen_provider.py` `success_response`); a backend that saves the file — the
- * hub's `corehub-images` among them — gives an absolute path under Hermes's `cache/images/`,
+ * hub's `corehub-images` among them — gives an absolute path under Hermes's `cache/images/`
+ * (`cache/generated/images/` from v0.21.6),
  * one that answers with a link gives a URL, which is left to the model's words.
  */
 export function producedImageOf(tool: string, result: unknown): string | null {

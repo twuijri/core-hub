@@ -227,18 +227,21 @@ function isDirectory(target: string): boolean {
 /**
  * Hermes's reason: the last line it printed, leaving out its own process warnings
  * (`[hermes] WARNING: …` — from v2026.9.21 the PID 1 warning of a `docker run --entrypoint
- * hermes`, printed to stderr while the refusal goes to stdout). `''` when there is nothing else,
- * so a caller reads the other stream next.
+ * hermes`, printed to stderr while the refusal goes to stdout; from v0.21.6 its package manager's
+ * startup verdict, `⚠ install out of sync (…)`, which the image prints for the ffmpeg it does not
+ * carry). `''` when there is nothing else, so a caller reads the other stream next.
  */
 export function lastLine(text: string): string {
   return (
     text
       .split('\n')
       .map((line) => line.trim())
-      .filter((line) => line !== '' && !/^\[hermes\] WARNING\b/.test(line))
+      .filter((line) => line !== '' && !HERMES_PROCESS_NOTICE.test(line))
       .at(-1) ?? ''
   );
 }
+
+const HERMES_PROCESS_NOTICE = /^(?:\[hermes\] WARNING\b|⚠ install out of sync\b)/;
 
 /**
  * A profile as an archive (ADR 0014 stage 2), through Hermes's own dashboard API (ADR

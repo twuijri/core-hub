@@ -3,6 +3,7 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import {
+  lastLine,
   HermesProfileError,
   PROFILE_ARCHIVE_TIMEOUT_MS,
   createHermesProfileArchives,
@@ -205,5 +206,19 @@ describe("Hermes's profile archives (dashboard API)", () => {
   it('falls back to the path it asked for when Hermes does not say where it wrote', async () => {
     const archives = createHermesProfileArchives(async () => ({ ok: true }) as never);
     expect(await archives.export('default', '/tmp/a.tar.gz')).toBe('/tmp/a.tar.gz');
+  });
+});
+
+describe("Hermes's reason in its own words", () => {
+  it('leaves out the lines Hermes prints about its own process, whichever release', () => {
+    const stderr = [
+      '[hermes] WARNING: this process is PID 1 with no init above it (entrypoint override?).',
+      '⚠ install out of sync (ffmpeg: not installed or outdated) — run `hermes pm install`',
+      '',
+    ].join('\n');
+    expect(lastLine(stderr)).toBe('');
+    expect(lastLine(`${stderr}Profile 'design' already exists.\n`)).toBe(
+      "Profile 'design' already exists.",
+    );
   });
 });

@@ -50,15 +50,18 @@ export function readPins({ dockerfile, versions }) {
 }
 
 /**
- * The version a Hermes release carries. Its releases are named "Hermes Agent v0.21.5
- * (v2026.9.24)" and their notes open with "# Hermes Agent v0.21.5 (v2026.9.24)".
+ * The version a Hermes release carries. Up to v2026.9.24 its releases were named "Hermes Agent
+ * v0.21.5 (v2026.9.24)" with a date for a tag; from v0.21.6 the name is "Hermes Agent v0.21.6"
+ * and the tag is the version itself. The name or the notes' first heading first, then a
+ * `vX.Y.Z` tag (never a date tag: a year is not a major version).
  */
 export function releaseVersion(release) {
   for (const text of [release.name, release.body]) {
     const match = /Hermes Agent v(\d+\.\d+\.\d+)\b/.exec(String(text ?? ''));
     if (match) return match[1];
   }
-  return null;
+  const tag = /^v(\d{1,3}\.\d+\.\d+)$/.exec(String(release.tag_name ?? ''));
+  return tag ? tag[1] : null;
 }
 
 /** Numeric, part by part; a pre-release sorts before its release. */

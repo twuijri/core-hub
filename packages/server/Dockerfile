@@ -108,43 +108,69 @@ RUN set -eu; \
 # the API server (aiohttp), cron and MCP need, plus the channels the hub links whose libraries
 # fit (Telegram, Discord, Slack, WhatsApp — below): no dashboard, TUI, browsers, ffmpeg or other
 # messaging extras — the hub is the UI.
+#
+# The Python is the one the release was made for (scripts/hermes-image/python-version.mjs): 3.12
+# up to v2026.9.24 (the floor included), the exact CPython its own package manager pins from
+# v0.21.6 (3.14.7), whose core dependencies are declared for that Python only. uv is the release
+# Hermes's package manager pins (0.12.3), which knows that CPython. The same build serves both,
+# so CI builds the floor and the pin from this one file
+# (docs/changes/2026-10-09-twuijri-hermes-0-21-6.md). `prepare.py stamp` gives a release whose
+# pyproject carries no version (v0.21.6 on) the install stamp Hermes's own packagers write, so
+# `hermes --version` names the release rather than "vunknown" once .git is gone.
 FROM node:24-bookworm AS hermes
-ARG HERMES_REF=v2026.9.24
-ARG UV_VERSION=0.11.6
+ARG HERMES_REF=v0.21.6
+ARG UV_VERSION=0.12.3
 ENV UV_PYTHON_INSTALL_DIR=/opt/hermes/python \
     UV_LINK_MODE=copy \
     UV_NO_CACHE=1
 ADD https://github.com/astral-sh/uv/releases/download/${UV_VERSION}/uv-installer.sh /tmp/uv-installer.sh
+COPY scripts/hermes-image /tmp/hermes-image
 RUN sh /tmp/uv-installer.sh \
  && install -m 0755 /root/.local/bin/uv /usr/local/bin/uv \
- && uv python install 3.12 \
- && uv venv --python 3.12 /opt/hermes/.venv \
  && git clone --depth 1 --branch "${HERMES_REF}" https://github.com/NousResearch/hermes-agent /opt/hermes/src \
- && rm -rf /opt/hermes/src/.git \
+ && python_version=$(node /tmp/hermes-image/python-version.mjs /opt/hermes/src) \
+ && echo "Hermes ${HERMES_REF} runs on Python ${python_version}" \
+ && uv python install "${python_version}" \
+ && uv venv --python "${python_version}" /opt/hermes/.venv \
  && cd /opt/hermes/src \
  && uv pip install --python /opt/hermes/.venv/bin/python -e ".[cron,mcp]" "aiohttp==3.14.3" \
+ && /opt/hermes/.venv/bin/python /tmp/hermes-image/prepare.py stamp "${HERMES_REF}" \
+ && rm -rf /opt/hermes/src/.git \
  && /opt/hermes/.venv/bin/hermes --version
 # The messaging channels whose libraries fit the image-size budget ship in the image, so linking
 # one downloads nothing at runtime (docs/changes/2026-09-25-twuijri-image-channel-deps.md,
 # docs/changes/2026-09-25-twuijri-more-channels.md). Matrix's (mautrix with encryption, ~9 MB
-# compressed) did not fit and is still installed by Hermes on first use; Mattermost and Email need
-# nothing beyond Hermes itself.
+# compressed) did not fit and is still installed by Hermes on first use where that Hermes can;
+# Mattermost and Email need nothing beyond Hermes itself.
 #
-# Telegram, Discord, Slack: Hermes installs each client on first use (tools/lazy_deps.py,
-# `platform.<name>`) from PyPI. The specs are read from that table here, so the image carries
-# exactly what Hermes would install and the pins cannot drift from Hermes's own. The venv's
-# current versions are the constraints — the rule Hermes itself applies to a lazy install — so no
-# core package moves; a conflict fails the build instead. The last line is Hermes's own question:
-# is_available is what ensure() asks before it installs anything.
+# Telegram, Discord, Slack: the specs are read from Hermes itself (scripts/hermes-image/prepare.py),
+# so the image carries exactly what Hermes would install and the pins cannot drift from Hermes's
+# own — its `tools/lazy_deps.py` table up to v2026.9.24, its `messaging` extra (what its own
+# Docker image bakes) from v0.21.6. The venv's current versions are the constraints — the rule
+# Hermes itself applies to a lazy install — so no core package moves; a conflict fails the build
+# instead. The check is Hermes's own question before it would install anything
+# (`lazy_deps.is_available`, then `pm.extras.available`).
 ARG IMAGE_CHANNELS="platform.telegram platform.discord platform.slack"
 RUN set -eu; cd /opt/hermes/src; \
     py=/opt/hermes/.venv/bin/python; \
-    specs=$("$py" -c "import sys; from tools.lazy_deps import LAZY_DEPS; print(' '.join(s for f in sys.argv[1:] for s in LAZY_DEPS[f]))" $IMAGE_CHANNELS); \
+    specs=$("$py" /tmp/hermes-image/prepare.py channel-specs $IMAGE_CHANNELS); \
     uv pip freeze --python "$py" | grep -E '^[A-Za-z0-9._-]+==' > /tmp/core-constraints.txt; \
     echo "$IMAGE_CHANNELS: $specs"; \
     uv pip install --python "$py" --constraint /tmp/core-constraints.txt $specs; \
     rm /tmp/core-constraints.txt; \
-    "$py" -c "import importlib, sys; from tools import lazy_deps; mods = {'platform.telegram': 'telegram.ext', 'platform.discord': 'discord', 'platform.slack': 'slack_bolt'}; [importlib.import_module(mods[f]) for f in sys.argv[1:] if f in mods]; missing = [f for f in sys.argv[1:] if not lazy_deps.is_available(f)]; assert not missing, [lazy_deps.feature_missing(f) for f in missing]" $IMAGE_CHANNELS
+    "$py" /tmp/hermes-image/prepare.py channel-check $IMAGE_CHANNELS
+# The optional packages Hermes installs the first time a feature needs them go to /data (see
+# HERMES_LAZY_INSTALL_TARGET below). Up to v2026.9.24 Hermes does that itself; v0.21.6 retired it
+# (its package manager declines every install in a sealed image), so for it the image carries
+# Core Hub's glue that keeps the same store working (scripts/hermes-image/corehub_hermes_packages.py).
+RUN cd /opt/hermes/src && /opt/hermes/.venv/bin/python /tmp/hermes-image/prepare.py lazy-target
+# From v0.21.6 Hermes runs Node only from its own package manager's pinned copy — a bare `npx` or
+# `node` MCP server and the WhatsApp bridge included — and a sealed image cannot download it, so
+# it is staged here with its npm, the way Hermes's own image does, in Hermes's sealed layout:
+# read-only, with what its package manager writes going to the Hermes home's tools/
+# (scripts/hermes-image/prepare.py pm-tools; the runtime's HERMES_RUNTIME_DIR names the store).
+# A Hermes up to v2026.9.24 runs the image's Node from PATH and gets nothing.
+RUN cd /opt/hermes/src && /opt/hermes/.venv/bin/python /tmp/hermes-image/prepare.py pm-tools /opt/hermes/pm-tools
 # WhatsApp: Hermes's bridge (scripts/whatsapp-bridge, Baileys) runs `npm install` the first time
 # a phone is linked. Its locked dependencies are installed here instead, read-only in the image;
 # the hub points each profile's copy of the bridge at them (modules/agents/whatsapp-bridge.ts).
@@ -172,21 +198,23 @@ RUN set -eu; cd /opt/hermes/src; \
            SECURITY.md SECURITY.es.md COMPAT_MANIFEST.md; \
     mkdir -p website/static/api && mv /tmp/model-catalog.json website/static/api/; \
     /opt/hermes/.venv/bin/hermes --version
-# Prune the standalone CPython to an interpreter: the python3.12 binary is statically linked
+# Prune the standalone CPython to an interpreter: the python3 binary is statically linked
 # (ldd lists no libpython), no wheel in the venv links libpython either, so the 32 MB embedding
 # library goes, along with Tcl/Tk (+ tkinter, IDLE, turtledemo — nothing in Hermes imports
 # them), the C headers, pkg-config and *-config scripts (no compiler in the image), the man
 # pages, and the base interpreter's own pip (invisible to the venv, which has
 # include-system-site-packages=false). ensurepip stays: tools/lazy_deps.py falls back to it.
+# Whichever Python the release runs on (3.12 or 3.14): the globs name no minor version.
 RUN set -eu; \
-    for py in /opt/hermes/python/cpython-3.12.*-linux-*-gnu; do \
+    for py in /opt/hermes/python/cpython-3.*-linux-*-gnu; do \
       rm -rf "$py/include" "$py/share/man" "$py/lib/pkgconfig" \
              "$py"/lib/libpython3*.so* "$py"/lib/libtcl9* "$py"/lib/tcl9* "$py"/lib/tk9* \
              "$py"/lib/itcl* "$py"/lib/thread* \
-             "$py/lib/python3.12/tkinter" "$py/lib/python3.12/idlelib" "$py/lib/python3.12/turtledemo" \
-             "$py"/lib/python3.12/config-3.12-* "$py"/lib/python3.12/lib-dynload/_tkinter* \
-             "$py"/lib/python3.12/site-packages/* \
              "$py"/bin/2to3* "$py"/bin/idle3* "$py"/bin/pip* "$py"/bin/pydoc3* "$py"/bin/*-config; \
+      for lib in "$py"/lib/python3.*; do \
+        rm -rf "$lib/tkinter" "$lib/idlelib" "$lib/turtledemo" "$lib"/config-3.* \
+               "$lib"/lib-dynload/_tkinter* "$lib"/site-packages/*; \
+      done; \
     done; \
     /opt/hermes/.venv/bin/python -c "import ssl, sqlite3, ensurepip, curses, zoneinfo; import hermes_cli" \
  && /opt/hermes/.venv/bin/hermes --version
@@ -198,13 +226,14 @@ RUN set -eu; \
 # (a stray Python 2 test in a wheel) is skipped, which is why the exit code is not the check —
 # the import below is.
 #
-# pip goes into the venv here, not later: the image has no uv at runtime, so Hermes installs an
-# optional package with `python -m pip install --target /data/hermes-packages`, and with the
-# venv sealed it could not bootstrap pip into it (ensurepip) the way an open venv does.
+# pip goes into the venv here, not later: the image has no uv at runtime, so an optional package
+# is installed with `python -m pip install --target /data/hermes-packages` (by Hermes up to
+# v2026.9.24, by the image's glue from v0.21.6), and with the venv sealed it could not bootstrap
+# pip into it (ensurepip) the way an open venv does.
 # go-w last: uv leaves world-writable .lock files, and nothing here may be writable by `hub`.
 RUN /opt/hermes/.venv/bin/python -m ensurepip --default-pip >/dev/null \
  && { /opt/hermes/.venv/bin/python -m compileall -q -j0 --invalidation-mode unchecked-hash \
-        /opt/hermes/src /opt/hermes/.venv/lib/python3.12/site-packages /opt/hermes/python >/dev/null || true; } \
+        /opt/hermes/src /opt/hermes/.venv/lib/python3.*/site-packages /opt/hermes/python >/dev/null || true; } \
  && chmod -R go-w /opt/hermes \
  && /opt/hermes/.venv/bin/python -m pip --version \
  && PYTHONDONTWRITEBYTECODE=1 /opt/hermes/.venv/bin/hermes --version
@@ -234,6 +263,7 @@ ENV COREHUB_VERSION=${COREHUB_VERSION} \
     PYTHONDONTWRITEBYTECODE=1 \
     HERMES_DISABLE_LAZY_INSTALLS=1 \
     HERMES_LAZY_INSTALL_TARGET=/data/hermes-packages \
+    HERMES_RUNTIME_DIR=/opt/hermes/pm-tools/store \
     COREHUB_AGENT_MODEL_SOURCE=hub
 # COREHUB_AGENT_MODEL_SOURCE=hub: kept so an older stack's environment still reads the same;
 # retired and ignored since DECISIONS §144 — every coding agent runs on the hub's own providers
@@ -245,16 +275,20 @@ ENV COREHUB_VERSION=${COREHUB_VERSION} \
 # The code is sealed (docs/changes/2026-09-23-twuijri-sealed-image.md): /app and /opt/hermes are
 # root's and read-only to `hub`, so nothing the hub or an agent runs can change the hub's or
 # Hermes's code — a change comes with a new image. Everything that is written lives in /data.
-# The two HERMES_* lines are Hermes's own switch for a sealed image (tools/lazy_deps.py, the
-# same pair its upstream Dockerfile sets): the optional packages Hermes installs the first time
-# a feature needs them (Edge voices, Bedrock, Vertex …) go to /data/hermes-packages instead of
-# its venv, appended to sys.path so they can add modules but never replace a core one, and
-# they survive a container being recreated.
+# HERMES_DISABLE_LAZY_INSTALLS and HERMES_LAZY_INSTALL_TARGET are Hermes's own switch for a
+# sealed image (tools/lazy_deps.py up to v2026.9.24, the same pair its upstream Dockerfile set):
+# the optional packages Hermes installs the first time a feature needs them (Edge voices,
+# Bedrock, Vertex …) go to /data/hermes-packages instead of its venv, appended to sys.path so
+# they can add modules but never replace a core one, and they survive a container being
+# recreated. From v0.21.6 the image's glue keeps that same store working
+# (scripts/hermes-image/corehub_hermes_packages.py), and HERMES_RUNTIME_DIR names the read-only
+# store of the tools Hermes's package manager staged at build (its pinned Node and npm); an
+# older Hermes ignores it.
 # git and ripgrep are what Hermes's own tools shell out to (tools/checkpoint_manager.py,
 # tools/working_diff.py, tools/subagent_worktree.py; tools/file_operations_search.py); curl is
 # how Hermes fetches its managed uv (hermes_cli/managed_uv.py); ca-certificates for provider calls.
 RUN apt-get update \
- && apt-get install -y --no-install-recommends ca-certificates curl git ripgrep \
+ && apt-get install -y --no-install-recommends ca-certificates curl git libatomic1 ripgrep \
  && apt-get clean \
  && rm -rf /var/lib/apt/lists/* \
  && groupadd --gid 10001 hub \

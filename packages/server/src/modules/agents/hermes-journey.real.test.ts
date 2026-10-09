@@ -127,6 +127,15 @@ describe.skipIf(!image)('Journey (real Hermes; set COREHUB_HERMES_IMAGE to run)'
 
   it("reads the profile's learned skills and memories the way Hermes draws them", async () => {
     const journey = await readJourney(api, 'work');
+    // From v0.21.6 Hermes ends a memory's id with a hash of its text
+    // (`memory:memory:0:f1e76a9cc750`); the hub passes ids through, so the checks below read
+    // them without it, whichever Hermes drew them.
+    const plain = (id: string) => id.replace(/^(memory:[a-z]+:\d+):[0-9a-f]{6,}$/, '$1');
+    for (const node of journey.nodes) node.id = plain(node.id);
+    for (const edge of journey.edges) {
+      edge.source = plain(edge.source);
+      edge.target = plain(edge.target);
+    }
     const byId = new Map(journey.nodes.map((node) => [node.id, node]));
 
     // Only what the agent wrote or used: `never-used` is not a node.
