@@ -744,6 +744,9 @@ function contextOf(app: FastifyInstance): AgentsContext {
     ...(own.runtime?.channelSettleMs !== undefined
       ? { channelSettleMs: own.runtime.channelSettleMs }
       : {}),
+    ...(hub.config.hermesTuiStartTimeoutMs !== undefined
+      ? { tuiReadyTimeoutMs: hub.config.hermesTuiStartTimeoutMs }
+      : {}),
     // Every messaging gateway starts on the providers and model a chat in its profile uses
     // (`models` writes them, looked up per start because it mounts after this module).
     // Hermes's own log from the TUI gateway, into the Logs screen's ring only (never the
@@ -890,6 +893,9 @@ function contextOf(app: FastifyInstance): AgentsContext {
     ...(own.dashboard?.spawnImpl ? { spawnImpl: own.dashboard.spawnImpl } : {}),
     ...(own.dashboard?.fetchImpl ? { fetchImpl: own.dashboard.fetchImpl } : {}),
     ...(own.dashboard?.idleMs !== undefined ? { idleMs: own.dashboard.idleMs } : {}),
+    ...(hub.config.hermesDashboardStartTimeoutMs !== undefined
+      ? { startTimeoutMs: hub.config.hermesDashboardStartTimeoutMs }
+      : {}),
   });
   const hubTools = new HubToolsService({
     app,

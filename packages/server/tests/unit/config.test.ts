@@ -48,6 +48,8 @@ describe('config', () => {
       'COREHUB_MODELS_CATALOG_URL',
       'COREHUB_TELEGRAM_API_BASE',
       'COREHUB_PLUGIN_TIMEOUT_MS',
+      'COREHUB_HERMES_DASHBOARD_START_TIMEOUT_MS',
+      'COREHUB_HERMES_TUI_START_TIMEOUT_MS',
       'COREHUB_MODEL_GATEWAY',
       'COREHUB_CLIPROXY_BIN',
       'COREHUB_AGENT_MODEL_SOURCE',
@@ -97,6 +99,24 @@ describe('config', () => {
     expect(loadConfig({ COREHUB_TASK_STUCK_MINUTES: '0' }).taskStuckMinutes).toBe(0);
     expect(() => loadConfig({ COREHUB_TASK_STUCK_MINUTES: '-1' })).toThrow(
       /COREHUB_TASK_STUCK_MINUTES/,
+    );
+  });
+
+  it('gives Hermes three minutes to start its internal API and two its TUI gateway, unless told otherwise', () => {
+    const config = loadConfig({});
+    expect(config.hermesDashboardStartTimeoutMs).toBe(180_000);
+    expect(config.hermesTuiStartTimeoutMs).toBe(120_000);
+    const slow = loadConfig({
+      COREHUB_HERMES_DASHBOARD_START_TIMEOUT_MS: '300000',
+      COREHUB_HERMES_TUI_START_TIMEOUT_MS: '240000',
+    });
+    expect(slow.hermesDashboardStartTimeoutMs).toBe(300_000);
+    expect(slow.hermesTuiStartTimeoutMs).toBe(240_000);
+    expect(() => loadConfig({ COREHUB_HERMES_TUI_START_TIMEOUT_MS: '500' })).toThrow(
+      /COREHUB_HERMES_TUI_START_TIMEOUT_MS/,
+    );
+    expect(() => loadConfig({ COREHUB_HERMES_DASHBOARD_START_TIMEOUT_MS: 'soon' })).toThrow(
+      /COREHUB_HERMES_DASHBOARD_START_TIMEOUT_MS/,
     );
   });
 
