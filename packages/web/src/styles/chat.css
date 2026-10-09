@@ -599,6 +599,14 @@ summary.tool-head:hover {
   color: var(--ch-color-text-faint);
   font-variant-numeric: tabular-nums;
 }
+/* A channel message's time stays visible under it (the chat's waits for a hover). */
+.msg-time-channel {
+  display: block;
+  margin-block-start: var(--ch-space-1);
+}
+.msg[data-side='user'] .msg-time-channel {
+  text-align: end;
+}
 
 /* The message the next turn answers, above the composer's surface. */
 .composer-reply {

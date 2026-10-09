@@ -13,6 +13,9 @@ import { useNavigate } from 'react-router';
 import { describeError } from '../auth/client.js';
 import { useAuth } from '../auth/context.js';
 import { useI18n } from '../i18n/context.js';
+import { intlLocale } from '../i18n/index.js';
+import { messageTime } from './MessageActions.js';
+import { Tooltip } from '../ui/Tooltip.js';
 import { termKey } from '../navigation/manifest.js';
 import { AppShell } from '../shell/AppShell.js';
 import { ProfileBadge } from '../shell/ProfileBadge.js';
@@ -285,6 +288,7 @@ function HubMessage({
   channel,
   status,
   messageId,
+  at,
 }: {
   name: string | null;
   text: string;
@@ -292,6 +296,8 @@ function HubMessage({
   /** `null` while the hub has not answered yet; absent for one the hub no longer follows. */
   status?: ChannelOutgoing | null;
   messageId?: string;
+  /** When it was sent, once Hermes has it; absent while it is still on its way. */
+  at?: string;
 }) {
   const { t } = useI18n();
   return (
@@ -314,6 +320,7 @@ function HubMessage({
         <div className="msg-bubble msg-user" data-role="user">
           <p dir="auto">{text}</p>
         </div>
+        {at && <ChannelTime at={at} />}
         {status !== undefined && <OutgoingStatus status={status} channel={channel} />}
       </div>
     </article>
@@ -346,6 +353,7 @@ function ChannelMessageView({
         text={message.text}
         channel={channel}
         messageId={message.id}
+        at={message.created_at}
         {...(followed ? { status: followed } : {})}
       />
     );
@@ -380,6 +388,7 @@ function ChannelMessageView({
               <p dir="auto">{message.text}</p>
             </div>
           )}
+          <ChannelTime at={message.created_at} />
         </div>
       </article>
     );
@@ -405,8 +414,36 @@ function ChannelMessageView({
         <div className="msg-agent-body">
           <Markdown text={message.text} />
         </div>
+        <ChannelTime at={message.created_at} />
       </div>
     </article>
+  );
+}
+
+/**
+ * When a channel message was sent, always shown: a conversation read here is read after the
+ * fact, so «when» matters more than in a live chat (where the time waits for a hover). The same
+ * words as the chat's (`messageTime`); the full date and time on hover, for the reader's zone.
+ */
+function ChannelTime({ at }: { at: string }) {
+  const { t, language } = useI18n();
+  const label = messageTime({ created_at: at }, language, t);
+  if (!label) return null;
+  const full = new Intl.DateTimeFormat(intlLocale(language), {
+    dateStyle: 'full',
+    timeStyle: 'short',
+  }).format(new Date(at));
+  return (
+    <Tooltip label={full}>
+      <time
+        className="msg-time msg-time-channel"
+        dateTime={at}
+        aria-label={full}
+        data-testid="channel-message-time"
+      >
+        {label}
+      </time>
+    </Tooltip>
   );
 }
 
