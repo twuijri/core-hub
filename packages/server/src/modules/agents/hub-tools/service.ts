@@ -634,8 +634,14 @@ const REFUSALS: Record<string, string> = {
     'no conversation of the hub is running in this profile, so there is nobody to act for',
   hub_tools_run_ambiguous:
     'several people have conversations running in this profile and the hub could not tell whose this is; try again',
+  // Owner, 2026-10-09: the agent must tell the person plainly that nothing was saved and how to
+  // link the account, instead of a vague "not available" (reported from a Telegram reminder).
   hub_tools_sender_not_linked:
-    "this message came from a messaging account nobody linked to Core Hub, so Core Hub's tools are not available here; the person can link it in Core Hub → Settings → Account",
+    "Nothing was done and nothing was saved: this message came from a Telegram or WhatsApp account that is not linked to anyone's Core Hub account, so Core Hub's tools (tasks, schedules, reminders and the rest) cannot act for the sender here. " +
+    'Tell the person this plainly, in their own language, and give them the steps to link this account once: ' +
+    '1) open Core Hub → Settings → Account → Messaging accounts and choose "Link an account" to get a code; ' +
+    '2) from this same account, send "/start" followed by that code to this chat within 10 minutes; ' +
+    '3) then ask again. Do not call Core Hub tools again in this turn, and do not say the request was saved.',
   hub_tools_sender_no_access:
     'the person who linked this messaging account may not use this profile (or is disabled), so there is nobody to act for',
   hub_tools_group_chat:
