@@ -118,7 +118,7 @@ RUN set -eu; \
 # pyproject carries no version (v0.21.6 on) the install stamp Hermes's own packagers write, so
 # `hermes --version` names the release rather than "vunknown" once .git is gone.
 FROM node:24-bookworm AS hermes
-ARG HERMES_REF=v0.21.6
+ARG HERMES_REF=v0.21.7
 ARG UV_VERSION=0.12.3
 ENV UV_PYTHON_INSTALL_DIR=/opt/hermes/python \
     UV_LINK_MODE=copy \
