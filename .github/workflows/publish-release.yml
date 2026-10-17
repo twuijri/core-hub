@@ -15,8 +15,9 @@ name: Publish release
 # One workflow with job dependencies rather than workflow_run: the release job starts only when
 # every build of this same run succeeded, for this tag's commit, and reads their artifacts
 # directly. The server image (release.yml) and iOS (ios-signed.yml → TestFlight) still run on
-# the tag on their own; iOS puts no file on the release. Only the last job may write: it alone
-# gets `contents: write`, through GITHUB_TOKEN.
+# the tag on their own; iOS puts no file on the release. Only the `publish` job may write: it alone
+# gets `contents: write`, through GITHUB_TOKEN. After it, `ms-store` sends the release's .msix to
+# the Microsoft Store (ms-store-publish.yml, read-only).
 on:
   push:
     tags: ['v*']
@@ -196,3 +197,18 @@ jobs:
               --notes-file "$RUNNER_TEMP/notes.md" --latest
           fi
           gh release view "$TAG" --json url,assets --jq '"\(.url)\n" + ([.assets[].name] | join("\n"))' | tee -a "$GITHUB_STEP_SUMMARY"
+
+  # Every release goes to every store (owner, 2026-10-05): once the release carries the .msix, a new
+  # Microsoft Store submission of it, committed for certification (ms-store-publish.yml). Without the
+  # Partner Center variables and secret it only leaves a notice. Its own job after `publish`, so a
+  # Store problem never holds back or undoes the GitHub release; only the one secret it uses is passed.
+  ms-store:
+    name: Microsoft Store
+    needs: [resolve, publish]
+    uses: ./.github/workflows/ms-store-publish.yml
+    permissions:
+      contents: read
+    with:
+      tag: ${{ needs.resolve.outputs.tag }}
+    secrets:
+      MS_STORE_CLIENT_SECRET: ${{ secrets.MS_STORE_CLIENT_SECRET }}

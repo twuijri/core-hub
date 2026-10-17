@@ -384,8 +384,9 @@ its approval.
   Store updates it; a pull request installs a test-signed copy and starts it in local mode (the hub
   answers, its data lands in the package's own folder). A `v*` tag now also makes the **GitHub
   release** (`publish-release.yml`): the `.exe`, `.msix`, notarised dmg, AppImage, `.deb` and the
-  signed Android APK, marked latest — not yet run on a real tag. The Store upload is by hand
-  (docs/RELEASING.md). Since 2026-09-26 the macOS app is **`Core Hub.app`** in a DMG window
+  signed Android APK, marked latest — not yet run on a real tag. Since 2026-10-17 the release's
+  `.msix` goes to the Microsoft Store by itself after the GitHub release (`ms-store-publish.yml`,
+  docs/RELEASING.md) — not yet run: it waits for the Partner Center credentials. Since 2026-09-26 the macOS app is **`Core Hub.app`** in a DMG window
   "Core Hub X.Y.Z" (1.1.1 was `corehub.app`), Windows installs **`Core Hub.exe`** in a `Core Hub`
   folder (an upgrade from 1.1.1's `corehub\corehub.exe` moves there and re-points `corehub://`,
   and the app re-points a person's own shortcuts to the old .exe), and Linux runs

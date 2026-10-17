@@ -2,9 +2,10 @@
 
 Who does what: building is automatic; **publishing is the owner's step** (TEAM-RULES §6). The
 owner pushes a `v*` tag (or runs *Publish release* for an existing one); from there the GitHub
-release is made by `publish-release.yml` (below). Nothing here uploads to a store, except
-TestFlight when the owner ticks it on a manual run; the Microsoft Store upload is done by hand in
-Partner Center.
+release is made by `publish-release.yml` (below), and right after it the release's `.msix` goes to
+the Microsoft Store as a new submission, committed for certification (`ms-store-publish.yml`,
+[Automatic submission](#automatic-submission-ms-store-publishyml)). Otherwise nothing here uploads
+to a store, except TestFlight when the owner ticks it on a manual run.
 
 ## Where each platform ships (owner, 2026-09-25)
 
@@ -346,7 +347,10 @@ notes* list, at most 20, with the full-changelog link).
 
 One workflow with job dependencies, not `workflow_run`: the release job starts only when every
 build of the same run succeeded, for the tag's commit, and reads their artifacts directly. The
-image (`release.yml`) and iOS (`ios-signed.yml`) still run on the tag on their own.
+image (`release.yml`) and iOS (`ios-signed.yml`) still run on the tag on their own. After the
+release job, `ms-store` calls `ms-store-publish.yml` with the tag: the `.msix` goes to the
+Microsoft Store ([Automatic submission](#automatic-submission-ms-store-publishyml)); it is a job
+of its own, so a Store problem leaves the GitHub release as published.
 
 **An existing tag** — Actions → *Publish release* → *Run workflow* on `main`, `tag` = e.g.
 `v1.1.0`. It builds that tag's code with the workflows on `main`. A tag whose code predates the
@@ -532,12 +536,64 @@ documents MSIX virtualisation and are not run in CI (they need Hermes's installe
 8. **Submission options**: publish as soon as it passes, or manually.
 9. **Submit to the Store**. Certification takes up to a few business days.
 
-A later version: the same steps from *Update* on the existing submission, with the new `.msix`
-(its version must be higher).
+A later version is automatic (below). By hand, only when the workflow cannot run: the same steps
+from *Update* on the existing submission, with the new `.msix` (its version must be higher).
 
-**Later, optional — automating the upload** (not built): the Microsoft Store Developer CLI
-(`msstore`) can publish an MSIX from a workflow. It needs an Entra ID (Azure AD) app registered
-in Partner Center (Account settings → User management → Azure AD applications, role *Manager*),
-and its tenant id, client id and secret as repository secrets; a job after the release would run
-`msstore publish Core-Hub-X.Y.Z-x64.msix -id 9MT62R5V3P5N`. Until the owner decides, the upload
-stays manual.
+### Automatic submission (`ms-store-publish.yml`)
+
+Owner's standing decision (2026-10-05): every release goes to every store at once. After
+`publish-release.yml` has published the GitHub release, its `ms-store` job calls
+`ms-store-publish.yml` with the tag, on a Windows runner:
+
+1. Downloads `Core-Hub-X.Y.Z-x64.msix` from that release (`gh release download`). A release
+   without one (v1.1.0) gets a notice and nothing is sent.
+2. Installs the **Microsoft Store Developer CLI** (`msstore`, [microsoft/msstore-cli](https://github.com/microsoft/msstore-cli),
+   the version in `MSSTORE_CLI_VERSION`) with Microsoft's action
+   `microsoft/microsoft-store-apppublisher` (pinned by commit), and signs it in with
+   `msstore reconfigure --tenantId … --sellerId … --clientId … --clientSecret …` (it checks
+   them against Partner Center; telemetry is then turned off).
+3. Stops if a submission is **already in progress** at Microsoft (committed, in pre-processing,
+   certification, release or publishing): Partner Center takes one at a time. The error names the
+   submission and its status; the GitHub release is not affected. An unfinished draft or a failed
+   submission is replaced instead (a warning says so).
+4. `msstore publish Core-Hub-X.Y.Z-x64.msix --appId 9MT62R5V3P5N --priceId Free --noCommit`: a
+   new submission cloned from the last published one (listings, screenshots, properties, age
+   rating and availability stay as they are in Partner Center), the old `.msix` marked for removal
+   and this one uploaded, kept as a draft. `--priceId Free` states the price Core Hub has anyway:
+   without it the CLI refuses a product whose price Partner Center manages per market. The
+   variable `MS_STORE_PRICE_ID` overrides it.
+5. **What's new**: the Google Play release notes of the tag
+   (`apps/android/fastlane/metadata/android/{en-US,ar}/changelogs/default.txt`) when their first
+   line names the version (`Core Hub 1.1.9` / `كور هب 1.1.9`), else one line, *Core Hub X.Y.Z:
+   improvements and fixes. What changed: <the GitHub release>*. Arabic for an Arabic listing,
+   English for every other. Written into the draft with `msstore submission get` / `submission
+   update` (Microsoft's documented way); if that fails, a warning, and the draft keeps the previous
+   text.
+6. `msstore submission publish` **commits** it, and the job waits (up to 20 minutes) until
+   Microsoft has taken it in: *PreProcessing* or *Certification* ends green, *CommitFailed* red with
+   Microsoft's errors. Certification itself takes up to a few business days; *Submission options*
+   in Partner Center decides whether it is published as soon as it passes.
+
+Microsoft's rule: the CLI only updates an app whose **first submission was published** through
+Partner Center (done by hand, above), and only a free one.
+
+**Credentials, once** (the owner, in Partner Center and GitHub):
+
+1. Partner Center → **Account settings** → **User management** → **Microsoft Entra applications**
+   → *Create Microsoft Entra application* (or add an existing one), role **Manager**. Its page
+   shows the **Tenant ID** and **Client ID**; **Add new key** there gives the **client secret**
+   (shown once; it expires — note the date).
+2. Partner Center → **Account settings** → **Legal info** → **Developer** tab: the **Seller ID**.
+3. GitHub → the repository → Settings → **Secrets and variables** → **Actions**:
+   - **Variables** tab: `MS_STORE_TENANT_ID`, `MS_STORE_SELLER_ID`, `MS_STORE_CLIENT_ID`
+     (identifiers, not secret; `MS_STORE_PRICE_ID` only to override `Free`);
+   - **Secrets** tab: `MS_STORE_CLIENT_SECRET`.
+
+Until all four are set the job ends green with a notice *Microsoft Store skipped* and the list of
+what is missing. When the client secret expires, the sign-in step fails: add a new key in Partner
+Center and replace the secret.
+
+**Again, or for an older tag**: Actions → **Microsoft Store publish** → Run workflow, `tag` = e.g.
+`v1.1.9` (empty = the latest release). Do that after an *already in progress* stop, once that
+submission is published, or after a failure the log explains. The run summary links Partner
+Center.

@@ -1,0 +1,260 @@
+name: Microsoft Store publish
+
+# Sends a version's Microsoft Store package to Partner Center (docs/RELEASING.md → Microsoft Store):
+# downloads `Core-Hub-X.Y.Z-x64.msix` from that version's GitHub release and runs the Microsoft
+# Store Developer CLI (`msstore`, set up by Microsoft's own action): `msstore publish --noCommit`
+# starts a new submission of product 9MT62R5V3P5N from the last published one (listing, pricing
+# and properties as they are) with this .msix in place of the old one, the Google Play release
+# notes become its "What's new", then `msstore submission publish` commits it and the job waits
+# until Microsoft has taken it for certification. The owner's standing decision (2026-10-05):
+# every release goes to every store, no human step.
+#
+# publish-release.yml calls it once the GitHub release is published (a release made with
+# GITHUB_TOKEN fires no `release` event). By hand: Actions → Microsoft Store publish → Run
+# workflow, `tag` empty = the latest release.
+#
+# Credentials: an Entra ID application added to Partner Center (role Manager) —
+# repository variables MS_STORE_TENANT_ID, MS_STORE_SELLER_ID, MS_STORE_CLIENT_ID and the
+# repository secret MS_STORE_CLIENT_SECRET. Without any of them the job says so and does nothing
+# (the release itself is already published). Windows runner: msstore keeps its credentials in the
+# Windows Credential Manager; Linux would need a desktop keyring the runner does not have.
+on:
+  workflow_call:
+    inputs:
+      tag:
+        description: 'The release tag whose .msix is sent (vX.Y.Z)'
+        type: string
+        required: true
+    secrets:
+      MS_STORE_CLIENT_SECRET:
+        required: false
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Release tag whose .msix is sent (e.g. v1.1.9); empty = the latest release'
+        required: false
+
+concurrency:
+  group: ms-store-publish
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+env:
+  PRODUCT_ID: 9MT62R5V3P5N
+  # The Microsoft Store Developer CLI release the action installs (github.com/microsoft/msstore-cli).
+  MSSTORE_CLI_VERSION: v0.4.3
+
+jobs:
+  store:
+    name: Submit to the Microsoft Store
+    runs-on: windows-latest
+    # Download (~155 MB), upload to Partner Center's blob, commit and Microsoft's pre-processing.
+    timeout-minutes: 60
+    defaults:
+      run:
+        shell: bash
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+      TAG_INPUT: ${{ inputs.tag }}
+    steps:
+      # Identifiers are repository variables, the client secret a repository secret. Missing any:
+      # a notice, and every later step is skipped — the job ends green.
+      - name: The Partner Center credentials are set
+        id: creds
+        env:
+          MS_STORE_TENANT_ID: ${{ vars.MS_STORE_TENANT_ID }}
+          MS_STORE_SELLER_ID: ${{ vars.MS_STORE_SELLER_ID }}
+          MS_STORE_CLIENT_ID: ${{ vars.MS_STORE_CLIENT_ID }}
+          MS_STORE_CLIENT_SECRET: ${{ secrets.MS_STORE_CLIENT_SECRET }}
+        run: |
+          set -euo pipefail
+          missing=()
+          [ -n "$MS_STORE_TENANT_ID" ] || missing+=('variable MS_STORE_TENANT_ID')
+          [ -n "$MS_STORE_SELLER_ID" ] || missing+=('variable MS_STORE_SELLER_ID')
+          [ -n "$MS_STORE_CLIENT_ID" ] || missing+=('variable MS_STORE_CLIENT_ID')
+          [ -n "$MS_STORE_CLIENT_SECRET" ] || missing+=('secret MS_STORE_CLIENT_SECRET')
+          if [ "${#missing[@]}" -gt 0 ]; then
+            list=$(printf '%s, ' "${missing[@]}")
+            list=${list%, }
+            echo "::notice title=Microsoft Store skipped::Not set: $list (Settings → Secrets and variables → Actions). Nothing was sent to Partner Center; how to make them: docs/RELEASING.md → Microsoft Store → Automatic submission."
+            echo "Microsoft Store: skipped — not set: $list" >> "$GITHUB_STEP_SUMMARY"
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      # The tag asked for, or the latest release; and its .msix, which a tag older than the Store
+      # package (v1.1.0) does not have.
+      - name: The release and its .msix
+        id: release
+        if: steps.creds.outputs.ready == 'true'
+        run: |
+          set -euo pipefail
+          tag=${TAG_INPUT:-$(gh release view --json tagName --jq .tagName)}
+          if ! [[ "$tag" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "::error::\"$tag\" is not a release tag (vX.Y.Z)."
+            exit 1
+          fi
+          version=${tag#v}
+          msix="Core-Hub-$version-x64.msix"
+          if ! gh release view "$tag" --json assets --jq '.assets[].name' | grep -Fqx "$msix"; then
+            echo "::notice title=Microsoft Store skipped::The $tag release has no $msix (a version from before the Store package); nothing was sent."
+            echo "Microsoft Store: skipped — the $tag release has no $msix" >> "$GITHUB_STEP_SUMMARY"
+            echo "found=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          dir="$RUNNER_TEMP/msstore"
+          mkdir -p "$dir"
+          gh release download "$tag" --pattern "$msix" --dir "$dir" --clobber
+          ls -l "$dir"
+          {
+            echo "found=true"
+            echo "tag=$tag"
+            echo "msix=$dir/$msix"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Microsoft Store Developer CLI
+        if: steps.release.outputs.found == 'true'
+        uses: microsoft/microsoft-store-apppublisher@cc9910a8d59f2eb55cbb83df0a3800cf3b5300e0 # v1.4
+        with:
+          version: ${{ env.MSSTORE_CLI_VERSION }}
+
+      # `reconfigure` with every value given asks nothing and checks them against Partner Center
+      # (a wrong id or secret fails here). The secret is a masked repository secret and only ever
+      # reaches the CLI's argument; the runner, and its credential store, are thrown away after
+      # the job.
+      - name: Sign the CLI in to Partner Center
+        if: steps.release.outputs.found == 'true'
+        env:
+          MS_STORE_TENANT_ID: ${{ vars.MS_STORE_TENANT_ID }}
+          MS_STORE_SELLER_ID: ${{ vars.MS_STORE_SELLER_ID }}
+          MS_STORE_CLIENT_ID: ${{ vars.MS_STORE_CLIENT_ID }}
+          MS_STORE_CLIENT_SECRET: ${{ secrets.MS_STORE_CLIENT_SECRET }}
+        run: |
+          set -euo pipefail
+          msstore --version
+          msstore reconfigure --tenantId "$MS_STORE_TENANT_ID" --sellerId "$MS_STORE_SELLER_ID" \
+            --clientId "$MS_STORE_CLIENT_ID" --clientSecret "$MS_STORE_CLIENT_SECRET"
+          msstore settings --enableTelemetry false
+
+      # Partner Center keeps one submission in progress per product. `msstore publish` deletes an
+      # uncommitted or failed one and starts over from the last published submission, but one that
+      # Microsoft is still processing (certification, publishing) cannot be replaced: stop with
+      # that in plain words rather than the CLI's failed delete.
+      - name: No submission already in certification
+        if: steps.release.outputs.found == 'true'
+        env:
+          TAG: ${{ steps.release.outputs.tag }}
+        run: |
+          set -euo pipefail
+          # The JSON goes to stdout (the CLI's own messages to stderr); drop a byte-order mark.
+          json() { msstore "$@" | sed '1s/^\xEF\xBB\xBF//'; }
+          app=$(json apps get "$PRODUCT_ID") || { echo "::error::msstore could not read product $PRODUCT_ID (is the Entra application a Manager in Partner Center?)"; exit 1; }
+          pending=$(printf %s "$app" | jq -r '.PendingApplicationSubmission.Id // empty')
+          if [ -z "$pending" ]; then
+            echo "No submission in progress."
+            exit 0
+          fi
+          status=$(json submission get "$PRODUCT_ID" | jq -r '.Status // "unknown"')
+          url="https://partner.microsoft.com/dashboard/products/$PRODUCT_ID/submissions/$pending"
+          case "$status" in
+            CommitStarted|PreProcessing|Certification|Release|PendingPublication|Publishing)
+              echo "::error title=Microsoft Store: a submission is already in progress::Submission $pending is $status ($url). Partner Center takes one at a time, so $TAG was not sent; the GitHub release is not affected. Once it is published (or cancelled in Partner Center), run Actions → Microsoft Store publish with tag $TAG."
+              echo "Microsoft Store: not sent — submission $pending is $status: $url" >> "$GITHUB_STEP_SUMMARY"
+              exit 1 ;;
+            *)
+              echo "::warning title=Microsoft Store: replacing an unfinished submission::Submission $pending is $status ($url); msstore deletes it and starts a new one from the last published submission." ;;
+          esac
+
+      # A new submission from the last published one, with this .msix in place of the old package,
+      # left as a draft (--noCommit) so its "What's new" can be set. The product is free; stating
+      # the base price keeps the CLI from refusing a product whose price Partner Center manages per
+      # market (MS_STORE_PRICE_ID overrides it).
+      - name: Upload ${{ steps.release.outputs.tag }} to a new submission
+        if: steps.release.outputs.found == 'true'
+        env:
+          MSIX: ${{ steps.release.outputs.msix }}
+          TAG: ${{ steps.release.outputs.tag }}
+          PRICE_ID: ${{ vars.MS_STORE_PRICE_ID || 'Free' }}
+        run: |
+          set -euo pipefail
+          status=0
+          msstore publish "$MSIX" --appId "$PRODUCT_ID" --priceId "$PRICE_ID" --uploadTimeout 3600 --noCommit || status=$?
+          if [ "$status" -ne 0 ]; then
+            echo "::error title=Microsoft Store upload failed::msstore publish ended with $status for $TAG; the log above says why. The GitHub release is not affected; rerun Actions → Microsoft Store publish with tag $TAG."
+            echo "Microsoft Store: $TAG upload failed (msstore exit $status)" >> "$GITHUB_STEP_SUMMARY"
+            exit 1
+          fi
+
+      # The same release notes as Google Play (apps/android/fastlane/metadata/android/{en-US,ar}/
+      # changelogs/default.txt at the tag) when their first line names this version, else one line
+      # pointing to the GitHub release; Arabic for an Arabic listing, English for the others. If the
+      # draft cannot take them, a warning, and the submission goes on with the previous text.
+      - name: What's new
+        if: steps.release.outputs.found == 'true'
+        env:
+          TAG: ${{ steps.release.outputs.tag }}
+        run: |
+          set -euo pipefail
+          version=${TAG#v}
+          dir="$RUNNER_TEMP/msstore-notes"
+          mkdir -p "$dir"
+          notes() { # <android locale> <file> <fallback>
+            if gh api -H 'Accept: application/vnd.github.raw' \
+                "repos/$GH_REPO/contents/apps/android/fastlane/metadata/android/$1/changelogs/default.txt?ref=$TAG" > "$2" 2>/dev/null \
+              && head -n 1 "$2" | grep -Fq "$version"; then
+              echo "$1: the Google Play notes"
+            else
+              printf '%s\n' "$3" > "$2"
+              echo "$1: the Google Play notes do not name $version; one line instead"
+            fi
+          }
+          url="https://github.com/$GH_REPO/releases/tag/$TAG"
+          notes en-US "$dir/en.txt" "Core Hub $version: improvements and fixes. What changed: $url"
+          notes ar "$dir/ar.txt" "كور هب $version: تحسينات وإصلاحات. التفاصيل: $url"
+          if msstore submission get "$PRODUCT_ID" | sed '1s/^\xEF\xBB\xBF//' > "$dir/submission.json" \
+            && jq --rawfile en "$dir/en.txt" --rawfile ar "$dir/ar.txt" '
+                 .Listings |= with_entries(
+                   if .value.BaseListing then
+                     .value.BaseListing.ReleaseNotes = ((if (.key | ascii_downcase | startswith("ar")) then $ar else $en end) | rtrimstr("\n"))
+                   else . end)' "$dir/submission.json" > "$dir/submission-notes.json" \
+            && msstore submission update "$PRODUCT_ID" --payload "$dir/submission-notes.json"; then
+            echo "What's new set for: $(jq -r '.Listings | keys | join(", ")' "$dir/submission-notes.json")"
+          else
+            echo "::warning title=Microsoft Store: What's new not changed::The draft kept the previous version's text; edit it in Partner Center if it matters."
+          fi
+
+      # Commit the draft, then wait until Microsoft has taken it in (it leaves CommitStarted for
+      # pre-processing and certification, which take up to a few business days on their own).
+      - name: Submit ${{ steps.release.outputs.tag }} for certification
+        if: steps.release.outputs.found == 'true'
+        env:
+          TAG: ${{ steps.release.outputs.tag }}
+        run: |
+          set -euo pipefail
+          url="https://partner.microsoft.com/dashboard/products/$PRODUCT_ID/overview"
+          fail() {
+            echo "::error title=Microsoft Store submission failed::$1 ($url). The GitHub release is not affected; rerun Actions → Microsoft Store publish with tag $TAG."
+            echo "Microsoft Store: $TAG failed — $1 — $url" >> "$GITHUB_STEP_SUMMARY"
+            exit 1
+          }
+          msstore submission publish "$PRODUCT_ID" || fail "msstore could not commit the submission"
+          status=unknown
+          for _ in $(seq 1 40); do
+            sub=$(msstore submission get "$PRODUCT_ID" | sed '1s/^\xEF\xBB\xBF//') || true
+            status=$(printf %s "$sub" | jq -r '.Status // "unknown"' 2>/dev/null || echo unknown)
+            echo "Submission status: $status"
+            [ "$status" = CommitStarted ] || [ "$status" = unknown ] || break
+            sleep 30
+          done
+          case "$status" in
+            CommitFailed|PreProcessingFailed|CertificationFailed)
+              printf %s "$sub" | jq -r '.StatusDetails.Errors[]? | "\(.Code): \(.Details)"' || true
+              fail "the submission is $status (the errors above)" ;;
+            CommitStarted|unknown)
+              echo "::warning title=Microsoft Store: still committing::The submission was committed but is still $status after 20 minutes; Partner Center shows how it goes ($url)." ;;
+          esac
+          echo "Microsoft Store: $TAG submitted — status $status — $url" | tee -a "$GITHUB_STEP_SUMMARY"
