@@ -49,7 +49,7 @@ v1.1.7: fallback
 $ (تحويل jq على مثال إرسال: en-us وar وقائمة بلا BaseListing)
 {"Pricing":{"PriceId":"Free"},"Listings":{"en-us":{"BaseListing":{"ReleaseNotes":"Core Hub 1.1.9\n\n• a"}},"ar":{"BaseListing":{"ReleaseNotes":"كور هب 1.1.9"}},"fr-fr":{"Platform":null}}}
 $ node scripts/check-change-record.mjs --base origin/main
-(ناتجه في الأسفل بعد الالتزام)
+change-record  OK — 1 record(s) valid
 ```
 
 ## المخاطر والرجوع
