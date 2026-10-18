@@ -310,6 +310,11 @@ describe('channel identities: a message on a channel acts for the person who lin
     const stranger = await call(h, key, 'gateway', 'tasks.create', { title: 'Stranger' });
     expect(stranger.isError).toBe(true);
     expect(stranger.body.code).toBe('hub_tools_sender_not_linked');
+    // What the agent passes on: nothing was saved, and how to link this account.
+    expect(stranger.body.error).toMatch(/^Nothing was done and nothing was saved/);
+    expect(stranger.body.error).toContain('Settings → Account → Messaging accounts');
+    expect(stranger.body.error).toContain('"/start"');
+    expect(stranger.body.error).toContain('do not say the request was saved');
 
     // The owner's own chat in the hub is live at the same time: the stranger's gateway call
     // still acts for nobody, and a call from the hub's own process is the owner's run.
