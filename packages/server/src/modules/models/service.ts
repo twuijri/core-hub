@@ -120,7 +120,7 @@ import {
   type AccountScope,
   type PendingLogin,
 } from './gemini-desktop/index.js';
-import type { SessionOpener } from './gemini-desktop/transport.js';
+import { defaultOpener, type SessionOpener } from './gemini-desktop/transport.js';
 import { t, type UiLanguage } from '../../i18n/index.js';
 
 /** The variable a Hermes profile's gateway token is in (DECISIONS §143). */
@@ -672,7 +672,7 @@ export class ModelsService {
       db: options.db,
       secrets: options.secrets,
       fetchImpl: options.geminiDesktop?.fetchImpl ?? globalThis.fetch,
-      ...(options.geminiDesktop?.opener ? { opener: options.geminiDesktop.opener } : {}),
+      opener: options.geminiDesktop?.opener ?? defaultOpener(() => options.hostEnv?.() ?? {}),
       now: () => this.now().getTime(),
     });
   }

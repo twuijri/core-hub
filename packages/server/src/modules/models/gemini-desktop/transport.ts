@@ -117,12 +117,12 @@ function proxyFor(host: string, env: NodeJS.ProcessEnv): URL | null {
   }
 }
 
-/** The service, directly or through the process's proxy. */
-export function defaultOpener(env: NodeJS.ProcessEnv = process.env): SessionOpener {
+/** The service, directly or through the host's proxy (`HTTPS_PROXY`, `NO_PROXY`). */
+export function defaultOpener(env: () => NodeJS.ProcessEnv = () => ({})): SessionOpener {
   return (signal) =>
     new Promise<ClientHttp2Session>((resolve, reject) => {
       const target = new URL(NATIVE_ORIGIN);
-      const proxy = proxyFor(target.hostname, env);
+      const proxy = proxyFor(target.hostname, env());
       const timer = setTimeout(
         () => fail(new NativeCallError(null, 'could not connect to Gemini’s service in time', 504)),
         CONNECT_TIMEOUT_MS,

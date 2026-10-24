@@ -207,13 +207,23 @@ describe.skipIf(!enabled)('subscription sign-ins with the real CLIProxyAPI', () 
 
   const authDir = () => path.join(hub.dataDir, 'gateway', 'cliproxy-auth');
 
-  it('offers every vendor CLIProxyAPI 8.0.4 signs in to, and it has no Gemini CLI, Qwen or iFlow sign-in', async () => {
+  it('offers every vendor CLIProxyAPI 8.0.4 signs in to plus the hub-held Gemini Desktop (§155), and it has no Gemini CLI, Qwen or iFlow sign-in', async () => {
     const vendors = await api('GET', '/api/v1/models/subscription-vendors');
     const offered = (vendors.json() as { items: { vendor: string }[] }).items.map(
       (item) => item.vendor,
     );
     expect(offered.sort()).toEqual(
-      ['antigravity', 'claude', 'codex', 'devin', 'kimi', 'kimi-ai', 'meta', 'xai'].sort(),
+      [
+        'antigravity',
+        'claude',
+        'codex',
+        'devin',
+        'gemini-desktop',
+        'kimi',
+        'kimi-ai',
+        'meta',
+        'xai',
+      ].sort(),
     );
     const lease = await modelGatewayFor(hub.app).subscriptions().open();
     try {
