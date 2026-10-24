@@ -15,8 +15,8 @@
 // - Older releases (v2026.9.24 and before, `requires-python = ">=3.11,<3.14"`) have no such lock
 //   and run on 3.12, the Python the image always used.
 //
-// The image's uv (`ARG UV_VERSION`) must know the release printed; Hermes's own pin (uv 0.12.3)
-// does.
+// The image's uv (`ARG UV_VERSION`) must know the release printed; Hermes's own pin does (uv 0.13.5
+// for v0.22.5's 3.14.9; uv 0.12.3 did not).
 import { existsSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
