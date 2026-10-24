@@ -1,9 +1,6 @@
-Core Hub 1.1.8
+Core Hub 1.1.9
 
-• Reply to Telegram and WhatsApp conversations from the app: your message reaches the chat and the agent answers there and here
-• Tap a message to see when it was sent
-• Swipe a message to reply, and long-press an agent's reply for copy and more
-• Workflows and the Tools section on the phone
-• Every agent can use any model your hub connects, including subscriptions
-• No notification for a chat you are looking at
-• Faster updates and many fixes
+• Gemini Desktop: add your Gemini account as a provider on your hub and chat with it, each conversation kept as one Gemini chat
+• See when each Telegram and WhatsApp message was sent
+• A clearer answer, with the steps to link, when an unlinked account messages an agent
+• Newer Hermes Agent and steadier agent start-up
