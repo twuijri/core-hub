@@ -374,6 +374,19 @@ describe('one gateway per host: named profiles’ routes in the root’s file (�
       // The root's page lists only its own routes; its listener is on for the copies.
       expect(listWebhooks(root).map((route) => route.name)).toEqual(['own', 'sales--deploys']);
       expect(webhookListener(root).enabled).toBe(true);
+      // The same copy in the profile's own file, under the root's name (Hermes v0.22.3 checks the
+      // route again there when it admits the delivery); the profile's page still lists its own.
+      const opsSubs = JSON.parse(
+        readFileSync(path.join(ops, 'webhook_subscriptions.json'), 'utf8'),
+      );
+      expect(opsSubs['ops--alerts']).toEqual(subs['ops--alerts']);
+      expect(opsSubs.alerts).toMatchObject({ prompt: 'Alert' });
+      const salesSubs = JSON.parse(
+        readFileSync(path.join(sales, 'webhook_subscriptions.json'), 'utf8'),
+      );
+      expect(salesSubs[salesKey]).toEqual(subs[salesKey]);
+      expect(listWebhooks(ops).map((route) => route.name)).toEqual(['alerts']);
+      expect(listWebhooks(sales).map((route) => route.name)).toEqual(['deploys']);
 
       // Unchanged: nothing written, the listener already on.
       expect(await shareProfileWebhooks(root, ['sales', 'ops'], free)).toEqual({
@@ -399,6 +412,9 @@ describe('one gateway per host: named profiles’ routes in the root’s file (�
       expect((await shareProfileWebhooks(root, ['ops'], free)).changed).toBe(true);
       const after = JSON.parse(readFileSync(path.join(root, 'webhook_subscriptions.json'), 'utf8'));
       expect(Object.keys(after).sort()).toEqual(['own', 'sales--deploys']);
+      expect(
+        Object.keys(JSON.parse(readFileSync(path.join(ops, 'webhook_subscriptions.json'), 'utf8'))),
+      ).toEqual([]);
     } finally {
       rmSync(root, { recursive: true, force: true });
     }

@@ -7,7 +7,10 @@
  * On a Hermes with one gateway per host (DECISIONS §129) that is the root's, and it serves every
  * profile — Hermes's routing table spans them all, as the real-Hermes test shows; on an older
  * Hermes each profile's gateway polls with its own home's key and is handed only its own
- * profile's items.
+ * profile's items. From v0.22.3 the one gateway lets a plugin inject only into its own profile's
+ * conversations (`injectsOnlyIntoOwnProfile`), and each profile's copy holds the gateway's
+ * injector: there every copy polls with its own key and is handed only its own profile's items,
+ * as on the oldest Hermes.
  *
  * Everything here is in memory: an item not taken before the hub stops is lost with the
  * outgoing message that made it, which says so (`sessions`, `bridge_no_answer`).
@@ -52,6 +55,8 @@ export interface ChannelBridgeDeps {
   /** The named profiles under the root (`profiles/<name>`). */
   namedProfiles(root: string): string[];
   topology(): GatewayTopology;
+  /** The Hermes the hub runs lets a plugin inject only into its own profile (v0.22.3 on). */
+  injectsOnlyIntoOwnProfile?(): boolean;
   /** Where Hermes reaches the hub's MCP endpoint; `null` before the hub listens. */
   mcpUrl(): string | null;
   listener(): BridgeListener | null;
@@ -164,10 +169,17 @@ export class ChannelBridge {
     return profile;
   }
 
-  /** The profiles a poller with this key's profile is handed items for. */
+  /**
+   * The profiles a poller with this key's profile is handed items for: its own, and on a Hermes
+   * with one gateway per host before v0.22.3 the root's copy gets every profile's while the named
+   * copies get none (that Hermes accepted any profile's conversation from the root's copy only for
+   * certain). From v0.22.3 each copy only ever gets its own.
+   */
   private serves(poller: string): (profile: string) => boolean {
-    return (profile) =>
-      profile === poller || (poller === 'default' && this.deps.topology() === 'one-per-host');
+    const shared =
+      this.deps.topology() === 'one-per-host' && !this.deps.injectsOnlyIntoOwnProfile?.();
+    if (!shared) return (profile) => profile === poller;
+    return poller === 'default' ? () => true : () => false;
   }
 
   private take(serves: (profile: string) => boolean): Array<BridgeItem & { profile: string }> {

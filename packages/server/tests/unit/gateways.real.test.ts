@@ -46,7 +46,12 @@ import path from 'node:path';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { capturingLogger, unreachableFetch } from './helpers.js';
 import { writeHermesEnv, writeHermesRoute } from '../../src/modules/models/propagation.js';
-import { imageHermesVersion, servesEveryProfileFromOneGateway } from './hermes-real.js';
+import {
+  gatewayLockRecord,
+  imageHermesVersion,
+  reservesEveryServedHome,
+  servesEveryProfileFromOneGateway,
+} from './hermes-real.js';
 import {
   addWebhook,
   postToListener,
@@ -448,19 +453,34 @@ describe.skipIf(!image)(
         ]);
         // Every row follows the one process (here a `docker exec`, so not the pid Hermes records).
         expect(new Set(runtime.gateways().map((gateway) => gateway.pid)).size).toBe(1);
-        // No gateway of its own: nothing holds a lock or writes a record in «manger»'s home.
-        expect(existsSync(path.join(root, 'profiles', 'manger', 'gateway.lock'))).toBe(false);
-        expect(readGatewayRecord(path.join(root, 'profiles', 'manger'))).toBeNull();
+        // No gateway of its own: no record in «manger»'s home. From v0.22.5 the one gateway
+        // reserves every home it serves, so «manger»'s lock names the root's gateway process;
+        // before it, nothing held a lock there.
+        const mangerHome = path.join(root, 'profiles', 'manger');
+        if (reservesEveryServedHome(image!)) {
+          const rootLock = gatewayLockRecord(root);
+          expect(rootLock).not.toBeNull();
+          expect(gatewayLockRecord(mangerHome)?.pid).toBe(rootLock?.pid);
+        } else {
+          expect(existsSync(path.join(mangerHome, 'gateway.lock'))).toBe(false);
+        }
+        expect(readGatewayRecord(mangerHome)).toBeNull();
         // The block the files lacked, written by the hub for the gateway that serves each one.
         for (const home of [root, path.join(root, 'profiles', 'manger')]) {
           expect(readFileSync(path.join(home, 'config.yaml'), 'utf8')).toContain(`${PROVIDER}:`);
         }
         // «manger»'s webhook route, copied by the hub into the root's file, is answered by the
         // one gateway's listener under `/p/manger/` — Hermes accepts the signed delivery.
-        await vi.waitFor(async () => expect((await deliverToManger())?.status).toBe(202), {
-          timeout: 120_000,
-          interval: 2_000,
-        });
+        await vi.waitFor(
+          async () => {
+            const answer = await deliverToManger();
+            expect(answer?.status, JSON.stringify(answer)).toBe(202);
+          },
+          {
+            timeout: 120_000,
+            interval: 2_000,
+          },
+        );
 
         const fromDefault = await ask(DEFAULT_PORT, runtime.apiKey()!);
         expect(fromDefault, JSON.stringify(fromDefault)).toMatchObject({ status: 200 });

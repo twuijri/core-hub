@@ -4,7 +4,10 @@
  * 1. The hub seeds the library into `default` and into a profile Hermes itself made (`hermes
  *    profile create`, which also seeds Hermes's own built-in skills); `hermes skills list` then
  *    lists every library skill in the `core-hub` category, beside Hermes's own.
- * 2. One image skill end to end, in a real Hermes turn: a scripted model loads `image-generate`
+ * 2. One image skill end to end, in a real Hermes turn — in the profile, through the surface the
+ *    hub's own chats use (`python -m tui_gateway.entry`, `HermesTuiSession`; the one-shot
+ *    `hermes -p <profile> chat -q` waits for a gateway runtime from v0.22.3 and never got one in a
+ *    throwaway container): a scripted model loads `image-generate`
  *    with `skill_view` and runs its script with `terminal`, exactly as the skill tells it to; the
  *    script reaches a scripted OpenAI-style image endpoint with the image model the hub wrote into
  *    the profile's `.env` for Models → Images (decision §72: `COREHUB_IMAGE_*`, which Hermes passes
@@ -15,7 +18,7 @@
  *   COREHUB_HERMES_IMAGE=core-hub:local pnpm --filter @corehub/server exec \
  *     vitest run tests/unit/skill-library.real.test.ts
  */
-import { execFileSync, spawn } from 'node:child_process';
+import { execFileSync } from 'node:child_process';
 import {
   chmodSync,
   existsSync,
@@ -31,11 +34,13 @@ import path from 'node:path';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { imageEnvOf } from '../../src/modules/models/images.js';
 import { writeHermesRoute } from '../../src/modules/models/propagation.js';
+import { HermesTuiSession, stdioTuiChannel } from '../../src/modules/agents/adapters/hermes-tui.js';
 import { seedSkillLibraryOfEveryProfile } from '../../src/modules/agents/index.js';
 import { LIBRARY_CATEGORY, shippedLibrary } from '../../src/modules/agents/skill-library.js';
 
 const image = process.env.COREHUB_HERMES_IMAGE;
 const HERMES = '/opt/hermes/.venv/bin/hermes';
+const PYTHON = '/opt/hermes/.venv/bin/python';
 const PROVIDER = 'corehub-custom-scripted';
 const KEY_ENV = 'COREHUB_CUSTOM_SCRIPTED_API_KEY';
 const IMAGE_KEY = 'sk-image-real-test';
@@ -70,7 +75,7 @@ describe.skipIf(!image)(
     const offered: string[][] = [];
     const toolResults: string[] = [];
 
-    const dockerArgs = (args: string[], cwd: string, name?: string) => [
+    const dockerArgs = (args: string[], cwd: string, name?: string, entrypoint = HERMES) => [
       'run',
       '--rm',
       ...(name ? ['--name', name] : []),
@@ -91,34 +96,55 @@ describe.skipIf(!image)(
       '-e',
       'NO_COLOR=1',
       '--entrypoint',
-      HERMES,
+      entrypoint,
       image!,
       ...args,
     ];
 
     /**
-     * A Hermes turn, asynchronously: the scripted model and image endpoint answer from this very
-     * process, so blocking it (execFileSync) would leave Hermes waiting on a server that cannot run.
+     * A Hermes turn in `profile`, as the hub runs one: a `tui_gateway` from the image (its
+     * JSON-RPC on stdin), a session opened in the profile with its model, every approval answered
+     * once (the one-shot's `--yolo`). Asynchronous: the scripted model and image endpoint answer
+     * from this very process. The answer's words, or an error with them.
      */
-    const hermesTurn = (args: string[], cwd: string) =>
-      new Promise<string>((resolve, reject) => {
-        const name = `corehub-library-real-${process.pid}`;
-        const child = spawn('docker', dockerArgs(args, cwd, name), {
-          stdio: ['ignore', 'pipe', 'pipe'],
+    const hermesTurn = async (prompt: string, profile: string, cwd: string): Promise<string> => {
+      const name = `corehub-library-real-${process.pid}`;
+      const channel = stdioTuiChannel({
+        command: 'docker',
+        args: ['run', '-i', ...dockerArgs(['-m', 'tui_gateway.entry'], cwd, name, PYTHON).slice(1)],
+        env: process.env,
+        readyTimeoutMs: 120_000,
+      });
+      try {
+        const session = await HermesTuiSession.open(channel, null, {
+          profile,
+          model: 'scripted-model',
+          provider: PROVIDER,
+          cwd,
         });
         let out = '';
-        child.stdout.on('data', (chunk: Buffer) => (out += chunk.toString()));
-        child.stderr.on('data', (chunk: Buffer) => (out += chunk.toString()));
-        const timer = setTimeout(() => {
+        const reading = (async () => {
+          for await (const event of session.stream()) {
+            if (event.type === 'message.delta') out += event.text;
+            if (event.type === 'approval.requested') await session.respond(event.id, 'once');
+            if (event.type === 'run.failed')
+              throw new Error(`hermes failed: ${event.error}\n${out}`);
+            if (event.type === 'run.completed') return;
+          }
+        })();
+        await session.send({ text: prompt });
+        await reading;
+        await session.close();
+        return out;
+      } finally {
+        await channel.close();
+        try {
           execFileSync('docker', ['rm', '-f', name], { stdio: 'ignore' });
-          reject(new Error(`hermes timed out:\n${out}`));
-        }, 240_000);
-        child.on('close', (code) => {
-          clearTimeout(timer);
-          if (code === 0) resolve(out);
-          else reject(new Error(`hermes exited ${code}:\n${out}`));
-        });
-      });
+        } catch {
+          // already gone with --rm
+        }
+      }
+    };
 
     const hermes = (args: string[], cwd = root) =>
       execFileSync('docker', dockerArgs(args, cwd), {
@@ -308,22 +334,7 @@ describe.skipIf(!image)(
     });
 
     it('runs image-generate end to end in a Hermes turn, against a scripted image endpoint', async () => {
-      const output = await hermesTurn(
-        [
-          '-p',
-          'work',
-          'chat',
-          '-q',
-          'ارسم لي ثعلبًا أحمر',
-          '-Q',
-          '--yolo',
-          '--max-turns',
-          '6',
-          '-t',
-          'terminal,skills',
-        ],
-        work,
-      );
+      const output = await hermesTurn('ارسم لي ثعلبًا أحمر', 'work', work);
       console.log(`hermes answered: ${output.trim().split('\n').slice(-3).join(' | ')}`);
       console.log(`tools offered to the model: ${[...new Set(offered.flat())].sort().join(', ')}`);
       console.log(`script output: ${toolResults.at(-1)?.slice(0, 300)}`);
@@ -346,6 +357,6 @@ describe.skipIf(!image)(
       expect(made[0]).toMatch(/^a-red-fox-in-flat-style-\d{8}-\d{6}-1\.png$/);
       expect(existsSync(path.join(work, 'images', made[0]!))).toBe(true);
       expect(toolResults.join('\n')).not.toContain(IMAGE_KEY);
-    });
+    }, 240_000);
   },
 );

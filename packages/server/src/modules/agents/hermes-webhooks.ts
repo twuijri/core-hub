@@ -474,7 +474,8 @@ export function sharedRouteKey(profile: string, name: string, taken: ReadonlySet
 /**
  * Copies every named profile's routes into the root's subscriptions file, for a Hermes that runs
  * one gateway per host (see the top of the file): each as `profile: <name>`, marked with where it
- * came from, under `sharedRouteKey`. Copies of routes that are gone — or of profiles that are gone —
+ * came from, under `sharedRouteKey` — and the same copy into the profile's own file under that
+ * name, where Hermes v0.22.3 and later look for it again when they admit the delivery. Copies of routes that are gone — or of profiles that are gone —
  * are removed; the root's own routes are never touched, and a name the root uses for its own
  * keeps it (the copy takes the hashed name). When any copy exists the root's listener is switched
  * on; `listenerSwitchedOn` says it was off, so the one gateway must start again to listen.
@@ -488,22 +489,39 @@ export async function shareProfileWebhooks(
   const own = new Set(Object.keys(current).filter((key) => !isShared(current[key]!)));
   const wanted: Record<string, Json> = {};
   const used = new Set(own);
+  let changed = false;
   for (const profile of [...profiles].sort()) {
     const home = path.join(root, 'profiles', profile);
     const subs = readSubscriptions(home);
+    const copies: Record<string, Json> = {};
     for (const route of listWebhooks(home)) {
       const raw = subs[route.name];
       if (!raw || route.static) continue;
       const key = sharedRouteKey(profile, route.name, used);
       used.add(key);
       wanted[key] = { ...raw, profile, [SHARED_FROM]: profile, [SHARED_NAME]: route.name };
+      if (!(key in subs) || isShared(subs[key]!)) copies[key] = wanted[key]!;
+    }
+    // The same copies in the profile's own file. From v0.22.3 Hermes admits a `/p/<profile>/`
+    // delivery in that profile's scope and checks the route there again by its name
+    // (`gateway/platforms/webhook_delivery.py` §route_digest reloads the subscriptions of the home in
+    // scope): without a copy under the root's name it refuses the delivery (503). The hub's own
+    // listing skips them (`listWebhooks`), as it skips the root's.
+    const mine: Record<string, Json> = {};
+    for (const [key, route] of Object.entries(subs)) if (!isShared(route)) mine[key] = route;
+    Object.assign(mine, copies);
+    if (JSON.stringify(mine) !== JSON.stringify(subs)) {
+      writeSubscriptions(home, mine);
+      changed = true;
     }
   }
   const next: Record<string, Json> = {};
   for (const [key, route] of Object.entries(current)) if (!isShared(route)) next[key] = route;
   Object.assign(next, wanted);
-  const changed = JSON.stringify(next) !== JSON.stringify(current);
-  if (changed) writeSubscriptions(root, next);
+  if (JSON.stringify(next) !== JSON.stringify(current)) {
+    writeSubscriptions(root, next);
+    changed = true;
+  }
   let listenerSwitchedOn = false;
   if (Object.keys(wanted).length > 0 && !webhookListener(root).enabled) {
     const others = profiles.map((profile) => path.join(root, 'profiles', profile));
