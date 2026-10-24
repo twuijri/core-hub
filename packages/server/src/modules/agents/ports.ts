@@ -224,6 +224,8 @@ export interface DirectChatRequest {
   signal?: AbortSignal;
   /** Where to move on to when this model fails (contract decision §54); in order. */
   fallbacks?: readonly { providerId: string; model: string }[];
+  /** The hub conversation (`direct-<session id>`), for a provider that keeps one (§155). */
+  conversation?: string | null;
 }
 
 export type DirectChatEvent =

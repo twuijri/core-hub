@@ -48,6 +48,7 @@ import {
   hermesProviderNameOf,
   legacyHermesKeyEnvOf,
   hermesRouteOf,
+  hubHeld,
   secretNameOf,
   type ProviderCatalogueEntry,
 } from './catalogue.js';
@@ -112,6 +113,14 @@ import {
   type SubscriptionBackend,
 } from './subscriptions.js';
 import { upstreamModel, upstreamPrefix } from './gateway/cliproxy-config.js';
+import {
+  GEMINI_DESKTOP_CALLBACK_HINT,
+  GeminiDesktop,
+  GeminiDesktopError,
+  type AccountScope,
+  type PendingLogin,
+} from './gemini-desktop/index.js';
+import type { SessionOpener } from './gemini-desktop/transport.js';
 import { t, type UiLanguage } from '../../i18n/index.js';
 
 /** The variable a Hermes profile's gateway token is in (DECISIONS §143). */
@@ -268,6 +277,8 @@ export interface ModelsServiceOptions {
    * Hermes — a row's address on its listener and a profile's long-lived token. Absent: native.
    */
   hermesGateway?: HermesGatewayPort;
+  /** Tests: how the hub reaches Google for Gemini Desktop (DECISIONS §155). */
+  geminiDesktop?: { fetchImpl?: typeof fetch; opener?: SessionOpener };
 }
 
 /** What the models module needs of the gateway to route Hermes through it (§143). */
@@ -302,6 +313,8 @@ interface SignInRecord {
   gateway?: GatewayLogin | null;
   /** "Move to the gateway": the Hermes-signed provider whose uses move here on approval. */
   moveFrom?: string | null;
+  /** A Gemini Desktop sign-in the hub runs itself (DECISIONS §155). */
+  native?: PendingLogin | null;
 }
 
 /** How long a finished or abandoned sign-in stays readable after its code ran out. */
@@ -429,8 +442,48 @@ export interface ContractProviderSignIn {
   callback_hint?: string | null;
 }
 
+/** Where a Gemini Desktop row's accounts are kept (§155): the row's own scope. */
+function accountScopeOf(row: ProviderRow): AccountScope {
+  return { id: row.id, workspace: row.workspace, ownerId: row.ownerId };
+}
+
+/**
+ * Why an agent other than the direct one cannot run on Gemini Desktop (§155): said by the
+ * gateway to the agent, and when somebody makes it a profile's default.
+ */
+export function geminiDesktopRefusal(label: string): string {
+  return `${label} answers text only, so only Core Hub's direct agent can use it: agents that use tools (Hermes, Claude Code, Codex and the other coding agents) cannot run on it. Pick another model for this agent, or chat with the direct agent.`;
+}
+
+/** A Gemini Desktop account operation; an unknown account is `404`. */
+function nativeAccount(accountId: string, run: () => void): void {
+  try {
+    run();
+  } catch (error) {
+    if (error instanceof GeminiDesktopError && error.status === 404) {
+      throw notFound({ resource: 'account', id: accountId });
+    }
+    throw error;
+  }
+}
+
+async function nativeAccountAsync(accountId: string, run: () => Promise<void>): Promise<void> {
+  try {
+    await run();
+  } catch (error) {
+    if (error instanceof GeminiDesktopError && error.status === 404) {
+      throw notFound({ resource: 'account', id: accountId });
+    }
+    if (error instanceof HubError) throw error;
+    throw new HubError('agent_error', {
+      message: error instanceof Error ? error.message : 'the account could not be renewed',
+      details: { reason: 'account_renew_failed' },
+    });
+  }
+}
+
 function signInView(record: SignInRecord): ContractProviderSignIn {
-  const pastes = record.gateway?.acceptsCode === true;
+  const pastes = record.gateway?.acceptsCode === true || !!record.native;
   return {
     id: record.id,
     status: record.status,
@@ -441,7 +494,13 @@ function signInView(record: SignInRecord): ContractProviderSignIn {
     accepts_code: pastes,
     expires_at: new Date(record.expiresAt).toISOString(),
     error: record.error,
-    ...(pastes ? { callback_hint: record.gateway?.callbackHint ?? null } : {}),
+    ...(pastes
+      ? {
+          callback_hint: record.native
+            ? GEMINI_DESKTOP_CALLBACK_HINT
+            : (record.gateway?.callbackHint ?? null),
+        }
+      : {}),
   };
 }
 
@@ -593,6 +652,8 @@ export class ModelsService {
   private readonly signIns = new Map<string, SignInRecord>();
   /** The subscriptions signed in to through the gateway (DECISIONS §143). */
   readonly subscriptions: Subscriptions;
+  /** Gemini Desktop, signed in to and served by the hub itself (DECISIONS §155). */
+  readonly geminiDesktop: GeminiDesktop;
 
   constructor(private readonly options: ModelsServiceOptions) {
     this.store = new ModelsStore({
@@ -606,6 +667,13 @@ export class ModelsService {
       backend: () => options.subscriptions?.() ?? null,
       now: () => this.now().getTime(),
       log: options.log,
+    });
+    this.geminiDesktop = new GeminiDesktop({
+      db: options.db,
+      secrets: options.secrets,
+      fetchImpl: options.geminiDesktop?.fetchImpl ?? globalThis.fetch,
+      ...(options.geminiDesktop?.opener ? { opener: options.geminiDesktop.opener } : {}),
+      now: () => this.now().getTime(),
     });
   }
 
@@ -1231,7 +1299,9 @@ export class ModelsService {
       // gateway's translator, for a subscription signed in to through it (§143).
       const entry = this.entryOf(row);
       const runtime = this.options.signIn?.();
-      if (entry?.gatewaySignIn) {
+      if (hubHeld(entry?.gatewaySignIn)) {
+        this.geminiDesktop.removeAll(accountScopeOf(row));
+      } else if (entry?.gatewaySignIn) {
         void this.subscriptions.removeAll(row.id);
       } else if (entry?.hermesProvider && runtime) {
         void runtime.signOut(entry.hermesProvider, this.signInProfileOf(scope, row));
@@ -1424,9 +1494,12 @@ export class ModelsService {
     // signed in to through the gateway, what the gateway's translator serves its accounts (§143).
     if (row.authKind === 'oauth') {
       if (row.status !== 'ok') return null;
-      if (entry?.gatewaySignIn ? this.subscriptions.unavailable() : !this.options.signIn?.()) {
-        return null;
-      }
+      const cannot = hubHeld(entry?.gatewaySignIn)
+        ? false
+        : entry?.gatewaySignIn
+          ? this.subscriptions.unavailable()
+          : !this.options.signIn?.();
+      if (cannot) return null;
     }
     const at = this.now();
     this.db
@@ -1673,6 +1746,9 @@ export class ModelsService {
   ): Promise<ContractProviderSignIn> {
     const row = this.loadProvider(scope, providerId);
     const entry = this.entryOf(row);
+    if (row.authKind === 'oauth' && hubHeld(entry?.gatewaySignIn)) {
+      return this.startNativeSignIn(scope, actor, row);
+    }
     if (row.authKind === 'oauth' && entry?.gatewaySignIn) {
       return this.startGatewaySignIn(scope, actor, row, entry.gatewaySignIn, null);
     }
@@ -1732,6 +1808,11 @@ export class ModelsService {
   ): Promise<ContractProviderSignIn> {
     const record = this.signInOf(scope, providerId, signInId);
     if (record.status !== 'pending') return signInView(record);
+    if (record.native) {
+      // Nothing to ask anybody: the pasted address finishes it (`completeSignIn`).
+      if (this.now().getTime() >= record.expiresAt) record.status = 'expired';
+      return signInView(record);
+    }
     if (record.gateway) return this.pollGatewaySignIn(scope, record);
     const runtime = this.options.signIn?.() ?? null;
     const expired = this.now().getTime() >= record.expiresAt;
@@ -1758,6 +1839,7 @@ export class ModelsService {
     code: string,
   ): Promise<ContractProviderSignIn> {
     const record = this.signInOf(scope, providerId, signInId);
+    if (record.native) return this.completeNativeSignIn(scope, record, code);
     if (!record.gateway?.acceptsCode) {
       throw new HubError('state_invalid', {
         messageKey: 'models.signin.code_not_accepted',
@@ -1835,6 +1917,94 @@ export class ModelsService {
         flow: gatewaySignIn.flow,
       },
     });
+    return signInView(record);
+  }
+
+  /**
+   * Gemini Desktop's sign-in, run by the hub itself (DECISIONS §155): a link to Google's page,
+   * whose landing address is pasted back. One at a time per provider.
+   */
+  private startNativeSignIn(
+    scope: WorkspaceScope,
+    actor: Actor,
+    row: ProviderRow,
+  ): ContractProviderSignIn {
+    this.forgetOldSignIns();
+    for (const other of this.signIns.values()) {
+      if (other.providerId !== row.id || !other.native || other.status !== 'pending') continue;
+      other.native.used = true;
+      other.status = 'failed';
+      other.error = 'replaced by a newer sign-in';
+    }
+    const login = this.geminiDesktop.startLogin();
+    const record: SignInRecord = {
+      id: newUlid(),
+      providerId: row.id,
+      workspace: scope.id,
+      actorId: actor.userId,
+      hermesProvider: '',
+      profile: null,
+      session: '',
+      userCode: null,
+      verificationUrl: login.url,
+      expiresAt: login.expiresAt,
+      status: 'pending',
+      error: null,
+      native: login,
+    };
+    this.signIns.set(record.id, record);
+    this.options.audit.record({
+      workspace: scope.id,
+      ownerId: actor.userId,
+      actorKind: 'user',
+      actorId: actor.userId,
+      action: 'provider.sign_in_started',
+      entityKind: 'provider',
+      entityId: row.id,
+      summary: `sign-in to ${row.slug} started`,
+      data: { slug: row.slug, scope: row.shared ? 'all' : 'profile', through: 'hub', flow: 'link' },
+    });
+    return signInView(record);
+  }
+
+  /**
+   * The address Google sent the browser to. One that does not belong to this sign-in (another
+   * sign-in's, or no code in it) is refused and the sign-in waits for the right one; once an
+   * address is accepted the sign-in ends, approved or failed.
+   */
+  private async completeNativeSignIn(
+    scope: WorkspaceScope,
+    record: SignInRecord,
+    code: string,
+  ): Promise<ContractProviderSignIn> {
+    if (record.status !== 'pending') return signInView(record);
+    const login = record.native!;
+    const row = this.store.providerById(record.providerId);
+    if (!row || row.archivedAt) throw notFound({ resource: 'provider', id: record.providerId });
+    try {
+      const { accountId } = await this.geminiDesktop.completeLogin(
+        accountScopeOf(row),
+        login,
+        code,
+      );
+      record.status = 'approved';
+      record.error = null;
+      this.gatewaySignedIn(scope, record, accountId);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'the sign-in failed';
+      if (!login.used) {
+        throw new HubError('validation_failed', {
+          message,
+          details: { field: 'code', reason: 'callback_refused', detail: message },
+        });
+      }
+      record.status = /declined/.test(message)
+        ? 'denied'
+        : /expired/.test(message)
+          ? 'expired'
+          : 'failed';
+      record.error = message;
+    }
     return signInView(record);
   }
 
@@ -2077,6 +2247,28 @@ export class ModelsService {
     | { supported: true; models: DiscoveredModel[]; source: 'provider'; reason: null }
     | { supported: false; reason: string }
   > {
+    if (hubHeld(this.entryOf(row)?.gatewaySignIn)) {
+      try {
+        const listed = await this.geminiDesktop.models(accountScopeOf(row));
+        return {
+          supported: true,
+          models: listed.map((model) => ({
+            key: model.id,
+            label: model.label,
+            kind: 'chat' as const,
+            contextWindow: null,
+            maxOutputTokens: null,
+          })),
+          source: 'provider',
+          reason: null,
+        };
+      } catch (error) {
+        return {
+          supported: false,
+          reason: error instanceof Error ? error.message : 'Gemini could not be asked',
+        };
+      }
+    }
     const backend = this.options.subscriptions?.() ?? null;
     const reason = backend ? backend.unavailable() : 'the model gateway is off on this hub';
     if (!backend || reason) return { supported: false, reason: reason ?? 'unavailable' };
@@ -2177,6 +2369,19 @@ export class ModelsService {
     errors: ContractProviderAccountError[];
   }> {
     const { row, signIn } = this.subscriptionRow(scope, providerId);
+    if (hubHeld(signIn)) {
+      if (this.syncSignedIn(row)) this.propagate(scope, actor);
+      return {
+        provider_id: row.id,
+        vendor: signIn.vendor,
+        flow: 'link',
+        available: true,
+        reason: null,
+        observed_at: this.now().toISOString(),
+        accounts: this.geminiDesktop.view(accountScopeOf(row), language),
+        errors: [],
+      };
+    }
     // The dialog asks CLIProxyAPI every time it is opened or refreshed: its counts move by the
     // minute, and its queue of failed calls is read only here and by the minute's timer.
     const read = await this.subscriptions.refresh(true);
@@ -2198,8 +2403,11 @@ export class ModelsService {
    * account added or removed outside a sign-in, or a hub restored from a backup).
    */
   private syncSignedIn(row: ProviderRow): boolean {
-    if (!this.subscriptions.known()) return false;
-    const has = this.subscriptions.cached(row.id).length > 0;
+    const native = hubHeld(this.entryOf(row)?.gatewaySignIn);
+    if (!native && !this.subscriptions.known()) return false;
+    const has = native
+      ? this.geminiDesktop.accounts(accountScopeOf(row)).length > 0
+      : this.subscriptions.cached(row.id).length > 0;
     const status = has ? 'ok' : 'unconfigured';
     if (row.status === status) return false;
     const at = this.now();
@@ -2219,9 +2427,11 @@ export class ModelsService {
    */
   /** Whether any profile has a subscription row signed in through the gateway. */
   hasSubscriptionRows(): boolean {
-    return this.store
-      .everyProviderRow()
-      .some((row) => !row.archivedAt && row.status === 'ok' && !!this.entryOf(row)?.gatewaySignIn);
+    return this.store.everyProviderRow().some((row) => {
+      const signIn = this.entryOf(row)?.gatewaySignIn;
+      // Gemini Desktop's accounts are the hub's own: they need no CLIProxyAPI (§155).
+      return !row.archivedAt && row.status === 'ok' && !!signIn && !hubHeld(signIn);
+    });
   }
 
   syncSubscriptionRows(scope: WorkspaceScope, actor: Actor): boolean {
@@ -2247,9 +2457,17 @@ export class ModelsService {
     patch: { disabled: boolean },
     language: UiLanguage,
   ): Promise<ContractProviderAccount> {
-    const { row } = this.subscriptionRow(scope, providerId);
+    const { row, signIn } = this.subscriptionRow(scope, providerId);
     if (typeof patch?.disabled !== 'boolean') {
       throw validationFailed({ field: 'disabled', reason: 'true or false' });
+    }
+    if (hubHeld(signIn)) {
+      const held = accountScopeOf(row);
+      nativeAccount(accountId, () =>
+        this.geminiDesktop.setDisabled(held, accountId, patch.disabled),
+      );
+      this.accountAudit(scope, actor, row, patch.disabled ? 'disabled' : 'enabled');
+      return this.geminiDesktop.accountView(held, accountId, language);
     }
     await this.subscriptions.setDisabled(row.id, accountId, patch.disabled);
     this.accountAudit(scope, actor, row, patch.disabled ? 'disabled' : 'enabled');
@@ -2262,8 +2480,12 @@ export class ModelsService {
     providerId: string,
     accountId: string,
   ): Promise<void> {
-    const { row } = this.subscriptionRow(scope, providerId);
-    await this.subscriptions.remove(row.id, accountId);
+    const { row, signIn } = this.subscriptionRow(scope, providerId);
+    if (hubHeld(signIn)) {
+      nativeAccount(accountId, () => this.geminiDesktop.remove(accountScopeOf(row), accountId));
+    } else {
+      await this.subscriptions.remove(row.id, accountId);
+    }
     this.accountAudit(scope, actor, row, 'signed_out');
     // The last account gone: Hermes's gateway block for this row goes too.
     if (this.syncSignedIn(this.loadProvider(scope, row.id))) this.propagate(scope, actor);
@@ -2276,7 +2498,13 @@ export class ModelsService {
     accountId: string,
     language: UiLanguage,
   ): Promise<ContractProviderAccount> {
-    const { row } = this.subscriptionRow(scope, providerId);
+    const { row, signIn } = this.subscriptionRow(scope, providerId);
+    if (hubHeld(signIn)) {
+      const held = accountScopeOf(row);
+      await nativeAccountAsync(accountId, () => this.geminiDesktop.renew(held, accountId));
+      this.accountAudit(scope, actor, row, 'renewed');
+      return this.geminiDesktop.accountView(held, accountId, language);
+    }
     await this.subscriptions.renew(row.id, accountId);
     this.accountAudit(scope, actor, row, 'renewed');
     return this.subscriptions.accountView(row.id, accountId, language);
@@ -2289,6 +2517,11 @@ export class ModelsService {
     language: UiLanguage,
   ): Promise<ContractProviderAccount> {
     const { row, signIn } = this.subscriptionRow(scope, providerId);
+    if (hubHeld(signIn)) {
+      const held = accountScopeOf(row);
+      await nativeAccountAsync(accountId, () => this.geminiDesktop.renew(held, accountId));
+      return this.geminiDesktop.accountView(held, accountId, language);
+    }
     await this.subscriptions.check(row.id, accountId, signIn);
     return this.subscriptions.accountView(row.id, accountId, language);
   }
@@ -3466,7 +3699,16 @@ export class ModelsService {
     };
     let stream: AsyncIterable<ChatEvent>;
     let release: (() => void) | null = null;
-    if (entry?.gatewaySignIn) {
+    if (hubHeld(entry?.gatewaySignIn)) {
+      // Gemini Desktop (§155): the hub speaks the app's own service, and keeps this conversation
+      // in one Gemini conversation.
+      stream = this.geminiDesktop.chat(accountScopeOf(provider), {
+        model: request.model,
+        messages: request.messages,
+        conversation: request.conversation ?? null,
+        ...(request.signal ? { signal: request.signal } : {}),
+      });
+    } else if (entry?.gatewaySignIn) {
       // Signed in to through the gateway (§143): the turn goes through its translator like any
       // agent's, and the account's token never comes into the hub.
       if (provider.status !== 'ok' || !this.options.gatewayDirect) {
@@ -3677,6 +3919,8 @@ export class ModelsService {
   private gatewayRoute(row: ProviderRow): { kind: UpstreamKind; baseUrl: string } | null {
     if (row.archivedAt || !row.enabled || row.kind !== 'llm') return null;
     const entry = this.entryOf(row);
+    // Gemini Desktop (§155) answers text only, for the direct agent: never an agent's upstream.
+    if (hubHeld(entry?.gatewaySignIn)) return null;
     // A subscription signed in to through the gateway (§143) is served by its accounts, once
     // there is one; a sign-in through Hermes stays Hermes's.
     if (entry?.gatewaySignIn) {
@@ -3789,6 +4033,9 @@ export class ModelsService {
     const provider = this.effectiveFor(workspace, providerId);
     if (!provider || provider.archivedAt) {
       return { refusal: 'the chosen model belongs to a provider this profile does not have' };
+    }
+    if (hubHeld(this.entryOf(provider)?.gatewaySignIn)) {
+      return { refusal: geminiDesktopRefusal(provider.label) };
     }
     if (!this.gatewayRoute(provider)) {
       return {
@@ -4119,7 +4366,15 @@ export class ModelsService {
     });
     // A subscription through the gateway (§143): its vendor, flow and accounts as last seen.
     const signIn = entry?.gatewaySignIn;
-    if (signIn) {
+    if (signIn && hubHeld(signIn)) {
+      const summary = this.geminiDesktop.summary(accountScopeOf(row));
+      provider.subscription = {
+        vendor: signIn.vendor,
+        flow: 'link',
+        accounts: summary.accounts,
+        accounts_ready: summary.ready,
+      };
+    } else if (signIn) {
       const summary = this.subscriptions.summary(row.id);
       provider.subscription = {
         vendor: signIn.vendor,
@@ -4340,6 +4595,13 @@ export class ModelsService {
   private requireExpressible(scope: WorkspaceScope, providerId: string): void {
     const row = this.loadProvider(scope, providerId);
     if (this.hermesNameOfProvider(row)) return;
+    if (hubHeld(this.entryOf(row)?.gatewaySignIn)) {
+      throw validationFailed({
+        field: 'default',
+        reason: geminiDesktopRefusal(row.label),
+        provider: row.slug,
+      });
+    }
     // A subscription signed in to through the gateway (§143) serves every agent; Hermes reaches
     // it once it uses the hub's models, and keeps its own model until then (the runtime report
     // says so).
@@ -4570,6 +4832,11 @@ export interface DirectChatRequest {
   messages: ChatMessage[];
   reasoningEffort?: string | null;
   signal?: AbortSignal;
+  /**
+   * The hub conversation this turn belongs to (`direct-<session id>`): a provider that keeps a
+   * conversation of its own (Gemini Desktop, §155) keeps one per hub conversation. Optional.
+   */
+  conversation?: string | null;
 }
 
 export type DirectChatEvent =

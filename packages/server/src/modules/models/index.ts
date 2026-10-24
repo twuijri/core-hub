@@ -73,6 +73,7 @@ import type { SpeechFormat } from './adapters/types.js';
 import { CliproxySupervisor } from './gateway/cliproxy.js';
 import { ModelGateway } from './gateway/gateway.js';
 import { locateCliproxy } from './gateway/locate.js';
+import type { SessionOpener } from './gemini-desktop/transport.js';
 
 export { ModelsService } from './service.js';
 export type {
@@ -168,6 +169,8 @@ export interface ModelsOverrides {
   signIn?: SignInRuntime | null;
   /** The model gateway's CLIProxyAPI executable (ADR 0029): a test's fake, or `null` for none. */
   cliproxyBin?: string | null;
+  /** How Gemini Desktop reaches Google (DECISIONS §155): a test's scripted token service and server. */
+  geminiDesktop?: { fetchImpl?: typeof fetch; opener?: SessionOpener };
 }
 
 let pendingOverrides: ModelsOverrides | null = null;
@@ -350,6 +353,7 @@ function contextOf(app: FastifyInstance): ModelsService {
       return row && !row.isDefault ? row.slug : null;
     },
     ...(own.fetchImpl ? { fetchImpl: own.fetchImpl } : {}),
+    ...(own.geminiDesktop ? { geminiDesktop: own.geminiDesktop } : {}),
     catalog: own.catalog ?? catalog,
     hostEnv,
     gatewayAvailable: () => modelGatewayFor(app).available(),

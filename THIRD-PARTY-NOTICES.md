@@ -204,3 +204,37 @@ file ships beside it as `LICENSE.CLIProxyAPI`.
 > LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 > OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 > SOFTWARE.
+
+## The Gemini Desktop plugin — the protocol the Gemini Desktop provider speaks
+
+`packages/server/src/modules/models/gemini-desktop/` speaks the Gemini desktop app's own sign-in and
+native service (DECISIONS §155). What it knows of them — the app's installed-app OAuth client and
+its scopes, the `RobinService` method names, and the protobuf field and extension numbers of
+`ProcessQuery` and `GetUserStatus` — was read from the owner's own plugin for CLIProxyAPI,
+[twuijri/cpa-plugin-api-key-manager](https://github.com/twuijri/cpa-plugin-api-key-manager)
+`plugins/gemini-desktop` `0.2.0-preview` (Go, MIT), and rewritten in TypeScript for the hub; no file
+of it is copied. Its C ABI host bridge (derived from router-for-me/cpa-plugin-gemini-cli) is not
+used. The field that continues a conversation was found later, on a live account
+(`docs/research/gemini-desktop-2026-10.md`).
+
+> MIT License
+>
+> Copyright (c) 2026 Gemini Desktop plugin contributors
+>
+> Permission is hereby granted, free of charge, to any person obtaining a copy
+> of this software and associated documentation files (the "Software"), to deal
+> in the Software without restriction, including without limitation the rights
+> to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+> copies of the Software, and to permit persons to whom the Software is
+> furnished to do so, subject to the following conditions:
+>
+> The above copyright notice and this permission notice shall be included in all
+> copies or substantial portions of the Software.
+>
+> THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+> IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+> FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+> AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+> LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+> OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+> SOFTWARE.

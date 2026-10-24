@@ -17,6 +17,12 @@ import { Button, Notice } from '../ui/index.js';
 import { SignInPanel } from './SignInPanel.js';
 import { useCreateProvider } from './queries.js';
 
+/**
+ * Subscriptions the hub signs in to and serves itself, with no gateway (Gemini Desktop, DECISIONS
+ * §155): offered even where the gateway is not, and for the direct agent only.
+ */
+const HUB_HELD_VENDORS: ReadonlySet<string> = new Set(['gemini-desktop']);
+
 /** The detail line of a subscription: how its sign-in goes, and whether usage shows. */
 export function subscriptionDetail(
   vendor: Pick<SubscriptionVendor, 'flow' | 'usage_windows'>,
@@ -54,6 +60,8 @@ export function SubscriptionSignIn({
 }) {
   const { t } = useI18n();
   const create = useCreateProvider();
+  const hubHeld = HUB_HELD_VENDORS.has(vendor.vendor);
+  const ready = available || hubHeld;
   const [signingIn, setSigningIn] = useState<Pick<Provider, 'id' | 'label'> | null>(null);
 
   if (signingIn) {
@@ -95,16 +103,26 @@ export function SubscriptionSignIn({
       <p className="text-sm" data-testid="subscription-detail">
         {subscriptionDetail(vendor, t)}
       </p>
-      {!available && (
+      {!ready && (
         <Notice tone="warning">
           <span data-testid="subscription-unavailable">
             {t('models.subscription.unavailable', { reason: reason ?? '—' })}
           </span>
         </Notice>
       )}
+      {hubHeld && (
+        <p className="text-sm" data-testid="subscription-hub-held">
+          {t('models.subscription.gemini_desktop_scope')}
+        </p>
+      )}
       {note && (
         <p className="text-xs text-muted" data-testid="subscription-note">
           {note}
+        </p>
+      )}
+      {hubHeld && (
+        <p className="text-xs text-muted" data-testid="subscription-unofficial">
+          {t('models.subscription.gemini_desktop_unofficial')}
         </p>
       )}
       {create.isError && <Notice tone="danger">{describeError(create.error, t)}</Notice>}
@@ -112,7 +130,7 @@ export function SubscriptionSignIn({
         <Button onClick={onClose}>{t('common.cancel')}</Button>
         <Button
           variant="primary"
-          disabled={!available || create.isPending}
+          disabled={!ready || create.isPending}
           loading={create.isPending}
           onClick={begin}
           data-testid="subscription-continue"
