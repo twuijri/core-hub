@@ -964,7 +964,12 @@ function isClosed(session: AgentSession): boolean {
 export function mintSessionRef(adapterKind: string, sessionId: string): string | null {
   // New conversations say the product's name; one started before the rename keeps the ref it
   // stored (`majlis-…`), which is what Hermes knows it by.
-  return adapterKind === 'hermes' ? `${derived.serviceName}-${sessionId.toLowerCase()}` : null;
+  if (adapterKind === 'hermes') return `${derived.serviceName}-${sessionId.toLowerCase()}`;
+  // The direct agent: one ref per hub conversation, so a provider that keeps a conversation of
+  // its own keeps one per hub conversation (Gemini Desktop, DECISIONS §155). A session that
+  // stored the older shared ref (`direct-<slug>`) keeps it.
+  if (adapterKind === 'builtin') return `direct-${sessionId.toLowerCase()}`;
+  return null;
 }
 
 /**

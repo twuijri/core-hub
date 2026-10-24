@@ -5671,3 +5671,69 @@ replacing the image.
   Hermes refuses mixed toolchains on purpose); writing the hub's API key into the root home's `.env`
   (any process reading that home would open an API server); naming the origin variable with one of
   Hermes's process-wide prefixes (its private allow-list, not a contract).
+
+## 155. Gemini Desktop: a subscription the hub signs in to and serves itself, one Gemini chat per hub chat
+
+Status: the owner's request and plan of 2026-10-24 (approved: «صح يالله ابدا»), on the research of the
+same day (`docs/research/gemini-desktop-2026-10.md`). The routing below is **proposed — owner to
+confirm**. Additive only; no contract change. Amends ADR 0030 (a subscription not held by
+CLIProxyAPI).
+
+- **What.** A provider «Gemini Desktop» (`gemini-desktop-subscription`, vendor `gemini-desktop`) in the
+  one provider list with the «Subscription» tag: the Gemini desktop app's own Google sign-in and its
+  native `RobinService` (gRPC over HTTP/2 on `robinfrontend-pa.googleapis.com`). Not Antigravity, not
+  Gemini CLI, no browser cookies. The protocol was read from the owner's own plugin for CLIProxyAPI
+  (MIT, THIRD-PARTY-NOTICES.md) and rewritten in TypeScript in `modules/models/gemini-desktop/`.
+- **Why the hub holds it.** CLIProxyAPI 8.0.4 has no such provider, and the plugin needs a plugin
+  build of CLIProxyAPI (8.0.41, not "no-plugin") built per platform — the image and the desktop
+  installers ship neither. So the preset's `GatewaySignIn.heldBy` is `hub`: the hub runs the sign-in,
+  keeps the accounts and speaks the service; nothing goes through CLIProxyAPI, and it works where the
+  gateway is off.
+- **Sign-in.** `flow: link`: the app's installed-app client, PKCE S256, a random `state`,
+  `access_type=offline`, the `flexible-api` scope, the redirect `http://localhost:51123/auth` (nothing
+  listens there; `callback_hint` says so and the person pastes the address back with
+  `models.completeProviderSignIn`, which works from a server). The sign-in lasts ten minutes and takes
+  one address: an address of another sign-in, or one with no code, is refused with `400` and the
+  sign-in keeps waiting; an accepted one ends it, approved or failed. Then a refresh mints a token with
+  the four service scopes, and the account's verified e-mail names it.
+- **Accounts.** One per Google account (its id is a hash of the e-mail): signing in again renews it,
+  another e-mail adds one beside it; one account's sign-in never lands on another's. They live in the
+  hub's encrypted `secrets` table under the provider row's scope (one row per account, one for the
+  row's conversations) — not a provider key, so not in Settings → Secrets, and the profile export
+  scrubs their bytes like every stored secret. A refresh keeps the stored refresh token when Google
+  sends none and saves a rotated one at once; a failed e-mail or mode lookup never undoes a refresh.
+  The provider's dialog (`models.getProviderAccounts` …) lists them with the e-mail; renew and "check
+  now" refresh the token and the modes; turn off and sign out work as for the other subscriptions.
+- **Models.** Each account's modes from `GetUserStatus` (the policy is authoritative, a disabled mode
+  never comes back from the older list), named `gemini-desktop-<title>` (`gemini-desktop-3.1-pro`) —
+  the provider's own local ids, not Gemini API model ids — plus `gemini-desktop-auto` (Google picks).
+  A named model sends that account's category and variant (template fields 47 / 66); a name the
+  account does not offer is refused (`model_not_found`), never sent as auto.
+- **One hub chat, one Gemini chat (the owner's requirement).** The direct agent's session reference
+  is now `direct-<session id>` for new conversations (an older session keeps the shared reference it
+  stored, and keeps the old behaviour: its history is folded into every message). For each hub
+  conversation the hub keeps the Gemini ids `{c_, r_, rc_}` of every answered turn, keyed by a hash of
+  the history up to that answer. A turn whose history is a known turn's continues from it (template
+  field 4) and sends only its new message; an older turn's ids branch (the hub cut its history back);
+  a history the direct agent no longer holds in memory (after a restart) continues the latest turn; a
+  history Gemini never saw starts a new Gemini chat with the history folded in. The conversation stays
+  on the account that started it. When Google no longer continues a conversation (`NOT_FOUND`,
+  `INVALID_ARGUMENT`, `FAILED_PRECONDITION` before any text) the turn starts a new Gemini chat with the
+  history, and the answer begins with one line in Arabic and English saying so.
+- **Who can use it (proposed — owner to confirm).** Text only: the native service has no tool
+  calling, and Hermes, Claude Code, Codex and every other coding agent send tools with every request.
+  So it serves **the hub's direct agent only**: it is never an upstream of the gateway, never a block
+  in Hermes's `providers:`, never in a coding agent's model list (`Model.agent_gateway` is false); a
+  turn of another agent that picks it is refused by the gateway with the reason, and it cannot be a
+  profile's default chat model (`validation_failed`, same reason). Images are refused by name.
+- **UI.** The «Subscription» entry adds two sentences: who can use it and that each Core Hub chat stays
+  one Gemini chat, and one neutral sentence that it uses the app's own sign-in and service, which
+  Google does not offer to other apps and may change or limit at any time. Gemini's logo.
+- **Limits.** After an edit or a regenerate the same chat in the Gemini app shows the old and the new
+  turns mixed (the app's view is linear; the model's context is right). A turn stopped before Google
+  sent its answer id is not remembered, so the next turn starts a new Gemini chat. No token counts:
+  usage is not reported rather than estimated.
+- **Rejected**: bundling the plugin's shared library into a plugin build of CLIProxyAPI (a bump of the
+  whole subscription engine for every account, Linux only, and still one chat per message);
+  emulating tool calls in text (unreliable); a callback listener on the hub (its `localhost` is not
+  the person's).

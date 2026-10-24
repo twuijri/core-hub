@@ -247,6 +247,7 @@ export interface DirectModelsPort {
       reasoningEffort?: string | null;
       signal?: AbortSignal;
       fallbacks?: readonly { providerId: string; model: string }[];
+      conversation?: string | null;
     },
   ): AsyncIterable<DirectChatEvent>;
 }
@@ -359,6 +360,9 @@ export class DirectSession implements AgentSession {
           ? { reasoningEffort: prompt.reasoningEffort }
           : {}),
         signal: controller.signal,
+        // Which hub conversation this is, for a provider that keeps one of its own (Gemini
+        // Desktop, models DECISIONS §155).
+        conversation: this.id,
         // The profile's chain (contract decision §54). The models module walks it: it knows
         // which provider errors another model could get past, and this file sees no provider.
         ...(prompt.fallbacks && prompt.fallbacks.length > 0

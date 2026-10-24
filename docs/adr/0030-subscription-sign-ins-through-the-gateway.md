@@ -5,6 +5,12 @@ Status: **Accepted** by the owner, 2026-09-30 (his explicit decision after the r
 there as "proposed — owner to confirm" are the implementer's choices inside this decision. Amends
 ADR 0029 §1 ("no OAuth credential is ever given to it"; "Hermes-held subscriptions are not lent").
 
+Amended 2026-10-24 by DECISIONS §155: one subscription, **Gemini Desktop**, is not CLIProxyAPI's.
+CLIProxyAPI has no such provider, so the hub signs in to it, keeps its accounts in its own encrypted
+store and speaks the Gemini app's native service itself (`GatewaySignIn.heldBy: hub`). It answers
+text only, so it serves the hub's direct agent alone; the gateway refuses it to every other agent
+with the reason. Everything below still holds for the subscriptions CLIProxyAPI holds.
+
 ## Context
 Before this, a provider used by signing in to an account (a ChatGPT, xAI, MiniMax or Nous
 subscription) was signed in to through Hermes (DECISIONS §55): Hermes kept the credential, the
