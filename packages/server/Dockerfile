@@ -130,11 +130,12 @@ RUN sh /tmp/uv-installer.sh \
  && install -m 0755 /root/.local/bin/uv /usr/local/bin/uv \
  && git clone --depth 1 --branch "${HERMES_REF}" https://github.com/NousResearch/hermes-agent /opt/hermes/src \
  && python_version=$(node /tmp/hermes-image/python-version.mjs /opt/hermes/src) \
- && echo "Hermes ${HERMES_REF} runs on Python ${python_version}" \
+ && aiohttp_version=$(node /tmp/hermes-image/aiohttp-version.mjs /opt/hermes/src) \
+ && echo "Hermes ${HERMES_REF} runs on Python ${python_version}, aiohttp ${aiohttp_version}" \
  && uv python install "${python_version}" \
  && uv venv --python "${python_version}" /opt/hermes/.venv \
  && cd /opt/hermes/src \
- && uv pip install --python /opt/hermes/.venv/bin/python -e ".[cron,mcp]" "aiohttp==3.14.3" \
+ && uv pip install --python /opt/hermes/.venv/bin/python -e ".[cron,mcp]" "aiohttp==${aiohttp_version}" \
  && /opt/hermes/.venv/bin/python /tmp/hermes-image/prepare.py stamp "${HERMES_REF}" \
  && rm -rf /opt/hermes/src/.git \
  && /opt/hermes/.venv/bin/hermes --version
