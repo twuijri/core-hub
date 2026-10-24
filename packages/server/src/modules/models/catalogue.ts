@@ -65,6 +65,8 @@ export const CREDENTIAL_FAMILIES = [
   'xai-subscription',
   'meta-subscription',
   'devin-subscription',
+  // Signed in to and served by the hub itself (DECISIONS §155): no CLIProxyAPI provider exists.
+  'gemini-desktop-subscription',
 ] as const;
 export type CredentialFamily = (typeof CREDENTIAL_FAMILIES)[number];
 
@@ -136,8 +138,22 @@ export type HermesRouteKind = 'builtin' | 'openai-compatible' | 'none' | 'gatewa
  */
 export interface GatewaySignIn {
   /** CLIProxyAPI's name for the vendor (`?provider=` of its login, `type` of its accounts). */
-  vendor: 'claude' | 'codex' | 'antigravity' | 'kimi' | 'kimi-ai' | 'xai' | 'meta' | 'devin';
+  vendor:
+    | 'claude'
+    | 'codex'
+    | 'antigravity'
+    | 'kimi'
+    | 'kimi-ai'
+    | 'xai'
+    | 'meta'
+    | 'devin'
+    | 'gemini-desktop';
   flow: 'device' | 'codex-device' | 'link';
+  /**
+   * Who holds the accounts and serves the turns: CLIProxyAPI (the default, ADR 0030), or the hub
+   * itself (`hub`, Gemini Desktop, DECISIONS §155) — text only, for the direct agent only.
+   */
+  heldBy?: 'cliproxy' | 'hub';
   /** Where a `link` sign-in's browser lands, for the paste box. */
   callbackHint?: string;
   /** The vendor's answers carry usage windows with reset times (Claude, ChatGPT). */
@@ -454,7 +470,28 @@ export const GATEWAY_SUBSCRIPTIONS: readonly GatewaySubscription[] = [
       company: 'Devin',
     },
   },
+  {
+    // The Gemini app for the desktop (DECISIONS §155): its own sign-in and native service, spoken
+    // by the hub itself (`gemini-desktop/`). Not Antigravity, not Gemini CLI, no browser cookies.
+    slug: 'gemini-desktop-subscription',
+    label: 'Gemini Desktop',
+    baseUrl: 'https://robinfrontend-pa.googleapis.com',
+    keysUrl: 'https://gemini.google.com',
+    signIn: {
+      vendor: 'gemini-desktop',
+      flow: 'link',
+      callbackHint: 'http://localhost:51123/auth',
+      usageWindows: false,
+      company: 'Google',
+      heldBy: 'hub',
+    },
+  },
 ];
+
+/** Whether a sign-in's accounts are the hub's own (Gemini Desktop), not CLIProxyAPI's. */
+export function hubHeld(signIn: GatewaySignIn | undefined | null): boolean {
+  return signIn?.heldBy === 'hub';
+}
 
 function subscriptionEntry(subscription: GatewaySubscription): ProviderCatalogueEntry {
   return {

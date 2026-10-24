@@ -23,6 +23,7 @@ const LOGO_OF_PRESET: Readonly<Record<string, string>> = {
   openrouter: 'openrouter',
   google: 'gemini',
   'antigravity-subscription': 'antigravity',
+  'gemini-desktop-subscription': 'gemini',
   groq: 'groq',
   'groq-stt': 'groq',
   'groq-tts': 'groq',

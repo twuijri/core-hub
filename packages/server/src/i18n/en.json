@@ -207,6 +207,10 @@
     "probe": {
       "failed": "The endpoint did not return a model list."
     },
+    "gemini_desktop": {
+      "account": "Gemini account",
+      "restarted": "↻ Gemini started a new chat for this conversation; the earlier messages were sent with it."
+    },
     "subscription": {
       "note": "Some vendors limit using a subscription outside their own apps.",
       "not_a_subscription": "This provider is not a subscription signed in to through Core Hub's gateway.",

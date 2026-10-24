@@ -22,6 +22,7 @@ Capability comparison: `FEATURE-MATRIX.md`.
 | Hubcode | AGPL-3.0 — **no code** (repo located 2026-09-21 at github.com/hubtool/hubcode; the earlier "repo not located" entry was wrong) | shared live sessions with voice; kanban per worktree; worker+verifier loops | `hubcode.md` |
 | DeepSeek harness (owner's description only, 2026-09-25) | unknown — **no code, no assets, no text** (nothing opened) | the idea of a per-conversation "Trajectory" tab: steps on a timeline with performance metrics | `trajectory.md` |
 | Claude's "Background tasks" panel (owner's description only, 2026-09-25) | proprietary product — **no code, no assets, no text** (nothing opened) | the idea of seeing an agent's running subagents and every background job in one place, with a way to stop them | `subagents-background.md` |
+| The owner's Gemini Desktop plugin for CLIProxyAPI (2026-10-24) | MIT — protocol facts rewritten in TypeScript, no file copied (THIRD-PARTY-NOTICES.md) | the Gemini desktop app's sign-in, its native service's methods and field numbers, reading an account's modes | `gemini-desktop-plugin.md` |
 
 ## ما نأخذه ومتى
 `ADOPTION-BACKLOG.md` يجمع كل فكرة قررنا أخذها، مرتَّبة بمرحلتها من

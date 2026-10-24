@@ -103,6 +103,8 @@ interface Hub {
   /** A hub older than §143 answers 404 to its operations. */
   old: boolean;
   signInStatus: string;
+  /** The gateway is off: the subscriptions it holds cannot be signed in to. */
+  gatewayOff: boolean;
 }
 
 function hub(state: Partial<Hub> = {}) {
@@ -111,6 +113,7 @@ function hub(state: Partial<Hub> = {}) {
     sent: [],
     old: false,
     signInStatus: 'pending',
+    gatewayOff: false,
     ...state,
   };
   let current = account();
@@ -130,8 +133,8 @@ function hub(state: Partial<Hub> = {}) {
     if (url.includes('/models/subscription-vendors')) {
       if (h.old) return missing();
       return json({
-        available: true,
-        reason: null,
+        available: !h.gatewayOff,
+        reason: h.gatewayOff ? 'the model gateway is switched off on this hub' : null,
         note: 'Some vendors limit using a subscription outside their own apps.',
         items: [
           {
@@ -149,6 +152,14 @@ function hub(state: Partial<Hub> = {}) {
             flow: 'link',
             usage_windows: true,
             checkable: true,
+          },
+          {
+            preset: 'gemini-desktop-subscription',
+            vendor: 'gemini-desktop',
+            label: 'Gemini Desktop',
+            flow: 'link',
+            usage_windows: false,
+            checkable: false,
           },
         ],
       });
@@ -396,6 +407,34 @@ describe('subscriptions on the models screen', () => {
     expect(
       state.sent.find((sent) => sent.method === 'POST' && sent.url.includes('/sign-in/'))?.body,
     ).toEqual({ code: 'http://localhost:54545/callback?code=abc&state=abc' });
+  });
+
+  it('offers Gemini Desktop where the gateway is off, says who can use it and that it is unofficial', async () => {
+    const { state, fetchImpl } = hub({ providers: [], gatewayOff: true });
+    renderScreen(fetchImpl);
+    await userEvent.click(await screen.findByTestId('open-add-provider'));
+    const trigger = await screen.findByTestId('add-preset');
+    await waitFor(async () => {
+      const labels = await optionLabels(userEvent, trigger);
+      await closeControl(userEvent);
+      expect(labels.some((label) => label.startsWith('Gemini DesktopSubscription'))).toBe(true);
+    });
+    await chooseOption(userEvent, trigger, /^Gemini Desktop/);
+    const list = await screen.findByTestId('subscription-vendors');
+    expect(within(list).queryByTestId('subscription-unavailable')).toBeNull();
+    expect(within(list).getByTestId('subscription-hub-held').textContent).toMatch(
+      /only Core Hub’s direct agent can use it/,
+    );
+    expect(within(list).getByTestId('subscription-unofficial').textContent).toMatch(
+      /Google may change or limit it/,
+    );
+    await userEvent.click(within(list).getByTestId('subscription-continue'));
+    await waitFor(() =>
+      expect(
+        state.sent.find((sent) => sent.method === 'POST' && sent.url.endsWith('/models/providers'))
+          ?.body,
+      ).toMatchObject({ preset: 'gemini-desktop-subscription' }),
+    );
   });
 
   it('offers nothing new on an older hub', async () => {

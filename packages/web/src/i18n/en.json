@@ -1207,7 +1207,9 @@
       "move_body": "Core Hub’s gateway will hold this subscription, show its accounts and usage, and give its models to every agent. Your model choices that use it move over once you have signed in.",
       "move_no_copy": "A sign-in cannot be copied from Hermes, so you sign in once more. The current sign-in keeps working until you remove it.",
       "move_start": "Sign in through the gateway",
-      "move_done": "Signed in. You can remove the old {provider} provider when you are ready."
+      "move_done": "Signed in. You can remove the old {provider} provider when you are ready.",
+      "gemini_desktop_scope": "Gemini Desktop answers text only, so only Core Hub’s direct agent can use it — not Hermes or the coding agents. Each Core Hub chat stays one chat in your Gemini history.",
+      "gemini_desktop_unofficial": "This uses the Gemini desktop app’s own sign-in and service, which Google does not offer to other apps; Google may change or limit it at any time."
     },
     "accounts": {
       "title": "Accounts",
