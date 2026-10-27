@@ -29,9 +29,13 @@
  *   `plugins.isolation: host`: a plugin that is not Hermes's own then runs in a plugin-host
  *   process per profile and reaches Hermes only through `ctx` — hooks and `inject_message` still
  *   work from there, the plugin manager does not (`ctx._manager` is refused), and the host's
- *   environment carries the profile's secret scope. The default stays in-process. Such a Hermes
- *   runs one gateway per host, so there the root home's copy (`hub.json` says `default`) is the
- *   one that polls.
+ *   environment carries the profile's secret scope. The default stays in-process. There every
+ *   copy polls, and the hub hands each only what its Hermes lets it inject (`bridge.ts`).
+ * - From v0.22.3 (`gateway/run_plugin_injection.py` §_plugin_messaging_session_owned) a plugin
+ *   puts a message only into its own profile's conversations: under one gateway per host the
+ *   root home's copy is refused a named profile's (`agent:<profile>:…`), and that profile's own
+ *   copy, which holds the gateway's injector as well (each profile has its own plugin manager),
+ *   is the one that must inject it.
  *
  * So the plugin does two things, and only inside a messaging gateway the hub started (the hub
  * sets `COREHUB_MCP_ORIGIN=gateway` there, decision §79):
@@ -114,14 +118,6 @@ def _hub():
     return None
 
 
-def _profile():
-    # The profile the hub wrote this copy for ("default" for Hermes's root home).
-    try:
-        return str(json.loads((_HERE / "hub.json").read_text(encoding="utf-8")).get("profile") or "")
-    except Exception:
-        return ""
-
-
 def _call(method, path, payload=None, timeout=10):
     hub = _hub()
     if hub is None:
@@ -159,15 +155,12 @@ def _text(value, limit):
 
 
 def _poll(ctx):
-    # Only the copy whose plugin manager holds the live gateway's injector can inject; every
-    # other copy (a named profile's, under one gateway per host) waits here and does nothing.
-    # In Hermes's plugin host (plugins.isolation: host, v0.21.6 on) the manager is out of sight,
-    # but such a Hermes runs one gateway per host, whose injector is the root home's: that copy
-    # polls (ctx.inject_message reaches the manager from the host), every other one does nothing.
-    if os.environ.get("HERMES_PLUGIN_HOST_PROCESS") == "1":
-        if _profile() != "default":
-            return
-    else:
+    # Only a copy whose plugin manager holds the live gateway's injector can inject; any other
+    # copy waits here and does nothing. In Hermes's plugin host (plugins.isolation: host, v0.21.6
+    # on) the manager is out of sight and every copy polls (ctx.inject_message reaches the
+    # gateway from the host): Core Hub hands each copy only what its Hermes lets it inject —
+    # every profile's to the root home's copy before v0.22.3, each profile's own from it on.
+    if os.environ.get("HERMES_PLUGIN_HOST_PROCESS") != "1":
         manager = getattr(ctx, "_manager", None)
         waited = 0.0
         while manager is None or not getattr(manager, "has_gateway_message_injector", False):

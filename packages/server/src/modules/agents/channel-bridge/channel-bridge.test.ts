@@ -128,6 +128,7 @@ describe('the plugin in a Hermes home', () => {
 
 describe('the bridge', () => {
   let topology: GatewayTopology;
+  let ownProfileOnly: boolean;
   let now: number;
   let heard: Array<[string, string, unknown]>;
   let bridge: ChannelBridge;
@@ -135,6 +136,7 @@ describe('the bridge', () => {
 
   beforeEach(() => {
     topology = 'per-profile';
+    ownProfileOnly = false;
     now = 1_000_000;
     heard = [];
     mkdirSync(path.join(home, 'profiles', 'work'), { recursive: true });
@@ -142,6 +144,7 @@ describe('the bridge', () => {
       managedRoot: () => home,
       namedProfiles: () => ['work'],
       topology: () => topology,
+      injectsOnlyIntoOwnProfile: () => ownProfileOnly,
       mcpUrl: () => 'http://127.0.0.1:9/api/v1/hub-mcp',
       listener: () => ({
         acknowledged: (profile, id, accepted, reason) =>
@@ -196,7 +199,26 @@ describe('the bridge', () => {
     expect((await bridge.outbox(keys.work, 0)).items.map((i) => i.id)).toEqual(['b']);
     topology = 'one-per-host';
     bridge.enqueue('work', item('c'));
+    // A named profile's copy is handed nothing there: the root's serves every profile.
+    expect((await bridge.outbox(keys.work, 0)).items).toEqual([]);
     expect((await bridge.outbox(keys.default, 0)).items.map((i) => i.id)).toEqual(['c']);
+  });
+
+  it('hands each copy only its own profile’s items on a Hermes that injects only there (v0.22.3 on)', async () => {
+    topology = 'one-per-host';
+    ownProfileOnly = true;
+    bridge.enqueue('work', item('w'));
+    bridge.enqueue('default', item('d'));
+    // The root's copy would be refused «work»'s conversation, so it never gets it.
+    expect((await bridge.outbox(keys.default, 0)).items.map((i) => i.id)).toEqual(['d']);
+    expect((await bridge.outbox(keys.work, 0)).items.map((i) => i.id)).toEqual(['w']);
+    // Who is listening for «work» is its own copy, not the root's.
+    now += 60_000;
+    const waiting = bridge.outbox(keys.default, 5);
+    expect(bridge.connected('default')).toBe(true);
+    expect(bridge.connected('work')).toBe(false);
+    bridge.enqueue('default', item('e'));
+    await waiting;
   });
 
   it('answers a waiting poll as soon as an item arrives, and says who is listening', async () => {
