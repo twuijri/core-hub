@@ -105,7 +105,8 @@
     "profile_switch": "Switch profile",
     "profile_current": "You are in {profile}",
     "group_expanded": "Expanded",
-    "group_collapsed": "Collapsed"
+    "group_collapsed": "Collapsed",
+    "repository": "Core Hub on GitHub"
   },
   "sessions": {
     "all_profiles": "All profiles",
@@ -223,8 +224,12 @@
     "app_version": "App version",
     "contract_version": "Contract version",
     "hub": "Hub",
-    "server_version": "Hub version",
-    "source": "Source"
+    "links": "Where Core Hub lives",
+    "download_page": "Download page",
+    "download_page_note": "The apps for every device, from the latest release.",
+    "repository": "Repository",
+    "repository_note": "The source code, the releases and the issues, on GitHub.",
+    "connected_hub": "Connected hub"
   },
   "account": {
     "change_password": "Change password",

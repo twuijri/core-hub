@@ -105,7 +105,8 @@
     "profile_switch": "بدّل البروفايل",
     "profile_current": "أنت في {profile}",
     "group_expanded": "مفتوحة",
-    "group_collapsed": "مطوية"
+    "group_collapsed": "مطوية",
+    "repository": "كور هب على GitHub"
   },
   "sessions": {
     "all_profiles": "كل البروفايلات",
@@ -223,8 +224,12 @@
     "app_version": "إصدار التطبيق",
     "contract_version": "إصدار العقد",
     "hub": "المركز",
-    "server_version": "إصدار المركز",
-    "source": "المصدر"
+    "links": "أين تجد كور هب",
+    "download_page": "صفحة التحميل",
+    "download_page_note": "تطبيقات كل الأجهزة من آخر إصدار.",
+    "repository": "المستودع",
+    "repository_note": "الشيفرة والإصدارات والبلاغات على GitHub.",
+    "connected_hub": "المركز المتصل"
   },
   "account": {
     "change_password": "غيّر كلمة المرور",

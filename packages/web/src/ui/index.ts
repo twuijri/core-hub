@@ -15,6 +15,7 @@ export { AlertDialog } from './AlertDialog.js';
 export { Avatar, initialOf, type AvatarSize } from './Avatar.js';
 export { agentMark } from './brand/marks.js';
 export { CoreHubMark } from './brand/CoreHubMark.js';
+export { GitHubMark } from './brand/GitHubMark.js';
 export { Badge, type BadgeTone } from './Badge.js';
 export { Breadcrumb, type Crumb } from './Breadcrumb.js';
 export {

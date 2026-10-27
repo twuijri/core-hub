@@ -163,7 +163,10 @@
     "back_to_chats": "Back to chats",
     "no_profile_title": "No profile yet",
     "no_profile_body": "Your account has not been given a profile, so there is nothing to open yet. Ask an admin to give you one, then check again.",
-    "no_profile_retry": "Check again"
+    "no_profile_retry": "Check again",
+    "repository": "Core Hub on GitHub",
+    "version_desktop": "Desktop app: {version}",
+    "version_hub": "Hub: {version}"
   },
   "pane": {
     "resize": "Resize the side pane (arrow keys resize, Home collapses, End expands)",
@@ -2524,12 +2527,19 @@
   },
   "about": {
     "name": "Name",
-    "server_version": "Server build",
     "contract_version": "Contract version",
     "client_version": "This page was built from",
     "locales": "Languages",
     "realtime": "Live channels",
-    "realtime_note": "What a client opens so it learns what happens without asking."
+    "realtime_note": "What a client opens so it learns what happens without asking.",
+    "links": "Where Core Hub lives",
+    "download_page": "Download page",
+    "download_page_note": "The apps for every device, from the latest release.",
+    "repository": "Repository",
+    "repository_note": "The source code, the releases and the issues, on GitHub.",
+    "desktop_app": "Desktop app",
+    "web_app": "This web app",
+    "connected_hub": "Connected hub"
   },
   "skills": {
     "title_of": "{name} skills",

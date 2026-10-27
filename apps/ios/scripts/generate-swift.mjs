@@ -199,14 +199,19 @@ ${registry.pseudo.map(pseudo).join('\n')}
 }
 
 export function productSwift(product) {
-  const { PRODUCT, derived, LEGACY } = product;
+  const { PRODUCT, PRODUCT_LINKS, derived, LEGACY } = product;
   return `${HEADER('packages/contracts/src/product.ts')}
+import Foundation
+
 /// What the product is called and the conventions named after it (ADR 0017).
 enum Product {
     static let id = "${PRODUCT.id}"
     static let name = "${PRODUCT.name}"
     static let nameAr = "${PRODUCT.nameAr}"
     static let repository = "${PRODUCT.repository}"
+    /// The repository on GitHub, and the download page \`site/\` publishes (About, the drawer).
+    static let repositoryURL = URL(string: "${PRODUCT_LINKS.repository}")!
+    static let downloadPageURL = URL(string: "${PRODUCT_LINKS.downloadPage}")!
     /// The QR payload's \`type\` the hub writes today.
     static let pairingType = "${derived.pairingType}"
     /// The \`type\` an older hub wrote; still read.

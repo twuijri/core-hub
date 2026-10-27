@@ -509,6 +509,7 @@ abstract class GenerateSharedSources : DefaultTask() {
                 ?: throw GradleException("product.ts: `$key` not found")
         val product = block("PRODUCT")
         val legacy = block("LEGACY")
+        val links = block("PRODUCT_LINKS")
         val id = field(product, "id")
         return buildString {
             appendLine("// Generated from packages/contracts/src/product.ts by :app:generateSharedSources. Do not edit.")
@@ -525,6 +526,10 @@ abstract class GenerateSharedSources : DefaultTask() {
             appendLine("    const val LEGACY_PAIRING_TYPE = \"${field(legacy, "pairingType")}\"")
             appendLine("    /** The deep-link scheme, as on the desktop app (`corehub://pair?…`). */")
             appendLine("    const val SCHEME = \"$id\"")
+            appendLine("    /** The repository on GitHub (`PRODUCT_LINKS.repository`): About and the drawer. */")
+            appendLine("    const val REPOSITORY_URL = \"${field(links, "repository")}\"")
+            appendLine("    /** The download page `site/` publishes (`PRODUCT_LINKS.downloadPage`): About. */")
+            appendLine("    const val DOWNLOAD_PAGE_URL = \"${field(links, "downloadPage")}\"")
             appendLine("}")
         }
     }
