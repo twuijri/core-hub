@@ -144,9 +144,13 @@ test('the family rules hold: icons on every row, Lucide strokes, a dot on a phon
   await expect(settingsRows.first()).toBeVisible();
   for (const row of await settingsRows.all()) await expect(row.locator('svg')).toHaveCount(1);
 
-  // Every icon in the sidebar is drawn with Lucide's stroke on its 24 grid.
+  // Every icon in the sidebar is drawn with Lucide's stroke on its 24 grid. The one brand mark
+  // (GitHub's, beside Settings) is filled on its own grid and is not an icon of the family.
+  await expect(page.locator('[data-testid="footer"] svg[data-brand-mark="github"]')).toHaveCount(1);
   const strokes = await page
-    .locator('[data-testid="settings-nav"] svg, [data-testid="footer"] svg')
+    .locator(
+      '[data-testid="settings-nav"] svg:not([data-brand-mark]), [data-testid="footer"] svg:not([data-brand-mark])',
+    )
     .evaluateAll((svgs) =>
       svgs.map((svg) => `${svg.getAttribute('viewBox')}|${svg.getAttribute('stroke-width')}`),
     );

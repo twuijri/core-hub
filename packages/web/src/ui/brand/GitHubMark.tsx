@@ -4,6 +4,9 @@
  * `mark-github` from Octicons (MIT, https://github.com/primer/octicons — THIRD-PARTY-NOTICES.md),
  * on its 16 grid, in one colour that follows the theme (`currentColor`).
  *
+ * `data-brand-mark` lets the family rules (e2e/…design-family) tell it from the Lucide icons,
+ * which all share one stroke on a 24 grid; a brand mark is filled on its own grid.
+ *
  * **Trademark.** The mark belongs to GitHub, Inc.; it is used only to say "this links to GitHub".
  */
 import type { SVGProps } from 'react';
@@ -13,7 +16,15 @@ export const GITHUB_MARK_PATH =
 
 export function GitHubMark({ size = 16, ...rest }: SVGProps<SVGSVGElement> & { size?: number }) {
   return (
-    <svg width={size} height={size} viewBox="0 0 16 16" fill="currentColor" aria-hidden {...rest}>
+    <svg
+      width={size}
+      height={size}
+      viewBox="0 0 16 16"
+      fill="currentColor"
+      aria-hidden
+      data-brand-mark="github"
+      {...rest}
+    >
       <path d={GITHUB_MARK_PATH} />
     </svg>
   );

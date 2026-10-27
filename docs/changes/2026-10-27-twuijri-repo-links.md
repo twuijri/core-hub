@@ -23,7 +23,7 @@
 - الويب/الديسكتوب: `packages/web/src/ui/brand/GitHubMark.tsx`، `ui/index.ts`، `shell/Sidebar.tsx`، `shell/VersionLabel.tsx`، `settings/AboutTab.tsx`، `i18n/{en,ar}.json`، والاختبارات `tests/sidebar-rail.test.tsx`، `tests/settings-pages.test.tsx`، `tests/version-label.test.tsx`.
 - iOS: `scripts/generate-swift.mjs` → `CoreHub/Generated/Product.swift`، `Resources/Assets.xcassets/GitHubMark.imageset`، `Theme/Icon.swift` (`GitHubMarkIcon`)، `Shell/SidebarView.swift` (زر المستودع جنب الإعدادات)، `Settings/Pages/AboutPage.swift`، `i18n/{en,ar}.json`، `CoreHubTests/AboutLinksTests.swift`.
 - أندرويد: `app/build.gradle.kts` (توليد `Product`)، `res/drawable/github_mark.xml`، `ui/screens/Shell.kt` (زر المستودع جنب الإعدادات)، `ui/screens/settings/AboutPage.kt`، `i18n/{en,ar}.json`، `test/.../ui/AboutLinksTest.kt`.
-- `scripts/github-mark.test.mjs`، `THIRD-PARTY-NOTICES.md`.
+- `scripts/github-mark.test.mjs`، `THIRD-PARTY-NOTICES.md`، `packages/web/e2e/zzzzzzzzzzz-design-family.spec.ts`.
 - حُذف مفتاح `about.server_version` من الويب و iOS لأنه لم يعد مستخدماً (صار «المركز المتصل»).
 
 ## الفحوص (الأوامر ونواتجها الفعلية)
@@ -45,6 +45,7 @@ $ eslint + prettier --check على الملفات المتغيّرة → نظي�
 حدود: موضع النافذة يُحسب من مكان الرقم عند فتحها (ثابتة على الشاشة)، ولم أجربها يدوياً في نافذة الديسكتوب الحقيقية؛ الاختبارات تغطي الفتح والإغلاق والأسطر.
 
 CI الأول (f2ae6688): 16 نجح. فشل فحص سجل التغيير لأن سطر الرأس فيه زيادة، وتصلّح. وألغيت مهلة «Web smoke journeys» بعد 35 دقيقة: تثبيت الخطوط بـ apt أخذ 27 دقيقة، وكل اختبارات Playwright اللي اشتغلت (73) نجحت قبل الإلغاء.
+CI الثاني (e21747c7): 17 نجح، وفشل اختبار واحد في Playwright هو `design-family`. قاعدته تقول إن كل أيقونة في تذييل الشريط مرسومة بخط Lucide على شبكة 24، وشعار GitHub شعار مصمت على شبكة 16. وسمته بـ `data-brand-mark="github"`، والقاعدة صارت تستثني الشعارات وتتأكد أن شعار GitHub موجود في التذييل.
 
 ## التسليم والخطوة التالية
 مراجعة المالك ودمجه، وينزل مع 1.1.10 بعد إطلاق 1.1.9.
