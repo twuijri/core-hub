@@ -10,6 +10,7 @@
  * hub does with the Hermes in front of it, so it asks.
  */
 import { execFileSync } from 'node:child_process';
+import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { parseVersion } from '../../src/modules/agents/adapters/host.js';
 import {
@@ -68,6 +69,61 @@ export function runsPluginsInAHost(image: string): boolean {
     pluginHosts.set(image, found);
   }
   return pluginHosts.get(image) ?? false;
+}
+
+const servedHomeOwners = new Map<string, boolean>();
+
+/**
+ * The image's Hermes makes the one gateway reserve every profile home it serves: it takes each
+ * served home's `gateway.lock` and writes its own pid record there (`gateway/runtime_ownership.py`,
+ * `_start_gateway_reserve_profiles`, v0.22.5 and later). Before it, a served profile's home had no
+ * lock at all. Either way no second gateway runs there.
+ */
+export function reservesEveryServedHome(image: string): boolean {
+  if (!servedHomeOwners.has(image)) {
+    let found = false;
+    try {
+      execFileSync(
+        'docker',
+        [
+          'run',
+          '--rm',
+          '--entrypoint',
+          '/bin/sh',
+          image,
+          '-c',
+          'test -f /opt/hermes/src/gateway/runtime_ownership.py',
+        ],
+        { stdio: 'ignore', timeout: 120_000 },
+      );
+      found = true;
+    } catch {
+      // not there: an older Hermes
+    }
+    servedHomeOwners.set(image, found);
+  }
+  return servedHomeOwners.get(image) ?? false;
+}
+
+/** The pid record in `<home>/gateway.lock` (JSON or a bare pid), or null with no lock or record. */
+export function gatewayLockRecord(home: string): { pid: number; hermes_home?: string } | null {
+  let raw: string;
+  try {
+    raw = readFileSync(path.join(home, 'gateway.lock'), 'utf8').trim();
+  } catch {
+    return null;
+  }
+  if (/^\d+$/.test(raw)) return { pid: Number(raw) };
+  try {
+    const record = JSON.parse(raw) as { pid?: unknown; hermes_home?: unknown };
+    if (typeof record.pid !== 'number') return null;
+    return {
+      pid: record.pid,
+      ...(typeof record.hermes_home === 'string' ? { hermes_home: record.hermes_home } : {}),
+    };
+  } catch {
+    return null;
+  }
 }
 
 /** The image's Hermes runs one gateway per host (v2026.9.21 and later). */

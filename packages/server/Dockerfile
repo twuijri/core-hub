@@ -111,15 +111,16 @@ RUN set -eu; \
 #
 # The Python is the one the release was made for (scripts/hermes-image/python-version.mjs): 3.12
 # up to v2026.9.24 (the floor included), the exact CPython its own package manager pins from
-# v0.21.6 (3.14.7), whose core dependencies are declared for that Python only. uv is the release
-# Hermes's package manager pins (0.12.3), which knows that CPython. The same build serves both,
-# so CI builds the floor and the pin from this one file
+# v0.21.6 (3.14.7; 3.14.9 from v0.22.5), whose core dependencies are declared for that Python
+# only. uv is the release Hermes's package manager pins (0.13.5 from v0.22.5; 0.12.3 before),
+# which knows that CPython — an older uv fails with "No download found" — and the older ones.
+# The same build serves both, so CI builds the floor and the pin from this one file
 # (docs/changes/2026-10-09-twuijri-hermes-0-21-6.md). `prepare.py stamp` gives a release whose
 # pyproject carries no version (v0.21.6 on) the install stamp Hermes's own packagers write, so
 # `hermes --version` names the release rather than "vunknown" once .git is gone.
 FROM node:24-bookworm AS hermes
-ARG HERMES_REF=v0.22.2
-ARG UV_VERSION=0.12.3
+ARG HERMES_REF=v0.22.5
+ARG UV_VERSION=0.13.5
 ENV UV_PYTHON_INSTALL_DIR=/opt/hermes/python \
     UV_LINK_MODE=copy \
     UV_NO_CACHE=1
@@ -129,11 +130,12 @@ RUN sh /tmp/uv-installer.sh \
  && install -m 0755 /root/.local/bin/uv /usr/local/bin/uv \
  && git clone --depth 1 --branch "${HERMES_REF}" https://github.com/NousResearch/hermes-agent /opt/hermes/src \
  && python_version=$(node /tmp/hermes-image/python-version.mjs /opt/hermes/src) \
- && echo "Hermes ${HERMES_REF} runs on Python ${python_version}" \
+ && aiohttp_version=$(node /tmp/hermes-image/aiohttp-version.mjs /opt/hermes/src) \
+ && echo "Hermes ${HERMES_REF} runs on Python ${python_version}, aiohttp ${aiohttp_version}" \
  && uv python install "${python_version}" \
  && uv venv --python "${python_version}" /opt/hermes/.venv \
  && cd /opt/hermes/src \
- && uv pip install --python /opt/hermes/.venv/bin/python -e ".[cron,mcp]" "aiohttp==3.14.3" \
+ && uv pip install --python /opt/hermes/.venv/bin/python -e ".[cron,mcp]" "aiohttp==${aiohttp_version}" \
  && /opt/hermes/.venv/bin/python /tmp/hermes-image/prepare.py stamp "${HERMES_REF}" \
  && rm -rf /opt/hermes/src/.git \
  && /opt/hermes/.venv/bin/hermes --version

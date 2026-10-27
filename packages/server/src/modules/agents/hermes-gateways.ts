@@ -112,6 +112,22 @@ export function topologyForVersion(version: string | null | undefined): GatewayT
 }
 
 /**
+ * The first Hermes release where a plugin may put a message only into its own profile's
+ * conversations: v0.22.3 (`gateway/run_plugin_injection.py` §_plugin_messaging_session_owned —
+ * under one gateway per host a session belongs to the profile its key names, `agent:<profile>:…`,
+ * and the plugin's profile is the home it was loaded from). Before it, the root home's copy of a
+ * plugin reached every profile's conversations.
+ */
+export const OWN_PROFILE_INJECTION_SINCE = '0.22.3';
+
+/** Whether this Hermes version lets a plugin inject only into its own profile's conversations. */
+export function injectsOnlyIntoOwnProfile(version: string | null | undefined): boolean {
+  const plain = version?.trim().split('+')[0];
+  if (!plain || !/^\d+\.\d+/.test(plain)) return false;
+  return compareVersions(plain, OWN_PROFILE_INJECTION_SINCE) >= 0;
+}
+
+/**
  * Whether a gateway's last words are Hermes refusing to be a second gateway on this host
  * (`gateway/host_attach.py` §attach_message, §_refuse_message, `gateway/run.py`
  * §_refuse_second_host_gateway). Exit code 75 alone is not enough: Hermes also exits 75 to be
@@ -504,6 +520,8 @@ export class ProfileGateways {
   private closed = false;
   private rescanTimer: NodeJS.Timeout | null = null;
   private topologyNow: GatewayTopology = 'per-profile';
+  /** The Hermes version last noted (`hermes --version`), or null before the hub read one. */
+  private versionNow: string | null = null;
   /** Named profiles already prepared for the root gateway (one gateway per host). */
   private readonly prepared = new Set<string>();
   /**
@@ -521,11 +539,20 @@ export class ProfileGateways {
   }
 
   /**
+   * Whether this Hermes lets a plugin inject only into its own profile's conversations
+   * (v0.22.3 and later, `injectsOnlyIntoOwnProfile`); false while the version is unknown.
+   */
+  injectsOnlyIntoOwnProfile(): boolean {
+    return injectsOnlyIntoOwnProfile(this.versionNow);
+  }
+
+  /**
    * The version of the Hermes the hub runs (`hermes --version`): from v2026.9.21 (`0.21.4`) one
    * gateway serves every profile. An older or unreadable version changes nothing — a gateway that
    * exits 75 saying so still switches (`useOneGatewayPerHost`).
    */
   noteVersion(version: string | null): Promise<void> {
+    if (version) this.versionNow = version;
     if (topologyForVersion(version) !== 'one-per-host') return Promise.resolve();
     return this.useOneGatewayPerHost(`Hermes ${version} runs one gateway per host`);
   }

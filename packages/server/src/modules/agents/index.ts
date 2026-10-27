@@ -940,6 +940,7 @@ function contextOf(app: FastifyInstance): AgentsContext {
     },
     namedProfiles: (root) => namedHermesProfiles(root),
     topology: () => runtime.profileGateways.topology(),
+    injectsOnlyIntoOwnProfile: () => runtime.profileGateways.injectsOnlyIntoOwnProfile(),
     mcpUrl: () => hubMcpUrl(app),
     listener: () => channelBridgeListenerFactory?.(app) ?? null,
     log: app.log,
