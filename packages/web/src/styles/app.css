@@ -544,6 +544,31 @@
 .chat-flow[data-empty='true'] .composer-dock {
   position: static;
 }
+/* A dock carrying lines and buttons of its own under the composer (a Telegram or WhatsApp
+   conversation): it sits on the page's colour, so no message shows through behind its words
+   (owner, 2026-10-27). The top fades in, so the transcript is not cut off by a hard edge. */
+.composer-dock-solid {
+  background: linear-gradient(to bottom, transparent, var(--ch-color-bg) var(--ch-space-4));
+}
+/* "Jump to latest" (JumpToLatest.tsx): a small round button floating just above the dock. */
+.jump-latest {
+  position: absolute;
+  inset-block-end: calc(100% + var(--ch-space-1));
+  inset-inline-start: 50%;
+  translate: -50% 0;
+  display: inline-grid;
+  place-items: center;
+  inline-size: 2.25rem;
+  block-size: 2.25rem;
+  border-radius: var(--ch-radius-full);
+  color: var(--ch-color-text);
+}
+[dir='rtl'] .jump-latest {
+  translate: 50% 0;
+}
+.jump-latest:hover {
+  background: var(--ch-color-surface-2);
+}
 
 /* ------------------------------------------------------------------ composer
    One surface, one spacing scale (the `space` tokens), one focus ring (the
@@ -989,6 +1014,20 @@
 }
 .ch-tooltip-arrow {
   fill: var(--ch-color-text);
+}
+/* A sentence explaining a control, not its name: wider, and see-through enough that the page
+   stays readable behind it (owner, 2026-10-27). */
+.ch-tooltip-note {
+  max-inline-size: min(22rem, 90vw);
+  padding: var(--ch-space-2) var(--ch-space-3);
+  border-radius: var(--ch-radius-md);
+  background: color-mix(in srgb, var(--ch-color-text) 82%, transparent);
+  -webkit-backdrop-filter: var(--ch-glass-filter);
+  backdrop-filter: var(--ch-glass-filter);
+  font-size: var(--ch-font-size-sm);
+}
+.ch-tooltip-note .ch-tooltip-arrow {
+  fill: color-mix(in srgb, var(--ch-color-text) 82%, transparent);
 }
 
 .ch-check-row {

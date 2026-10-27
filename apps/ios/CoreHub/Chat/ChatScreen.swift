@@ -183,6 +183,15 @@ struct ChatScreen: View {
             .scrollDismissesKeyboard(.interactively)
             .dismissesKeyboardOnTap()
             .defaultScrollAnchor(.bottom)
+            // Scrolled up into the conversation: a small ↓ back to the newest message (owner, 2026-10-27).
+            .overlay(alignment: .bottom) {
+                if !atBottom, !model.state.messages.isEmpty {
+                    JumpToLatestButton {
+                        withAnimation(.easeOut(duration: Motion.fast)) { proxy.scrollTo("bottom", anchor: .bottom) }
+                    }
+                }
+            }
+            .animation(.easeOut(duration: Motion.fast), value: atBottom)
             // The keyboard takes the bottom of the screen: a reader at the latest message stays
             // there, above the composer, instead of the list shrinking over it.
             .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillShowNotification)) { _ in

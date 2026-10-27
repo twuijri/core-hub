@@ -124,6 +124,8 @@ fun HubButton(
     enabled: Boolean = true,
     loading: Boolean = false,
     fill: Boolean = false,
+    /** A long press: explains what the button does before it is pressed (the web's tooltip). */
+    onLongClick: (() -> Unit)? = null,
 ) {
     val t = LocalTokens.current
     val p = paint(t, kind)
@@ -138,12 +140,25 @@ fun HubButton(
             .clip(ItemShape)
             .background(bg, ItemShape)
             .border(1.dp, p.border, ItemShape)
-            .clickable(
-                interactionSource = interaction,
-                indication = ripple(),
-                enabled = enabled && !loading,
-                role = Role.Button,
-                onClick = onClick,
+            .then(
+                if (onLongClick == null) {
+                    Modifier.clickable(
+                        interactionSource = interaction,
+                        indication = ripple(),
+                        enabled = enabled && !loading,
+                        role = Role.Button,
+                        onClick = onClick,
+                    )
+                } else {
+                    Modifier.combinedClickable(
+                        interactionSource = interaction,
+                        indication = ripple(),
+                        enabled = enabled && !loading,
+                        role = Role.Button,
+                        onLongClick = onLongClick,
+                        onClick = onClick,
+                    )
+                },
             )
             .padding(horizontal = size.pad),
         verticalAlignment = Alignment.CenterVertically,

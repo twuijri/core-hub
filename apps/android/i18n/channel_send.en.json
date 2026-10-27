@@ -18,5 +18,8 @@
   "chcv_send_unavailable_hermes_not_managed": "A conversation from %1$s — read-only: this hub does not run Hermes, so it cannot write into it.",
   "chcv_send_unavailable_bridge_offline": "A conversation from %1$s — writing from here is unavailable while Hermes’s messaging gateway is starting or stopped.",
   "chcv_send_unavailable_not_current": "This %1$s chat has moved on to a newer conversation; a message from here would go there.",
-  "chcv_send_unavailable_no_route": "A conversation from %1$s — Hermes keeps no way back to this chat, so it cannot be written into from here."
+  "chcv_send_unavailable_no_route": "A conversation from %1$s — Hermes keeps no way back to this chat, so it cannot be written into from here.",
+  "chcv_send_hide_hint": "Hide this note",
+  "chcv_send_show_hint": "Where does my message go?",
+  "chcv_continue_explain": "Want to copy this %1$s conversation and keep working on it inside the hub? Press here. A new chat opens in the hub, and what you write in it stays in the hub and does not go to %1$s. The original conversation does not change."
 }

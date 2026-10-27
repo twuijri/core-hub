@@ -115,6 +115,8 @@ export const IconSidebarFold = ({ className = '', ...p }: IconProps) =>
 export const IconSidebarUnfold = ({ className = '', ...p }: IconProps) =>
   lucide('panel-left-open')({ ...p, className: `rtl:-scale-x-100 ${className}` });
 export const IconChevron = lucide('chevron-down');
+export const IconArrowDown = lucide('arrow-down');
+export const IconInfo = lucide('info');
 export const IconCopy = lucide('copy');
 export const IconCheck = lucide('check');
 export const IconSpark = lucide('sparkles');

@@ -218,6 +218,10 @@ struct ChannelConversationScreen: View {
     @State private var continuing = false
     @State private var deleting: ChannelConversation?
     @State private var note: String?
+    /// The newest message is on screen; scrolled up, a ↓ floats above the composer (owner, 2026-10-27).
+    @State private var atBottom = true
+    /// The line under the composer, put away on this phone once read (owner, 2026-10-27).
+    @AppStorage(Product.storagePrefix + "channel_send_hint_hidden") private var hintHidden = false
 
     var body: some View {
         VStack(spacing: 0) {
@@ -270,10 +274,22 @@ struct ChannelConversationScreen: View {
                                 .id("sending")
                         }
                         Color.clear.frame(height: 1).id("end")
+                            .onAppear { atBottom = true }
+                            .onDisappear { atBottom = false }
                     }
                     .padding(.horizontal, Space.s4)
                     .padding(.vertical, Space.s3)
                 }
+                // Opened at the newest message, coming back to it included.
+                .defaultScrollAnchor(.bottom)
+                .overlay(alignment: .bottom) {
+                    if !atBottom, !model.messages.isEmpty {
+                        JumpToLatestButton {
+                            withAnimation(.easeOut(duration: Motion.fast)) { reader.scrollTo("end", anchor: .bottom) }
+                        }
+                    }
+                }
+                .animation(.easeOut(duration: Motion.fast), value: atBottom)
                 .onChange(of: model.latest.last?.id) { _, last in
                     if last != nil { reader.scrollTo("end", anchor: .bottom) }
                 }
@@ -373,26 +389,71 @@ struct ChannelConversationScreen: View {
             )
             .frame(maxWidth: .infinity)
             HStack(alignment: .center, spacing: Space.s2) {
-                Text(l10n("channel_send.hint", ["channel": channelName]))
-                    .font(.system(size: FontSize.sizeXs))
-                    .foregroundStyle(Tone.textMuted)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .accessibilityIdentifier("channel.send.hint")
-                Button {
-                    continuing = true
-                } label: {
-                    LucideLabel(l10n("session_groups.channels.continue.button"), icon: .messagesSquare, size: 14)
+                if hintHidden {
+                    // Put away: the same words, one tap away.
+                    Button { hintHidden = false } label: {
+                        LucideIcon(.info, size: 16).foregroundStyle(Tone.textMuted)
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel(l10n("channel_send.show_hint"))
+                    .accessibilityHint(l10n("channel_send.hint", ["channel": channelName]))
+                    .accessibilityIdentifier("channel.send.hint.show")
+                    Spacer(minLength: 0)
+                } else {
+                    Text(l10n("channel_send.hint", ["channel": channelName]))
+                        .font(.system(size: FontSize.sizeXs))
+                        .foregroundStyle(Tone.textMuted)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .accessibilityIdentifier("channel.send.hint")
+                    Button { hintHidden = true } label: {
+                        LucideIcon(.x, size: 14).foregroundStyle(Tone.textMuted)
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel(l10n("channel_send.hide_hint"))
+                    .accessibilityIdentifier("channel.send.hint.hide")
                 }
-                .buttonStyle(.bordered)
-                .controlSize(.small)
-                .tint(Tone.accent)
-                .accessibilityIdentifier("channel.continue")
+                continueButton(size: 14, prominent: false)
             }
         }
         .padding(.horizontal, Space.s3)
         .padding(.vertical, Space.s2)
         .background(Tone.bg)
         .accessibilityIdentifier("channel.composer")
+    }
+
+    /// «Continue in Core Hub». A long press explains it first (owner, 2026-10-27): the new chat is
+    /// the hub's own, and nothing written in it goes to the channel.
+    @ViewBuilder
+    private func continueButton(size: CGFloat, prominent: Bool) -> some View {
+        let button = Button {
+            continuing = true
+        } label: {
+            LucideLabel(l10n("session_groups.channels.continue.button"), icon: .messagesSquare, size: size)
+                .frame(maxWidth: prominent ? .infinity : nil)
+        }
+        .tint(Tone.accent)
+        .accessibilityHint(l10n("channel_send.continue_explain", ["channel": channelName]))
+        .accessibilityIdentifier("channel.continue")
+        .contextMenu {
+            Button {
+                continuing = true
+            } label: {
+                LucideLabel(l10n("session_groups.channels.continue.button"), icon: .messagesSquare)
+            }
+        } preview: {
+            Text(l10n("channel_send.continue_explain", ["channel": channelName]))
+                .font(.system(size: FontSize.sizeSm))
+                .foregroundStyle(Tone.text)
+                .contentDirection(of: l10n("channel_send.continue_explain", ["channel": channelName]))
+                .padding(Space.s4)
+                .frame(width: 300)
+                .background(Tone.surface)
+        }
+        if prominent {
+            button.buttonStyle(.borderedProminent)
+        } else {
+            button.buttonStyle(.bordered).controlSize(.small)
+        }
     }
 
     /// Why there is no composer, where the reply is made, and going on here.
@@ -412,15 +473,7 @@ struct ChannelConversationScreen: View {
                 .tint(Tone.accent)
                 .accessibilityIdentifier("channel.open_current")
             }
-            Button {
-                continuing = true
-            } label: {
-                LucideLabel(l10n("session_groups.channels.continue.button"), icon: .messagesSquare, size: 16)
-                    .frame(maxWidth: .infinity)
-            }
-            .buttonStyle(.borderedProminent)
-            .tint(Tone.accent)
-            .accessibilityIdentifier("channel.continue")
+            continueButton(size: 16, prominent: true)
         }
         .padding(Space.s3)
         .background(Tone.bg)

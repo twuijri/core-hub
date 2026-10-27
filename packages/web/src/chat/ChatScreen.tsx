@@ -65,7 +65,8 @@ import { activeRun, isBusy, textOf } from './transcript.js';
 import { runProgress, turnsOf } from './turns.js';
 import { useRecentModels } from '../models/useModelPicker.js';
 import { defaultModelLabel, useApprovalMode, useComposerModels } from './useComposerControls.js';
-import { useFollowBottom } from './followBottom.js';
+import { useFollowBottom, useScrolledAway } from './followBottom.js';
+import { JumpToLatest } from './JumpToLatest.js';
 import { useLoadOlderOnScroll } from './olderMessages.js';
 import { useSessionStream } from './useSessionStream.js';
 import { useRunHistory } from './useRunHistory.js';
@@ -194,6 +195,7 @@ function OpenSessionBody({ sessionId, title: pageTitle, intro }: OpenSessionProp
     hold: holding,
     onBottom: () => setPhase(['shown'], 'released'),
   });
+  const away = useScrolledAway(transcript);
   // Keyed on the last message, not the count: older pages joining at the top change the
   // count too, and must never pull a person reading history down to the bottom.
   const last = state.messages.at(-1);
@@ -704,6 +706,7 @@ function OpenSessionBody({ sessionId, title: pageTitle, intro }: OpenSessionProp
                   {...(question
                     ? { question: <QuestionCard key={question.id} approval={question} /> }
                     : {})}
+                  jump={<JumpToLatest shown={away} onJump={follow} />}
                   {...(outbox.length > 0
                     ? {
                         queue: (

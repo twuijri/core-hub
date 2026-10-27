@@ -227,4 +227,20 @@ final class ChannelSendTests: XCTestCase {
             "This Telegram chat has moved on to a newer conversation; a message from here would go there."
         )
     }
+
+    /// The words of the bottom's polish (owner, 2026-10-27): the ↓ back to the newest message, the
+    /// line under the composer put away and brought back, and what «Continue in Core Hub» does.
+    func testJumpHintAndContinueWordsInBothLanguages() {
+        let en = L10n(.en, bundle: Bundle(for: AppModel.self))
+        let ar = L10n(.ar, bundle: Bundle(for: AppModel.self))
+        XCTAssertEqual(en("chat.jump_latest"), "Jump to the latest message")
+        XCTAssertEqual(ar("chat.jump_latest"), "انزل لآخر رسالة")
+        XCTAssertEqual(en("channel_send.hide_hint"), "Hide this note")
+        XCTAssertEqual(ar("channel_send.show_hint"), "أين تذهب رسالتي؟")
+        XCTAssertEqual(
+            ar("channel_send.continue_explain", ["channel": "تيليجرام"]),
+            "تبي تنسخ محادثة تيليجرام وتكمل الشغل عليها داخل الهب؟ اضغط هنا. تنفتح محادثة جديدة في الهب، واللي تكتبه فيها يبقى في الهب وما يروح لـتيليجرام. المحادثة الأصلية ما تتغيّر."
+        )
+        XCTAssertTrue(en("channel_send.continue_explain", ["channel": "WhatsApp"]).contains("does not go to WhatsApp"))
+    }
 }

@@ -21,6 +21,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.derivedStateOf
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -62,6 +63,7 @@ import hub.core.android.ui.components.TurnView
 import hub.core.android.ui.theme.LocalTokens
 import hub.core.client.model.ApprovalDecision
 import hub.core.client.model.RunStatus
+import kotlinx.coroutines.launch
 
 /**
  * A conversation, or the new-chat draft when [sessionId] is null: the agent row above the
@@ -131,6 +133,8 @@ fun ChatScreen(
     }
     val listState = rememberLazyListState()
     val atBottom by remember { derivedStateOf { !listState.canScrollForward } }
+    val scrolledAway = hub.core.android.ui.components.rememberScrolledAway(listState)
+    val jumpScope = rememberCoroutineScope()
     val youLabel = stringResource(R.string.chat_you)
     val agents = hub.core.android.ui.components.rememberAgents(profile)
     val agentFallback = agents.firstOrNull { it.id == chat.session?.agentId }?.name ?: stringResource(R.string.agent_fallback)
@@ -223,6 +227,16 @@ fun ChatScreen(
                         }
                     }
                 }
+            }
+            // Scrolled up into the conversation: a small ↓ back to the newest message (owner, 2026-10-27).
+            if (sessionId != null && !ui.loading && scrolledAway) {
+                hub.core.android.ui.components.JumpToLatest(
+                    onJump = {
+                        following = true
+                        jumpScope.launch { listState.scrollToItem(turns.lastIndex + 1) }
+                    },
+                    modifier = Modifier.align(Alignment.BottomCenter),
+                )
             }
         }
         Column(Modifier.padding(horizontal = 12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {

@@ -8,7 +8,7 @@
 // (§62) stays a separate action. The hub announces each turn (`channel_conversation.updated`);
 // the polling is only a fallback. Older messages are read a page at a time when asked, and the
 // pictures the person sent are drawn in their bubble while Hermes still keeps them (§103).
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router';
 import { describeError } from '../auth/client.js';
 import { useAuth } from '../auth/context.js';
@@ -48,6 +48,8 @@ import { IconEyeOff, IconGlobe, IconMore, IconTrash } from '../ui/icons.js';
 import { Markdown } from './Markdown.js';
 import { ContinueChannel } from './ContinueChannel.js';
 import { ChannelComposer, sendUnavailableText } from './ChannelComposer.js';
+import { useFollowBottom, useScrolledAway } from './followBottom.js';
+import { JumpToLatest } from './JumpToLatest.js';
 
 export function ChannelConversationView({ id }: { id: string }) {
   const { t } = useI18n();
@@ -67,6 +69,13 @@ export function ChannelConversationView({ id }: { id: string }) {
   const [older, setOlder] = useState<{ items: ChannelMessage[]; next: number | null } | null>(null);
   useEffect(() => setOlder(null), [id]);
   const loadOlder = useOlderChannelMessages(id);
+  // Opened at the newest message, and following new ones while the reader is there
+  // (followBottom.ts, owner 2026-10-27): coming back from another chat landed at the top.
+  // Older pages join above a reader who scrolled up for them and never pull them down.
+  const transcript = useRef<HTMLDivElement>(null);
+  const follow = useFollowBottom(transcript);
+  const away = useScrolledAway(transcript);
+  useEffect(() => follow(), [id, follow]);
   const latest = read.data?.items ?? [];
   const seen = new Set(latest.map((message) => message.id));
   const messages = [...(older?.items ?? []).filter((message) => !seen.has(message.id)), ...latest];
@@ -165,7 +174,7 @@ export function ChannelConversationView({ id }: { id: string }) {
           </div>
         )}
         {read.isError && <Notice tone="danger">{describeError(read.error, t)}</Notice>}
-        <div className="chat-stream chat-turns" data-testid="channel-transcript">
+        <div className="chat-stream chat-turns" ref={transcript} data-testid="channel-transcript">
           {hasMore &&
             (nextOffset !== null ? (
               <div className="flex justify-center py-2">
@@ -222,9 +231,19 @@ export function ChannelConversationView({ id }: { id: string }) {
         </div>
         {/* The composer for an admin; otherwise in its place: why not, and where to reply. */}
         {conversation && (
-          <div className="composer-dock flex flex-col gap-2">
+          <div className="composer-dock composer-dock-solid flex flex-col gap-2">
+            <JumpToLatest shown={away} onJump={follow} />
             {conversation.can_send ? (
-              <ChannelComposer id={id} channel={channel} peer={peer} onSending={setSending} />
+              <ChannelComposer
+                id={id}
+                channel={channel}
+                peer={peer}
+                onSending={(words) => {
+                  setSending(words);
+                  // What the person just wrote is where they want to be.
+                  if (words) follow();
+                }}
+              />
             ) : (
               <div data-testid="channel-readonly">
                 <Notice tone="info">

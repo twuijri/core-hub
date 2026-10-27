@@ -350,5 +350,6 @@
   "pending_count": "%1$d waiting for you",
   "chat_new_in_profile": "New chat in %1$s",
   "chat_start_hint": "Ask anything. The conversation starts with your first message.",
-  "connect_or": "or"
+  "connect_or": "or",
+  "chat_jump_latest": "Jump to the latest message"
 }

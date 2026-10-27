@@ -9,7 +9,7 @@
  * The hub's half is `packages/server/src/modules/sessions/channel-sends.test.ts`.
  */
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { cleanup, render, screen, waitFor, within } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter, Route, Routes } from 'react-router';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -339,5 +339,58 @@ describe('an admin writes into a Telegram conversation from the hub (§153)', ()
     render(<Screen fetchImpl={older.fetchImpl} />);
     expect(await screen.findByTestId('channel-readonly')).toHaveTextContent('للقراءة فقط');
     expect(screen.queryByTestId('channel-composer')).toBeNull();
+  });
+});
+
+describe('the channel conversation’s bottom (owner, 2026-10-27)', () => {
+  afterEach(() => vi.restoreAllMocks());
+
+  it('opens at the newest message, not at the top', async () => {
+    vi.spyOn(HTMLElement.prototype, 'scrollHeight', 'get').mockReturnValue(5000);
+    vi.spyOn(HTMLElement.prototype, 'clientHeight', 'get').mockReturnValue(600);
+    // jsdom draws no Tailwind: the shell's <main> scrolls (`overflow-y-auto`) on a real page.
+    const real = window.getComputedStyle.bind(window);
+    vi.spyOn(window, 'getComputedStyle').mockImplementation((node, pseudo) =>
+      (node as HTMLElement).id === 'main'
+        ? ({ ...real(node, pseudo), overflowY: 'auto' } as CSSStyleDeclaration)
+        : real(node, pseudo),
+    );
+    const hub = fakeHub({ can_send: true, send_unavailable: null, current_id: null });
+    render(<Screen fetchImpl={hub.fetchImpl} />);
+    await screen.findByTestId('channel-composer-input');
+    const main = document.getElementById('main')!;
+    await waitFor(() => expect(main.scrollTop).toBe(5000));
+    expect(screen.queryByTestId('jump-latest')).toBeNull();
+  });
+
+  it('the line under the composer can be put away, stays away, and comes back', async () => {
+    const user = userEvent.setup();
+    const hub = fakeHub({ can_send: true, send_unavailable: null, current_id: null });
+    const first = render(<Screen fetchImpl={hub.fetchImpl} />);
+    await user.click(await screen.findByTestId('channel-send-hint-hide'));
+    expect(screen.queryByTestId('channel-send-hint')).toBeNull();
+    // Still told to a screen reader, and one hover away on the ⓘ beside send.
+    expect(screen.getByTestId('channel-composer')).toHaveAccessibleDescription(/من كور هب/);
+    expect(localStorage.getItem('corehub.channel-send-hint-hidden')).toBe('1');
+
+    first.unmount();
+    render(<Screen fetchImpl={hub.fetchImpl} />);
+    await screen.findByTestId('channel-composer-input');
+    expect(screen.queryByTestId('channel-send-hint')).toBeNull();
+    await user.click(screen.getByTestId('channel-send-hint-show'));
+    expect(screen.getByTestId('channel-send-hint')).toHaveTextContent('من كور هب');
+    expect(localStorage.getItem('corehub.channel-send-hint-hidden')).toBe('0');
+  });
+
+  it('«Continue in Core Hub» explains itself on focus and the note goes when focus leaves', async () => {
+    const hub = fakeHub({ can_send: true, send_unavailable: null, current_id: null });
+    render(<Screen fetchImpl={hub.fetchImpl} />);
+    const button = await screen.findByTestId('channel-continue');
+    fireEvent.focus(button);
+    const note = await screen.findByRole('tooltip');
+    expect(note).toHaveTextContent('تبي تنسخ محادثة تيليجرام');
+    expect(note).toHaveTextContent('ما يروح لـتيليجرام');
+    fireEvent.blur(button);
+    await waitFor(() => expect(screen.queryByRole('tooltip')).toBeNull());
   });
 });

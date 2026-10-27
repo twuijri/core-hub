@@ -12,7 +12,7 @@
  * The caller lets go (`hold` false) once the person sends, or scrolls to the bottom
  * themselves, which `onBottom` reports.
  */
-import { useCallback, useEffect, useRef, type RefObject } from 'react';
+import { useCallback, useEffect, useRef, useState, type RefObject } from 'react';
 
 /** How close to the bottom still counts as "at the bottom", in pixels. */
 const NEAR = 80;
@@ -82,4 +82,32 @@ export function useFollowBottom(
     pinned.current = true;
     toBottom();
   }, [toBottom]);
+}
+
+/** How far above the bottom the reader must be before "Jump to latest" shows, in pixels. */
+export const AWAY = 240;
+
+/**
+ * Whether the reader has scrolled up from the newest message (owner, 2026-10-27): the floating
+ * "jump to latest" button shows while this is true. A margin above `NEAR`, so a reply growing
+ * under a reader who is following it never flickers the button.
+ */
+export function useScrolledAway(content: RefObject<HTMLElement | null>): boolean {
+  const [away, setAway] = useState(false);
+  useEffect(() => {
+    const node = content.current;
+    const at = scrollParent(node);
+    if (!node || !at) return;
+    const target: HTMLElement | Window = at === document.scrollingElement ? window : at;
+    const measure = () => setAway(at.scrollHeight - at.scrollTop - at.clientHeight > AWAY);
+    target.addEventListener('scroll', measure, { passive: true });
+    const observer = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(measure);
+    observer?.observe(node);
+    measure();
+    return () => {
+      target.removeEventListener('scroll', measure);
+      observer?.disconnect();
+    };
+  }, [content]);
+  return away;
 }

@@ -8,6 +8,7 @@ object Lucide {
     val Activity = R.drawable.lucide_activity
     val Archive = R.drawable.lucide_archive
     val ArchiveRestore = R.drawable.lucide_archive_restore
+    val ArrowDown = R.drawable.lucide_arrow_down
     val ArrowLeft = R.drawable.lucide_arrow_left
     val ArrowUp = R.drawable.lucide_arrow_up
     val ArrowUpDown = R.drawable.lucide_arrow_up_down

@@ -350,5 +350,6 @@
   "pending_count": "%1$d بانتظارك",
   "chat_new_in_profile": "محادثة جديدة في %1$s",
   "chat_start_hint": "اسأل ما شئت. تبدأ المحادثة مع أول رسالة.",
-  "connect_or": "أو"
+  "connect_or": "أو",
+  "chat_jump_latest": "انزل لآخر رسالة"
 }

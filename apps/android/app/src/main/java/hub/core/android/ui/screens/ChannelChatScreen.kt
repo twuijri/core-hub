@@ -227,55 +227,66 @@ fun ChannelChatScreen(
         val rows = messages.size + split.pending.size + (if (showSending) 1 else 0)
         // To the end (the list clamps an index past its last row, the header rows included).
         LaunchedEffect(latest.size, split.pending.size, showSending) { if (rows > 0 && !loadingOlder) list.scrollToItem(rows + 4) }
-        LazyColumn(
-            Modifier.weight(1f).fillMaxWidth().testTag("channel.transcript"), state = list,
-            contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 16.dp, vertical = 8.dp),
-            verticalArrangement = Arrangement.spacedBy(10.dp),
-        ) {
-            if (loading) item { Box(Modifier.fillMaxWidth().padding(24.dp), contentAlignment = Alignment.Center) { Spinner(20.dp, t.textMuted) } }
-            if (hasMore) {
-                item(key = "older") {
-                    Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
-                        val offset = nextOffset
-                        if (offset != null) {
-                            HubButton(
-                                stringResource(R.string.chcv_load_older),
-                                {
-                                    loadingOlder = true
-                                    scope.launch {
-                                        ops.messages(profile, conversationId, offset).onSuccess { page ->
-                                            older = page.items + older
-                                            olderRead = true
-                                            nextOffset = page.nextOffset
-                                            hasMore = page.nextOffset != null
-                                        }.onFailure { error = it as HubError }
-                                        loadingOlder = false
-                                    }
-                                },
-                                kind = ButtonKind.Secondary, size = ControlSize.Sm, loading = loadingOlder, modifier = Modifier.testTag("channel.older"),
-                            )
-                        } else {
-                            Text(stringResource(R.string.chcv_has_more), fontSize = FontTokens.sizeXs.sp, color = t.textMuted)
+        val away = hub.core.android.ui.components.rememberScrolledAway(list)
+        var hintHidden by remember { mutableStateOf(graph.prefs.channelSendHintHidden) }
+        Box(Modifier.weight(1f).fillMaxWidth()) {
+            LazyColumn(
+                Modifier.fillMaxSize().testTag("channel.transcript"), state = list,
+                contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 16.dp, vertical = 8.dp),
+                verticalArrangement = Arrangement.spacedBy(10.dp),
+            ) {
+                if (loading) item { Box(Modifier.fillMaxWidth().padding(24.dp), contentAlignment = Alignment.Center) { Spinner(20.dp, t.textMuted) } }
+                if (hasMore) {
+                    item(key = "older") {
+                        Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
+                            val offset = nextOffset
+                            if (offset != null) {
+                                HubButton(
+                                    stringResource(R.string.chcv_load_older),
+                                    {
+                                        loadingOlder = true
+                                        scope.launch {
+                                            ops.messages(profile, conversationId, offset).onSuccess { page ->
+                                                older = page.items + older
+                                                olderRead = true
+                                                nextOffset = page.nextOffset
+                                                hasMore = page.nextOffset != null
+                                            }.onFailure { error = it as HubError }
+                                            loadingOlder = false
+                                        }
+                                    },
+                                    kind = ButtonKind.Secondary, size = ControlSize.Sm, loading = loadingOlder, modifier = Modifier.testTag("channel.older"),
+                                )
+                            } else {
+                                Text(stringResource(R.string.chcv_has_more), fontSize = FontTokens.sizeXs.sp, color = t.textMuted)
+                            }
                         }
                     }
                 }
-            }
-            error?.let { item(key = "error") { ErrorNotice(it) } }
-            if (!loading && messages.isEmpty() && error == null) {
-                item(key = "empty") { EmptyState(stringResource(R.string.chcv_no_messages), icon = Lucide.Globe) }
-            }
-            items(messages, key = { it.id }) { message ->
-                if (ChannelSendRules.fromHub(message)) {
-                    val followed = split.followed[message.id]
-                    HubMessageView(message.authorName, message.text, channel, followed = followed != null, status = followed)
-                } else {
-                    ChannelMessageView(message, peer, conversationId, profile, ops)
+                error?.let { item(key = "error") { ErrorNotice(it) } }
+                if (!loading && messages.isEmpty() && error == null) {
+                    item(key = "empty") { EmptyState(stringResource(R.string.chcv_no_messages), icon = Lucide.Globe) }
+                }
+                items(messages, key = { it.id }) { message ->
+                    if (ChannelSendRules.fromHub(message)) {
+                        val followed = split.followed[message.id]
+                        HubMessageView(message.authorName, message.text, channel, followed = followed != null, status = followed)
+                    } else {
+                        ChannelMessageView(message, peer, conversationId, profile, ops)
+                    }
+                }
+                // Written from here and not in the transcript yet: after the rest, with what became of it.
+                items(split.pending, key = { "outgoing:${it.id}" }) { each -> HubMessageView(each.authorName, each.text, channel, followed = true, status = each) }
+                sending?.takeIf { showSending }?.let { words ->
+                    item(key = "sending:${words.key}") { HubMessageView(null, words.text, channel, followed = true, status = null) }
                 }
             }
-            // Written from here and not in the transcript yet: after the rest, with what became of it.
-            items(split.pending, key = { "outgoing:${it.id}" }) { each -> HubMessageView(each.authorName, each.text, channel, followed = true, status = each) }
-            sending?.takeIf { showSending }?.let { words ->
-                item(key = "sending:${words.key}") { HubMessageView(null, words.text, channel, followed = true, status = null) }
+            // Scrolled up into the conversation: a small ↓ back to the newest message (owner, 2026-10-27).
+            if (away) {
+                hub.core.android.ui.components.JumpToLatest(
+                    onJump = { scope.launch { list.scrollToItem(rows + 4) } },
+                    modifier = Modifier.align(Alignment.BottomCenter),
+                )
             }
         }
         val c = conversation
@@ -283,6 +294,7 @@ fun ChannelChatScreen(
             ChannelSendBottom(
                 ChannelSendRules.bottom(c), channel, peer, draft, onDraft = { draft = it }, busy = sending != null, failure = refusal,
                 onSend = send, onOpenCurrent = { id -> onOpenConversation(id, c.profile) }, onContinue = { continuing = true },
+                hintHidden = hintHidden, onHintHidden = { hidden -> hintHidden = hidden; graph.prefs.channelSendHintHidden = hidden },
             )
         }
     }
