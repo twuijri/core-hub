@@ -5,7 +5,7 @@
 // the row geometry, the scrolling middle, the footer — comes from `ui/SidebarShell.tsx`,
 // so the phone drawer and any later rail are assembled from the same pieces rather than
 // drawn again (docs/clients/DESIGN.md §UI policy).
-import { derived } from '@corehub/contracts';
+import { PRODUCT_LINKS, derived } from '@corehub/contracts';
 import { useEffect } from 'react';
 import { Link, NavLink, useLocation, useNavigate } from 'react-router';
 import { useAuth } from '../auth/context.js';
@@ -28,6 +28,7 @@ import { useRealtime } from '../realtime/context.js';
 import { RoomList } from '../rooms/RoomList.js';
 import { SessionList } from '../sessions/SessionList.js';
 import { SettingsNav, settingsIdFromPath } from '../settings/SettingsNav.js';
+import { VersionLabel, useDesktopAppVersion, versionFacts } from './VersionLabel.js';
 import { AgentBackRow, AgentNav } from '../agents/AgentNav.js';
 import {
   destinationIcons,
@@ -46,6 +47,7 @@ import {
   Badge,
   CoreHubMark,
   Button,
+  GitHubMark,
   Menu,
   MenuItem,
   MenuNote,
@@ -97,6 +99,7 @@ export function Sidebar({
   useDesktopEffects();
   const { t, language } = useI18n();
   const { user, signOut, homeProfile } = useAuth();
+  const desktopVersion = useDesktopAppVersion();
   const { prefs, update } = useTheme();
   const realtime = useRealtime();
   const meta = useMeta();
@@ -451,11 +454,25 @@ export function Sidebar({
             >
               {t('shell.theme_next', { next: t(`display.theme.${nextTheme(prefs.theme)}`) })}
             </MenuItem>
+            <MenuItem
+              icon={<GitHubMark size={16} />}
+              onSelect={() =>
+                window.open(PRODUCT_LINKS.repository, '_blank', 'noopener,noreferrer')
+              }
+            >
+              {t('shell.repository')}
+            </MenuItem>
             <MenuSeparator />
             <MenuItem icon={<IconSignOut size={16} />} onSelect={() => void signOut()}>
               {t('nav.sign_out')}
             </MenuItem>
-            <MenuNote>v{meta.data?.server_version ?? __APP_VERSION__}</MenuNote>
+            <MenuNote>
+              {versionFacts(desktopVersion, meta.data?.server_version ?? __APP_VERSION__)
+                .lines.map((line) =>
+                  t(`shell.version_${line.key}`, { version: `\u2068${line.version}\u2069` }),
+                )
+                .join(' · ')}
+            </MenuNote>
           </Menu>
         </SidebarFooter>
       ) : (
@@ -489,6 +506,21 @@ export function Sidebar({
                 </NavLink>
               </Tooltip>
             ))}
+            {/* The repository, beside Settings (owner, 2026-10-27): where Core Hub lives, for
+              somebody who forgot. A new tab here; the desktop app opens it in the browser. */}
+            <Tooltip label={t('shell.repository')}>
+              <a
+                href={PRODUCT_LINKS.repository}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="ch-btn ch-btn-ghost ch-btn-sm"
+                data-icon-only="true"
+                aria-label={t('shell.repository')}
+                data-testid="repository-link"
+              >
+                <GitHubMark size={16} />
+              </a>
+            </Tooltip>
             <Button
               variant="ghost"
               size="sm"
@@ -527,11 +559,10 @@ export function Sidebar({
                 {themeIcon(prefs.theme, 15)}
               </Button>
             </Tooltip>
-            {/* The version that is *running*, which is the hub's — the browser may be
-              holding an older bundle. The build constant answers only until the hub does. */}
-            <span className="ms-auto text-faint" data-testid="app-version">
-              v{meta.data?.server_version ?? __APP_VERSION__}
-            </span>
+            {/* This app's version (the desktop app's own in its window, the hub's in a browser —
+              the browser may be holding an older bundle, and the build constant answers only
+              until the hub does); pointing at it shows each version on its own line. */}
+            <VersionLabel hubVersion={meta.data?.server_version ?? __APP_VERSION__} />
           </div>
         </SidebarFooter>
       )}

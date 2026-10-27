@@ -163,7 +163,10 @@
     "back_to_chats": "رجوع إلى المحادثات",
     "no_profile_title": "لا بروفايل لك بعد",
     "no_profile_body": "لم يُعطَ حسابك أي بروفايل، فلا شيء يُفتح بعد. اطلب من المشرف أن يعطيك واحدًا، ثم تحقّق مرة أخرى.",
-    "no_profile_retry": "تحقّق مرة أخرى"
+    "no_profile_retry": "تحقّق مرة أخرى",
+    "repository": "كور هب على GitHub",
+    "version_desktop": "تطبيق سطح المكتب: {version}",
+    "version_hub": "المركز: {version}"
   },
   "pane": {
     "resize": "تغيير عرض اللوحة الجانبية (الأسهم للتغيير، Home للطيّ، End للتوسيع)",
@@ -2520,12 +2523,19 @@
   },
   "about": {
     "name": "الاسم",
-    "server_version": "إصدار الخادم",
     "contract_version": "إصدار العقد",
     "client_version": "إصدار هذه الصفحة",
     "locales": "اللغات",
     "realtime": "قنوات البثّ الحيّ",
-    "realtime_note": "ما يفتحه العميل ليعرف بما يحدث دون أن يسأل."
+    "realtime_note": "ما يفتحه العميل ليعرف بما يحدث دون أن يسأل.",
+    "links": "أين تجد كور هب",
+    "download_page": "صفحة التحميل",
+    "download_page_note": "تطبيقات كل الأجهزة من آخر إصدار.",
+    "repository": "المستودع",
+    "repository_note": "الشيفرة والإصدارات والبلاغات على GitHub.",
+    "desktop_app": "تطبيق سطح المكتب",
+    "web_app": "تطبيق الويب هذا",
+    "connected_hub": "المركز المتصل"
   },
   "skills": {
     "title_of": "مهارات {name}",

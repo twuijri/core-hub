@@ -29,6 +29,18 @@ export const PRODUCT = {
 } as const;
 
 /**
+ * Where a person finds the product on the web: the repository, and the download page that
+ * `site/` publishes on GitHub Pages. Every client shows both in About (owner, 2026-10-27), so
+ * somebody who forgot where Core Hub lives can find it again. Literals, not derived from
+ * `PRODUCT.repository`, because the Android build reads this file with a regex;
+ * `product.test.ts` keeps them in step.
+ */
+export const PRODUCT_LINKS = {
+  repository: 'https://github.com/twuijri/core-hub',
+  downloadPage: 'https://twuijri.github.io/core-hub/',
+} as const;
+
+/**
  * The apps' store identities: the iOS bundle id (APNs's `apns-topic`) and the Android
  * application id. They are not renamed with the product — a store knows an app by these
  * for good — so they live beside `PRODUCT`, not in it. The hub offers the bundle id as the

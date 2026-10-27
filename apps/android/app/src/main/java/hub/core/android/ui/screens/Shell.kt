@@ -60,6 +60,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
@@ -82,6 +83,7 @@ import hub.core.android.R
 import hub.core.android.generated.ControlTokens
 import hub.core.android.generated.FontTokens
 import hub.core.android.generated.LayoutTokens
+import hub.core.android.generated.Product
 import hub.core.android.generated.RadiusTokens
 import hub.core.android.generated.Terms
 import hub.core.android.graph
@@ -767,6 +769,9 @@ private fun Footer(shell: ShellViewModel, nav: Navigator, onClose: () -> Unit) {
                 ProfileSwitcher(shell, Modifier.weight(1f, fill = false))
             }
             HubIconButton(Lucide.Settings, term("settings"), { nav.go(Route.Settings); onClose() }, size = ControlTokens.heightMd.dp, iconSize = 18.dp, modifier = Modifier.testTag("footer.settings"))
+            // The repository, beside Settings (owner, 2026-10-27), as on the web and iOS.
+            val uri = LocalUriHandler.current
+            HubIconButton(R.drawable.github_mark, stringResource(R.string.shell_repository), { uri.openUri(Product.REPOSITORY_URL) }, size = ControlTokens.heightMd.dp, iconSize = 18.dp, modifier = Modifier.testTag("footer.repository"))
             HubIconButton(Lucide.LogOut, term("sign_out"), shell::signOut, size = ControlTokens.heightMd.dp, iconSize = 18.dp, tint = t.danger, modifier = Modifier.testTag("footer.sign_out"))
         }
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {

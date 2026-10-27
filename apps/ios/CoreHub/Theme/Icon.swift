@@ -23,6 +23,23 @@ struct LucideIcon: View {
     }
 }
 
+/// GitHub's mark (Resources/Assets.xcassets/GitHubMark, the web's GitHubMark.tsx path; Lucide no
+/// longer draws brand marks), for the one place the app points at its repository. A template, so
+/// it takes the colour around it, and it grows with Dynamic Type like `LucideIcon`.
+struct GitHubMarkIcon: View {
+    var size: CGFloat = 18
+    @ScaledMetric(relativeTo: .body) private var scale: CGFloat = 1
+
+    var body: some View {
+        Image("GitHubMark")
+            .renderingMode(.template)
+            .resizable()
+            .scaledToFit()
+            .frame(width: size * scale, height: size * scale)
+            .accessibilityHidden(true)
+    }
+}
+
 /// A title with its Lucide icon, for list rows and buttons (a menu takes `Image(lucide:)`).
 struct LucideLabel: View {
     let title: String
