@@ -52,20 +52,26 @@
   - `agents.test.ts`: المساعد صار من وكلاء الهب الدائمين.
   - `web/tests/agent-run-help.test.tsx` (3 اختبارات).
 
-## الفحوص الفعلية
-محلياً بـ Node 24 و`--maxWorkers=2`:
-- **الخادم:**
-  - `vitest src/modules/agents` بدون الاختبارات الحقيقية: 857 من 857، بعد ما صلّحت اختبارين يعدّون
-    قائمة الوكلاء.
-  - `vitest src/modules/models src/modules/sessions`: 567 ناجح، و1 متخطّى.
-  - `tsc --noEmit` نظيف.
-  - `eslint` و`prettier` على الملفات اللي تغيّرت.
-- **الويب:**
-  - `vitest tests`: 1651 من 1651.
-  - `tsc` للكود وللاختبارات نظيف.
-- **الباقي:** الحِزم الكاملة، و e2e، والاختبارات الحقيقية مع Hermes تشتغل على GitHub CI.
+## الفحوص (الأوامر ونواتجها الفعلية)
+محلياً بـ Node 24:
+```
+$ npx vitest run src/modules/agents --maxWorkers=2 --exclude '**/*.real.test.ts'   (packages/server)
+  Test Files 70 passed | 1 skipped · Tests 856 passed | 1 skipped
+  (قبلها فشل اختباران في agents.test.ts يعدّان وكلاء الهب الدائمين؛ صلّحتهما)
+$ npx vitest run src/modules/agents/adapters/hermes-helper.test.ts               → 12 passed
+$ npx vitest run src/modules/models src/modules/sessions --maxWorkers=2 --exclude '**/*.real.test.ts'
+  Test Files 57 passed · Tests 567 passed | 1 skipped
+$ npx vitest run tests --maxWorkers=2                                              (packages/web)
+  Test Files 135 passed · Tests 1651 passed
+$ pnpm typecheck                     → بلا أخطاء
+$ pnpm contracts:check-clients       → check-clients OK — 1185 client file(s) scanned, 277 contract path(s) known.
+$ pnpm lint                          → All matched files use Prettier code style!
+```
+- **أول تشغيل على CI:** فشل اختبار ⁨CLI⁩ (يتوقع `['direct']`) وجولة ⁨e2e⁩ رقم 6 (تتوقع 11 وكيل).
+  السبب نفس الشي: المساعد انضاف للقائمة. صلّحتهم.
+- **فحص الديسكتوب (local mode):** هو الفحص المتقلّب المعروف، ونجح لما انعاد تشغيله في ⁨#258⁩.
 
-## القيود
+## المخاطر والرجوع
 - **إذا الهب نفسه طافي:** المساعد ما يقدر يساعد.
 - **في صورة السيرفر:** كود Hermes ما ينكتب، فالمساعد يصلّح «البيت»، يعني الإعدادات والملفات الشخصية
   والبوابة. أما تحديث Hermes نفسه فيصير بتحديث الصورة.
@@ -74,7 +80,12 @@
   المحفوظ نفسه يبقى.
 - **ما انجرّب على Hermes حقيقي خربان:** الاختبارات على Hermes مُحاكى. التجربة الحقيقية على ستاك
   الاختبار.
+- **المستوى الأحمر:** يقدر يخرّب. الحماية:
+  - موافقة على كل أمر.
+  - نسخة احتياطية قبل كتابة أي ملف.
+  - للمالك بس.
+- **الرجوع:** بإرجاع الفرع. لا عقد ولا جداول ولا بيانات محفوظة جديدة.
 
-## الخطوة التالية
+## التسليم والخطوة التالية
 - مراجعة المالك للـPR ودمجه.
 - بعده: زر مختصر في بطاقة Hermes على ⁨iOS⁩ و⁨Android⁩، وتجربته على ستاك الاختبار.
