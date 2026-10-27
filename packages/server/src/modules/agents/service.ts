@@ -1130,6 +1130,8 @@ export class AgentsService implements UpdatePolicyStore {
       reasoningEffort: string | null;
       /** The model gateway's grant, when this process runs on the hub's models (ADR 0029). */
       gateway?: AgentGatewayGrant | null;
+      /** Who opened the conversation (the Hermes helper checks it, ADR 0031). */
+      userId?: string | null;
     },
   ): AgentTarget {
     const settings = this.settingsRow(workspaceId, row.id);
@@ -1157,6 +1159,7 @@ export class AgentsService implements UpdatePolicyStore {
       modelProvider: selection.provider,
       modelProviderId: selection.providerId,
       reasoningEffort: run.reasoningEffort,
+      ...(run.userId !== undefined ? { userId: run.userId } : {}),
     };
   }
 

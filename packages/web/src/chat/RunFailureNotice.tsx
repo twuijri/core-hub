@@ -169,6 +169,7 @@ export function RunFailureNotice({
   agent,
   onDismiss,
   onPickModel,
+  helperId,
 }: {
   failure: RunFailure;
   /** The conversation's agent: a coding agent's known failures get their way out. */
@@ -183,6 +184,11 @@ export function RunFailureNotice({
   onDismiss?: (() => void) | undefined;
   /** Opens the conversation's model picker (a spent quota's way on). */
   onPickModel?: (() => void) | undefined;
+  /**
+   * The Hermes helper's agent id, for an admin (ADR 0031): a Hermes run that failed offers a
+   * new chat with it. Absent for a member, or a hub without the helper.
+   */
+  helperId?: string | null | undefined;
 }) {
   const { t } = useI18n();
   const dismiss: ReactNode = onDismiss ? (
@@ -198,6 +204,19 @@ export function RunFailureNotice({
       data-testid="run-failed-dismiss"
     />
   ) : null;
+  // Hermes in trouble: its helper looks into it (ADR 0031).
+  const helperLink: ReactNode =
+    helperId && agent?.kind === 'hermes' ? (
+      <p>
+        <Link
+          to={`${routeOf('new_chat')}?agent=${helperId}`}
+          className="link underline"
+          data-testid="run-failed-ask-helper"
+        >
+          {t('chat.ask_hermes_helper')}
+        </Link>
+      </p>
+    ) : null;
   const quota = quotaOf(failure);
   if (quota) {
     return (
@@ -256,9 +275,10 @@ export function RunFailureNotice({
   }
   if (failure.code !== 'provider_not_configured') {
     return (
-      <Notice tone="danger" className="run-failure">
+      <Notice tone="danger" className="run-failure space-y-1">
         {dismiss}
-        {t('chat.run_failed', { error: failure.error, code: failure.code })}
+        <p>{t('chat.run_failed', { error: failure.error, code: failure.code })}</p>
+        {helperLink}
       </Notice>
     );
   }
@@ -275,6 +295,7 @@ export function RunFailureNotice({
       <p className="text-xs opacity-80" data-testid="run-failed-detail">
         {failure.error}
       </p>
+      {helperLink}
     </Notice>
   );
 }

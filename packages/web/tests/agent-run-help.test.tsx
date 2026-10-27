@@ -92,3 +92,46 @@ describe('a coding agent’s failed run', () => {
     expect(screen.queryByTestId('run-failed-agent-help')).toBeNull();
   });
 });
+
+describe('a failed Hermes run (ADR 0031)', () => {
+  const hermes = agent('hermes', 'Hermes', { kind: 'hermes' } as Partial<Agent>);
+  const helperId = '01J8QK3ZR2W7M5N4P6T8V9X0HH';
+
+  it.each(['ar', 'en'] as const)(
+    'offers an admin a chat with the Hermes helper, in %s',
+    (language) => {
+      render(
+        <MemoryRouter>
+          <I18nProvider language={language}>
+            <RunFailureNotice
+              failure={{ code: 'agent_error', error: 'Hermes did not answer' }}
+              agent={hermes}
+              helperId={helperId}
+            />
+          </I18nProvider>
+        </MemoryRouter>,
+      );
+      const link = screen.getByTestId('run-failed-ask-helper');
+      expect(link.getAttribute('href')).toBe(`/new?agent=${helperId}`);
+      expect(link.textContent).toBe(translate(language, 'chat.ask_hermes_helper'));
+    },
+  );
+
+  it('offers nothing without the helper (a member), or for another agent', () => {
+    show('en', hermes, 'Hermes did not answer');
+    expect(screen.queryByTestId('run-failed-ask-helper')).toBeNull();
+    cleanup();
+    render(
+      <MemoryRouter>
+        <I18nProvider language="en">
+          <RunFailureNotice
+            failure={{ code: 'agent_error', error: 'boom' }}
+            agent={agent('pi', 'Pi')}
+            helperId={helperId}
+          />
+        </I18nProvider>
+      </MemoryRouter>,
+    );
+    expect(screen.queryByTestId('run-failed-ask-helper')).toBeNull();
+  });
+});

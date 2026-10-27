@@ -379,6 +379,7 @@ export class AgentRunner implements AgentRunnerPort {
         provider: request.provider,
         reasoningEffort: request.reasoningEffort,
         gateway,
+        userId: request.userId ?? null,
       });
       let session: AgentSession;
       try {

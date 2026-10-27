@@ -138,9 +138,11 @@ describe('agents: the registry a hub boots with', () => {
         CATALOG.map((entry) => entry.id).sort(),
       );
       // Nothing is installed in the test environment: the PATH points at an empty dir.
-      // The hub's own agent is the exception — it *is* the hub, so it is always there.
+      // The hub's own agents are the exception — they *are* the hub, so they are always there
+      // (`direct`, and the Hermes helper of ADR 0031).
+      const own = new Set(['direct', 'hermes-helper']);
       for (const item of items) {
-        expect(item.status).toBe(item.slug === 'direct' ? 'available' : 'not_installed');
+        expect(item.status).toBe(own.has(item.slug) ? 'available' : 'not_installed');
       }
     } finally {
       await hub.close();
@@ -508,10 +510,10 @@ describe('agents: reconciling the table with the data volume (ADR 0006)', () => 
     try {
       // First boot: nothing on the volume, so nothing claims to be installed.
       const first = await testHub(env, { agents: { installer: fakeInstaller() } });
-      // The hub's own agent is always installed; it is the hub, not a directory.
+      // The hub's own agents are always installed; they are the hub, not a directory.
       expect(
         (await listAgents(first))
-          .filter((item) => item.slug !== 'direct')
+          .filter((item) => item.slug !== 'direct' && item.slug !== 'hermes-helper')
           .every((item) => item.status === 'not_installed'),
       ).toBe(true);
       await first.app.close();

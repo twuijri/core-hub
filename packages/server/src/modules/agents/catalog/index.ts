@@ -20,6 +20,7 @@ import { geminiCli } from './gemini-cli.js';
 import { goose } from './goose.js';
 import { grokBuild } from './grok-build.js';
 import { hermes } from './hermes.js';
+import { hermesHelper } from './hermes-helper.js';
 import { kimiCode } from './kimi-code.js';
 import { opencode } from './opencode.js';
 import { pi } from './pi.js';
@@ -37,6 +38,8 @@ export * from './types.js';
 export const CATALOG: readonly CatalogEntry[] = [
   hermes,
   direct,
+  // The hub's second agent of its own: it looks into Hermes when Hermes is in trouble (ADR 0031).
+  hermesHelper,
   claudeCode,
   codex,
   geminiCli,
@@ -50,6 +53,7 @@ export const CATALOG: readonly CatalogEntry[] = [
 
 export const HERMES_ENTRY = hermes;
 export const DIRECT_ENTRY = direct;
+export const HERMES_HELPER_ENTRY = hermesHelper;
 
 /** Every entry the hub can install on demand (everything except the bundled runtime). */
 export const INSTALLABLE = CATALOG.filter((entry) => entry.install.kind !== 'bundled');

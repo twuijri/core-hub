@@ -52,6 +52,7 @@ import { t } from '../../i18n/index.js';
 import {
   defaultWorkspace,
   findWorkspace,
+  findUser,
   ownerUser,
   registerWorkspaceStatsProvider,
   requireRole,
@@ -819,6 +820,40 @@ function contextOf(app: FastifyInstance): AgentsContext {
       direct: {
         models: () => modelsPorts.get(hub.io) ?? null,
         ...own.adapterOptions?.direct,
+      },
+      // The Hermes helper (ADR 0031) looks at the runtime this module supervises, and at the
+      // person who asked: admins and the owner only, in their own language.
+      hermesHelper: {
+        host: () => ({
+          user: (userId) => {
+            if (!userId) return null;
+            const row = findUser(requireSqlite(hub.database), userId);
+            if (!row || row.status !== 'active') return null;
+            return {
+              role: row.role === 'owner' ? 'owner' : row.role === 'admin' ? 'admin' : 'member',
+              locale: row.locale === 'en' ? 'en' : 'ar',
+            };
+          },
+          status: () => ({
+            ...runtime.status(),
+            gateways: runtime.gateways(),
+            processes: runtime.processes(),
+          }),
+          home: () => runtime.status().home ?? runtime.cliEnv().HERMES_HOME ?? null,
+          executable: () => runtime.executable(),
+          cliEnv: () => runtime.cliEnv(),
+          canRestart: () => runtime.status().mode === 'managed',
+          restart: () => runtime.restart(),
+          canUpdate: () => runtime.personalInstall(),
+          update: (onLine) => runtime.selfUpdate(onLine),
+          hubFacts: () => ({
+            version: hub.version,
+            platform: process.platform,
+            arch: process.arch,
+            node: process.version,
+          }),
+        }),
+        ...own.adapterOptions?.hermesHelper,
       },
       host,
     });

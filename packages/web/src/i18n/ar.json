@@ -416,7 +416,8 @@
     "fallback_note": "فشل {failed}، فأجاب {model}",
     "fallback_reason": "السبب: {reason}",
     "bar_more": "المزيد",
-    "jump_latest": "انزل لآخر رسالة"
+    "jump_latest": "انزل لآخر رسالة",
+    "ask_hermes_helper": "اسأل مساعد Hermes وش صار"
   },
   "composer": {
     "label": "محرّر الرسالة",
@@ -743,7 +744,9 @@
       "origin_chat": "أثناء محادثة",
       "approve": "موافقة",
       "reject": "رفض"
-    }
+    },
+    "ask_helper": "اسأل المساعد",
+    "helper_start": "ابدأ محادثة"
   },
   "jobs": {
     "status": {
