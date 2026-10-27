@@ -62,6 +62,19 @@ A company with no logo in either (LiteLLM, Nous Portal) shows a monogram of its 
 company a provider is, is not affiliated with, endorsed by, or a product of any of them, and
 does not use them to suggest otherwise.
 
+## Octicons — GitHub's mark beside Settings
+
+The GitHub mark at the foot of the sidebar and in About (web and desktop, iOS, Android; owner,
+2026-10-27) is the `mark-github` path of [Octicons](https://github.com/primer/octicons), copied
+into `packages/web/src/ui/brand/GitHubMark.tsx` and, unchanged, into the phones' assets
+(`apps/ios/CoreHub/Resources/Assets.xcassets/GitHubMark.imageset`,
+`apps/android/app/src/main/res/drawable/github_mark.xml`; `scripts/github-mark.test.mjs` keeps
+them equal). Lucide no longer draws brand marks.
+
+MIT License · Copyright (c) GitHub Inc. — the licence text is quoted in full above (lobe-icons).
+The mark itself is GitHub, Inc.'s trademark; Core Hub uses it only to say that the link goes to
+GitHub, and is not affiliated with or endorsed by GitHub.
+
 ## Lucide — the icons of every client
 
 The web client, the desktop app (which shows the web client), and the iOS and Android apps draw

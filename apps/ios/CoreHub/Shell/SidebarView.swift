@@ -189,6 +189,13 @@ struct SidebarView: View {
                     .accessibilityLabel(l10n(destination.titleKey))
                     .accessibilityIdentifier("footer.\(destination.rawValue)")
                 }
+                // The repository, beside Settings (owner, 2026-10-27), as on the web and Android.
+                Link(destination: Product.repositoryURL) {
+                    GitHubMarkIcon(size: 18)
+                        .tapTarget()
+                }
+                .accessibilityLabel(l10n("shell.repository"))
+                .accessibilityIdentifier("footer.repository")
             }
             HStack(spacing: Space.s2) {
                 LanguageMenu()

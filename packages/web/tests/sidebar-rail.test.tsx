@@ -196,6 +196,15 @@ describe('the sidebar folds into a rail of icons', () => {
     expect(within(nav).getByTestId('person-button').getAttribute('aria-label')).toContain('Noura');
   });
 
+  it('unfolded, the footer links the repository beside Settings, in a new tab', async () => {
+    mount();
+    const link = await within(sidebar()).findByTestId('repository-link');
+    expect(link.getAttribute('href')).toBe('https://github.com/twuijri/core-hub');
+    expect(link.getAttribute('target')).toBe('_blank');
+    expect(link.getAttribute('rel')).toBe('noopener noreferrer');
+    expect(link.getAttribute('aria-label')).toBe('Core Hub on GitHub');
+  });
+
   it('remembers the choice across a reload of the app', async () => {
     localStorage.setItem(FOLD_STORAGE, '1');
     mount();
@@ -232,6 +241,7 @@ describe('the sidebar folds into a rail of icons', () => {
     expect(items[0]).toBe('Settings');
     expect(items).toContain('العربية');
     expect(items.some((text) => text?.startsWith('Theme: '))).toBe(true);
+    expect(items).toContain('Core Hub on GitHub');
     expect(items.at(-1)).toBe('Sign out');
     expect(within(menu).getByText(/Noura/)).toBeTruthy();
   });

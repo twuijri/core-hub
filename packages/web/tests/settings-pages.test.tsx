@@ -1,7 +1,7 @@
 // The last four settings pages whose module already answers: Knowledge, Plugins, Updates
 // and About. What is worth testing in each is the sentence it tells the truth with.
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { cleanup, render, screen, waitFor } from '@testing-library/react';
+import { cleanup, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router';
 import { afterEach, describe, expect, it } from 'vitest';
@@ -10,7 +10,7 @@ import { SessionStore } from '../src/auth/store.js';
 import { ThemeProvider } from '../src/design/theme.js';
 import { I18nProvider } from '../src/i18n/context.js';
 import { RealtimeProvider } from '../src/realtime/context.js';
-import { AboutTab } from '../src/settings/AboutTab.js';
+import { AboutTab, aboutVersionRows } from '../src/settings/AboutTab.js';
 import { KnowledgeTab } from '../src/settings/KnowledgeTab.js';
 import { PluginsTab } from '../src/settings/PluginsTab.js';
 import { UpdatesTab } from '../src/settings/UpdatesTab.js';
@@ -220,6 +220,25 @@ describe('Updates', () => {
   });
 });
 
+describe("About's version rows", () => {
+  it('in a browser: this web build, then the hub only when there is one', () => {
+    expect(aboutVersionRows(null, '1.1.10', '1.1.8').map((r) => [r.labelKey, r.value])).toEqual([
+      ['about.web_app', '1.1.10'],
+      ['about.connected_hub', '1.1.8'],
+    ]);
+    expect(aboutVersionRows(null, '1.1.10', null).map((r) => r.labelKey)).toEqual([
+      'about.web_app',
+    ]);
+  });
+
+  it("in the desktop app: the app's own version, not the bundle the hub served", () => {
+    expect(aboutVersionRows('1.1.10', '1.1.6-preview.46', '1.1.6-preview.46')).toEqual([
+      { key: 'app', labelKey: 'about.desktop_app', value: '1.1.10' },
+      { key: 'server', labelKey: 'about.connected_hub', value: '1.1.6-preview.46' },
+    ]);
+  });
+});
+
 describe('About', () => {
   it('shows the server build and the contract version as two different things', async () => {
     const { fetchImpl } = hub();
@@ -227,6 +246,34 @@ describe('About', () => {
     await waitFor(() => expect(screen.getByTestId('about-facts')).toBeTruthy());
     expect(screen.getByTestId('about-server').textContent).toBe('0.1.0-alpha.6');
     expect(screen.getByTestId('about-contract').textContent).toBe('1.0.0');
+  });
+
+  it('starts with this app, then the hub it is connected to', async () => {
+    const { fetchImpl } = hub();
+    mount(<AboutTab />, fetchImpl);
+    await waitFor(() => expect(screen.getByTestId('about-facts')).toBeTruthy());
+    const facts = screen.getByTestId('about-facts');
+    const rows = within(facts)
+      .getAllByRole('row')
+      .map((row) => row.textContent ?? '');
+    // The header row, then this web build, then the connected hub.
+    expect(rows[1]).toContain('This web app');
+    expect(rows[1]).toContain('test');
+    expect(rows[2]).toContain('Connected hub');
+    expect(rows[2]).toContain('0.1.0-alpha.6');
+  });
+
+  it('links the download page and the repository, so Core Hub can be found again', async () => {
+    const { fetchImpl } = hub();
+    mount(<AboutTab />, fetchImpl);
+    const download = await screen.findByTestId('about-link-download');
+    expect(download.getAttribute('href')).toBe('https://twuijri.github.io/core-hub/');
+    expect(download.getAttribute('target')).toBe('_blank');
+    expect(download.textContent).toContain('Download page');
+    const repository = screen.getByTestId('about-link-repository');
+    expect(repository.getAttribute('href')).toBe('https://github.com/twuijri/core-hub');
+    expect(repository.textContent).toContain('Repository');
+    expect(repository.textContent).toContain('github.com/twuijri/core-hub');
   });
 
   it('lists the live channels the hub actually declared', async () => {

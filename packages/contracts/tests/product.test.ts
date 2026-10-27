@@ -6,7 +6,7 @@
  * the reason attached, because the failure mode of getting it wrong is silence.
  */
 import { describe, expect, it } from 'vitest';
-import { LEGACY, PRODUCT, STABLE, derived, readProductEnv } from '../src/product.js';
+import { LEGACY, PRODUCT, PRODUCT_LINKS, STABLE, derived, readProductEnv } from '../src/product.js';
 
 describe('the product name', () => {
   it('is Core Hub', () => {
@@ -41,6 +41,14 @@ describe('the identifier a rename must not touch', () => {
     // for the same profile: nothing errors, the hub just stops finding yesterday's rows.
     // If a rename makes this fail, put the old string back — do not update the expectation.
     expect(STABLE.idNamespace).toBe('majlis');
+  });
+});
+
+describe('where the product lives on the web', () => {
+  it('points at this repository and the download page site/ publishes on its GitHub Pages', () => {
+    const [owner, name] = PRODUCT.repository.split('/');
+    expect(PRODUCT_LINKS.repository).toBe(`https://github.com/${PRODUCT.repository}`);
+    expect(PRODUCT_LINKS.downloadPage).toBe(`https://${owner}.github.io/${name}/`);
   });
 });
 
