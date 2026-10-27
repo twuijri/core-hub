@@ -150,9 +150,17 @@ class AppPrefs(private val prefs: SharedPreferences) {
         _theme.value = choice
     }
 
+    /** The line under a channel composer, put away on this phone once read (owner, 2026-10-27). */
+    var channelSendHintHidden: Boolean
+        get() = prefs.getBoolean(KEY_CHANNEL_HINT, false)
+        set(value) {
+            prefs.edit().putBoolean(KEY_CHANNEL_HINT, value).apply()
+        }
+
     private companion object {
         const val KEY_LANGUAGE = "language"
         const val KEY_THEME = "theme"
+        const val KEY_CHANNEL_HINT = "channel_send_hint_hidden"
     }
 }
 

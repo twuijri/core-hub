@@ -2,15 +2,21 @@ package hub.core.android.ui.screens
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
@@ -21,8 +27,10 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextDirection
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.window.Popup
 import hub.core.android.R
 import hub.core.android.generated.FontTokens
 import hub.core.android.ui.components.Composer
@@ -32,6 +40,7 @@ import hub.core.android.ui.components.errorText
 import hub.core.android.ui.kit.ButtonKind
 import hub.core.android.ui.kit.ControlSize
 import hub.core.android.ui.kit.HubButton
+import hub.core.android.ui.kit.HubIconButton
 import hub.core.android.ui.kit.Lucide
 import hub.core.android.ui.theme.LocalTokens
 import hub.core.client.model.ChannelOutgoing
@@ -82,8 +91,14 @@ fun ChannelSendBottom(
     onSend: () -> Unit,
     onOpenCurrent: (String) -> Unit,
     onContinue: () -> Unit,
+    /** The line under the composer is put away on this phone (owner, 2026-10-27). */
+    hintHidden: Boolean = false,
+    onHintHidden: (Boolean) -> Unit = {},
 ) {
     val t = LocalTokens.current
+    // «Continue in Core Hub», explained on a long press (owner, 2026-10-27).
+    var explaining by remember { mutableStateOf(false) }
+    if (explaining) ContinueExplain(channel) { explaining = false }
     when (bottom) {
         ChannelBottom.Composer -> Column(Modifier.fillMaxWidth().testTag("channel.composer")) {
             failure?.let {
@@ -104,13 +119,26 @@ fun ChannelSendBottom(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
             ) {
-                Text(
-                    stringResource(R.string.chcv_send_hint, channel), fontSize = FontTokens.sizeXs.sp, color = t.textMuted,
-                    modifier = Modifier.weight(1f).testTag("channel.send.hint"),
-                )
+                if (hintHidden) {
+                    // Put away: the same words, one tap away.
+                    HubIconButton(
+                        Lucide.Info, stringResource(R.string.chcv_send_show_hint), { onHintHidden(false) },
+                        Modifier.testTag("channel.send.hint.show"), size = 32.dp, iconSize = 16.dp,
+                    )
+                    Spacer(Modifier.weight(1f))
+                } else {
+                    Text(
+                        stringResource(R.string.chcv_send_hint, channel), fontSize = FontTokens.sizeXs.sp, color = t.textMuted,
+                        modifier = Modifier.weight(1f).testTag("channel.send.hint"),
+                    )
+                    HubIconButton(
+                        Lucide.X, stringResource(R.string.chcv_send_hide_hint), { onHintHidden(true) },
+                        Modifier.testTag("channel.send.hint.hide"), size = 32.dp, iconSize = 14.dp,
+                    )
+                }
                 HubButton(
                     stringResource(R.string.chcv_continue_button), onContinue, kind = ButtonKind.Secondary, size = ControlSize.Sm,
-                    icon = Lucide.MessagesSquare, modifier = Modifier.testTag("channel.continue"),
+                    icon = Lucide.MessagesSquare, modifier = Modifier.testTag("channel.continue"), onLongClick = { explaining = true },
                 )
             }
         }
@@ -129,9 +157,30 @@ fun ChannelSendBottom(
             }
             HubButton(
                 stringResource(R.string.chcv_continue_button), onContinue, size = ControlSize.Md, icon = Lucide.MessagesSquare,
-                modifier = Modifier.testTag("channel.continue"),
+                modifier = Modifier.testTag("channel.continue"), onLongClick = { explaining = true },
             )
         }
+    }
+}
+
+/**
+ * What «Continue in Core Hub» does, after a long press on it: a see-through card above the bottom
+ * of the screen, gone with a tap anywhere (owner, 2026-10-27).
+ */
+@Composable
+private fun ContinueExplain(channel: String, onDone: () -> Unit) {
+    val t = LocalTokens.current
+    Popup(alignment = Alignment.BottomCenter, offset = IntOffset(0, -260), onDismissRequest = onDone) {
+        Text(
+            stringResource(R.string.chcv_continue_explain, channel), fontSize = FontTokens.sizeSm.sp, color = t.surface,
+            style = TextStyle(textDirection = TextDirection.Content),
+            modifier = Modifier
+                .widthIn(max = 320.dp)
+                .background(t.text.copy(alpha = 0.86f), RoundedCornerShape(10.dp))
+                .clickable(onClick = onDone)
+                .padding(horizontal = 14.dp, vertical = 10.dp)
+                .testTag("channel.continue.explain"),
+        )
     }
 }
 

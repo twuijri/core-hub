@@ -19,6 +19,7 @@ import { useI18n } from '../i18n/context.js';
 import { useProfileInLink } from '../shell/profiles.js';
 import type { ContentBlock } from '../types.js';
 import { Button, Dialog, Field, Notice, Textarea } from '../ui/index.js';
+import { Tooltip } from '../ui/Tooltip.js';
 import { installedAgents } from './AgentChips.js';
 import { chatHref } from './anchor.js';
 import { putFirstMessage } from './firstMessage.js';
@@ -67,15 +68,19 @@ export function ContinueChannel({ id, channel }: { id: string; channel: string }
 
   return (
     <>
-      <Button
-        variant="primary"
-        size="sm"
-        className="self-start"
-        onClick={() => setOpen(true)}
-        data-testid="channel-continue"
-      >
-        {t('sessions.channels.continue.button')}
-      </Button>
+      {/* What the button does, on hover or focus, gone as soon as the pointer leaves
+          (owner, 2026-10-27): the new chat is the hub's own, the channel never sees it. */}
+      <Tooltip label={t('sessions.channels.continue.explain', { channel })} tone="note">
+        <Button
+          variant="primary"
+          size="sm"
+          className="self-start"
+          onClick={() => setOpen(true)}
+          data-testid="channel-continue"
+        >
+          {t('sessions.channels.continue.button')}
+        </Button>
+      </Tooltip>
       <Dialog
         open={open}
         onOpenChange={(next) => {

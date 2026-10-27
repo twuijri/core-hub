@@ -147,7 +147,8 @@
     "start_hint": "Ask anything. The conversation starts with your first message.",
     "more": "More",
     "export": "Export",
-    "time_yesterday": "Yesterday {time}"
+    "time_yesterday": "Yesterday {time}",
+    "jump_latest": "Jump to the latest message"
   },
   "tool": {
     "running": "Running",

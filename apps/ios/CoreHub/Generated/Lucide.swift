@@ -6,6 +6,7 @@ enum Lucide: String, CaseIterable {
     case activity = "activity"
     case archive = "archive"
     case archiveRestore = "archive-restore"
+    case arrowDown = "arrow-down"
     case arrowLeft = "arrow-left"
     case arrowUp = "arrow-up"
     case arrowUpDown = "arrow-up-down"

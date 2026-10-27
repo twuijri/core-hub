@@ -17,12 +17,18 @@ export function Tooltip({
   label,
   children,
   side = 'top',
+  tone = 'label',
 }: {
   /** The words. Nothing renders when it is empty — an empty tooltip is noise. */
   label: ReactNode;
   /** The trigger. One element: Radix clones it rather than wrapping it in a box. */
   children: ReactElement;
   side?: 'top' | 'bottom' | 'inline-start' | 'inline-end';
+  /**
+   * `label`: a few words naming the control. `note`: a sentence or two explaining what it does,
+   * on a wider, see-through card that still leaves the page readable behind it.
+   */
+  tone?: 'label' | 'note';
 }) {
   // `inline-start`/`inline-end` follow the reading direction: the end is the left in Arabic.
   const rtl = Direction.useDirection() === 'rtl';
@@ -45,7 +51,7 @@ export function Tooltip({
         <RadixTooltip.Trigger asChild>{children}</RadixTooltip.Trigger>
         <RadixTooltip.Portal>
           <RadixTooltip.Content
-            className="ch-tooltip"
+            className={tone === 'note' ? 'ch-tooltip ch-tooltip-note' : 'ch-tooltip'}
             side={physical}
             sideOffset={6}
             collisionPadding={8}

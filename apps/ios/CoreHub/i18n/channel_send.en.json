@@ -19,6 +19,9 @@
     "unavailable_hermes_not_managed": "A conversation from {channel} — read-only: this hub does not run Hermes, so it cannot write into it.",
     "unavailable_bridge_offline": "A conversation from {channel} — writing from here is unavailable while Hermes’s messaging gateway is starting or stopped.",
     "unavailable_not_current": "This {channel} chat has moved on to a newer conversation; a message from here would go there.",
-    "unavailable_no_route": "A conversation from {channel} — Hermes keeps no way back to this chat, so it cannot be written into from here."
+    "unavailable_no_route": "A conversation from {channel} — Hermes keeps no way back to this chat, so it cannot be written into from here.",
+    "hide_hint": "Hide this note",
+    "show_hint": "Where does my message go?",
+    "continue_explain": "Want to copy this {channel} conversation and keep working on it inside the hub? Press here. A new chat opens in the hub, and what you write in it stays in the hub and does not go to {channel}. The original conversation does not change."
   }
 }

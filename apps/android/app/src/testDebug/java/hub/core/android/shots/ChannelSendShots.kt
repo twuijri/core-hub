@@ -18,6 +18,8 @@ import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performTouchInput
+import androidx.compose.ui.test.longClick
 import androidx.compose.ui.test.performTextReplacement
 import androidx.compose.ui.unit.dp
 import androidx.test.ext.junit.runners.AndroidJUnit4
@@ -64,6 +66,7 @@ class ChannelSendShots {
         compose.setContent {
             CoreHubTheme(theme) {
                 var draft by remember { mutableStateOf("") }
+                var hintHidden by remember { mutableStateOf(false) }
                 Column(Modifier.fillMaxWidth().background(LocalTokens.current.bg).testTag("shot")) {
                     Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                         HubMessageView("Sara", words.first, channel, followed = true, status = outgoing("answering"))
@@ -73,6 +76,7 @@ class ChannelSendShots {
                     ChannelSendBottom(
                         bottom, channel, "Omar", draft, { draft = it }, busy = false, failure = refusal,
                         onSend = {}, onOpenCurrent = onOpen, onContinue = {},
+                        hintHidden = hintHidden, onHintHidden = { hintHidden = it },
                     )
                 }
             }
@@ -133,5 +137,33 @@ class ChannelSendShots {
         show(ThemeChoice.DARK, "تيليجرام", Triple("ما آخر الأخبار؟", "أرسل التقرير لو سمحت", "شكرًا"), ChannelBottom.Unavailable(ChannelSendUnavailable.NOT_ADMIN, null))
         compose.onNodeWithTag("channel.open_current").assertDoesNotExist()
         save("not-admin-dark-ar")
+    }
+
+    /** The line under the composer can be put away once read, and brought back (owner, 2026-10-27). */
+    @Test fun hintCanBePutAwayAndBroughtBack() {
+        show(ThemeChoice.LIGHT, "Telegram", english, ChannelBottom.Composer)
+        compose.onNodeWithTag("channel.send.hint").assertExists()
+        compose.onNodeWithTag("channel.send.hint.hide").performClick()
+        compose.waitForIdle()
+        compose.onNodeWithTag("channel.send.hint").assertDoesNotExist()
+        save("hint-hidden-light-en")
+        compose.onNodeWithTag("channel.send.hint.show").performClick()
+        compose.waitForIdle()
+        compose.onNodeWithTag("channel.send.hint").assertExists()
+    }
+
+    /** A long press on «Continue in Core Hub» explains it first (owner, 2026-10-27). */
+    @Config(qualifiers = "ar-w440dp-h956dp-xxhdpi")
+    @Test fun continueExplainsItselfOnALongPress() {
+        show(ThemeChoice.DARK, "تيليجرام", Triple("ما آخر الأخبار؟", "أرسل التقرير لو سمحت", "شكرًا"), ChannelBottom.Composer)
+        compose.onNodeWithTag("channel.continue.explain").assertDoesNotExist()
+        compose.onNodeWithTag("channel.continue").performTouchInput { longClick() }
+        compose.waitForIdle()
+        compose.onNodeWithText(
+            "تبي تنسخ محادثة تيليجرام وتكمل الشغل عليها داخل الهب؟ اضغط هنا. تنفتح محادثة جديدة في الهب، واللي تكتبه فيها يبقى في الهب وما يروح لـتيليجرام. المحادثة الأصلية ما تتغيّر.",
+        ).assertExists()
+        compose.onNodeWithTag("channel.continue.explain").performClick()
+        compose.waitForIdle()
+        compose.onNodeWithTag("channel.continue.explain").assertDoesNotExist()
     }
 }

@@ -125,6 +125,8 @@ export interface ComposerProps {
   queue?: ReactNode;
   /** A question the agent is waiting on (`QuestionCard`), above everything else. */
   question?: ReactNode;
+  /** "Jump to latest" (`JumpToLatest.tsx`), floating above the dock while the reader is up. */
+  jump?: ReactNode;
   /** How full the model's window is, beside the mic. */
   context?: ReactNode;
   /**
@@ -193,6 +195,7 @@ export function Composer({
   reply,
   queue,
   question,
+  jump,
   context,
   status,
   model = null,
@@ -451,6 +454,7 @@ export function Composer({
 
   return (
     <div className="composer-dock" data-testid="composer-dock">
+      {jump}
       {question}
       {status}
       {chips}

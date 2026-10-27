@@ -9,9 +9,10 @@ import { describeError } from '../auth/client.js';
 import { useI18n } from '../i18n/context.js';
 import type { Translator } from '../i18n/index.js';
 import { useSendChannelMessage, type ChannelSendUnavailable } from '../sessions/channels.js';
-import { IconSend } from '../ui/icons.js';
+import { IconClose, IconInfo, IconSend } from '../ui/icons.js';
 import { Notice } from '../ui/Notice.js';
 import { Tooltip } from '../ui/Tooltip.js';
+import { useChannelHintHidden } from './channelHint.js';
 
 /** Why a channel conversation cannot be written into, in the reader's words. */
 export function sendUnavailableText(
@@ -71,6 +72,7 @@ export function ChannelComposer({
   const box = useRef<HTMLTextAreaElement>(null);
   const words = text.trim();
   const busy = send.isPending;
+  const [hintHidden, setHintHidden] = useChannelHintHidden();
 
   const submit = () => {
     if (!words || busy) return;
@@ -102,6 +104,7 @@ export function ChannelComposer({
   };
 
   const placeholder = t('sessions.channels.send.placeholder', { channel, peer });
+  const hint = t('sessions.channels.send.hint', { channel });
   return (
     <>
       <form
@@ -136,6 +139,20 @@ export function ChannelComposer({
         </div>
         <div className="composer-tools">
           <span className="composer-spacer" />
+          {/* The line under the composer, put away: the same words, one hover away. */}
+          {hintHidden && (
+            <Tooltip label={hint}>
+              <button
+                type="button"
+                className="composer-btn"
+                aria-label={t('sessions.channels.send.show_hint')}
+                onClick={() => setHintHidden(false)}
+                data-testid="channel-send-hint-show"
+              >
+                <IconInfo size={16} />
+              </button>
+            </Tooltip>
+          )}
           <Tooltip label={t('sessions.channels.send.send', { channel })}>
             <button
               type="submit"
@@ -150,9 +167,28 @@ export function ChannelComposer({
           </Tooltip>
         </div>
       </form>
-      <p id={hintId} className="composer-reason" data-testid="channel-send-hint">
-        {t('sessions.channels.send.hint', { channel })}
-      </p>
+      {hintHidden ? (
+        <p id={hintId} className="sr-only">
+          {hint}
+        </p>
+      ) : (
+        <div className="composer-reason flex items-start gap-1" data-testid="channel-send-hint">
+          <p id={hintId} className="min-w-0 flex-1">
+            {hint}
+          </p>
+          <Tooltip label={t('sessions.channels.send.hide_hint')}>
+            <button
+              type="button"
+              className="btn btn-ghost shrink-0 p-0.5"
+              aria-label={t('sessions.channels.send.hide_hint')}
+              onClick={() => setHintHidden(true)}
+              data-testid="channel-send-hint-hide"
+            >
+              <IconClose size={14} />
+            </button>
+          </Tooltip>
+        </div>
+      )}
     </>
   );
 }

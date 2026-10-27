@@ -147,7 +147,8 @@
     "start_hint": "اسأل ما شئت. تبدأ المحادثة مع أول رسالة.",
     "more": "المزيد",
     "export": "تصدير",
-    "time_yesterday": "أمس {time}"
+    "time_yesterday": "أمس {time}",
+    "jump_latest": "انزل لآخر رسالة"
   },
   "tool": {
     "running": "يعمل",

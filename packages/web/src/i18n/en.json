@@ -280,7 +280,8 @@
         "hint": "A new chat in this profile starts with this conversation attached for the agent to read. The conversation on {channel} stays as it is.",
         "note": "What should the agent do with it? (optional)",
         "go": "Continue",
-        "no_agent": "No agent in this profile can take it. Install one from Agents first."
+        "no_agent": "No agent in this profile can take it. Install one from Agents first.",
+        "explain": "Want to copy this {channel} conversation and keep working on it inside the hub? Press here. A new chat opens in the hub, and what you write in it stays in the hub and does not go to {channel}. The original conversation does not change."
       },
       "hide": "Hide from my list",
       "unhide": "Show again",
@@ -326,7 +327,9 @@
           "bridge_offline": "A conversation from {channel} — writing from here is unavailable while Hermes’s messaging gateway is starting or stopped.",
           "not_current": "This {channel} chat has moved on to a newer conversation; a message from here would go there.",
           "no_route": "A conversation from {channel} — Hermes keeps no way back to this chat, so it cannot be written into from here."
-        }
+        },
+        "hide_hint": "Hide this note",
+        "show_hint": "Where does my message go?"
       }
     }
   },
@@ -412,7 +415,8 @@
     "answered_by": "Answered by {model}",
     "fallback_note": "{failed} failed, so {model} answered",
     "fallback_reason": "Why: {reason}",
-    "bar_more": "More"
+    "bar_more": "More",
+    "jump_latest": "Jump to the latest message"
   },
   "composer": {
     "label": "Message composer",
