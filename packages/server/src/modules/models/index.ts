@@ -71,6 +71,7 @@ import {
 } from './service.js';
 import type { SpeechFormat } from './adapters/types.js';
 import { CliproxySupervisor } from './gateway/cliproxy.js';
+import { LocalRuntimeService } from './local-runtime/service.js';
 import { ModelGateway } from './gateway/gateway.js';
 import { locateCliproxy } from './gateway/locate.js';
 import type { SessionOpener } from './gemini-desktop/transport.js';
@@ -148,6 +149,8 @@ export { CLIPROXY_VERSION, devCliproxyPath, locateCliproxy } from './gateway/loc
 /** Test seams: a scripted `fetch` for the provider adapters, an in-memory key ring. */
 export interface ModelsOverrides {
   fetchImpl?: typeof fetch;
+  /** Local models (ADR 0032) in tests: offered or not, and where "an Ollama already here" is. */
+  localRuntime?: { available?: boolean; externalUrl?: string; platform?: string; arch?: string };
   /** Skip the key file entirely (the crypto tests own their own ring). */
   keys?: DataKeyRing;
   /**
@@ -184,6 +187,7 @@ export function overrideModels(next: ModelsOverrides | null): void {
 const contexts = new WeakMap<SocketServer, ModelsService>();
 const rings = new WeakMap<SocketServer, DataKeyRing>();
 const gateways = new WeakMap<SocketServer, ModelGateway>();
+const localRuntimes = new WeakMap<SocketServer, LocalRuntimeService>();
 
 /**
  * The hub's model gateway (ADR 0029): one per hub, started the first time an agent needs it,
@@ -257,6 +261,103 @@ export function modelGatewayFor(app: FastifyInstance): ModelGateway {
   });
   gateways.set(hub.io, gateway);
   return gateway;
+}
+
+/**
+ * The default profile and its owner: what the hub acts as when it changes a provider row on its
+ * own (the local Ollama's address), as the boot reconciliation does.
+ */
+function ownerScope(
+  app: FastifyInstance,
+): { scope: WorkspaceScope; actor: { userId: string } } | null {
+  const db = requireSqlite(app.hub.database);
+  const owner = ownerUser(db);
+  const row = defaultWorkspace(db);
+  if (!owner || !row) return null;
+  return {
+    scope: { id: row.id, slug: row.slug, name: row.name, isDefault: row.isDefault },
+    actor: { userId: owner.id },
+  };
+}
+
+/**
+ * Points the `ollama` provider row at `baseUrl`, creating it (shared) when there is none. An
+ * existing row is moved only when the hub runs that Ollama itself (`overwrite`): a row the
+ * person pointed at another computer stays theirs when an Ollama merely shows up on this one.
+ */
+async function pointOllamaProvider(
+  app: FastifyInstance,
+  baseUrl: string,
+  overwrite: boolean,
+): Promise<void> {
+  const owner = ownerScope(app);
+  if (!owner) return;
+  const service = contextOf(app);
+  const existing = service
+    .listProviders(owner.scope, { kind: 'llm' })
+    .find((row) => row.slug === 'ollama');
+  if (!existing) {
+    await service.createProvider(owner.scope, owner.actor, {
+      preset: 'ollama',
+      label: 'Ollama',
+      kind: 'llm',
+      base_url: baseUrl,
+      scope: 'all',
+    });
+    return;
+  }
+  if (!overwrite || existing.base_url === baseUrl) return;
+  await service.updateProvider(owner.scope, owner.actor, existing.id, { base_url: baseUrl });
+  // A new address alone does not reach Hermes or the gateway (`updateProvider` propagates on a
+  // key or an on/off change only), and the model list is the new server's.
+  service.propagate(owner.scope, owner.actor);
+  service.refreshProvider(owner.scope, owner.actor, existing.id);
+}
+
+/** Local models (ADR 0032): Ollama installed and run by the hub, or found on this computer. */
+export function localRuntimeFor(app: FastifyInstance): LocalRuntimeService {
+  const { hub } = app;
+  const existing = localRuntimes.get(hub.io);
+  if (existing) return existing;
+  if (pendingOverrides) {
+    overrides.set(hub.io, pendingOverrides);
+    pendingOverrides = null;
+  }
+  const setting = hub.config.localModels ?? 'auto';
+  const own = overrides.get(hub.io) ?? {};
+  const test = own.localRuntime ?? {};
+  const runtime = new LocalRuntimeService({
+    available:
+      test.available ??
+      (setting === 'on' || (setting === 'auto' && (hub.relayHost ?? null) !== null)),
+    ...(test.externalUrl ? { externalUrl: test.externalUrl } : {}),
+    ...(test.platform ? { platform: test.platform } : {}),
+    ...(test.arch ? { arch: test.arch } : {}),
+    dataDir: hub.config.dataDir,
+    host: {
+      pathValue: hub.config.hostEnv.path,
+      pathExt: hub.config.hostEnv.pathExt,
+      inherited: hub.config.hostEnv.inherited,
+    },
+    env: hub.config.hostEnv.inherited ?? {},
+    log: app.log,
+    jobs: jobRunnerFor(app),
+    ...(own.fetchImpl ? { fetchImpl: own.fetchImpl } : {}),
+    onAddress: async (baseUrl) => {
+      await pointOllamaProvider(app, baseUrl, await runtime.isManaged());
+    },
+    onModelsChanged: () => {
+      const owner = ownerScope(app);
+      if (!owner) return;
+      const service = contextOf(app);
+      const row = service
+        .listProviders(owner.scope, { kind: 'llm' })
+        .find((item) => item.slug === 'ollama');
+      if (row) service.refreshProvider(owner.scope, owner.actor, row.id);
+    },
+  });
+  localRuntimes.set(hub.io, runtime);
+  return runtime;
 }
 
 /**
@@ -631,6 +732,11 @@ export const modelsModule = defineModule({
       contexts.get(app.hub.io)?.abandonSignIns();
       await gateways.get(app.hub.io)?.close();
     });
+    // A local Ollama the hub installed stops with it (ADR 0032 §5) — before the server waits for
+    // open connections to end (`onClose` comes after that, and a window left open holds it).
+    app.addHook('preClose', async () => {
+      await localRuntimes.get(app.hub.io)?.close();
+    });
 
     /**
      * Boot reconciliation (ADR 0010 §Propagation).
@@ -647,6 +753,10 @@ export const modelsModule = defineModule({
      * whose Hermes home is unwritable still serves every other screen.
      */
     app.addHook('onReady', async () => {
+      // The local Ollama starts in the background: a slow or broken one never holds boot.
+      void localRuntimeFor(app)
+        .boot()
+        .catch((error: unknown) => app.log.warn({ err: error }, 'local runtime: boot failed'));
       const db = requireSqlite(app.hub.database);
       const service = contextOf(app);
       // Hermes reaches its models through the gateway, on every hub (DECISIONS §144, reversing
@@ -859,6 +969,77 @@ export const modelsModule = defineModule({
       handler: (request) => {
         const { service, scope } = enter(request);
         return service.runtimeReport(scope.id);
+      },
+    });
+
+    // ----------------------------------------------------------- local models (ADR 0032)
+
+    const truthy = (value: unknown) => value === true || value === 'true' || value === '1';
+    const jobActor = (request: FastifyRequest) => {
+      const { scope, actor } = enter(request);
+      return { workspace: scope.id, userId: actor.userId };
+    };
+
+    defineRoute(app, deps, {
+      operationId: 'models.getLocalRuntime',
+      handler: (request, { query }) => localRuntimeFor(app).view(truthy(query.fresh)),
+    });
+
+    defineRoute(app, deps, {
+      operationId: 'models.removeLocalRuntime',
+      status: 204,
+      handler: async (request, { query }) => {
+        await localRuntimeFor(app).remove(truthy(query.keep_models));
+        return null;
+      },
+    });
+
+    defineRoute(app, deps, {
+      operationId: 'models.installLocalRuntime',
+      status: 202,
+      handler: (request) => ({
+        job_id: localRuntimeFor(app).installOrUpdate(jobActor(request), 'install').id,
+      }),
+    });
+
+    defineRoute(app, deps, {
+      operationId: 'models.updateLocalRuntime',
+      status: 202,
+      handler: (request) => ({
+        job_id: localRuntimeFor(app).installOrUpdate(jobActor(request), 'update').id,
+      }),
+    });
+
+    defineRoute(app, deps, {
+      operationId: 'models.startLocalRuntime',
+      handler: () => localRuntimeFor(app).start(),
+    });
+
+    defineRoute(app, deps, {
+      operationId: 'models.stopLocalRuntime',
+      handler: () => localRuntimeFor(app).stop(),
+    });
+
+    defineRoute(app, deps, {
+      operationId: 'models.listLocalModels',
+      handler: () => localRuntimeFor(app).models(),
+    });
+
+    defineRoute(app, deps, {
+      operationId: 'models.pullLocalModel',
+      status: 202,
+      handler: (request, { body }) => {
+        const { name } = body as { name: string };
+        return { job_id: localRuntimeFor(app).pull(jobActor(request), name).id };
+      },
+    });
+
+    defineRoute(app, deps, {
+      operationId: 'models.deleteLocalModel',
+      status: 204,
+      handler: async (request, { query }) => {
+        await localRuntimeFor(app).deleteModel(String(query.name ?? ''));
+        return null;
       },
     });
 

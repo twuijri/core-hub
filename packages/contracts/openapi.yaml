@@ -14452,6 +14452,315 @@ paths:
           $ref: '#/components/responses/Unauthorized'
         '404':
           $ref: '#/components/responses/NotFound'
+  /models/local-runtime:
+    get:
+      operationId: models.getLocalRuntime
+      tags: [models]
+      summary: Ollama on this computer — installed by the hub, found already here, or absent (admin)
+      description: >-
+        Local models (ADR 0032). `available` is false outside the desktop app's own hub, and then
+        nothing else here applies. `mode` is `managed` when the hub installed Ollama (it starts
+        and stops with the hub, and the hub updates and removes it), `external` when an Ollama
+        the hub did not install answers on this computer (the hub manages its models only), and
+        `none` otherwise. `fresh=true` asks for the newest Ollama release now rather than from
+        the last hours' answer.
+      parameters:
+        - $ref: '#/components/parameters/Profile'
+        - name: fresh
+          in: query
+          required: false
+          schema:
+            type: boolean
+      x-roles: [owner, admin]
+      x-rt-events: []
+      responses:
+        '200':
+          description: How Ollama is on this computer.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LocalRuntime'
+              example:
+                available: true
+                mode: managed
+                state: running
+                error: null
+                version: 0.40.13
+                latest_version: 0.40.13
+                update_available: false
+                base_url: http://127.0.0.1:11434
+                platform: win32-x64
+                gpu:
+                  vendor: nvidia
+                  name: NVIDIA GeForce RTX 4070
+                  cuda: cuda_v13
+                download_bytes: null
+                job_id: null
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+    delete:
+      operationId: models.removeLocalRuntime
+      tags: [models]
+      summary: Remove the Ollama the hub installed (admin)
+      description: >-
+        Stops it and deletes its program. Its models go too unless `keep_models=true`. An Ollama
+        the hub did not install is refused (`409`, reason `local_runtime_not_managed`).
+      parameters:
+        - $ref: '#/components/parameters/Profile'
+        - name: keep_models
+          in: query
+          required: false
+          schema:
+            type: boolean
+      x-roles: [owner, admin]
+      x-rt-events: []
+      responses:
+        '204':
+          description: Removed.
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '409':
+          $ref: '#/components/responses/Conflict'
+  /models/local-runtime/install:
+    post:
+      operationId: models.installLocalRuntime
+      tags: [models]
+      summary: Install the newest Ollama into the hub's own folder (admin)
+      description: >-
+        A job (`kind: install`). Only the graphics libraries this computer needs are kept, and
+        on Windows only those are downloaded (ADR 0032 §3). Refused (`409`) when an Ollama is
+        already installed or already running on this computer.
+      parameters:
+        - $ref: '#/components/parameters/Profile'
+      x-roles: [owner, admin]
+      x-rt-events: [job.queued, job.progress, job.completed, job.failed]
+      responses:
+        '202':
+          description: Install started.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/JobAccepted'
+              example:
+                job_id: 01J8QK3ZR2W7M5N4P6T8V9X0JB
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '409':
+          $ref: '#/components/responses/Conflict'
+  /models/local-runtime/update:
+    post:
+      operationId: models.updateLocalRuntime
+      tags: [models]
+      summary: Update the Ollama the hub installed to the newest release (admin)
+      description: >-
+        A job (`kind: update`). The running Ollama stops, the new one replaces it and starts;
+        a failed update leaves the old one in place and running.
+      parameters:
+        - $ref: '#/components/parameters/Profile'
+      x-roles: [owner, admin]
+      x-rt-events: [job.queued, job.progress, job.completed, job.failed]
+      responses:
+        '202':
+          description: Update started.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/JobAccepted'
+              example:
+                job_id: 01J8QK3ZR2W7M5N4P6T8V9X0JB
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '409':
+          $ref: '#/components/responses/Conflict'
+  /models/local-runtime/start:
+    post:
+      operationId: models.startLocalRuntime
+      tags: [models]
+      summary: Start the Ollama the hub installed (admin)
+      parameters:
+        - $ref: '#/components/parameters/Profile'
+      x-roles: [owner, admin]
+      x-rt-events: []
+      responses:
+        '200':
+          description: Started.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LocalRuntime'
+              example:
+                available: true
+                mode: managed
+                state: running
+                error: null
+                version: 0.40.13
+                latest_version: 0.40.13
+                update_available: false
+                base_url: http://127.0.0.1:11434
+                platform: darwin-arm64
+                gpu:
+                  vendor: apple
+                  name: Apple silicon
+                  cuda: null
+                download_bytes: null
+                job_id: null
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
+  /models/local-runtime/stop:
+    post:
+      operationId: models.stopLocalRuntime
+      tags: [models]
+      summary: Stop the Ollama the hub installed (admin)
+      parameters:
+        - $ref: '#/components/parameters/Profile'
+      x-roles: [owner, admin]
+      x-rt-events: []
+      responses:
+        '200':
+          description: Stopped.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LocalRuntime'
+              example:
+                available: true
+                mode: managed
+                state: stopped
+                error: null
+                version: 0.40.13
+                latest_version: 0.40.13
+                update_available: false
+                base_url: null
+                platform: darwin-arm64
+                gpu:
+                  vendor: apple
+                  name: Apple silicon
+                  cuda: null
+                download_bytes: null
+                job_id: null
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '409':
+          $ref: '#/components/responses/Conflict'
+  /models/local-runtime/models:
+    get:
+      operationId: models.listLocalModels
+      tags: [models]
+      summary: The models in the local Ollama, the ones loaded now, and suggestions (admin)
+      parameters:
+        - $ref: '#/components/parameters/Profile'
+      x-roles: [owner, admin]
+      x-rt-events: []
+      responses:
+        '200':
+          description: The local models.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LocalModels'
+              example:
+                installed:
+                  - name: qwen3:8b
+                    size: 5225388164
+                    modified_at: '2026-10-30T10:00:00Z'
+                    family: qwen3
+                    parameter_size: 8.2B
+                    quantization: Q4_K_M
+                loaded: []
+                suggested:
+                  - name: qwen3:8b
+                    size_bytes: 5583457485
+                    memory_bytes: 17179869184
+                    tools: true
+                    installed: true
+                    fits: true
+                memory_bytes: 34359738368
+                disk_free_bytes: 214748364800
+                pulls: []
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '409':
+          $ref: '#/components/responses/Conflict'
+    post:
+      operationId: models.pullLocalModel
+      tags: [models]
+      summary: Download a model into the local Ollama (admin)
+      description: >-
+        A job (`kind: install`, `input.model`); its progress `result` carries `model`,
+        `completed` and `total` bytes. Cancelling the job stops the download.
+      parameters:
+        - $ref: '#/components/parameters/Profile'
+      x-roles: [owner, admin]
+      x-rt-events: [job.queued, job.progress, job.completed, job.failed, job.cancelled]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LocalModelPull'
+            example:
+              name: qwen3:8b
+      responses:
+        '202':
+          description: Download started.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/JobAccepted'
+              example:
+                job_id: 01J8QK3ZR2W7M5N4P6T8V9X0JB
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '409':
+          $ref: '#/components/responses/Conflict'
+    delete:
+      operationId: models.deleteLocalModel
+      tags: [models]
+      summary: Delete a model from the local Ollama (admin)
+      parameters:
+        - $ref: '#/components/parameters/Profile'
+        - name: name
+          in: query
+          required: true
+          schema:
+            type: string
+            minLength: 1
+            maxLength: 200
+      x-roles: [owner, admin]
+      x-rt-events: []
+      responses:
+        '204':
+          description: Deleted.
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
   /models/defaults:
     get:
       operationId: models.getDefaults
@@ -28080,6 +28389,158 @@ components:
       properties:
         disabled:
           type: boolean
+    LocalRuntime:
+      type: object
+      description: Ollama on the computer the hub runs on (ADR 0032).
+      required:
+        [
+          available,
+          mode,
+          state,
+          error,
+          version,
+          latest_version,
+          update_available,
+          base_url,
+          platform,
+          gpu,
+          download_bytes,
+          job_id,
+        ]
+      properties:
+        available:
+          type: boolean
+          description: False outside the desktop app's own hub; then nothing else applies.
+        mode:
+          type: string
+          enum: [none, managed, external]
+        state:
+          type: string
+          enum: [stopped, starting, running, error]
+        error:
+          type: [string, 'null']
+        version:
+          type: [string, 'null']
+        latest_version:
+          type: [string, 'null']
+          description: The newest Ollama release; null when the hub could not ask.
+        update_available:
+          type: boolean
+        base_url:
+          type: [string, 'null']
+          description: Where Ollama answers now; null while it is not running.
+        platform:
+          type: [string, 'null']
+          description: '`win32-x64`, `darwin-arm64`, …; null where Ollama publishes nothing.'
+        gpu:
+          oneOf:
+            - type: 'null'
+            - type: object
+              required: [vendor, name, cuda]
+              properties:
+                vendor:
+                  type: string
+                  enum: [nvidia, amd, intel, apple, none]
+                name:
+                  type: [string, 'null']
+                cuda:
+                  type: [string, 'null']
+                  description: The CUDA libraries kept for an NVIDIA card (`cuda_v13`), else null.
+        download_bytes:
+          type: [integer, 'null']
+          description: What installing (or the available update) downloads, when known.
+        job_id:
+          type: [string, 'null']
+          description: The install or update job running now.
+    LocalModel:
+      type: object
+      required: [name, size, modified_at, family, parameter_size, quantization]
+      properties:
+        name:
+          type: string
+        size:
+          type: integer
+        modified_at:
+          type: [string, 'null']
+        family:
+          type: [string, 'null']
+        parameter_size:
+          type: [string, 'null']
+        quantization:
+          type: [string, 'null']
+    LocalModelLoaded:
+      type: object
+      required: [name, size, size_vram, expires_at]
+      properties:
+        name:
+          type: string
+        size:
+          type: integer
+        size_vram:
+          type: integer
+          description: How much of it sits in the graphics card's memory.
+        expires_at:
+          type: [string, 'null']
+    LocalModelSuggestion:
+      type: object
+      required: [name, size_bytes, memory_bytes, tools, installed, fits]
+      properties:
+        name:
+          type: string
+        size_bytes:
+          type: integer
+          description: About what the download weighs.
+        memory_bytes:
+          type: integer
+          description: The least RAM the model runs comfortably in.
+        tools:
+          type: boolean
+        installed:
+          type: boolean
+        fits:
+          type: boolean
+          description: This computer has at least `memory_bytes` of RAM.
+    LocalModels:
+      type: object
+      required: [installed, loaded, suggested, memory_bytes, disk_free_bytes, pulls]
+      properties:
+        installed:
+          type: array
+          items:
+            $ref: '#/components/schemas/LocalModel'
+        loaded:
+          type: array
+          items:
+            $ref: '#/components/schemas/LocalModelLoaded'
+        suggested:
+          type: array
+          items:
+            $ref: '#/components/schemas/LocalModelSuggestion'
+        memory_bytes:
+          type: integer
+        disk_free_bytes:
+          type: [integer, 'null']
+        pulls:
+          type: array
+          description: Downloads running now, so a reopened screen finds their jobs.
+          items:
+            type: object
+            required: [name, job_id]
+            properties:
+              name:
+                type: string
+              job_id:
+                type: string
+    LocalModelPull:
+      type: object
+      required: [name]
+      additionalProperties: false
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 200
+          description: A name from the Ollama library (`qwen3:8b`) or a Hugging Face path.
     RuntimeReport:
       type: object
       description: >-
