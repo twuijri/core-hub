@@ -86,6 +86,11 @@ export interface AgentTarget {
   /** The hub's own `providers` row id behind that model; see `PromptInput`. */
   modelProviderId?: string | null;
   reasoningEffort?: string | null;
+  /**
+   * The hub user who opened this conversation, for an adapter of the hub's own that acts on
+   * the machine and must know who asked (the Hermes helper, ADR 0031). Absent outside a run.
+   */
+  userId?: string | null;
 }
 
 export type InstallSource = 'managed' | 'user_cli' | 'builtin' | 'none';

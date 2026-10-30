@@ -53,6 +53,7 @@ import { holdsBack, queued, type QueuedMessage } from './outbox.js';
 import { QuestionCard } from './QuestionCard.js';
 import { RunStatus } from './RunStatus.js';
 import { RunFailureNotice, failuresByMessage } from './RunFailureNotice.js';
+import { HERMES_HELPER_SLUG } from '../agents/sections.js';
 import { ModelNamesContext, catalogueNames } from './fallback.js';
 import { SubagentsPanel } from './SubagentsPanel.js';
 import {
@@ -150,7 +151,7 @@ interface OpenSessionProps {
 
 function OpenSessionBody({ sessionId, title: pageTitle, intro }: OpenSessionProps) {
   const { t, language } = useI18n();
-  const { client, profile } = useAuth();
+  const { client, profile, user } = useAuth();
   const inLink = useProfileInLink();
   const navigate = useNavigate();
 
@@ -297,6 +298,11 @@ function OpenSessionBody({ sessionId, title: pageTitle, intro }: OpenSessionProp
 
   const agentId = state.session?.agent_id ?? null;
   const agents = useAgents();
+  // The Hermes helper, for an admin: a failed Hermes run offers it (ADR 0031).
+  const helperId =
+    user?.role === 'owner' || user?.role === 'admin'
+      ? ((agents.data ?? []).find((agent) => agent.slug === HERMES_HELPER_SLUG)?.id ?? null)
+      : null;
   const catalogue = useCatalogue();
   const modelDefaults = useModelDefaults();
   // The fallback line names models as people know them, not by their catalogue keys.
@@ -670,6 +676,7 @@ function OpenSessionBody({ sessionId, title: pageTitle, intro }: OpenSessionProp
                           agent={(agents.data ?? []).find((agent) => agent.id === agentId)}
                           onDismiss={() => setDismissed((held) => new Set(held).add(entry.runId))}
                           onPickModel={openModelPicker}
+                          helperId={helperId}
                         />
                       ) : null;
                     }}

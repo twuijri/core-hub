@@ -8,6 +8,9 @@ import type { Agent } from '../types.js';
  * the side list its Settings row. Its settings come from the adapter's descriptor (ADR 0002),
  * which every adapter has, so `settings` is not a capability an agent has to declare.
  */
+/** The catalog id of the Hermes helper, the hub's own agent that looks into Hermes (ADR 0031). */
+export const HERMES_HELPER_SLUG = 'hermes-helper';
+
 export function configurable(agent: Pick<Agent, 'status' | 'install'>): boolean {
   return agent.status !== 'not_installed' && agent.install.source !== 'none';
 }

@@ -13,7 +13,10 @@ between the database and the API.
 
 A fresh install shows **two** agents, not one (ADOPTION-BACKLOG §2.15, owner's decision
 of 2026-09-22): Hermes, and `direct` — the hub talking to the model provider with no
-runtime in between. See §The direct agent below.
+runtime in between. See §The direct agent below. A third agent of the hub's own sits
+beside them: `hermes-helper`, which looks into Hermes when it is in trouble and, at the
+level the person allows, fixes it (ADR 0031, owner's decision of 2026-10-28). It runs in
+the hub's process on the hub's models, never through Hermes.
 
 Which agents exist is not open: the hub ships a **curated catalog**
 (`packages/server/src/modules/agents/catalog/`, one reviewed file per agent with an id, an

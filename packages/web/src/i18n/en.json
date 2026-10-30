@@ -416,7 +416,8 @@
     "fallback_note": "{failed} failed, so {model} answered",
     "fallback_reason": "Why: {reason}",
     "bar_more": "More",
-    "jump_latest": "Jump to the latest message"
+    "jump_latest": "Jump to the latest message",
+    "ask_hermes_helper": "Ask the Hermes helper what went wrong"
   },
   "composer": {
     "label": "Message composer",
@@ -743,7 +744,9 @@
       "origin_chat": "During a conversation",
       "approve": "Approve",
       "reject": "Reject"
-    }
+    },
+    "ask_helper": "Ask the helper",
+    "helper_start": "Start a chat"
   },
   "jobs": {
     "status": {

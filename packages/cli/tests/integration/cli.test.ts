@@ -216,7 +216,8 @@ describe('the reference client against the hub', () => {
     const items = (
       JSON.parse(listed.stdout) as { items: { id: string; slug: string; status: string }[] }
     ).items;
-    expect(items.map((item) => item.slug)).toEqual(['direct']);
+    // The Hermes helper (ADR 0031) is the hub's own too, listed after it.
+    expect(items.map((item) => item.slug)).toEqual(['direct', 'hermes-helper']);
     const direct = items[0]!;
     expect(direct.status).toBe('available');
 

@@ -226,11 +226,11 @@ test.describe('web smoke journeys', () => {
     await login(page);
     await newChat(page);
     const row = page.getByTestId('agent-chips');
-    // Eleven agents from the catalog — Hermes, the hub's own `direct` agent
-    // (ADOPTION-BACKLOG §2.15) and the nine coding CLIs (Qwen Code, Kimi Code and Pi since
-    // 2026-09-25, Goose and Grok Build since 2026-09-27) — and a trailing "+" that goes to
-    // the Agents page.
-    await expect(page.getByTestId('agent-chip')).toHaveCount(11);
+    // Twelve agents from the catalog — Hermes, the hub's own `direct` agent
+    // (ADOPTION-BACKLOG §2.15) and its Hermes helper (ADR 0031, since 2026-10-28), and the
+    // nine coding CLIs (Qwen Code, Kimi Code and Pi since 2026-09-25, Goose and Grok Build
+    // since 2026-09-27) — and a trailing "+" that goes to the Agents page.
+    await expect(page.getByTestId('agent-chip')).toHaveCount(12);
     await expect(page.getByTestId('agent-add')).toBeVisible();
     // Pages take the whole width (owner, 2026-09-23), so on a wide screen the row is at the
     // top of the ladder or one rung down — which one depends on the machine's fonts (CI's
@@ -249,9 +249,12 @@ test.describe('web smoke journeys', () => {
     await expect(chips.first()).toContainText('Hermes');
     await expect(chips.nth(1)).toHaveClass(/ch-segment-icon-only/);
     // An icon is not a mystery: the name is still the accessible name. Chip 1 is the
-    // direct agent, which sits second in every list (`agents/service.ts` §order).
+    // direct agent, which sits second in every list (`agents/service.ts` §order), and chip 2
+    // the Hermes helper.
     await expect(chips.nth(1)).toHaveAttribute('aria-label', /مباشر/);
-    await expect(chips.nth(2)).toHaveAttribute('aria-label', /Claude Code/);
+    // The hub's other agent of its own follows it; then the coding CLIs.
+    await expect(chips.nth(2)).toHaveAttribute('aria-label', /مساعد Hermes/);
+    await expect(chips.nth(3)).toHaveAttribute('aria-label', /Claude Code/);
     // The hairline is drawn between icon-only neighbours and never beside the raised
     // surface, and it is decorative: a pseudo-element, nothing in the accessibility tree.
     const dividerOn = (index: number) =>

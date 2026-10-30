@@ -17,7 +17,7 @@ import { useAgents } from '../hub/queries.js';
 import { useAuth } from '../auth/context.js';
 import { describeError } from '../auth/client.js';
 import { useI18n } from '../i18n/context.js';
-import { agentRoute, termKey } from '../navigation/manifest.js';
+import { agentRoute, routeOf, termKey } from '../navigation/manifest.js';
 import { AppShell } from '../shell/AppShell.js';
 import { useProfileName } from '../shell/profiles.js';
 import { useConfirm } from '../ui/ConfirmDialog.js';
@@ -39,7 +39,7 @@ import {
   type BadgeTone,
 } from '../ui/index.js';
 import { destinationIcons, IconAgents } from '../ui/icons.js';
-import { agentSections, configurable } from './sections.js';
+import { HERMES_HELPER_SLUG, agentSections, configurable } from './sections.js';
 import { useJobs } from './useJobs.js';
 import { versionNotes } from './versionNotes.js';
 
@@ -96,14 +96,28 @@ export function AgentManagerScreen() {
       )}
       <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
         {agents.data?.map((agent) => (
-          <AgentCard key={agent.id} agent={agent} jobs={jobs} />
+          <AgentCard
+            key={agent.id}
+            agent={agent}
+            jobs={jobs}
+            helperId={agents.data.find((a) => a.slug === HERMES_HELPER_SLUG)?.id ?? null}
+          />
         ))}
       </div>
     </AppShell>
   );
 }
 
-function AgentCard({ agent, jobs }: { agent: Agent; jobs: Record<string, Job> }) {
+function AgentCard({
+  agent,
+  jobs,
+  helperId,
+}: {
+  agent: Agent;
+  jobs: Record<string, Job>;
+  /** The Hermes helper's agent id (ADR 0031), for Hermes's card and its own. */
+  helperId: string | null;
+}) {
   const { t } = useI18n();
   const nameOf = useProfileName();
   const { client, user, profile } = useAuth();
@@ -334,7 +348,7 @@ function AgentCard({ agent, jobs }: { agent: Agent; jobs: Record<string, Job> })
           <Button disabled={running} onClick={() => void act('restart')}>
             {t('agents.restart')}
           </Button>
-        ) : installed && managed ? (
+        ) : agent.slug === HERMES_HELPER_SLUG ? null : installed && managed ? (
           <Button variant="danger-quiet" disabled={running} onClick={() => void act('uninstall')}>
             {t('agents.remove')}
           </Button>
@@ -350,7 +364,23 @@ function AgentCard({ agent, jobs }: { agent: Agent; jobs: Record<string, Job> })
         ) : null}
         {/* Every agent that is actually here can be configured, and the way in is beside
             the button a person already came for (owner, 2026-09-22). */}
-        {installed && (
+        {/* Hermes in trouble: a chat with its helper, for an admin (ADR 0031). The helper's
+            own card opens the same chat, and has no settings of its own. */}
+        {admin && helperId && (agent.kind === 'hermes' || agent.slug === HERMES_HELPER_SLUG) && (
+          <Link
+            to={`${routeOf('new_chat')}?agent=${helperId}`}
+            className={buttonClass(
+              agent.slug === HERMES_HELPER_SLUG ? 'primary' : 'secondary',
+              'md',
+            )}
+            data-testid="ask-hermes-helper"
+          >
+            <span className="ch-btn-label">
+              {t(agent.slug === HERMES_HELPER_SLUG ? 'agents.helper_start' : 'agents.ask_helper')}
+            </span>
+          </Link>
+        )}
+        {installed && agent.slug !== HERMES_HELPER_SLUG && (
           <Link
             to={agentRoute('agent_settings', agent.id)}
             className={buttonClass('secondary', 'md')}
