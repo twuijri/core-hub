@@ -64,6 +64,7 @@ import { ProviderAccountsDialog } from './ProviderAccountsDialog.js';
 import { MoveToGatewayDialog } from './MoveToGatewayDialog.js';
 import { SpeechCard } from './SpeechCard.js';
 import { RuntimeCard } from './RuntimeChecks.js';
+import { LocalRuntimeCard } from './LocalRuntimeCard.js';
 import { needsLoopbackWarning, suggestedHostUrl } from './loopback.js';
 import {
   chatModels,
@@ -246,6 +247,8 @@ function ProvidersTab({
   return (
     <>
       <p className="mb-3 text-sm text-muted">{t('models.providers.hint')}</p>
+      {/* Ollama on this computer (ADR 0032): the desktop app's hub only, for an admin. */}
+      {kind === 'llm' && <LocalRuntimeCard />}
       {/* Which provider this profile speaks through, and its settings (DECISIONS §63). */}
       {side && kind !== 'llm' && <SpeechCard kind={kind} side={side} />}
       {side && !side.ready && side.reason && (
