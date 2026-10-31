@@ -53,6 +53,7 @@ describe('config', () => {
       'COREHUB_MODEL_GATEWAY',
       'COREHUB_CLIPROXY_BIN',
       'COREHUB_AGENT_MODEL_SOURCE',
+      'COREHUB_LOCAL_MODELS',
     ]);
     const picked = pickEnv({
       DATA_DIR: '/x',

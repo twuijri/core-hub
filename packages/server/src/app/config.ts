@@ -38,6 +38,7 @@ export const ENV_KEYS = [
   'COREHUB_MODEL_GATEWAY',
   'COREHUB_CLIPROXY_BIN',
   'COREHUB_AGENT_MODEL_SOURCE',
+  'COREHUB_LOCAL_MODELS',
 ] as const;
 export type EnvKey = (typeof ENV_KEYS)[number];
 export type EnvSource = Partial<Record<EnvKey, string | undefined>> & {
@@ -245,6 +246,14 @@ const envSchema = z.object({
   COREHUB_AGENT_MODEL_SOURCE: z
     .enum(['hub', 'auto'], { message: 'COREHUB_AGENT_MODEL_SOURCE must be hub or auto' })
     .optional(),
+  /**
+   * Local models (ADR 0032): installing and running Ollama on the computer the hub runs on.
+   * `auto` (the default) offers it only in the desktop app's own hub; `on` offers it anywhere
+   * (a developer's hub), `off` nowhere.
+   */
+  COREHUB_LOCAL_MODELS: z
+    .enum(['auto', 'on', 'off'], { message: 'COREHUB_LOCAL_MODELS must be auto, on or off' })
+    .optional(),
 });
 
 /** The shared models catalogue every hub reads (DECISIONS §110). */
@@ -399,6 +408,8 @@ export interface HubConfig {
   telegramApiBase?: string;
   /** The model gateway (ADR 0029). Absent in tests that build a config by hand: on, `auto`. */
   modelGateway?: ModelGatewayConfig;
+  /** `COREHUB_LOCAL_MODELS` (ADR 0032). Absent in hand-built configs: `auto`. */
+  localModels?: 'auto' | 'on' | 'off';
 }
 
 export interface ModelGatewayConfig {
@@ -489,6 +500,7 @@ export function loadConfig(
       cliproxyBin: env.COREHUB_CLIPROXY_BIN ? path.resolve(env.COREHUB_CLIPROXY_BIN) : null,
       defaultSource: env.COREHUB_AGENT_MODEL_SOURCE ?? 'auto',
     },
+    localModels: env.COREHUB_LOCAL_MODELS ?? 'auto',
   };
 }
 

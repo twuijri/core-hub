@@ -15,6 +15,8 @@ import type {
   ProviderPreset,
   ProviderProbeResult,
   ProviderSignIn,
+  LocalModels,
+  LocalRuntime,
   RuntimeReport,
   SpeechSettings,
 } from '../types.js';
@@ -26,6 +28,8 @@ export const modelKeys = {
   defaults: (profile: string) => ['models', 'defaults', profile] as const,
   speech: (profile: string) => ['models', 'speech', profile] as const,
   runtime: (profile: string) => ['models', 'runtime', profile] as const,
+  localRuntime: (profile: string) => ['models', 'local-runtime', profile] as const,
+  localModels: (profile: string) => ['models', 'local-models', profile] as const,
 };
 
 export function useProviders() {
@@ -35,6 +39,10 @@ export function useProviders() {
     queryFn: async () =>
       (await client.request('get', '/models/providers')).data.items as Provider[],
     enabled: !!session,
+    // A model list being fetched (a refresh the hub started itself, such as after a local model
+    // download) is followed until it lands.
+    refetchInterval: (query) =>
+      query.state.data?.some((row) => row.catalogue.status === 'loading') ? 2_000 : false,
   });
 }
 
@@ -574,5 +582,136 @@ export function useMoveToGateway() {
         })
       ).data as ProviderMove,
     onSuccess: () => void queryClient.invalidateQueries({ queryKey: ['models', 'providers'] }),
+  });
+}
+
+// ------------------------------------------------------ local models (ADR 0032)
+
+/**
+ * Ollama on the computer the hub runs on: absent, installed by the hub, or already there.
+ * Only the desktop app's own hub answers `available: true`; anywhere else, and for a member
+ * (`403`), the card is simply not there, so a refusal is not asked again.
+ */
+export function useLocalRuntime(enabled: boolean) {
+  const { client, profile, session } = useAuth();
+  return useQuery({
+    queryKey: modelKeys.localRuntime(profile),
+    queryFn: async () =>
+      (await client.request('get', '/models/local-runtime')).data as LocalRuntime,
+    enabled: !!session && enabled,
+    retry: false,
+    // A starting Ollama turns running (or error) by itself: asked again until it has.
+    refetchInterval: (query) =>
+      (query.state.data as LocalRuntime | undefined)?.state === 'starting' ? LOCAL_POLL_MS : false,
+  });
+}
+
+/** How often a starting Ollama is asked about again. */
+const LOCAL_POLL_MS = 2_000;
+
+/** "Check for updates": the newest Ollama release asked for now, not from the last hours. */
+export function useCheckLocalRuntime() {
+  const { client, profile } = useAuth();
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async () =>
+      (await client.request('get', '/models/local-runtime', { query: { fresh: true } }))
+        .data as LocalRuntime,
+    onSuccess: (runtime) => queryClient.setQueryData(modelKeys.localRuntime(profile), runtime),
+  });
+}
+
+/** Install and update answer a job; start and stop answer the runtime as it is now. */
+export function useLocalRuntimeAction() {
+  const { client, profile } = useAuth();
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (
+      action: 'install' | 'update' | 'start' | 'stop',
+    ): Promise<{ job_id: string } | LocalRuntime> => {
+      switch (action) {
+        case 'install':
+          return (await client.request('post', '/models/local-runtime/install')).data;
+        case 'update':
+          return (await client.request('post', '/models/local-runtime/update')).data;
+        case 'start':
+          return (await client.request('post', '/models/local-runtime/start')).data as LocalRuntime;
+        case 'stop':
+          return (await client.request('post', '/models/local-runtime/stop')).data as LocalRuntime;
+      }
+    },
+    onSuccess: (answer) => {
+      if ('available' in answer) {
+        queryClient.setQueryData(modelKeys.localRuntime(profile), answer);
+      } else {
+        void queryClient.invalidateQueries({ queryKey: modelKeys.localRuntime(profile) });
+      }
+      void queryClient.invalidateQueries({ queryKey: modelKeys.localModels(profile) });
+    },
+  });
+}
+
+/** Remove the Ollama the hub installed; its models go too unless they are kept. */
+export function useRemoveLocalRuntime() {
+  const { client } = useAuth();
+  const changed = useLocalModelsChanged();
+  return useMutation({
+    mutationFn: async (keepModels: boolean) => {
+      await client.request('delete', '/models/local-runtime', {
+        query: { keep_models: keepModels },
+      });
+    },
+    onSuccess: changed,
+  });
+}
+
+/** The local models: installed, loaded now, suggested, and the downloads running now. */
+export function useLocalModels(enabled: boolean) {
+  const { client, profile, session } = useAuth();
+  return useQuery({
+    queryKey: modelKeys.localModels(profile),
+    queryFn: async () =>
+      (await client.request('get', '/models/local-runtime/models')).data as LocalModels,
+    enabled: !!session && enabled,
+    retry: false,
+  });
+}
+
+/**
+ * After a model arrives or goes, or Ollama itself: the local lists, and the providers and the
+ * catalogue — the hub keeps an `ollama` provider pointed at it, and the pickers list its models.
+ */
+export function useLocalModelsChanged() {
+  const { profile } = useAuth();
+  const queryClient = useQueryClient();
+  return () => {
+    void queryClient.invalidateQueries({ queryKey: modelKeys.localRuntime(profile) });
+    void queryClient.invalidateQueries({ queryKey: modelKeys.localModels(profile) });
+    for (const key of ['providers', 'catalogue', 'runtime'] as const) {
+      void queryClient.invalidateQueries({ queryKey: ['models', key] });
+    }
+  };
+}
+
+/** Download a model: a job, followed by the card until it ends. */
+export function usePullLocalModel() {
+  const { client, profile } = useAuth();
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (name: string) =>
+      (await client.request('post', '/models/local-runtime/models', { body: { name } })).data,
+    onSuccess: () =>
+      void queryClient.invalidateQueries({ queryKey: modelKeys.localModels(profile) }),
+  });
+}
+
+export function useDeleteLocalModel() {
+  const { client } = useAuth();
+  const changed = useLocalModelsChanged();
+  return useMutation({
+    mutationFn: async (name: string) => {
+      await client.request('delete', '/models/local-runtime/models', { query: { name } });
+    },
+    onSuccess: changed,
   });
 }

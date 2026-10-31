@@ -331,6 +331,17 @@ is refused **by name**. Nothing is silently dropped and nothing is silently trun
 | anything else (PDF, audio, binary) | run fails `unsupported_media_type`, naming the file and its type | — |
 | over a limit | run fails `payload_too_large`, naming the size and the limit | — |
 
+## Local models — Ollama on the desktop hub (ADR 0032)
+
+Desktop app only (`available` is false elsewhere; `COREHUB_LOCAL_MODELS`). Nothing is stored in
+the database: a hub-installed Ollama is `<DATA_DIR>/runtimes/ollama/` — `app/` (the program),
+`models/` (its models), `state.json` (version, port, the CUDA folder kept). Either Ollama — the one
+the hub installed (`managed`, run as its child) or one already on the computer (`external`,
+`127.0.0.1:11434`) — becomes the shared `ollama` provider row's address, so every agent and the
+gateway reach local models like any provider. Routes: `/models/local-runtime[/install|/update|
+/start|/stop|/models]`, owner and admins only; installs, updates and model downloads are jobs
+(`install` / `update`).
+
 ## Not stored
 
 - Plain API keys; the data key itself (a file under the data directory, never

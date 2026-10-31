@@ -48,6 +48,7 @@ sets:
 | `COREHUB_MODEL_GATEWAY` | Optional, **on by default**. The model gateway (ADR 0029): every coding agent (Claude Code, Codex, Goose, OpenCode, Qwen Code, Kimi Code) reaches the hub's own providers through it, with a session token instead of a key. `off` hands agents the profile's keys as before. |
 | `COREHUB_AGENT_MODEL_SOURCE` | Optional. What an agent's "Automatic" model source means: the image sets `hub` (every coding agent on the hub's providers); `auto` (the default outside the image) keeps an agent signed in to its own account on it. A person's choice in the agent's Settings → Models always wins. |
 | `COREHUB_CLIPROXY_BIN` | Optional. Where CLIProxyAPI, the gateway's translator, is — only for a hub that is not the image or the desktop app (the image carries it at `/opt/corehub/bin/cli-proxy-api`). |
+| `COREHUB_LOCAL_MODELS` | Optional. Local models (ADR 0032): `auto` (the default) lets the desktop app's own hub install and run Ollama; `on` allows it on any hub (a developer's), `off` nowhere. Leave it unset in the image. |
 
 Subscriptions signed in to through the gateway (ADR 0030) are kept by CLIProxyAPI in
 `<DATA_DIR>/gateway/cliproxy-auth/` (one `0600` file per account; they hold the accounts' tokens —
