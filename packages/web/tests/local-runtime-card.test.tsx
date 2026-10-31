@@ -81,7 +81,7 @@ function models(over: Record<string, unknown> = {}) {
     installed: [
       {
         name: 'qwen3:8b',
-        size: 5 * GB,
+        size_bytes: 5 * GB,
         modified_at: '2026-10-30T10:00:00Z',
         family: 'qwen3',
         parameter_size: '8.2B',
@@ -89,7 +89,12 @@ function models(over: Record<string, unknown> = {}) {
       },
     ],
     loaded: [
-      { name: 'qwen3:8b', size: 5 * GB, size_vram: 5 * GB, expires_at: '2026-10-30T10:05:00Z' },
+      {
+        name: 'qwen3:8b',
+        size_bytes: 5 * GB,
+        vram_bytes: 5 * GB,
+        expires_at: '2026-10-30T10:05:00Z',
+      },
     ],
     suggested: [
       {

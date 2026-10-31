@@ -128,6 +128,15 @@ describe('local models over HTTP', () => {
     expect(
       (models.json() as { installed: { name: string }[] }).installed.map((m) => m.name),
     ).toEqual(['llama3.2:3b', 'qwen3:4b']);
+    // The contract's names, not Ollama's or the service's own.
+    expect((models.json() as { installed: unknown[] }).installed[0]).toEqual({
+      name: 'llama3.2:3b',
+      size_bytes: 1,
+      modified_at: null,
+      family: null,
+      parameter_size: null,
+      quantization: null,
+    });
 
     const removed = await authed(hub, hub.token, {
       method: 'DELETE',

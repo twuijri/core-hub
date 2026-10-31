@@ -14677,7 +14677,7 @@ paths:
               example:
                 installed:
                   - name: qwen3:8b
-                    size: 5225388164
+                    size_bytes: 5225388164
                     modified_at: '2026-10-30T10:00:00Z'
                     family: qwen3
                     parameter_size: 8.2B
@@ -28454,11 +28454,11 @@ components:
           description: The install or update job running now.
     LocalModel:
       type: object
-      required: [name, size, modified_at, family, parameter_size, quantization]
+      required: [name, size_bytes, modified_at, family, parameter_size, quantization]
       properties:
         name:
           type: string
-        size:
+        size_bytes:
           type: integer
         modified_at:
           type: [string, 'null']
@@ -28470,13 +28470,13 @@ components:
           type: [string, 'null']
     LocalModelLoaded:
       type: object
-      required: [name, size, size_vram, expires_at]
+      required: [name, size_bytes, vram_bytes, expires_at]
       properties:
         name:
           type: string
-        size:
+        size_bytes:
           type: integer
-        size_vram:
+        vram_bytes:
           type: integer
           description: How much of it sits in the graphics card's memory.
         expires_at:

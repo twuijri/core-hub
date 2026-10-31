@@ -62,9 +62,19 @@ export interface LocalRuntimeView {
   job_id: string | null;
 }
 
+/** A row of `LocalModel` in the contract: Ollama's own fields, named the hub's way. */
+export interface LocalModelRow {
+  name: string;
+  size_bytes: number;
+  modified_at: string | null;
+  family: string | null;
+  parameter_size: string | null;
+  quantization: string | null;
+}
+
 export interface LocalModelsView {
-  installed: OllamaModel[];
-  loaded: OllamaLoaded[];
+  installed: LocalModelRow[];
+  loaded: { name: string; size_bytes: number; vram_bytes: number; expires_at: string | null }[];
   suggested: (SuggestedModel & { installed: boolean; fits: boolean })[];
   memory_bytes: number;
   disk_free_bytes: number | null;
@@ -461,8 +471,20 @@ export class LocalRuntimeService {
     );
     const names = new Set(installed.map((model) => model.name));
     return {
-      installed,
-      loaded,
+      installed: installed.map((model: OllamaModel) => ({
+        name: model.name,
+        size_bytes: model.size,
+        modified_at: model.modifiedAt,
+        family: model.family,
+        parameter_size: model.parameterSize,
+        quantization: model.quantization,
+      })),
+      loaded: loaded.map((model: OllamaLoaded) => ({
+        name: model.name,
+        size_bytes: model.size,
+        vram_bytes: model.sizeVram,
+        expires_at: model.expiresAt,
+      })),
       suggested: SUGGESTED_MODELS.map((model) => ({
         ...model,
         installed: names.has(model.name) || names.has(`${model.name}:latest`),

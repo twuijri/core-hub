@@ -98,6 +98,21 @@ $ npx vitest run tests/local-runtime-card.test.tsx tests/i18n.test.ts tests/mode
   قتل الهب بـ SIGKILL (انهيار) → Ollama ظل شغّال → تشغيل الهب من جديد وقّف الباقي ثم شغّل واحد جديد
 ```
 
+### إصلاحات بعد فحوصات GitHub الأولى (2026-11-01)
+- **أندرويد** (`ContractExamplesTest`): مثال `LocalModel.size` فيه رقم أكبر من `Int`. مولّد Kotlin يوسّع للنوع `Long` بس الحقول اللي اسمها ينتهي بـ`_bytes`.
+  - الحل: صارت الأسماء `size_bytes` و`vram_bytes`.
+  - لقيت معه خطأ حقيقي: السيرفر كان يرجّع أسماء الخدمة (`modifiedAt`، `parameterSize`) بدل أسماء العقد، فالويب ما كان يعرض حجم النموذج ولا نوعه.
+  - الحل: `service.models()` يحوّل لشكل العقد، والاختبار عبر HTTP يتأكد من الصف كامل.
+- **`tests/unit/status.test.ts`**: `docs/STATUS.md` صار 390 من 390، وصف models صار 42.
+- **Desktop app smoke** (pairing + `Worker teardown timeout`): موجود قبل هذا الطلب. نفس الفشل صار في آخر تشغيلين على main، وهم 41067064540 و40583626147. ما صلّحته هنا.
+```
+$ npx vitest run src/modules/models/local-runtime src/modules/models/local-runtime-api.test.ts tests/unit/status.test.ts --maxWorkers=2
+  Test Files 3 passed | 1 skipped · Tests 16 passed | 2 skipped
+$ npx vitest run tests/local-runtime-card.test.tsx (packages/web) → 7 passed
+$ pnpm typecheck → exit 0 · contracts:lint OK · check-clients OK · compat OK (v1.1.9)
+```
+- **ما شغّلته محلياً:** اختبار أندرويد نفسه، لأن Java وGradle مو موجودين على الجهاز. ينتظر فحوصات GitHub.
+
 ## المخاطر والرجوع
 - **ويندوز:**
   - ما نقدر نتحقق من SHA-256 حق الملف كامل، لأننا ما نحمّله كامل.

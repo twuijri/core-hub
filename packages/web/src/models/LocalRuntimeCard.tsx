@@ -481,7 +481,9 @@ function LocalModelsPanel({ jobs }: { jobs: Record<string, Job> }) {
                 <span className="font-medium" dir="ltr">
                   {model.name}
                 </span>
-                <span className="text-xs text-muted">{formatBytes(model.size, language)}</span>
+                <span className="text-xs text-muted">
+                  {formatBytes(model.size_bytes, language)}
+                </span>
                 {(model.parameter_size || model.quantization) && (
                   <span className="text-xs text-muted" dir="ltr">
                     {[model.parameter_size, model.quantization].filter(Boolean).join(' · ')}
