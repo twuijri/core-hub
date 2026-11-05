@@ -21,6 +21,13 @@
  *   the reason. A call carries where it came from (`X-Corehub-Origin`: the hub's own process or
  *   a gateway), so a gateway's call is only ever one of its turns and a hub process's only
  *   one of the hub's runs — a stranger's message can never borrow a person's live chat.
+ * - from Hermes v0.22.2 the hub's own Hermes conversations run **inside** that gateway too
+ *   (`adapters/hermes-gateway-channel.ts`), so their calls say `gateway` as well. A gateway's
+ *   call is then one of its channel turns or one of the hub's runs, and a run counts only once
+ *   it has announced a call to the hub's tools — a channel turn never announces, so a call
+ *   nobody announced is never a run's (the hub waits a moment for the announcement, as above).
+ *   An announced run beside a channel turn of anybody else: the two cannot be told apart, and
+ *   the call is refused.
  */
 import { issueRunToken, revokeRunToken } from '../../auth/index.js';
 import type { HubOrigin } from './block.js';
@@ -100,7 +107,8 @@ export class RunLeases {
   /**
    * A turn of a messaging gateway started (the hub's hook, §79): for the person who linked its
    * sender, or for nobody with the reason. Either way it is live in its profile, so a call from
-   * that gateway meanwhile is its, and never a hub run's.
+   * that gateway meanwhile is its, unless a hub run in that gateway announced one
+   * (`decideGateway`).
    */
   openChannel(input: {
     key: string;
@@ -176,14 +184,16 @@ export class RunLeases {
    * Decide now, or say that it cannot be decided yet (`null`).
    *
    * `origin` is where the call came from (the block's `X-Corehub-Origin`): a hub process
-   * (`hub`) can only be one of the hub's runs, a messaging gateway (`gateway`) only one of its
-   * turns; unknown (`null`, a Hermes the hub did not start) could be either.
+   * (`hub`) can only be one of the hub's runs, a messaging gateway (`gateway`) one of its turns
+   * or a run the hub holds in it that announced the call; unknown (`null`, a Hermes the hub did
+   * not start) could be either.
    */
   private decide(
     workspaceId: string,
     origin: HubOrigin | null,
     final: boolean,
   ): Attribution | null {
+    if (origin === 'gateway') return this.decideGateway(workspaceId, final);
     const live = this.live(workspaceId).filter(
       (lease) =>
         origin === null || (origin === 'hub' ? lease.kind === 'run' : lease.kind === 'channel'),
@@ -202,6 +212,46 @@ export class RunLeases {
     const announcedOwners = new Set(announced.map(ownerOf));
     if (announcedOwners.size === 1) return decided(newest(announced));
     return final ? { ok: false, reason: 'hub_tools_run_ambiguous' } : null;
+  }
+
+  /**
+   * A call from a gateway: one of its channel turns, or one of the hub's runs held in it
+   * (`adapters/hermes-gateway-channel.ts`) once that run announced it.
+   */
+  private decideGateway(workspaceId: string, final: boolean): Attribution | null {
+    const live = this.live(workspaceId);
+    const channels = live.filter((lease) => lease.kind === 'channel');
+    const runs = live.filter((lease) => lease.kind === 'run');
+    if (channels.length === 0 && runs.length === 0) {
+      return { ok: false, reason: 'hub_tools_no_live_run' };
+    }
+    const ownerOf = (lease: Lease) => lease.userId ?? `nobody:${lease.runId}`;
+    const announced = runs.filter((lease) => lease.pending > 0);
+    if (channels.length > 0) {
+      // A run that announced a call to the hub's tools beside a channel turn: either could be
+      // calling. Only when both act for one person is there no doubt.
+      if (announced.length > 0) {
+        const owners = new Set([...channels, ...announced].map(ownerOf));
+        return owners.size === 1
+          ? decided(newest(announced))
+          : { ok: false, reason: 'hub_tools_run_ambiguous' };
+      }
+      // Nothing announced yet while a run is live: its announcement may still be on its way.
+      if (runs.length > 0 && !final) return null;
+      // A channel turn's call, as before the hub's conversations ran in the gateway.
+      const owners = new Set(channels.map(ownerOf));
+      return owners.size === 1
+        ? decided(newest(channels))
+        : { ok: false, reason: 'hub_tools_run_ambiguous' };
+    }
+    // Only the hub's runs: the call is one of theirs once one has announced it; the event and
+    // the call travel separately, so it is waited for.
+    const announcedOwners = new Set(announced.map(ownerOf));
+    if (announcedOwners.size === 1) return decided(newest(announced));
+    if (!final) return null;
+    return announcedOwners.size > 1
+      ? { ok: false, reason: 'hub_tools_run_ambiguous' }
+      : { ok: false, reason: 'hub_tools_no_live_run' };
   }
 
   /** The run a call in this profile belongs to, waiting briefly when several could. */
