@@ -55,6 +55,13 @@
 - **الوثائق:** ADR 0013، إضافة 2026-11-05.
 
 ## الفحوص (الأوامر ونواتجها الفعلية)
+```
+$ pnpm exec vitest run --maxWorkers=2 src/modules/agents/adapters/hermes-gateway-channel src/modules/agents/hub-tools/leases
+ Test Files  2 passed (2)
+      Tests  15 passed (15)
+$ pnpm contracts:check-clients
+check-clients  OK — 1187 client file(s) scanned, 283 contract path(s) known.
+```
 - `pnpm exec vitest run --maxWorkers=2 src/modules/agents/`: آخر تشغيل كامل 870 ناجح و1 فاشل.
   - الفاشل `hub-tools.routes.test.ts` «acts only while a run is live…». يستدعي الأدوات بدون origin، وهذا مسار ما لمسته.
   - أعدت تشغيل الملف تسع مرات ومرّ في كلها، فهو اختبار متذبذب من قبل وما سببه هذا التغيير.
