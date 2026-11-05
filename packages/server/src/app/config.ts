@@ -36,6 +36,7 @@ export const ENV_KEYS = [
   'COREHUB_HERMES_DASHBOARD_START_TIMEOUT_MS',
   'COREHUB_HERMES_TUI_START_TIMEOUT_MS',
   'COREHUB_MODEL_GATEWAY',
+  'COREHUB_GEMINI_DESKTOP_TOOLS',
   'COREHUB_CLIPROXY_BIN',
   'COREHUB_AGENT_MODEL_SOURCE',
   'COREHUB_LOCAL_MODELS',
@@ -234,6 +235,15 @@ const envSchema = z.object({
     })
     .optional(),
   /**
+   * Gemini Desktop for every agent that speaks Chat Completions (Hermes first), its tools carried
+   * in text (an experiment on DECISIONS §155). Off unless `on` (`1`, `true`).
+   */
+  COREHUB_GEMINI_DESKTOP_TOOLS: z
+    .enum(['on', 'off', '1', '0', 'true', 'false'], {
+      message: 'COREHUB_GEMINI_DESKTOP_TOOLS must be on or off',
+    })
+    .optional(),
+  /**
    * Where CLIProxyAPI is, when not where the image (`/opt/corehub/bin/cli-proxy-api`) or the
    * desktop app puts it. The desktop app sets it for its embedded hub.
    */
@@ -419,6 +429,8 @@ export interface ModelGatewayConfig {
   cliproxyBin: string | null;
   /** `COREHUB_AGENT_MODEL_SOURCE`: retired and ignored (§144); read for older stacks only. */
   defaultSource: 'hub' | 'auto';
+  /** `COREHUB_GEMINI_DESKTOP_TOOLS` is `on`: agents may run on Gemini Desktop (§155 experiment). */
+  geminiDesktopTools?: boolean;
 }
 
 export interface WebTerminalConfig {
@@ -499,6 +511,7 @@ export function loadConfig(
       enabled: !['off', '0', 'false'].includes(env.COREHUB_MODEL_GATEWAY ?? 'on'),
       cliproxyBin: env.COREHUB_CLIPROXY_BIN ? path.resolve(env.COREHUB_CLIPROXY_BIN) : null,
       defaultSource: env.COREHUB_AGENT_MODEL_SOURCE ?? 'auto',
+      geminiDesktopTools: ['on', '1', 'true'].includes(env.COREHUB_GEMINI_DESKTOP_TOOLS ?? 'off'),
     },
     localModels: env.COREHUB_LOCAL_MODELS ?? 'auto',
   };

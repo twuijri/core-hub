@@ -5737,3 +5737,22 @@ CLIProxyAPI).
   whole subscription engine for every account, Linux only, and still one chat per message);
   emulating tool calls in text (unreliable); a callback listener on the hub (its `localhost` is not
   the person's).
+- **Amendment (2026-11-06): tools in text, as a measured experiment.** The owner rejected the
+  direct-only routing (2026-11-05: «لازم يكون للكل») and asked for Hermes first («اهم شي عندي مع
+  هرمز»). Behind `COREHUB_GEMINI_DESKTOP_TOOLS=on` (off by default, no contract change), a signed-in
+  Gemini Desktop row is served to agents through the gateway — answered by the hub itself, never
+  an upstream of CLIProxyAPI (`gemini-desktop/tools-in-text.ts`, `agent-turn.ts`,
+  `gateway/hub-answer.ts`):
+  - the agent's tools go into the system message with one way to call them, a `<tool_call>` block
+    of JSON; the answer streams until a block starts, and each block naming a listed tool with an
+    object of arguments (required and top-level types checked) becomes a Chat Completions tool
+    call. When an answer's blocks are all unusable the model is told what was wrong once; a second
+    failure ends the turn with the reason in words.
+  - Tool results go back as `<tool_result>` blocks. An answer is recorded as the agent will send it
+    back, so one agent conversation (keyed by its system message and first user message,
+    `tools-<hash>`) stays one Gemini conversation and each call sends only what is new.
+  - Chat Completions only (Hermes, Goose, OpenCode …); Anthropic Messages and Responses are refused
+    with the reason. Images are refused as for the direct agent. No usage is reported.
+  - Every call logs what it did (tools, calls, problems, corrected, continued or folded, time).
+    The rejection above stands until those numbers say otherwise: the owner decides from them
+    whether it is turned on for everyone.

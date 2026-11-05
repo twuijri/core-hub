@@ -53,6 +53,8 @@ import {
   chatToAnthropic,
 } from './anthropic-chat.js';
 import { BISECT, bisectStep } from './bisect.js';
+import { writeHubAnswer } from './hub-answer.js';
+import type { AgentTurnEvent } from '../gemini-desktop/agent-turn.js';
 
 /** The model names an agent is started with; each resolves to the model its turn chose. */
 export const GATEWAY_MODEL_ALIASES = ['corehub-main', 'corehub-small'] as const;
@@ -112,6 +114,16 @@ export interface GatewaySource {
   target(workspace: string, providerId: string, model: string): GatewayTarget | { refusal: string };
   /** The catalogue keys a profile's coding agents can run, for `/v1/models`. */
   modelKeys(workspace: string): string[];
+  /**
+   * A Chat Completions call the hub answers itself (Gemini Desktop, its tools in text), or null
+   * when CLIProxyAPI serves the target.
+   */
+  hubAnswer?(
+    workspace: string,
+    target: { providerId: string; model: string },
+    body: Record<string, unknown>,
+    signal?: AbortSignal,
+  ): AsyncIterable<AgentTurnEvent> | null;
   /** A call that ended after its turn did: added to that run's ledger row. */
   recordLate(grant: GatewayGrantRecord, runId: string, usage: GatewayTurnUsage): void;
 }
@@ -531,6 +543,34 @@ export class ModelGateway {
     );
     if ('refusal' in resolved) {
       fail(response, route.wire, 400, 'invalid_request_error', resolved.refusal);
+      return;
+    }
+    // A model the hub answers itself (Gemini Desktop, its tools in text): Chat Completions only.
+    const stopped = new AbortController();
+    const answer = this.options.source.hubAnswer?.(
+      grant.workspace,
+      resolved.target,
+      body,
+      stopped.signal,
+    );
+    if (answer) {
+      if (route.upstream !== '/v1/chat/completions') {
+        fail(
+          response,
+          route.wire,
+          400,
+          'invalid_request_error',
+          `${resolved.target.modelLabel} serves only agents that speak OpenAI Chat Completions (Hermes, Goose, OpenCode …) for now; pick another model for this agent`,
+        );
+        return;
+      }
+      response.on('close', () => {
+        if (!response.writableEnded) stopped.abort();
+      });
+      await writeHubAnswer(response, answer, {
+        model: typeof body.model === 'string' ? body.model : resolved.target.model,
+        stream: body.stream === true,
+      });
       return;
     }
     // The cached list, unless it does not have the row yet (a provider added a moment ago).

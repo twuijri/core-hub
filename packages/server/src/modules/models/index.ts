@@ -174,6 +174,8 @@ export interface ModelsOverrides {
   cliproxyBin?: string | null;
   /** How Gemini Desktop reaches Google (DECISIONS §155): a test's scripted token service and server. */
   geminiDesktop?: { fetchImpl?: typeof fetch; opener?: SessionOpener };
+  /** Tests: `COREHUB_GEMINI_DESKTOP_TOOLS` without the environment. */
+  geminiDesktopTools?: boolean;
 }
 
 let pendingOverrides: ModelsOverrides | null = null;
@@ -235,6 +237,8 @@ export function modelGatewayFor(app: FastifyInstance): ModelGateway {
       target: (workspace, providerId, model) =>
         contextOf(app).gatewayTarget(workspace, providerId, model),
       modelKeys: (workspace) => contextOf(app).gatewayModelKeys(workspace),
+      hubAnswer: (workspace, target, body, signal) =>
+        contextOf(app).gatewayHubAnswer(workspace, target, body, signal),
       // A call that ended after its turn: added to that run's row (the ledger keeps one row per
       // run and model, so the per-call counts are summed rather than replacing the turn's).
       recordLate: (grant, runId, usage) => {
@@ -455,6 +459,8 @@ function contextOf(app: FastifyInstance): ModelsService {
     },
     ...(own.fetchImpl ? { fetchImpl: own.fetchImpl } : {}),
     ...(own.geminiDesktop ? { geminiDesktop: own.geminiDesktop } : {}),
+    geminiDesktopTools:
+      own.geminiDesktopTools ?? hub.config.modelGateway?.geminiDesktopTools ?? false,
     catalog: own.catalog ?? catalog,
     hostEnv,
     gatewayAvailable: () => modelGatewayFor(app).available(),

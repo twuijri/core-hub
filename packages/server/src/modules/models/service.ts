@@ -121,6 +121,8 @@ import {
   type PendingLogin,
 } from './gemini-desktop/index.js';
 import { defaultOpener, type SessionOpener } from './gemini-desktop/transport.js';
+import { agentTurn, type AgentTurnEvent } from './gemini-desktop/agent-turn.js';
+import type { ChatCompletionsBody } from './gemini-desktop/tools-in-text.js';
 import { t, type UiLanguage } from '../../i18n/index.js';
 
 /** The variable a Hermes profile's gateway token is in (DECISIONS §143). */
@@ -279,6 +281,11 @@ export interface ModelsServiceOptions {
   hermesGateway?: HermesGatewayPort;
   /** Tests: how the hub reaches Google for Gemini Desktop (DECISIONS §155). */
   geminiDesktop?: { fetchImpl?: typeof fetch; opener?: SessionOpener };
+  /**
+   * `COREHUB_GEMINI_DESKTOP_TOOLS`: Gemini Desktop serves every agent that speaks Chat
+   * Completions, its tools in text (an experiment on §155). Off unless set.
+   */
+  geminiDesktopTools?: boolean;
 }
 
 /** What the models module needs of the gateway to route Hermes through it (§143). */
@@ -3953,6 +3960,50 @@ export class ModelsService {
     }
   }
 
+  /**
+   * A Gemini Desktop row the hub answers agents itself, its tools in text (an experiment on §155,
+   * `COREHUB_GEMINI_DESKTOP_TOOLS`): on, signed in, never through CLIProxyAPI.
+   */
+  private hubAnswers(row: ProviderRow): boolean {
+    if (!this.options.geminiDesktopTools) return false;
+    if (row.archivedAt || !row.enabled || row.kind !== 'llm') return false;
+    return (
+      hubHeld(this.entryOf(row)?.gatewaySignIn) && row.authKind === 'oauth' && row.status === 'ok'
+    );
+  }
+
+  /** Whether agents reach a row through the gateway: by CLIProxyAPI, or answered by the hub. */
+  private agentServed(row: ProviderRow): boolean {
+    return this.gatewayRoute(row) !== null || this.hubAnswers(row);
+  }
+
+  /**
+   * An agent's Chat Completions call the hub answers itself (Gemini Desktop, tools in text), or
+   * null when CLIProxyAPI serves the target.
+   */
+  gatewayHubAnswer(
+    workspace: string,
+    target: { providerId: string; model: string },
+    body: ChatCompletionsBody,
+    signal?: AbortSignal,
+  ): AsyncIterable<AgentTurnEvent> | null {
+    const row = this.effectiveFor(workspace, target.providerId);
+    if (!row || !this.hubAnswers(row)) return null;
+    const log = this.options.log;
+    return agentTurn({
+      desktop: this.geminiDesktop,
+      row: accountScopeOf(row),
+      model: target.model,
+      body,
+      ...(signal ? { signal } : {}),
+      report: (report) =>
+        log.info(
+          { provider: row.slug, model: target.model, ...report },
+          'gemini-desktop: an agent call with its tools in text',
+        ),
+    });
+  }
+
   /** A row's chat models the gateway can hand CLIProxyAPI. */
   private gatewayModelsOf(row: ProviderRow): ModelRow[] {
     return this.store
@@ -3993,7 +4044,7 @@ export class ModelsService {
   private gatewayProviderIds(workspace: string): Set<string> {
     return new Set(
       this.effectiveRows(workspace, 'llm')
-        .filter((row) => this.gatewayRoute(row) !== null)
+        .filter((row) => this.agentServed(row))
         .map((row) => row.id),
     );
   }
@@ -4002,7 +4053,7 @@ export class ModelsService {
   gatewayModelKeys(workspace: string): string[] {
     const keys: string[] = [];
     for (const row of this.effectiveRows(workspace, 'llm')) {
-      if (!this.gatewayRoute(row)) continue;
+      if (!this.agentServed(row)) continue;
       for (const model of this.gatewayModelsOf(row)) {
         if (!model.visible || !this.passesVisibility(row, model.modelKey)) continue;
         keys.push(`${row.slug}/${model.modelKey}`);
@@ -4014,7 +4065,7 @@ export class ModelsService {
   /** Whether the gateway can serve a profile's provider row (the one it uses for that slug). */
   gatewayServes(workspace: string, providerId: string): boolean {
     const row = this.effectiveFor(workspace, providerId);
-    return !!row && this.gatewayRoute(row) !== null;
+    return !!row && this.agentServed(row);
   }
 
   /** A model row's context window, for the agents that must be told it (Claude Code, Codex). */
@@ -4034,10 +4085,10 @@ export class ModelsService {
     if (!provider || provider.archivedAt) {
       return { refusal: 'the chosen model belongs to a provider this profile does not have' };
     }
-    if (hubHeld(this.entryOf(provider)?.gatewaySignIn)) {
+    if (hubHeld(this.entryOf(provider)?.gatewaySignIn) && !this.hubAnswers(provider)) {
       return { refusal: geminiDesktopRefusal(provider.label) };
     }
-    if (!this.gatewayRoute(provider)) {
+    if (!this.agentServed(provider)) {
       return {
         refusal: `${provider.label} is not available to agents through Core Hub: it has no key or signed-in account the hub can use, or it is a subscription signed in to through Hermes (move it to Core Hub's gateway in Settings → Models)`,
       };
@@ -4617,7 +4668,7 @@ export class ModelsService {
     const entry = this.entryOf(row);
     if (hermesRouteOf(entry) === 'openai-compatible' && row.kind !== 'llm') return null;
     // Hermes on the hub's models (§143): a row the gateway serves is its block at the gateway.
-    if (this.hermesViaGateway() && this.gatewayRoute(row)) return this.gatewayBlockName(row);
+    if (this.hermesViaGateway() && this.agentServed(row)) return this.gatewayBlockName(row);
     return hermesProviderNameOf(row.slug, entry);
   }
 
@@ -4660,7 +4711,7 @@ export class ModelsService {
     if (!port) return [];
     const out: HermesProviderRoute[] = [];
     for (const row of rows) {
-      if (!row.enabled || row.kind !== 'llm' || !this.gatewayRoute(row)) continue;
+      if (!row.enabled || row.kind !== 'llm' || !this.agentServed(row)) continue;
       const wire = this.gatewayWire(row);
       const baseUrl = port.rowAddress(
         row.id,

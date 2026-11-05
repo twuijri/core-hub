@@ -80,6 +80,13 @@ export interface GeminiDesktopTurn {
   /** The hub conversation (`direct-<session>`); without one each turn folds its history. */
   conversation?: string | null;
   signal?: AbortSignal;
+  /**
+   * The answer as the conversation keeps it, when the caller sends it back otherwise than it was
+   * said (an agent's calls, rendered again by `tools-in-text.ts`). Default: as said.
+   */
+  recordAs?: (answer: string) => string;
+  /** Told how the turn reaches Gemini: only its new message, or the history folded in. */
+  onPlan?: (kind: 'continue' | 'branch' | 'new') => void;
 }
 
 interface AccountHealth {
@@ -422,6 +429,7 @@ export class GeminiDesktop {
     if (!sameThread && thread && thread.turns.length > 0 && plan.kind === 'new') {
       plan = { kind: 'new', folded: plan.folded || messages.length > 1, diverged: true };
     }
+    turn.onPlan?.(plan.kind);
     const mode = turn.model === GEMINI_DESKTOP_AUTO ? null : modeOf(account.modes, turn.model);
     const selection: TurnSelection = {
       category: mode?.category ?? 0,
@@ -541,7 +549,10 @@ export class GeminiDesktop {
             threads,
             key,
             account.id,
-            [...messages, { role: 'assistant', text: emitted }],
+            [
+              ...messages,
+              { role: 'assistant', text: turn.recordAs ? turn.recordAs(emitted) : emitted },
+            ],
             ids as ConversationIds,
             this.now(),
             attempt.startsNew,
@@ -579,7 +590,10 @@ export class GeminiDesktop {
           threads,
           key,
           account.id,
-          [...messages, { role: 'assistant', text: emitted }],
+          [
+            ...messages,
+            { role: 'assistant', text: turn.recordAs ? turn.recordAs(emitted) : emitted },
+          ],
           ids as ConversationIds,
           this.now(),
           attempt.startsNew,

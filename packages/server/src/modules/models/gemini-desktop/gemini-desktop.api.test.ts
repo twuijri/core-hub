@@ -39,7 +39,7 @@ function google(): typeof fetch {
   }) as unknown as typeof fetch;
 }
 
-async function hub(): Promise<{ h: Hub; fake: FakeNative }> {
+async function hub(tools = false): Promise<{ h: Hub; fake: FakeNative }> {
   const fake = await fakeNative();
   // The gateway is off and there is no CLIProxyAPI: Gemini Desktop needs neither.
   const made = await signedInHub(
@@ -49,6 +49,7 @@ async function hub(): Promise<{ h: Hub; fake: FakeNative }> {
         fetchImpl: (async () => new Response('{}', { status: 503 })) as unknown as typeof fetch,
         cliproxyBin: null,
         geminiDesktop: { fetchImpl: google(), opener: fake.opener },
+        ...(tools ? { geminiDesktopTools: true } : {}),
       },
     },
   );
@@ -236,6 +237,64 @@ describe('gemini desktop through the API', () => {
     ).toBe(false);
     const refusal = service.gatewayTarget(workspace, provider.id, 'gemini-desktop-3.1-pro');
     expect(refusal).toEqual({ refusal: expect.stringMatching(/text only.*direct agent/) });
+  });
+});
+
+describe('gemini desktop for every agent, its tools in text (COREHUB_GEMINI_DESKTOP_TOOLS)', () => {
+  it('is a model agents run through the gateway, answered by the hub and never by CLIProxyAPI', async () => {
+    const { h, fake } = await hub(true);
+    const created = await authed(h, h.token, {
+      method: 'POST',
+      url: '/api/v1/models/providers',
+      payload: { preset: 'gemini-desktop-subscription', label: '', kind: 'llm', scope: 'all' },
+    });
+    const provider = created.json() as { id: string };
+    const signIn = (
+      await authed(h, h.token, {
+        method: 'POST',
+        url: `/api/v1/models/providers/${provider.id}/sign-in`,
+      })
+    ).json() as SignIn;
+    const state = new URL(signIn.verification_url).searchParams.get('state');
+    await authed(h, h.token, {
+      method: 'POST',
+      url: `/api/v1/models/providers/${provider.id}/sign-in/${signIn.id}`,
+      payload: { code: `${REDIRECT_URI}?state=${state}&code=4/abc` },
+    });
+    await drainJobs(h.app);
+
+    const service = modelsServiceFor(h.app);
+    const workspace = await defaultWorkspace(h);
+    expect(service.gatewayUpstreams().some((upstream) => upstream.providerId === provider.id)).toBe(
+      false,
+    );
+    expect(service.gatewayModelKeys(workspace)).toContain(
+      'gemini-desktop-subscription/gemini-desktop-3.1-pro',
+    );
+    const target = service.gatewayTarget(workspace, provider.id, 'gemini-desktop-3.1-pro');
+    expect(target).toMatchObject({ providerId: provider.id, model: 'gemini-desktop-3.1-pro' });
+
+    const answer = service.gatewayHubAnswer(
+      workspace,
+      { providerId: provider.id, model: 'gemini-desktop-3.1-pro' },
+      {
+        messages: [
+          { role: 'system', content: 'You are Hermes.' },
+          { role: 'user', content: 'hello' },
+        ],
+        tools: [
+          {
+            type: 'function',
+            function: { name: 'terminal', parameters: { type: 'object' } },
+          },
+        ],
+      },
+    );
+    let text = '';
+    for await (const event of answer!) if (event.type === 'delta') text += event.text;
+    expect(text).toMatch(/^echo: /);
+    // The tools went with the system message, folded into the first Gemini message.
+    expect(fake.requests.at(-1)!.text).toContain('### terminal');
   });
 });
 

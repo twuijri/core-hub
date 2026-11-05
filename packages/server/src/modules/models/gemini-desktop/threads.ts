@@ -40,11 +40,12 @@ export const MAX_THREADS = 1_000;
 
 /**
  * A conversation key the hub can trust to name one hub conversation: the direct agent's session
- * reference, `direct-<session id>`. Anything else (an older session's shared reference) has no
- * continuity, and every turn folds its history as before.
+ * reference, `direct-<session id>`, or an agent conversation's start (`tools-<hash>`,
+ * `tools-in-text.ts`). Anything else (an older session's shared reference) has no continuity, and
+ * every turn folds its history as before.
  */
 export function usableKey(key: string | null | undefined): key is string {
-  return typeof key === 'string' && /^direct-[0-9a-z]{20,40}$/.test(key);
+  return typeof key === 'string' && /^(direct-[0-9a-z]{20,40}|tools-[0-9a-f]{32})$/.test(key);
 }
 
 export function historyHash(messages: readonly ThreadMessage[]): string {
