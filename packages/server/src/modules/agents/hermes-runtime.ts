@@ -45,6 +45,12 @@ import {
   type TuiChannel,
 } from './adapters/hermes-tui.js';
 import type { RuntimeState } from './adapters/types.js';
+import {
+  gatewayTuiChannel,
+  type GatewayBootstrap,
+  type GatewaySocket,
+} from './adapters/hermes-gateway-channel.js';
+import { bootstrapGateway } from './hermes-gateway-bootstrap.js';
 import { activeChannels } from './channels.js';
 import {
   ProfileGateways,
@@ -165,6 +171,14 @@ export interface HermesRuntimeOptions {
   hermesVersion?: (hermes: string, env: NodeJS.ProcessEnv) => Promise<string | null>;
   /** Asks the root gateway to rescan its profiles (tests replace the control socket). */
   rescanProfiles?: (root: string) => Promise<unknown>;
+  /**
+   * Injected in tests: the ticket for attaching to a profile's running gateway
+   * (`hermes-gateway-bootstrap.ts`). Absent with `tuiSpawn`: a scripted stdio gateway is the
+   * stdio path, so the bootstrap says `unsupported`.
+   */
+  gatewayBootstrap?: (profile: string | null) => Promise<GatewayBootstrap>;
+  /** Injected in tests: the WebSocket to an attached gateway. */
+  gatewaySocket?: (url: string, protocols: string[]) => GatewaySocket;
 }
 
 /** Hermes's profile id rule (`_PROFILE_ID_RE`); a hub slug always satisfies it. */
@@ -354,7 +368,9 @@ export class HermesRuntime {
       ...[...this.retiredTui]
         .filter((channel) => channel.alive)
         .map((channel) => ({ channel, state: 'retiring' })),
-    ];
+      // A channel attached to the gateway has no process of its own: its conversations run in
+      // the gateway listed below. A stdio one has none until its first conversation.
+    ].filter(({ channel }) => channel.pid != null);
     return [
       ...tuis.map(({ channel, state }) => ({
         kind: 'tui_gateway' as const,
@@ -587,7 +603,42 @@ export class HermesRuntime {
     // The interpreter of Hermes's own venv, beside its `hermes` entry point.
     const python = path.join(path.dirname(hermes), 'python');
     if (!existsSync(python)) return null;
-    this.tui = stdioTuiChannel({
+    // From Hermes v0.22.2 the stdio entry refuses a home its gateway owns, and the hub always
+    // runs that gateway: conversations attach to it (`hermes-gateway-channel.ts`). An older
+    // Hermes is still spoken to over stdio, through the same channel.
+    const bootstrap =
+      this.options.gatewayBootstrap ??
+      (this.options.tuiSpawn
+        ? async (): Promise<GatewayBootstrap> => ({ kind: 'unsupported' })
+        : (profile: string | null) =>
+            bootstrapGateway({
+              python,
+              env: this.cliEnv(),
+              home: profile ? path.join(home, 'profiles', profile) : home,
+            }));
+    this.tui = gatewayTuiChannel({
+      bootstrap,
+      fallback: () => this.stdioTui(python, home),
+      ...(this.options.tuiReadyTimeoutMs !== undefined
+        ? { readyTimeoutMs: this.options.tuiReadyTimeoutMs }
+        : {}),
+      ...(this.options.gatewaySocket ? { socket: this.options.gatewaySocket } : {}),
+      log: (message, detail) => this.log.warn({ detail }, message),
+    });
+    const channel = this.tui;
+    channel.onExit((reason) => {
+      if (this.tui === channel) this.tui = null;
+      this.retiredTui.delete(channel);
+      // The hub closing it is routine; the process going away on its own is not.
+      if (reason === TUI_STOPPED) this.log.info({ reason }, 'hermes: the TUI gateway stopped');
+      else this.log.warn({ reason }, 'hermes: the TUI gateway stopped');
+    });
+    return channel;
+  }
+
+  /** The standalone stdio gateway, for a Hermes that still serves a home beside its gateway. */
+  private stdioTui(python: string, home: string): TuiChannel {
+    return stdioTuiChannel({
       command: python,
       args: ['-m', 'tui_gateway.entry'],
       // The hub's own conversations run here: their calls to the hub's tools say so (§79).
@@ -606,15 +657,6 @@ export class HermesRuntime {
         else this.log.info(detail, 'hermes: the TUI gateway started');
       },
     });
-    const channel = this.tui;
-    channel.onExit((reason) => {
-      if (this.tui === channel) this.tui = null;
-      this.retiredTui.delete(channel);
-      // The hub closing it is routine; the process going away on its own is not.
-      if (reason === TUI_STOPPED) this.log.info({ reason }, 'hermes: the TUI gateway stopped');
-      else this.log.warn({ reason }, 'hermes: the TUI gateway stopped');
-    });
-    return channel;
   }
 
   /**

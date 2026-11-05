@@ -323,6 +323,9 @@ describe('Hermes runtime: the TUI gateway and changing keys', () => {
     // A new conversation gets a gateway started with the new key.
     const second = runtime.tuiChannel()!;
     expect(second).not.toBe(first);
+    // The channel starts its stdio gateway on first use (`hermes-gateway-channel.ts` decides
+    // then whether this Hermes is attached to or spoken to over stdio).
+    await HermesTuiSession.open(second, null);
     expect(started).toHaveLength(2);
     expect(started[1]!.env.OPENROUTER_API_KEY).toBe('new-key');
     expect(runtime.tuiChannel()).toBe(second);

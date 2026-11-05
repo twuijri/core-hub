@@ -91,6 +91,9 @@ describe('Hermes processes and the TUI log', () => {
     ]);
 
     const channel = runtime.tuiChannel()!;
+    // Started on first use (`hermes-gateway-channel.ts`), over stdio for this scripted Hermes.
+    void channel.request('session.list', {}).catch(() => undefined);
+    await new Promise((resolve) => setTimeout(resolve, 5));
     expect(channel.pid).toBe(777);
     expect(runtime.processes()).toEqual([
       { kind: 'tui_gateway', profile: null, pid: 777, state: 'running' },

@@ -76,3 +76,46 @@ Reading Hermes's MIT source again (never the owner's Studio fork, ADR 0004):
 - Tests: a unit fake that speaks the same frames, and a real-Hermes test that runs the image's
   `tui_gateway` with a scripted OpenAI-compatible model standing in for the provider, so
   `clarify` is exercised end to end without a key.
+
+## Amendment (2026-11-05): attach to the running gateway from Hermes v0.22.2
+Owner, 2026-11-05: «ايه صلح هرمز الحين». Every Hermes conversation on the 1.1.9 image (Hermes
+v0.22.5) failed on its first message: `the Hermes TUI gateway exited (code 1: refused: /data/hermes
+is owned by a running gateway; attach to it instead)`.
+
+What was observed in Hermes's MIT source (v0.22.2 to v0.22.6): the gateway reserves `gateway.lock`
+in every home it serves (`gateway/run_bootstrap.py` §_start_gateway_reserve_profiles), and the
+standalone stdio entry claims its launch home the same way before it serves
+(`tui_gateway/entry.py` §_claim_launch_home, 2026-10-06), because it opens `state.db` as a
+writer. "No product surface launches this standalone stdio server any more": Hermes's TUI and
+desktop app attach to the profile's gateway (`ui-tui/scripts/gateway_bootstrap.py`). Every
+real-Hermes test ran the stdio entry on a home no gateway served, so none saw the refusal.
+
+Decision 1 becomes:
+
+1. **Conversations attach to the gateway the hub already runs** when its Hermes refuses the stdio
+   entry beside it (`_claim_launch_home` present). The hub asks Hermes's own Python for an
+   `interactive` session ticket per profile (discovery, the control socket of the home that
+   serves it, `gateway_ws_target`) and opens `<api_origin>/api/ws` with `hermes-gateway-v1`
+   (`hermes-gateway-bootstrap.ts`). The frames are the same JSON-RPC; the session verbs are the
+   gateway's canonical ones — `session.create` with a `source` from its closed list (`gui`) and
+   `reasoning`, `prompt.submit` with a `submission_id`, `execution_generation` on interrupt and
+   steer, the model, effort, folder and compress as revision-fenced `session.mutate`,
+   `session.detach` for close, and approvals and questions as `approval.request` /
+   `clarify.request` events answered with `approval.respond` / `clarify.respond`
+   (`hermes-gateway-channel.ts`). A Hermes without the refusal keeps the stdio child exactly as
+   before, behind the same channel. The hub never starts a gateway for this: in its own home it
+   runs it (a conversation waits while it restarts), and a Hermes somebody else runs is theirs.
+
+Consequences:
+- No second Hermes process: conversations run inside the gateway, and a gateway restart (a
+  provider change, a crash) ends a turn in flight with the reason, as the stdio child's exit did.
+  The next message attaches again and continues the stored session.
+- The hub's tools see `X-Corehub-Origin: gateway` for the hub's own Hermes conversations too
+  (decision §79). A gateway's call is then one of its channel turns, or a hub run once that run
+  announced the call (`tool.started` of an `mcp__corehub__` tool); the hub waits a moment for the
+  announcement, and an announced run beside somebody else's live channel turn is refused as
+  ambiguous rather than guessed (`hub-tools/leases.ts` §decideGateway).
+- Tests: `hermes-gateway-channel.test.ts` (a scripted gateway socket) and
+  `hermes-gateway-attach.real.test.ts`, which runs the image's own `hermes gateway run` first,
+  shows the stdio entry refused, and carries a turn, an approval, a question and a resume
+  through the attached channel.
