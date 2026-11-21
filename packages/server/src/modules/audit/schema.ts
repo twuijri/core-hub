@@ -36,7 +36,16 @@ import {
 
 export const ACTOR_KINDS = ['user', 'agent', 'system', 'schedule', 'workflow', 'device'] as const;
 export const COST_SOURCES = ['provider', 'estimated', 'unknown'] as const;
-export const USAGE_ORIGINS = ['user', 'task', 'schedule', 'workflow', 'room', 'api'] as const;
+/** `external`: a person's own program through the gateway's external entrance (DECISIONS §156). */
+export const USAGE_ORIGINS = [
+  'user',
+  'task',
+  'schedule',
+  'workflow',
+  'room',
+  'api',
+  'external',
+] as const;
 export const JOB_STATUSES = [
   'queued',
   'running',

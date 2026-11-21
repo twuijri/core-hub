@@ -54,6 +54,7 @@ describe('config', () => {
       'COREHUB_CLIPROXY_BIN',
       'COREHUB_AGENT_MODEL_SOURCE',
       'COREHUB_LOCAL_MODELS',
+      'COREHUB_EXTERNAL_GATEWAY_RATE_LIMIT',
     ]);
     const picked = pickEnv({
       DATA_DIR: '/x',

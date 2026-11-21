@@ -112,6 +112,12 @@ export interface GatewayGrantRecord extends GatewayGrantInput {
   waited: Set<string>;
   /** Why each of `exhausted` was refused, for the answer to the agent's next call. */
   refusals: Map<string, GatewayQuotaFailure>;
+  /**
+   * A call through the external entrance (DECISIONS §156): a person's own program with their app
+   * token, one record per call, never stored here. Its usage goes to the ledger under the person
+   * with the source `external`.
+   */
+  external?: { tokenId: string };
 }
 
 export class GatewayTokens {
@@ -138,6 +144,33 @@ export class GatewayTokens {
     };
     this.records.set(token, record);
     return record;
+  }
+
+  /**
+   * The grant of one call through the external entrance (DECISIONS §156): no token of its own (the
+   * person's app token was checked by the hub's auth), no turn, nothing kept after the call.
+   */
+  external(input: { workspace: string; userId: string; tokenId: string }): GatewayGrantRecord {
+    return {
+      workspace: input.workspace,
+      agentId: 'external',
+      agentSlug: 'external',
+      sessionId: '',
+      userId: input.userId,
+      alive: () => true,
+      token: '',
+      expiresAt: Number.POSITIVE_INFINITY,
+      turn: null,
+      lastRunId: null,
+      selection: null,
+      totals: new Map(),
+      revoked: false,
+      exhausted: new Set(),
+      waited: new Set(),
+      refusals: new Map(),
+      redirect: null,
+      external: { tokenId: input.tokenId },
+    };
   }
 
   /**

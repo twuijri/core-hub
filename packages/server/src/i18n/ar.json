@@ -239,6 +239,11 @@
         "unreachable": "تعذّر على كور هب الوصول إلى {company}. تحقّق من اتصال المركز ثم حاول مرة أخرى.",
         "no_usage": "أجاب {company}، لكن بلا استهلاك يستطيع كور هب قراءته."
       }
+    },
+    "external_gateway": {
+      "gateway_off": "بوابة النماذج مطفأة في هذا المركز (COREHUB_MODEL_GATEWAY=off)، فلا يوجد ما يُفتح.",
+      "no_translator": "هذا المركز ليس فيه CLIProxyAPI، وبوابة النماذج تحتاجه.",
+      "usage_name": "تطبيقاتك الخاصة (عبر البوابة)"
     }
   },
   "knowledge": {
