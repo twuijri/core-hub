@@ -15340,6 +15340,318 @@ paths:
           $ref: '#/components/responses/AgentUnavailable'
         '429':
           $ref: '#/components/responses/RateLimited'
+  # ======================================================== the model gateway, from outside
+  /models/external-gateway:
+    get:
+      operationId: models.getExternalGateway
+      tags: [models]
+      summary: The model gateway's external entrance — on or off, and its addresses (admin)
+      description: |
+        The hub's model gateway (ADR 0029) served on the hub's own API port to a person's own
+        programs — DeepSeek Harness through the Core Hub plugin (ADR 0033 §3, DECISIONS §156). Off
+        until an admin switches it on. `available` is false where the hub has no gateway
+        (`COREHUB_MODEL_GATEWAY=off`, or no CLIProxyAPI), and `reason` says why. The addresses are
+        paths on this hub; a client puts its own origin in front.
+      x-scope: global
+      x-roles: [owner, admin]
+      x-rt-events: []
+      responses:
+        '200':
+          description: The entrance's settings.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ExternalGateway'
+              example:
+                enabled: false
+                available: true
+                reason: null
+                openai_base_path: /api/v1/gateway/openai/v1
+                anthropic_base_path: /api/v1/gateway/anthropic
+                rate_limit_per_minute: 60
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+    patch:
+      operationId: models.updateExternalGateway
+      tags: [models]
+      summary: Switch the model gateway's external entrance on or off (admin)
+      x-scope: global
+      x-roles: [owner, admin]
+      x-rt-events: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ExternalGatewayPatch'
+            example:
+              enabled: true
+      responses:
+        '200':
+          description: The entrance's settings as stored.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ExternalGateway'
+              example:
+                enabled: true
+                available: true
+                reason: null
+                openai_base_path: /api/v1/gateway/openai/v1
+                anthropic_base_path: /api/v1/gateway/anthropic
+                rate_limit_per_minute: 60
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+  /gateway/openai/v1/models:
+    get:
+      operationId: gateway.openaiListModels
+      tags: [models]
+      summary: The models a person may use through the external entrance, in OpenAI's list shape
+      description: |
+        The external entrance of the model gateway (DECISIONS §156): every model the caller may
+        pick in the hub — the shared providers and the profile-only providers of every profile
+        they may enter — that the gateway can serve, by its hub id (`Model.key`, `"<provider
+        slug>/<model>"`). Subscriptions signed in to through Hermes are never offered (ADR 0029).
+
+        **Who may call.** Only while an admin switched the entrance on
+        (`models.updateExternalGateway`). The bearer is the person's own app token (`hub_at_…`: a
+        paired device's or a personal one), never a person's web session, an agent's run token or
+        a session token of the loopback gateway. Each token may make
+        `ExternalGateway.rate_limit_per_minute` calls a minute.
+
+        **Errors are in the caller's own wire** (`x-error-envelope: wire`), not the hub's `{error,
+        code}`: these routes are for OpenAI and Anthropic clients.
+      security:
+        - {}
+        - bearer: []
+      x-scope: global
+      x-error-envelope: wire
+      x-rt-events: []
+      responses:
+        '200':
+          description: The models, as OpenAI lists them.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OpenAIModelList'
+              example:
+                object: list
+                data:
+                  - id: anthropic/claude-sonnet-4-5
+                    object: model
+                    created: 0
+                    owned_by: corehub
+        '401':
+          $ref: '#/components/responses/OpenAIWireUnauthorized'
+        '403':
+          $ref: '#/components/responses/OpenAIWireForbidden'
+        '429':
+          $ref: '#/components/responses/OpenAIWireRateLimited'
+  /gateway/openai/v1/chat/completions:
+    post:
+      operationId: gateway.openaiChatCompletions
+      tags: [models]
+      summary: OpenAI Chat Completions on a hub model, through the external entrance
+      description: |
+        As `gateway.openaiListModels` says who may call. `model` is a hub model id from that list;
+        the hub's model gateway translates the call to whatever the model's provider speaks (tools
+        and streaming included) with the provider's key, which never leaves the hub. `stream: true`
+        answers Server-Sent Events. The usage is recorded under the caller in the usage ledger
+        with the source `external`. A provider's own refusal passes through as it came.
+      security:
+        - {}
+        - bearer: []
+      x-scope: global
+      x-error-envelope: wire
+      x-rt-events: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GatewayCallRequest'
+            example:
+              model: anthropic/claude-sonnet-4-5
+              messages:
+                - role: user
+                  content: 'لخّص هذا الملف'
+              stream: false
+      responses:
+        '200':
+          description: The model's answer, in OpenAI's shape (or its event stream).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GatewayCallAnswer'
+              example:
+                id: chatcmpl-1
+                object: chat.completion
+                model: anthropic/claude-sonnet-4-5
+                choices:
+                  - index: 0
+                    message: { role: assistant, content: 'الملف يشرح خطوات التثبيت.' }
+                    finish_reason: stop
+                usage: { prompt_tokens: 12, completion_tokens: 9, total_tokens: 21 }
+            text/event-stream:
+              schema:
+                type: string
+        '400':
+          $ref: '#/components/responses/OpenAIWireBadRequest'
+        '401':
+          $ref: '#/components/responses/OpenAIWireUnauthorized'
+        '403':
+          $ref: '#/components/responses/OpenAIWireForbidden'
+        '429':
+          $ref: '#/components/responses/OpenAIWireRateLimited'
+        '503':
+          $ref: '#/components/responses/OpenAIWireUnavailable'
+  /gateway/openai/v1/responses:
+    post:
+      operationId: gateway.openaiResponses
+      tags: [models]
+      summary: OpenAI Responses on a hub model, through the external entrance
+      description: As `gateway.openaiChatCompletions`, on OpenAI's Responses wire.
+      security:
+        - {}
+        - bearer: []
+      x-scope: global
+      x-error-envelope: wire
+      x-rt-events: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GatewayCallRequest'
+            example:
+              model: anthropic/claude-sonnet-4-5
+              input: 'لخّص هذا الملف'
+              stream: false
+      responses:
+        '200':
+          description: The model's answer, in the Responses shape (or its event stream).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GatewayCallAnswer'
+              example:
+                id: resp_1
+                object: response
+                model: anthropic/claude-sonnet-4-5
+                output:
+                  - type: message
+                    role: assistant
+                    content: [{ type: output_text, text: 'الملف يشرح خطوات التثبيت.' }]
+                usage: { input_tokens: 12, output_tokens: 9, total_tokens: 21 }
+            text/event-stream:
+              schema:
+                type: string
+        '400':
+          $ref: '#/components/responses/OpenAIWireBadRequest'
+        '401':
+          $ref: '#/components/responses/OpenAIWireUnauthorized'
+        '403':
+          $ref: '#/components/responses/OpenAIWireForbidden'
+        '429':
+          $ref: '#/components/responses/OpenAIWireRateLimited'
+        '503':
+          $ref: '#/components/responses/OpenAIWireUnavailable'
+  /gateway/anthropic/v1/models:
+    get:
+      operationId: gateway.anthropicListModels
+      tags: [models]
+      summary: The models a person may use through the external entrance, in Anthropic's list shape
+      description: |
+        As `gateway.openaiListModels`, in the Anthropic Models API's shape. The key may also come
+        as `x-api-key`, as Anthropic clients send it.
+      security:
+        - {}
+        - bearer: []
+      x-scope: global
+      x-error-envelope: wire
+      x-rt-events: []
+      responses:
+        '200':
+          description: The models, as Anthropic lists them.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AnthropicModelList'
+              example:
+                data:
+                  - type: model
+                    id: anthropic/claude-sonnet-4-5
+                    display_name: anthropic/claude-sonnet-4-5
+                    created_at: '1970-01-01T00:00:00Z'
+                has_more: false
+                first_id: anthropic/claude-sonnet-4-5
+                last_id: anthropic/claude-sonnet-4-5
+        '401':
+          $ref: '#/components/responses/AnthropicWireUnauthorized'
+        '403':
+          $ref: '#/components/responses/AnthropicWireForbidden'
+        '429':
+          $ref: '#/components/responses/AnthropicWireRateLimited'
+  /gateway/anthropic/v1/messages:
+    post:
+      operationId: gateway.anthropicMessages
+      tags: [models]
+      summary: Anthropic Messages on a hub model, through the external entrance
+      description: |
+        As `gateway.openaiChatCompletions`, on Anthropic's Messages wire (`x-api-key` is accepted
+        in place of `Authorization: Bearer`).
+      security:
+        - {}
+        - bearer: []
+      x-scope: global
+      x-error-envelope: wire
+      x-rt-events: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GatewayCallRequest'
+            example:
+              model: anthropic/claude-sonnet-4-5
+              max_tokens: 1024
+              messages:
+                - role: user
+                  content: 'لخّص هذا الملف'
+      responses:
+        '200':
+          description: The model's answer, in Anthropic's shape (or its event stream).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GatewayCallAnswer'
+              example:
+                id: msg_1
+                type: message
+                role: assistant
+                model: anthropic/claude-sonnet-4-5
+                content: [{ type: text, text: 'الملف يشرح خطوات التثبيت.' }]
+                stop_reason: end_turn
+                usage: { input_tokens: 12, output_tokens: 9 }
+            text/event-stream:
+              schema:
+                type: string
+        '400':
+          $ref: '#/components/responses/AnthropicWireBadRequest'
+        '401':
+          $ref: '#/components/responses/AnthropicWireUnauthorized'
+        '403':
+          $ref: '#/components/responses/AnthropicWireForbidden'
+        '429':
+          $ref: '#/components/responses/AnthropicWireRateLimited'
+        '503':
+          $ref: '#/components/responses/AnthropicWireUnavailable'
   # ================================================================== devices
   /devices:
     get:
@@ -19440,6 +19752,116 @@ components:
       schema:
         type: string
   responses:
+    OpenAIWireBadRequest:
+      description: 'The request is not one the entrance can serve (no model, an unknown model, a body that is not JSON).'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/OpenAIWireError'
+          example:
+            error:
+              message: anthropic/unknown is not a model you may use through Core Hub
+              type: invalid_request_error
+              code: invalid_request_error
+    OpenAIWireUnauthorized:
+      description: 'No app token of a person, or one the hub refused.'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/OpenAIWireError'
+          example:
+            error:
+              message: a Core Hub app token is required; this one is unknown, expired or revoked
+              type: authentication_error
+              code: authentication_error
+    OpenAIWireForbidden:
+      description: 'The entrance is off on this hub, or the token may not use it.'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/OpenAIWireError'
+          example:
+            error:
+              message: the external entrance of the model gateway is off on this hub
+              type: permission_error
+              code: permission_error
+    OpenAIWireRateLimited:
+      description: 'This token made too many calls this minute; `retry-after` says when to try again.'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/OpenAIWireError'
+          example:
+            error:
+              message: too many calls through Core Hub this minute; try again in 12 seconds
+              type: rate_limit_error
+              code: rate_limit_error
+    OpenAIWireUnavailable:
+      description: 'The hub has no model gateway, or its translator could not start.'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/OpenAIWireError'
+          example:
+            error:
+              message: the model gateway is off on this hub
+              type: api_error
+              code: api_error
+    AnthropicWireBadRequest:
+      description: 'The request is not one the entrance can serve (no model, an unknown model, a body that is not JSON).'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/AnthropicWireError'
+          example:
+            type: error
+            error:
+              type: invalid_request_error
+              message: anthropic/unknown is not a model you may use through Core Hub
+    AnthropicWireUnauthorized:
+      description: 'No app token of a person, or one the hub refused.'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/AnthropicWireError'
+          example:
+            type: error
+            error:
+              type: authentication_error
+              message: a Core Hub app token is required; this one is unknown, expired or revoked
+    AnthropicWireForbidden:
+      description: 'The entrance is off on this hub, or the token may not use it.'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/AnthropicWireError'
+          example:
+            type: error
+            error:
+              type: permission_error
+              message: the external entrance of the model gateway is off on this hub
+    AnthropicWireRateLimited:
+      description: 'This token made too many calls this minute; `retry-after` says when to try again.'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/AnthropicWireError'
+          example:
+            type: error
+            error:
+              type: rate_limit_error
+              message: too many calls through Core Hub this minute; try again in 12 seconds
+    AnthropicWireUnavailable:
+      description: 'The hub has no model gateway, or its translator could not start.'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/AnthropicWireError'
+          example:
+            type: error
+            error:
+              type: api_error
+              message: the model gateway is off on this hub
     UnsupportedMediaType:
       description: The body or the file is not of a kind this operation takes (`unsupported_media_type`).
       content:
@@ -28878,10 +29300,148 @@ components:
         An audio format a client asks speech in: `mp3`, `aac` (in an MP4/M4A container, what
         iOS and Android play natively), `wav`, or `ogg` (Ogg Opus).
       enum: [mp3, aac, wav, ogg]
+    # ---------------------------------------------------- the model gateway, from outside
+    ExternalGateway:
+      type: object
+      description: The model gateway's external entrance (DECISIONS §156).
+      required:
+        [enabled, available, reason, openai_base_path, anthropic_base_path, rate_limit_per_minute]
+      properties:
+        enabled:
+          type: boolean
+          description: Switched on by an admin. Off by default.
+        available:
+          type: boolean
+          description: Whether this hub has a model gateway to open at all.
+        reason:
+          type: [string, 'null']
+          description: Why it is not available, in the request's language; null when it is.
+        openai_base_path:
+          type: string
+          description: The OpenAI base address (`…/v1`) on this hub, a path; the caller adds the origin.
+        anthropic_base_path:
+          type: string
+          description: The Anthropic base address on this hub, a path; the client adds `/v1/messages`.
+        rate_limit_per_minute:
+          type: integer
+          minimum: 1
+          description: Calls a minute one token may make (`COREHUB_EXTERNAL_GATEWAY_RATE_LIMIT`, 60).
+    ExternalGatewayPatch:
+      type: object
+      required: [enabled]
+      properties:
+        enabled:
+          type: boolean
+    GatewayCallRequest:
+      type: object
+      description: |
+        A request in the caller's own wire (OpenAI Chat Completions or Responses, Anthropic
+        Messages), passed to the model gateway as it came. `model` is a hub model id
+        (`gateway.openaiListModels`); a request without one is refused in the wire's envelope.
+      properties:
+        model:
+          type: string
+        stream:
+          type: boolean
+      additionalProperties: true
+    GatewayCallAnswer:
+      type: object
+      description: The model's answer in the caller's own wire, as the provider gave it.
+      additionalProperties: true
+    OpenAIModelList:
+      type: object
+      required: [object, data]
+      properties:
+        object:
+          type: string
+          enum: [list]
+        data:
+          type: array
+          items:
+            type: object
+            required: [id, object, created, owned_by]
+            properties:
+              id:
+                type: string
+              object:
+                type: string
+              created:
+                type: integer
+              owned_by:
+                type: string
+    AnthropicModelList:
+      type: object
+      required: [data, has_more, first_id, last_id]
+      properties:
+        data:
+          type: array
+          items:
+            type: object
+            required: [type, id, display_name, created_at]
+            properties:
+              type:
+                type: string
+              id:
+                type: string
+              display_name:
+                type: string
+              created_at:
+                type: string
+        has_more:
+          type: boolean
+        first_id:
+          type: [string, 'null']
+        last_id:
+          type: [string, 'null']
+    OpenAIWireError:
+      type: object
+      description: OpenAI's error envelope, which OpenAI clients read (DECISIONS §156).
+      required: [error]
+      properties:
+        error:
+          type: object
+          required: [message, type, code]
+          properties:
+            message:
+              type: string
+            type:
+              type: string
+            code:
+              type: [string, 'null']
+      example:
+        error:
+          message: the external entrance of the model gateway is off on this hub
+          type: permission_error
+          code: permission_error
+    AnthropicWireError:
+      type: object
+      description: Anthropic's error envelope, which Anthropic clients read (DECISIONS §156).
+      required: [type, error]
+      properties:
+        type:
+          type: string
+          enum: [error]
+        error:
+          type: object
+          required: [type, message]
+          properties:
+            type:
+              type: string
+            message:
+              type: string
+      example:
+        type: error
+        error:
+          type: permission_error
+          message: the external entrance of the model gateway is off on this hub
     # ---------------------------------------------------------------- devices
     DevicePlatform:
       type: string
-      enum: [android, ios, web, macos, windows, linux]
+      description: |
+        Where the device runs. `dsh` is the Core Hub plugin of DeepSeek Harness on a computer (ADR
+        0033, DECISIONS §157): a computer that links through the plugin rather than the Core Hub app.
+        Older clients show an unknown value as a computer.
+      enum: [android, ios, web, macos, windows, linux, dsh]
     DeviceKind:
       type: string
       enum: [phone, tablet, computer, browser]
@@ -28901,6 +29461,7 @@ components:
           calendar,
           reminders,
           health,
+          screen_task,
         ]
     DeviceCapability:
       type: object
@@ -29421,7 +29982,11 @@ components:
                 `open_path`, `open_url` or `send_file` (the device uploads the file with the
                 resumable upload in this profile). `apps` takes `{op: call, program, tool,
                 arguments}` (one tool call of a program the device shares) or `{op: status,
-                call_id}` (how a long call stands).
+                call_id}` (how a long call stands). `screen_task` (a computer that does a task on
+                its own screen, ADR 0033 §5, DECISIONS §157) takes `{task, app?, time_budget_s?,
+                model?}` — the task in words, an app to stay in, a time budget in seconds and a hub
+                model id for the computer's local session — or `{op: status, call_id}` (how a
+                running task stands).
               additionalProperties: true
             status:
               $ref: '#/components/schemas/DeviceRequestStatus'
@@ -29435,7 +30000,10 @@ components:
                 `send_file` `{attachment_id, name, mime, size_bytes, kind}`. `apps` returns
                 `{state: done, content, is_error}`, or `{state: running, call_id, progress}` when
                 the call is still going after the device's soft deadline (the program keeps
-                running; ask again with `op: status`).
+                running; ask again with `op: status`). `screen_task` returns `{state: done | running
+                | failed, outcome?, screenshot_attachment_id?, call_id?, progress?}`: `running`
+                carries `call_id`; the screenshot is an attachment the device uploaded with the
+                resumable upload in this profile, which the hub puts on the conversation.
               additionalProperties: true
             error:
               oneOf:
@@ -29474,8 +30042,8 @@ components:
           maximum: 300000
           description: |
             How long the device has to answer. Absent, it depends on the capability (DECISIONS
-            §89): `files` 60 s and `apps` 120 s (the person may be asked first), everything else
-            30 s.
+            §89): `files` 60 s, `apps` 120 s and `screen_task` 180 s (the person may be asked
+            first; a long one answers `running` before), everything else 30 s.
     DeviceRequestResponse:
       type: object
       required: [status]
