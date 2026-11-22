@@ -5,7 +5,8 @@
  * dialog (accounts, usage windows, "check now", errors, turn off, renew, sign out), the account's
  * models reaching the catalogue and the gateway, and "move this sign-in to the gateway".
  */
-import { existsSync, readFileSync, readdirSync } from 'node:fs';
+import { existsSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { eq } from 'drizzle-orm';
@@ -32,6 +33,7 @@ afterEach(async () => {
   for (const step of cleanup.splice(0).reverse()) await step();
   delete process.env.FAKE_CLIPROXY_LOGIN;
   delete process.env.FAKE_CLIPROXY_ERRORS;
+  delete process.env.FAKE_CLIPROXY_CATALOGUE;
 });
 
 async function hub(gateway: 'on' | 'off' = 'on'): Promise<Hub> {
@@ -259,6 +261,58 @@ describe('subscriptions through the gateway', () => {
       payload: { code: 'anything' },
     });
     expect(refused.statusCode).toBe(409);
+  });
+
+  it('follows the model list CLIProxyAPI serves once its catalogue is refreshed', async () => {
+    // Owner, 2026-11-22: "the real proxy gives me 17 ChatGPT models, the hub shows 13". The list
+    // was read at sign-in only; CLIProxyAPI refreshes its catalogue at start and every 3 hours.
+    const dir = mkdtempSync(path.join(tmpdir(), 'corehub-catalogue-'));
+    cleanup.push(() => rmSync(dir, { recursive: true, force: true }));
+    const file = path.join(dir, 'catalogue.json');
+    process.env.FAKE_CLIPROXY_CATALOGUE = file;
+    const h = await hub();
+    const service = modelsServiceFor(h.app);
+    const provider = await add(h, 'chatgpt-subscription');
+    expect((await settle(h, provider.id, await start(h, provider.id))).status).toBe('approved');
+    await drainJobs(h.app);
+    const listed = async () => {
+      const list = await authed(h, h.token, { method: 'GET', url: '/api/v1/models/providers' });
+      const row = (list.json() as { items: { id: string; models: { model: string }[] }[] }).items;
+      return row
+        .find((item) => item.id === provider.id)!
+        .models.map((model) => model.model)
+        .sort();
+    };
+    expect(await listed()).toEqual(['gpt-5.5', 'gpt-5.5-codex']);
+
+    writeFileSync(
+      file,
+      JSON.stringify({
+        codex: [
+          { id: 'gpt-6.2-sol', context_length: 400000 },
+          { id: 'gpt-5.6-terra', context_length: 400000 },
+          { id: 'gpt-5.5-codex', context_length: 400000 },
+        ],
+      }),
+    );
+    // A translator that has just started may still serve the catalogue it shipped with.
+    expect(await service.followSubscriptionCatalogues({ userId: h.userId })).toEqual([]);
+    expect(await listed()).toEqual(['gpt-5.5', 'gpt-5.5-codex']);
+    // Once it has run long enough, the row follows: new models in, a model gone archived.
+    expect(await service.followSubscriptionCatalogues({ userId: h.userId }, 0)).toEqual([
+      provider.id,
+    ]);
+    expect(await listed()).toEqual(['gpt-5.5-codex', 'gpt-5.6-terra', 'gpt-6.2-sol']);
+    // Nothing changed since: nothing is written.
+    expect(await service.followSubscriptionCatalogues({ userId: h.userId }, 0)).toEqual([]);
+    // "Refresh models" reads the same list.
+    const refreshed = await authed(h, h.token, {
+      method: 'POST',
+      url: `/api/v1/models/providers/${provider.id}/refresh`,
+    });
+    expect(refreshed.statusCode, refreshed.body).toBe(202);
+    await drainJobs(h.app);
+    expect(await listed()).toEqual(['gpt-5.5-codex', 'gpt-5.6-terra', 'gpt-6.2-sol']);
   });
 
   it('signs in to ChatGPT by the code CLIProxyAPI prints, and the dialog shows usage, checks, errors and actions', async () => {

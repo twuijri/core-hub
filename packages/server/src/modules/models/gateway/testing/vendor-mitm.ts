@@ -51,6 +51,8 @@ const HOSTS = [
   'api.anthropic.com',
   'api.github.com',
   'github.com',
+  // CLIProxyAPI's published model catalogue, fetched at start and every 3 hours.
+  'raw.githubusercontent.com',
 ];
 
 /** A throwaway authority and one certificate for every stand-in host. */

@@ -4835,6 +4835,18 @@ does them, proposed here — owner to confirm:
   (its per-request lines at debug), a change of providers served by a new process while the old one
   finishes its streams. Known: it still asks GitHub for the Antigravity client version every three
   hours, which the hub cannot switch off.
+  **Amended 2026-11-22** (owner: «the real proxy gives me 17 ChatGPT models, the hub shows 13»): the
+  running translator no longer gets `-local-model`. With it CLIProxyAPI kept the catalogue its
+  release was built with, so a subscription signed in through it (§143) listed 8.0.4's models for
+  ever — `gpt-5.5` included, the newer ones missing. Now it fetches its published catalogue
+  (`router-for-me/models`, on GitHub, `models.router-for.me` as fallback; public JSON, no account, no
+  key) at start and every three hours, and keeps the shipped one when that fails (an offline hub).
+  The hub follows it: with the minute's subscription read, a subscription row whose served model ids
+  differ from its catalogue gets the new list (models gone are archived, as "Refresh models" does),
+  never in the translator's first two minutes (its startup fetch may not have landed) and never
+  starting it to find out (`followSubscriptionCatalogues`). ChatGPT's short-code sign-in child keeps
+  `-local-model`: it serves no model. Key rows are unchanged: their models are the ones the file
+  names.
 - **Proven for real** (`agents/model-gateway.real.test.ts`, a CI job required through `gate`):
   CLIProxyAPI 8.0.4 + the hub's gateway + the real `claude-agent-acp` 0.84.0 and `codex-acp` 2.0.0,
   against a provider that speaks only Chat Completions: Claude Code writes a file with its `Write` tool
@@ -5022,7 +5034,8 @@ list and "check now" on the vendors' undocumented usage addresses; §144 replace
   reached cools until its reset while the others answer (the global `disable-cooling: true` of
   §142 stays for key rows). A signed-in row is an upstream of kind `subscription`: no group in
   CLIProxyAPI's file, so signing in starts no new process. Its models are what CLIProxyAPI serves
-  under `h<row>/` (`GET /v1/models`, its own catalogue for the vendor, with context windows). One
+  under `h<row>/` (`GET /v1/models`, its own catalogue for the vendor, with context windows; kept
+  current since 2026-11-22, §140's amendment). One
   account can belong to one row at a time: the same e-mail signed in under a second row moves to
   it.
 - **The dialog** (`ProviderAccounts`): per account its status (`active`, `cooling`, `error`,

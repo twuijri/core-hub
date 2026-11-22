@@ -319,6 +319,11 @@ interface SignInRecord {
 
 /** How long a finished or abandoned sign-in stays readable after its code ran out. */
 const SIGN_IN_KEEP_MS = 15 * 60_000;
+/**
+ * How long CLIProxyAPI must have run before its model list is followed: it fetches its published
+ * catalogue at start (two addresses, 30 s each), and until then serves the one it shipped with.
+ */
+export const SUBSCRIPTION_CATALOGUE_SETTLE_MS = 2 * 60_000;
 
 /** Where a provider row is stored: the shared scope, or one profile's own (decision §37). */
 interface ProviderOwner {
@@ -1550,32 +1555,7 @@ export class ModelsService {
           current.kind === 'llm'
             ? result.models
             : result.models.filter((model) => model.kind === current.kind);
-        const report = this.store.replaceCatalogue(
-          { workspace: row.workspace, ownerId: actor.userId },
-          row.id,
-          listed,
-        );
-        // Where the list came from (decision §83): a key provider's adapter always asks the
-        // provider itself; a signed-in provider says whether it could.
-        const origin = result as { source?: unknown; reason?: unknown };
-        const source: 'provider' | 'fallback' =
-          origin.source === 'fallback' ? 'fallback' : 'provider';
-        const fallbackReason = typeof origin.reason === 'string' ? origin.reason : null;
-        this.db
-          .update(providers)
-          .set({
-            catalogueStatus: 'ready',
-            catalogueError: null,
-            catalogueRefreshedAt: finishedAt,
-            capabilities: {
-              ...this.loadProvider(scope, row.id).capabilities,
-              catalogueSource: source,
-              catalogueFallbackReason: source === 'fallback' ? fallbackReason : null,
-            },
-            updatedAt: finishedAt,
-          })
-          .where(eq(providers.id, row.id))
-          .run();
+        const report = this.storeCatalogue(current, actor, listed, result, finishedAt);
         handle.progress(100, `${listed.length} models`);
         // The models just arrived. If this workspace still has no chat default, the
         // provider that was added a moment ago becomes it — otherwise the owner adds a
@@ -1586,6 +1566,41 @@ export class ModelsService {
         return { ...report, models: listed.length };
       },
     );
+  }
+
+  /** A model list that arrived, kept as the row's catalogue (`replaceCatalogue`), marked ready. */
+  private storeCatalogue(
+    row: ProviderRow,
+    actor: Actor,
+    listed: DiscoveredModel[],
+    result: { source?: unknown; reason?: unknown },
+    at: Date,
+  ): { added: number; updated: number; archived: number } {
+    const report = this.store.replaceCatalogue(
+      { workspace: row.workspace, ownerId: actor.userId },
+      row.id,
+      listed,
+    );
+    // Where the list came from (decision §83): a key provider's adapter always asks the
+    // provider itself; a signed-in provider says whether it could.
+    const source: 'provider' | 'fallback' = result.source === 'fallback' ? 'fallback' : 'provider';
+    const fallbackReason = typeof result.reason === 'string' ? result.reason : null;
+    this.db
+      .update(providers)
+      .set({
+        catalogueStatus: 'ready',
+        catalogueError: null,
+        catalogueRefreshedAt: at,
+        capabilities: {
+          ...(this.store.providerById(row.id) ?? row).capabilities,
+          catalogueSource: source,
+          catalogueFallbackReason: source === 'fallback' ? fallbackReason : null,
+        },
+        updatedAt: at,
+      })
+      .where(eq(providers.id, row.id))
+      .run();
+    return report;
   }
 
   /** Every provider of one credential family gets its catalogue refreshed. */
@@ -2447,6 +2462,56 @@ export class ModelsService {
       this.options.log.warn({ err: error }, 'models: could not bring the subscriptions up to date');
       return false;
     }
+  }
+
+  /**
+   * Keeps each gateway subscription's models in step with what CLIProxyAPI serves its accounts
+   * (owner, 2026-11-22: "the real proxy gives me 17 ChatGPT models, the hub shows 13"). CLIProxyAPI
+   * refreshes its catalogue at start and every three hours; the row's list used to be read once, at
+   * sign-in, and again only on "Refresh models". Called with the minute's subscription read: a row
+   * whose served model ids differ from its catalogue gets the new list (models gone are archived,
+   * as a refresh does). It never starts CLIProxyAPI, never acts in its first minutes (its list may
+   * still be the shipped one), and leaves a row alone while a refresh runs or nothing is served.
+   * Returns the ids of the rows it changed. Never throws.
+   */
+  async followSubscriptionCatalogues(
+    actor: Actor,
+    settleMs: number = SUBSCRIPTION_CATALOGUE_SETTLE_MS,
+  ): Promise<string[]> {
+    const changed: string[] = [];
+    try {
+      const backend = this.options.subscriptions?.() ?? null;
+      if (!backend || backend.unavailable()) return changed;
+      const running = backend.runningForMs?.() ?? null;
+      if (running === null || running < settleMs) return changed;
+      for (const row of this.store.everyProviderRow()) {
+        const signIn = this.entryOf(row)?.gatewaySignIn;
+        if (!signIn || hubHeld(signIn)) continue;
+        if (row.archivedAt || !row.enabled || row.status !== 'ok') continue;
+        if (row.catalogueStatus === 'loading') continue;
+        const result = await this.subscriptionModels(row);
+        if (!result.supported) continue;
+        const held = new Set(
+          this.store
+            .modelsOf(row.id)
+            .filter((model) => model.source !== 'manual')
+            .map((model) => model.modelKey),
+        );
+        const served = new Set(result.models.map((model) => model.key));
+        if (held.size === served.size && [...served].every((key) => held.has(key))) continue;
+        const fresh = this.store.providerById(row.id);
+        if (!fresh || fresh.archivedAt || fresh.catalogueStatus === 'loading') continue;
+        const report = this.storeCatalogue(fresh, actor, result.models, result, this.now());
+        this.options.log.info(
+          { provider: row.id, slug: row.slug, models: served.size, ...report },
+          'models: a subscription follows the model list CLIProxyAPI serves now',
+        );
+        changed.push(row.id);
+      }
+    } catch (error) {
+      this.options.log.warn({ err: error }, 'models: could not follow the subscriptions’ models');
+    }
+    return changed;
   }
 
   async updateProviderAccount(
