@@ -17,6 +17,7 @@ import path from 'node:path';
 import { io, type Socket } from 'socket.io-client';
 import { HubApiError, type HubClient } from '@corehub/contracts';
 import { PROGRAM_SOURCE, SCREEN_CAPABILITY } from './names.js';
+import { LinkRefused } from './hub.js';
 
 export type LinkStatus = 'connecting' | 'connected' | 'offline' | 'refused' | 'stopped';
 
@@ -266,13 +267,29 @@ export class DeviceLink {
           error: { code: refusal.code, message: refusal.message.slice(0, 1000) },
         };
       }
-      await this.options.client
-        .raw('post', '/device-requests/{request_id}/respond', {
+      const send = (payload: Record<string, unknown>) =>
+        this.options.client.raw('post', '/device-requests/{request_id}/respond', {
           params: { request_id: request.id },
-          body,
+          body: payload,
           headers: { 'X-Hub-Profile': request.profile },
-        })
-        .catch(() => undefined);
+        });
+      try {
+        await send(body);
+      } catch (error) {
+        // An answer the hub will not take (a shape it does not know) must not leave the agent
+        // waiting for the request's whole wait: say why instead (owner's Mac, 2026-11-22).
+        if (body.status === 'fulfilled' && !(error instanceof LinkRefused)) {
+          const why = error instanceof Error ? error.message : String(error);
+          await send({
+            status: 'failed',
+            result: null,
+            error: {
+              code: 'failed',
+              message: `The hub did not accept this computer's answer: ${why}`.slice(0, 1000),
+            },
+          }).catch(() => undefined);
+        }
+      }
     } finally {
       this.inFlight.delete(request.id);
     }

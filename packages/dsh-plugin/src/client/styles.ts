@@ -20,6 +20,8 @@ export const CSS = `
 .corehub-fact-value { flex: 1 1 200px; min-width: 0; font: var(--dsw-font-xs-13); color: var(--dsw-alias-label-primary); overflow-wrap: anywhere; display: inline-flex; align-items: center; gap: 6px; }
 .corehub-mono { font-family: var(--dsw-font-markdown-code-font-family); unicode-bidi: isolate; }
 .corehub-switch-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 36px; }
+
+.corehub-switch { display: inline-flex; flex: 0 0 auto; }
 .corehub-switch-row > span { font: var(--dsw-font-xs-13); color: var(--dsw-alias-label-primary); }
 .corehub-result { display: flex; align-items: flex-start; gap: 8px; font: var(--dsw-font-xs-13); white-space: pre-wrap; unicode-bidi: plaintext; }
 .corehub-result[data-ok='true'] { color: var(--dsw-alias-label-secondary); }

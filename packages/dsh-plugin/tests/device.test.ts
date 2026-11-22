@@ -52,7 +52,7 @@ function answers(screen: Partial<ScreenService> = {}, consent: 'once' | 'deny' =
     state: 'done' as const,
     outcome: 'Made the note.',
     screenshot_attachment_id: 'AT1',
-    progress: { steps: 3, message: null },
+    progress: '3 steps',
   }));
   const answer = deviceAnswers({
     folders: () => ({

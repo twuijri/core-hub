@@ -85,8 +85,21 @@ function switchRow(
     'div',
     { className: 'corehub-switch-row' },
     h('span', { dir: 'auto' }, label),
-    h(Switch, { label, checked, onChange, disabled }),
+    ltrSwitch({ label, checked, onChange, disabled }),
   );
+}
+
+/**
+ * The harness's switch moves its knob with a left-to-right offset, so on an Arabic page it slid
+ * off the track (owner's Mac, 2026-11-22). Kept left-to-right, as a switch reads in every language.
+ */
+function ltrSwitch(props: {
+  label: string;
+  checked: boolean;
+  onChange: (v: boolean) => void;
+  disabled?: boolean;
+}) {
+  return h('span', { dir: 'ltr', className: 'corehub-switch' }, h(Switch, props));
 }
 
 /** A selector like the harness's own settings pages: a field-shaped trigger and its menu. */
@@ -536,7 +549,7 @@ function CoreHubSettings({ api }: { api: PanelApi }): ReactNode {
               { key: sv.name, className: 'corehub-card-row' },
               h('span', { className: 'corehub-grow', dir: 'ltr' }, sv.name),
               h(Tag, { tone: 'neutral' }, sv.state),
-              h(Switch, {
+              ltrSwitch({
                 label: `${t('programs.on')}: ${sv.name}`,
                 checked: sv.profiles.length > 0,
                 disabled: !link || !!busy,

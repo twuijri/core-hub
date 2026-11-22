@@ -250,10 +250,10 @@ export type ScreenOutcome =
       state: 'done';
       outcome: string;
       screenshot_attachment_id: string | null;
-      progress: { steps: number; message: string | null };
+      progress: string;
     }
-  | { state: 'failed'; outcome: string; progress: { steps: number; message: string | null } }
-  | { state: 'running'; call_id: string; progress: { steps: number; message: string | null } };
+  | { state: 'failed'; outcome: string; progress: string }
+  | { state: 'running'; call_id: string; progress: string };
 
 export interface ScreenDeps {
   /** The hub link (for the provider row) and the token the child authenticates with. */
@@ -292,7 +292,7 @@ export class ScreenRunner {
       return {
         state: 'failed',
         outcome: 'Another screen task is still running on this computer.',
-        progress: { steps: 0, message: null },
+        progress: '0 steps',
       };
     const link = this.deps.hub();
     if (!link) return failed('This computer is not linked to a hub.');
@@ -453,8 +453,15 @@ export class ScreenRunner {
   }
 }
 
-function progressOf(fold: ScreenFold): { steps: number; message: string | null } {
-  return { steps: fold.steps, message: fold.lastText?.slice(0, 500) ?? null };
+/**
+ * How far the session got, in words: the hub takes `progress` as text only (DECISIONS §157), and
+ * refused the object this used to send, so a finished task never reached it (owner's Mac,
+ * 2026-11-22: three tasks ended in `device_timeout` while the harness had done them).
+ */
+function progressOf(fold: ScreenFold): string {
+  const steps = `${fold.steps} ${fold.steps === 1 ? 'step' : 'steps'}`;
+  const last = fold.lastText?.trim().slice(0, 500);
+  return last ? `${steps} · ${last}` : steps;
 }
 
 function failed(outcome: string, fold: ScreenFold = emptyFold()): ScreenOutcome {
