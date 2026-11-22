@@ -12,7 +12,7 @@ import { deviceAnswers, type Activity } from './device-answers.js';
 import { DeviceLink, type LinkStatus } from './device-link.js';
 import { cleanFolders, systemOpener, type FolderConfig } from './folders.js';
 import { AgentBridge, type AskResult } from './hermes.js';
-import type { ConfigEditor, McpServerManager, ToolRegistry, UserQuestions } from './host.js';
+import type { ConfigEditor, McpServerManager, ToolRegistry } from './host.js';
 import {
   HubConnection,
   LinkRefused,
@@ -26,7 +26,6 @@ import {
   COMMAND_NAME,
   HARNESS_ROWS,
   PLUGIN_NAME,
-  PRODUCT_NAME,
   SCREEN_CAPABILITY,
 } from './names.js';
 import { parsePairing } from './pairing.js';
@@ -150,7 +149,6 @@ export class CoreHub {
   tools: ToolRegistry | null = null;
   mcpManager: McpServerManager | null = null;
   configEditor: ConfigEditor | null = null;
-  userQuestions: UserQuestions | null = null;
 
   constructor(private readonly options: CoreOptions) {
     this.store = new PluginStore(options.dataDir);
@@ -653,44 +651,14 @@ export class CoreHub {
 
   // ------------------------------------------------------------------ harness glue
 
+  /**
+   * The consent for a request from the hub. Always the system's own dialog: the harness's
+   * question prompt answers only questions asked inside one of its chats, and a hub request has
+   * none, so a question put there waited, unseen, until the hub gave up (owner's Mac,
+   * 2026-11-22: two screen tasks ended in `device_timeout` with no prompt shown).
+   */
   private asker(): Asker {
-    const native = systemAsker();
-    return async (question) => {
-      const questions = this.userQuestions;
-      if (questions) {
-        try {
-          const always = question.labels.session ?? undefined;
-          const answer = await questions.ask({
-            questions: [
-              {
-                id: 'consent',
-                header: PRODUCT_NAME,
-                question: question.message,
-                options: [
-                  { label: question.labels.once },
-                  ...(always ? [{ label: always }] : []),
-                  { label: question.labels.deny },
-                ],
-                intent: {
-                  kind: 'approval',
-                  approve: question.labels.once,
-                  reject: question.labels.deny,
-                  ...(always ? { always } : {}),
-                  subject: { name: PRODUCT_NAME },
-                },
-              },
-            ],
-          });
-          const picked = answer.answers[0]?.selected[0];
-          if (picked === question.labels.once) return 'once';
-          if (always && picked === always) return 'session';
-          return 'deny';
-        } catch {
-          // No answerer for a question outside a chat: the OS dialog asks instead.
-        }
-      }
-      return native(question);
-    };
+    return systemAsker();
   }
 
   private harnessMcp(): HarnessMcp {

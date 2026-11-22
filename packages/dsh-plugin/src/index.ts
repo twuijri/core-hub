@@ -221,12 +221,6 @@ export function apply(ctx: HostContext & { configEditor: ConfigEditor }, config:
         };
       });
   });
-  ctx.inject(['userQuestions'], (c) => {
-    core.userQuestions = c.userQuestions ?? null;
-    c.effect(() => () => {
-      core.userQuestions = null;
-    });
-  });
 }
 
 function registerCommands(commands: CommandRuntime, core: CoreHub): void {
