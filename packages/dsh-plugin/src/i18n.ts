@@ -76,9 +76,6 @@ const en = {
   'screen.why.disabled': 'switched off in the settings',
   'screen.why.cua': 'this harness has no Computer Use',
   'screen.why.unlinked': 'not linked',
-  'tool.description':
-    'Ask the {product} agent (Hermes, on the person’s hub server, with its own memory, skills and MCP tools) and get its final answer. One hub conversation follows this harness session, so it keeps the thread. Use it for questions that need the hub’s memory, the person’s server-side tools, or another agent’s view.',
-  'tool.message': 'The message to send to the hub’s agent.',
   'command.corehub': 'Link this harness to {product}, see the link, or unlink',
   'command.agent': 'Ask the {product} agent (Hermes) on the hub',
   'command.corehub.hint': 'link <pairing> | status | models | unlink',
@@ -150,8 +147,6 @@ const ar: Record<Key, string> = {
   'screen.why.disabled': 'مطفية في الإعدادات',
   'screen.why.cua': 'هذا الهارنس ما فيه ‏Computer Use‏',
   'screen.why.unlinked': 'غير مربوط',
-  'tool.description': en['tool.description'],
-  'tool.message': en['tool.message'],
   'command.corehub': 'اربط هذا الهارنس مع {product}، أو اعرض حالة الربط، أو فكّه',
   'command.agent': 'اسأل وكيل {product} (‏Hermes‏) في الهب',
   'command.corehub.hint': 'link <الربط> | status | models | unlink',

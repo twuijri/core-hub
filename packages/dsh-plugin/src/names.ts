@@ -21,6 +21,12 @@ export const AGENT_COMMAND_NAME = 'hermes';
 /** The model-facing tool that does the same for the harness's own agent. */
 export const ASK_AGENT_TOOL = `${PRODUCT.id}_ask_agent`;
 
+/** The tool that collects the answer of a question the ask tool left running. */
+export const AGENT_RESULT_TOOL = `${PRODUCT.id}_agent_result`;
+
+/** The kind of the harness background job that carries a slow answer (`corehub-…` ids). */
+export const ASK_JOB_KIND = PRODUCT.id;
+
 /**
  * The provider row the plugin writes under `llm-pi-ai.providers` (the harness's model list).
  * Its `Authorization` header in the patch is a placeholder: the real bearer is put on each
