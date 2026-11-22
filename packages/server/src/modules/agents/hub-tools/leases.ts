@@ -28,6 +28,13 @@
  *   nobody announced is never a run's (the hub waits a moment for the announcement, as above).
  *   An announced run beside a channel turn of anybody else: the two cannot be told apart, and
  *   the call is refused.
+ * - inside that gateway a hub conversation is a turn like any other, so the hub's hook reports
+ *   it too (observed on Hermes v0.22.5: platform `local`, the gateway's local user as the
+ *   sender, chat type `dm`, and the Hermes session id the hub was handed by `session.create`).
+ *   That turn is not a channel's: a run's lease remembers its Hermes session
+ *   (`agentSessionId`), and the hub opens no channel lease for a turn of a live run's session
+ *   (`runOfAgentSession`). Without that, every hub conversation stood beside a "channel turn of
+ *   nobody" — its own — and each call it announced was refused as ambiguous (2026-11-22).
  */
 import { issueRunToken, revokeRunToken } from '../../auth/index.js';
 import type { HubOrigin } from './block.js';
@@ -50,6 +57,10 @@ export interface Lease {
   /** `run`: a run of the hub's own; `channel`: a turn of Hermes's messaging gateway (§79). */
   kind: 'run' | 'channel';
   sessionId: string | null;
+  /** A run's conversation as its agent names it (Hermes's session id); `null` when unknown. */
+  agentSessionId: string | null;
+  /** A channel turn's platform, as the gateway named it (for the hub's log only). */
+  platform: string | null;
   workspaceId: string;
   /** The person it acts for; `null` for a channel turn that acts for nobody. */
   userId: string | null;
@@ -66,6 +77,25 @@ export interface Lease {
   lastAnnouncedAt: number;
 }
 
+/** `RunLeases.describe`: what was live in a profile, for the log. */
+export interface LeaseSummary {
+  runs: number;
+  /** Runs that announced a call to the hub's tools and have not finished it. */
+  announced: number;
+  channels: number;
+  channels_for_nobody: number;
+  leases: Array<{
+    kind: Lease['kind'];
+    run_id: string | null;
+    user_id: string | null;
+    platform: string | null;
+    refusal: ChannelRefusal | null;
+    pending: number;
+    age_s: number;
+    idle_s: number;
+  }>;
+}
+
 export type Attribution =
   | { ok: true; lease: Lease & { userId: string; token: string } }
   | {
@@ -79,7 +109,14 @@ export class RunLeases {
   constructor(private readonly now: () => number = Date.now) {}
 
   /** A run of the hub's started. No owner (a run the hub cannot attribute): no lease. */
-  open(input: { runId: string; sessionId: string; workspaceId: string; userId: string | null }) {
+  open(input: {
+    runId: string;
+    sessionId: string;
+    workspaceId: string;
+    userId: string | null;
+    /** The agent's own id of the conversation (Hermes's session id), when it has one. */
+    agentSessionId?: string | null;
+  }) {
     if (!input.userId) return;
     this.close(input.runId);
     const token = issueRunToken({
@@ -93,6 +130,8 @@ export class RunLeases {
       runId: input.runId,
       kind: 'run',
       sessionId: input.sessionId,
+      agentSessionId: input.agentSessionId || null,
+      platform: null,
       workspaceId: input.workspaceId,
       userId: input.userId,
       refusal: null,
@@ -115,6 +154,7 @@ export class RunLeases {
     workspaceId: string;
     userId: string | null;
     refusal: ChannelRefusal | null;
+    platform?: string | null;
   }): void {
     this.close(input.key);
     const at = this.now();
@@ -130,6 +170,8 @@ export class RunLeases {
       runId: input.key,
       kind: 'channel',
       sessionId: null,
+      agentSessionId: null,
+      platform: input.platform || null,
       workspaceId: input.workspaceId,
       userId: input.userId,
       refusal: input.userId ? null : (input.refusal ?? 'hub_tools_sender_not_linked'),
@@ -178,6 +220,46 @@ export class RunLeases {
       if (lease.kind === 'channel' && now - lease.seenAt > CHANNEL_LEASE_IDLE_MS) this.close(key);
     }
     return [...this.leases.values()].filter((lease) => lease.workspaceId === workspaceId);
+  }
+
+  /**
+   * The live run of the hub's whose agent conversation is this one (Hermes's session id), or
+   * `null`. A gateway turn of such a session is that run's, not a channel's.
+   */
+  runOfAgentSession(workspaceId: string, agentSessionId: string | null | undefined): Lease | null {
+    if (!agentSessionId) return null;
+    return (
+      this.live(workspaceId).find(
+        (lease) => lease.kind === 'run' && lease.agentSessionId === agentSessionId,
+      ) ?? null
+    );
+  }
+
+  /**
+   * What is live in a profile, for the hub's log when a call acts for nobody: counts and kinds,
+   * run and person ids — never a token, a sender's id or a message.
+   */
+  describe(workspaceId: string): LeaseSummary {
+    const now = this.now();
+    const live = this.live(workspaceId);
+    const runs = live.filter((lease) => lease.kind === 'run');
+    const channels = live.filter((lease) => lease.kind === 'channel');
+    return {
+      runs: runs.length,
+      announced: runs.filter((lease) => lease.pending > 0).length,
+      channels: channels.length,
+      channels_for_nobody: channels.filter((lease) => lease.userId === null).length,
+      leases: live.map((lease) => ({
+        kind: lease.kind,
+        run_id: lease.kind === 'run' ? lease.runId : null,
+        user_id: lease.userId,
+        platform: lease.platform,
+        refusal: lease.refusal,
+        pending: lease.pending,
+        age_s: Math.round((now - lease.startedAt) / 1000),
+        idle_s: Math.round((now - lease.seenAt) / 1000),
+      })),
+    };
   }
 
   /**

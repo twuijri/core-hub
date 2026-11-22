@@ -46,6 +46,7 @@ import { OneshotUnavailable, type AgentEvent, type AgentSession } from './adapte
 import type { AgentsService } from './service.js';
 import { capturingLogger } from '../../../tests/unit/helpers.js';
 import type { ModelsOverrides } from '../models/index.js';
+import type { RunLeases } from './hub-tools/leases.js';
 
 const SOCKET_PATH = '/rt';
 const PROFILE = 'default';
@@ -670,6 +671,73 @@ describe('agent runner: a live session whose process went away between turns', (
     expect((await drain('r2')).at(-1)).toMatchObject({ type: 'completed' });
     expect(opened).toHaveLength(2);
     expect(opened[1]!.ref).toBe('stored-1');
+  });
+});
+
+describe("agent runner: the hub tools' lease of a run", () => {
+  it("names the agent's own session, so a gateway turn of it is the run's (2026-11-22)", async () => {
+    const opened: unknown[] = [];
+    const leases = {
+      open: (input: unknown) => opened.push(input),
+      close: () => undefined,
+      toolStarted: () => undefined,
+      toolEnded: () => undefined,
+    };
+    const adapter = {
+      async start() {
+        return {
+          id: 'local-7ab5',
+          async send() {
+            return { stopReason: 'completed' };
+          },
+          async *stream(): AsyncIterable<AgentEvent> {
+            yield { type: 'run.completed', stopReason: 'completed' };
+          },
+          async respond() {},
+          async interrupt() {},
+          async close() {},
+        };
+      },
+    };
+    const service = {
+      loadAgent: () => ({ id: 'agent-1', installState: 'installed', adapterKind: 'hermes' }),
+      selectionFor: () => ({ model: null, provider: null, providerId: null }),
+      fallbacksFor: () => [],
+      providerSlugOf: () => null,
+      modelSourceFor: () => null,
+      targetFor: () => ({ sessionRef: null }),
+    };
+    const runner = new AgentRunner({
+      service: service as unknown as AgentsService,
+      adapters: { byKind: () => adapter } as unknown as AdapterSet,
+      log: capturingLogger().logger,
+      leases: leases as unknown as RunLeases,
+    });
+    await runner.start({
+      runId: 'r1',
+      sessionId: 'S1',
+      workspace: 'w',
+      userId: 'u1',
+      agentId: 'agent-1',
+      agentSessionRef: null,
+      workingDir: null,
+      model: null,
+      provider: null,
+      reasoningEffort: null,
+      prompt: [{ type: 'text' as const, text: 'hi' }],
+      files: null,
+      allowedTools: [],
+    });
+    for await (const event of runner.stream('r1')) void event;
+    expect(opened).toEqual([
+      {
+        runId: 'r1',
+        sessionId: 'S1',
+        workspaceId: 'w',
+        userId: 'u1',
+        agentSessionId: 'local-7ab5',
+      },
+    ]);
   });
 });
 
