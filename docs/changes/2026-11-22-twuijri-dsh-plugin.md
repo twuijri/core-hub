@@ -46,6 +46,13 @@
   - الويب: `models/ExternalGatewayCard.tsx` (جديد)، و`ModelsScreen.tsx` و`queries.ts` و`types.ts`، ونصوص `ar`/`en`.
   - نصوص مجموعة «حواسيبك» في iOS وAndroid.
   - الوثائق: `docs/contracts/DECISIONS.md` (§156، §157)، و`docs/STATUS.md`، و`docs/DEPLOY.md`.
+
+- **جهة الإضافة (⁨feat/dsh-plugin-pkg⁩):**
+  - حزمة جديدة `packages/dsh-plugin/`: `package.json` (حزمة ⁨dsh⁩ و`engines.dsh` مثبّت على ⁨0.2.2-rc.5⁩)، و`cordis.patch.yml`، و`scripts/build.mjs` (⁨esbuild⁩ إلى `dist/index.js` و`dist/screen-consent.js`)، و`README.md` بالإنجليزي.
+  - `src/`: `pairing.ts` (قراءة كود الربط)، `store.ts` (ملفات ⁨0600⁩)، `hub.ts` (المطالبة بالربط وتجديد المفتاح وقائمة موديلات البوابة)، `provider.ts` (صف مزوّد «كور هب»)، `device-link.ts` و`device-answers.ts` و`folders.ts` و`programs.ts` (منقولة من تطبيق سطح المكتب: كودنا)، `consent.ts`، `screen.ts` و`screen-consent.ts` (مهام الشاشة)، `hermes.ts` (⁨/hermes⁩ والأداة)، `i18n.ts` (عربي وإنجليزي)، `host.ts` (الجزء اللي نستخدمه من واجهة الهارنس)، `core.ts` و`index.ts`.
+  - `tests/`: ١١ ملف ⁨vitest⁩ للمنطق الصافي.
+  - `pnpm-lock.yaml`: اعتماديات التطوير للحزمة (`@deepseek-ai/schemastery` و⁨esbuild⁩ و⁨socket.io-client⁩).
+  - ما لمسنا العقد ولا الخادم ولا الويب؛ دمجنا فرع الهب في فرع الإضافة عشان الأنواع المولّدة.
 ## الفحوص (الأوامر ونواتجها الفعلية)
 - تُلصق هنا عند التشغيل.
 - **جهة الهب (⁨feat/dsh-plugin-hub⁩)، 2026-11-22، محلياً.** شغّلنا فقط ما يمسّه التغيير، والمجموعات الكاملة تشتغل على ⁨CI⁩:
@@ -93,6 +100,31 @@
     ```
   - **ما ما جرّبناه:** ما جرّبنا البطاقة بعيننا في متصفح، واعتمدنا على اختبار المكوّن. وما جرّبنا الإضافة الحقيقية ولا ⁨CLIProxyAPI⁩ الحقيقي، واستعملنا البديل الوهمي في الاختبارات. و⁨Playwright⁩ ما شغّلناه.
 
+
+- **جهة الإضافة (⁨feat/dsh-plugin-pkg⁩)، 2026-11-22، محلياً على لينكس:**
+  - `pnpm --filter @corehub/dsh-plugin typecheck`: ‏exit=0.
+  - ‏⁨vitest --maxWorkers=2⁩ في الحزمة: `Test Files 11 passed (11)` و`Tests 64 passed (64)`.
+  - `npx eslint packages/dsh-plugin`: ‏exit=0، و`prettier --check`: `All matched files use Prettier code style!`.
+  - `pnpm contracts:check-clients` بعد دمج فرع الهب: `OK — 1189 client file(s) scanned, 289 contract path(s) known.`
+  - `node scripts/version-check.mjs`: `version: 1.1.10 everywhere`.
+  - **تجربة حقيقية مع الهارنس ⁨0.2.2-rc.5⁩** (مثبّت في `~/.cache/dsh-dev` مع ⁨DSH_HOME⁩ معزول، وهب وهمي محلي بشكل العقد): التثبيت بـ `dsh plugin --profile e2e add <tgz>` نجح وفحص `engines.dsh` مرّ؛ `/corehub link` بالـ ⁨JSON⁩ والمنصة `dsh`؛ `/corehub status` و`models` و`unlink`؛ صف المزوّد انكتب في `cordis.patch.yml` بدون المفتاح، وطلبات المحادثة وصلت البوابة بالمفتاح الحقيقي من خطّاف `llm-pi-ai/request-headers`؛ أداة `corehub_ask_agent` و`/hermes` رجعوا جواب الهب؛ رابط الجهاز جاوب طلب `files` بالمجلد المشارك ورفض `apps` لبرنامج غير مفعّل؛ وبروفايل مهام الشاشة اشتغل بالمشغّل الأحادي ورجع `running` ثم `done` مع معرّف الصورة (بدون ⁨Computer Use⁩ لأنه لينكس).
+
+    ```
+    $ pnpm --filter @corehub/dsh-plugin typecheck   # exit=0
+    $ npx vitest run --maxWorkers=2
+     Test Files  11 passed (11)
+          Tests  64 passed (64)
+    $ dsh plugin --profile e2e add corehub-dsh-plugin-1.1.10.tgz
+    + @corehub/dsh-plugin file:…/corehub-dsh-plugin-1.1.10.tgz
+    E2E /corehub link {"type":"corehub.pairing", => {"kind":"success","text":"Linked to http://127.0.0.1:47811 as Owner. …\nThe hub’s models are in the model picker under “Core Hub” (1)."}
+    {"type":"tool_call","callId":"call_1","tool":"corehub_ask_agent","input":{"message":"What is in my memory?"}}
+    {"type":"final",…,"reason":{"kind":"completed"},"text":"FINAL: Hermes says: your memory holds the launch plan."}
+    hub: POST /gateway/openai/v1/chat/completions auth "Bearer hub_at_e2…" tools ["corehub_ask_agent"]
+    hub: POST /device-requests/RQ1/respond {"status":"fulfilled",…"access":"read-only"…}
+    ScreenRunner (Linux, fake hub): FIRST {"state":"running",…} END {"state":"done","outcome":"Hello from the fake hub","screenshot_attachment_id":"AT-uploaded",…}
+    ```
+  - **ما جرّبناه:** هب حقيقي مع الباب الخارجي، وتشغيل ⁨Computer Use⁩ على ماك، وبروفايل تطبيق الهارنس المكتبي، ونافذة الموافقة في ويندوز وماك.
+
 ## المخاطر والرجوع
 - **الهارنس معاينة للمطورين:** نسخة كل يوم إلى خمسة أيام، وفيها تغييرات كاسرة. الإضافة مثبّتة على النسخ المجرَّبة.
 - **الباب الخارجي سطح جديد على منفذ الهب:** مطفي افتراضياً، ومربوط بمفتاح شخص، ومحدود، ومسجَّل.
@@ -100,3 +132,7 @@
 
 ## التسليم والخطوة التالية
 - **الحين:** كتابة القرار، ثم تنفيذ جهة الهب وجهة الإضافة.
+
+- **جهة الإضافة (⁨feat/dsh-plugin-pkg⁩):** الحزمة جاهزة وما انرفعت. الخطوة التالية: تجربتها على ماك المالك مع هب فيه الباب الخارجي مفتوح، ثم مهمة شاشة حقيقية.
+- **مفتوح لجهة الهب:** `DeviceProgram.source` ما فيه قيمة للهارنس، فالهب يرفض البرامج في تقرير الجهاز؛ الإضافة ترسل التقرير بدونها وتقول هذا في `/corehub status`. نقترح إضافة `dsh` للقائمة.
+- **مخالفة للقرار مكتوبة:** جلسة الشاشة تشتغل كعملية منفصلة بالمشغّل الأحادي (`dsh-headless`) لأن الهارنس ما يعطي الإضافة طريقة موثّقة تبدأ جلسة ⁨PTC⁩ داخل العملية؛ والموافقة في الغالب نافذة النظام لأن سؤال الهارنس مربوط بمحادثة.
