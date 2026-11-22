@@ -60,7 +60,7 @@
   "agents2_hub_group_about_notifications": "Tell the person something: a notice in their inbox.",
   "agents2_hub_group_about_workflows": "List workflows; with changes allowed, run one.",
   "agents2_hub_group_about_files": "Read the files in this profile's folder; with changes allowed, write them.",
-  "agents2_hub_group_about_devices": "Use the shared folders and the programs on the person's own computers that run the Core Hub app (each computer asks its person first). With changes allowed, write files and run programs there.",
+  "agents2_hub_group_about_devices": "Use the shared folders and the programs on the person's own computers that run the Core Hub app or the Core Hub plugin of DeepSeek Harness (each computer asks its person first). With changes allowed, write files, run programs there, and hand a computer a task to do on its screen.",
   "agents2_hub_unavailable_runtime_absent": "There is no Hermes beside this hub to give the tools to.",
   "agents2_hub_unavailable_hermes_profile_absent": "Hermes has no folder for this profile yet. Start a conversation in it first.",
   "agents2_hub_reason_hub_tools_no_live_run": "no conversation was running, so there was nobody to act for",

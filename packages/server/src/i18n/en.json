@@ -239,6 +239,11 @@
         "unreachable": "Core Hub could not reach {company}. Check the hub's connection, then try again.",
         "no_usage": "{company} answered, but without usage Core Hub can read."
       }
+    },
+    "external_gateway": {
+      "gateway_off": "The model gateway is switched off on this hub (COREHUB_MODEL_GATEWAY=off), so there is nothing to open.",
+      "no_translator": "This hub has no CLIProxyAPI, which the model gateway needs.",
+      "usage_name": "Your own apps (through the gateway)"
     }
   },
   "knowledge": {

@@ -17,6 +17,7 @@ import type {
   ProviderSignIn,
   LocalModels,
   LocalRuntime,
+  ExternalGateway,
   RuntimeReport,
   SpeechSettings,
 } from '../types.js';
@@ -30,6 +31,7 @@ export const modelKeys = {
   runtime: (profile: string) => ['models', 'runtime', profile] as const,
   localRuntime: (profile: string) => ['models', 'local-runtime', profile] as const,
   localModels: (profile: string) => ['models', 'local-models', profile] as const,
+  externalGateway: () => ['models', 'external-gateway'] as const,
 };
 
 export function useProviders() {
@@ -713,5 +715,31 @@ export function useDeleteLocalModel() {
       await client.request('delete', '/models/local-runtime/models', { query: { name } });
     },
     onSuccess: changed,
+  });
+}
+
+/**
+ * The model gateway's external entrance (DECISIONS §156): on or off for the whole hub, and the
+ * addresses a person's own program points at. Admins only; anyone else is not asked.
+ */
+export function useExternalGateway(enabled: boolean) {
+  const { client, session } = useAuth();
+  return useQuery({
+    queryKey: modelKeys.externalGateway(),
+    queryFn: async () =>
+      (await client.request('get', '/models/external-gateway')).data as ExternalGateway,
+    enabled: !!session && enabled,
+    retry: false,
+  });
+}
+
+export function useSetExternalGateway() {
+  const { client } = useAuth();
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (enabled: boolean) =>
+      (await client.request('patch', '/models/external-gateway', { body: { enabled } }))
+        .data as ExternalGateway,
+    onSuccess: (gateway) => queryClient.setQueryData(modelKeys.externalGateway(), gateway),
   });
 }

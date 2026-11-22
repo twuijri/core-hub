@@ -71,25 +71,30 @@ const TIMEOUTS: Partial<Record<CapabilityKind, number>> = {
   files: 60_000,
   apps: 120_000,
   location: 90_000,
+  // The computer asks its person every task, then starts a local session; a long task answers
+  // `running` well before this and is followed with `op: status` (ADR 0033 §5, DECISIONS §157).
+  screen_task: 180_000,
 };
 export function defaultTimeoutFor(capability: CapabilityKind): number {
   return TIMEOUTS[capability] ?? DEFAULT_TIMEOUT_MS;
 }
 /**
  * What an agent's run may ask the person's own devices for: a computer's files and programs
- * (§89), and a phone's location (§105), which the phone answers only after its person agrees.
+ * (§89), a phone's location (§105), which the phone answers only after its person agrees, and a
+ * task on a computer's screen (§157), which the computer asks its person for every time.
  */
 export const AGENT_CAPABILITIES: ReadonlySet<CapabilityKind> = new Set([
   'files',
   'apps',
   'location',
+  'screen_task',
 ]);
 /**
  * Capabilities only a connected computer serves: asked of one that is offline, the answer is
  * "offline" at once instead of a wait for a device that cannot hear it (§89). A phone's
  * capabilities keep §74's catch-up on reconnect.
  */
-const LIVE_ONLY: ReadonlySet<CapabilityKind> = new Set(['files', 'apps', 'screen']);
+const LIVE_ONLY: ReadonlySet<CapabilityKind> = new Set(['files', 'apps', 'screen', 'screen_task']);
 /** How often a waiting job looks whether someone cancelled it. */
 const CANCEL_POLL_MS = 250;
 /** The room a device's own sockets join on `/rt/devices`. */
@@ -169,6 +174,25 @@ export function checkResult(capability: CapabilityKind, result: unknown): Record
     if (!running && !done) {
       throw new HubError('validation_failed', {
         details: { field: 'result', reason: 'not_a_program_result', expected: ['state'] },
+      });
+    }
+  }
+  if (capability === 'screen_task') {
+    // A task on the computer's screen (§157): done or failed with its outcome and one screenshot
+    // (an attachment the computer uploaded), or still running with the call to ask about.
+    const text = (field: string) =>
+      value[field] === undefined || value[field] === null || typeof value[field] === 'string';
+    const state = value.state;
+    const shaped =
+      (state === 'done' || state === 'failed' || state === 'running') &&
+      text('outcome') &&
+      text('screenshot_attachment_id') &&
+      text('progress') &&
+      text('call_id') &&
+      (state !== 'running' || (typeof value.call_id === 'string' && value.call_id !== ''));
+    if (!shaped) {
+      throw new HubError('validation_failed', {
+        details: { field: 'result', reason: 'not_a_screen_task_result', expected: ['state'] },
       });
     }
   }

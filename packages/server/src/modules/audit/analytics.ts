@@ -29,9 +29,18 @@ export interface AnalyticsProfile {
   isDefault: boolean;
 }
 
+/**
+ * The `agent_id` of the ledger rows the model gateway's external entrance writes (DECISIONS §156):
+ * no agent of the hub's made those calls, a person's own program did (DeepSeek Harness through the
+ * Core Hub plugin). Not a ULID of any row; the reports name it `externalName`.
+ */
+export const EXTERNAL_USAGE_AGENT_ID = '00000000000000000000EXTERN';
+
 export interface AnalyticsQuery {
   profiles: readonly AnalyticsProfile[];
   days: number;
+  /** How the reports name the external entrance's calls, in the request's language. */
+  externalName?: string;
   agentId?: string | undefined;
   /** Minutes east of UTC; days are counted in that calendar. */
   utcOffsetMinutes?: number | undefined;
@@ -189,7 +198,7 @@ export class UsageAnalytics {
     );
 
     const activity = this.activity(workspaces, period);
-    const agents = this.agentsOf(activity, reported, groups);
+    const agents = this.agentsOf(activity, reported, groups, query.externalName);
 
     const wanted = (agentId: string) => !query.agentId || agentId === query.agentId;
     const totals = zero();
@@ -406,7 +415,7 @@ export class UsageAnalytics {
       generated_at: new Date(now).toISOString(),
       profiles: query.profiles.map((p) => p.slug),
       counting_since: counter ? counter.startedAt.toISOString() : null,
-      agents: this.agentsOf(activity, null, []),
+      agents: this.agentsOf(activity, null, [], query.externalName),
       totals: {
         uses,
         distinct_skills: perSkill.size,
@@ -483,6 +492,7 @@ export class UsageAnalytics {
     activity: readonly RunActivityRow[],
     reported: Map<string, number> | null,
     groups: ReadonlyArray<{ agentId: string }>,
+    externalName?: string,
   ): Array<{ agent_id: string; name: string | null; reports_usage: boolean }> {
     const ids = new Set<string>([
       ...activity.map((row) => row.agentId),
@@ -491,7 +501,7 @@ export class UsageAnalytics {
     return [...ids]
       .map((agentId) => ({
         agent_id: agentId,
-        name: this.nameOf(agentId),
+        name: agentId === EXTERNAL_USAGE_AGENT_ID ? (externalName ?? null) : this.nameOf(agentId),
         reports_usage: reported ? (reported.get(agentId) ?? 0) > 0 : true,
       }))
       .sort((a, b) => (a.name ?? a.agent_id).localeCompare(b.name ?? b.agent_id));

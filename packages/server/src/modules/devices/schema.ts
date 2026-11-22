@@ -31,7 +31,16 @@ import {
   ulid,
 } from '../../db/columns.js';
 
-export const DEVICE_PLATFORMS = ['android', 'ios', 'web', 'macos', 'windows', 'linux'] as const;
+/** `dsh`: the Core Hub plugin of DeepSeek Harness on a computer (ADR 0033, DECISIONS §157). */
+export const DEVICE_PLATFORMS = [
+  'android',
+  'ios',
+  'web',
+  'macos',
+  'windows',
+  'linux',
+  'dsh',
+] as const;
 export const DEVICE_KINDS = ['phone', 'tablet', 'computer', 'browser'] as const;
 export const DEVICE_CONNECTIONS = ['lan', 'relay'] as const;
 export const PUSH_PROVIDERS = ['none', 'fcm', 'apns', 'webpush'] as const;
@@ -56,6 +65,8 @@ export const CAPABILITY_KINDS = [
   'calendar',
   'reminders',
   'health',
+  // A computer that does a task in words on its own screen (ADR 0033 §5, DECISIONS §157).
+  'screen_task',
 ] as const;
 /** The contract's `DeviceRequestStatus`; `pending` is the only one that is not final. */
 export const DEVICE_REQUEST_STATUSES = [
