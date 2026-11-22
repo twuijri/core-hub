@@ -372,6 +372,7 @@ export class ModelGateway {
           env: cliproxy.env(),
         });
       },
+      runningForMs: () => cliproxy.runningForMs(),
       models: async (prefix) => {
         const held = await lease();
         try {

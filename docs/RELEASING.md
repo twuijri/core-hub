@@ -397,6 +397,21 @@ from the pinned `HERMES_REF` whatever it says. Before tagging, read it (or run
 `node scripts/hermes-watch.mjs status --repo twuijri/core-hub` locally) and merge a green Hermes
 pull request first when you want the release to carry it.
 
+## The CLIProxyAPI watch (2026-11-22)
+
+The model gateway's translator is one pinned CLIProxyAPI release (`scripts/cliproxy/pin.json`,
+`CLIPROXY_VERSION` in `packages/server/src/modules/models/gateway/locate.ts`; ADR 0029). Its model
+catalogue does not wait for the pin: the running translator fetches CLIProxyAPI's published
+catalogue at start and every three hours, and the hub's subscription rows follow it (DECISIONS
+§140, amended 2026-11-22). Its code, its management API and the catalogue it keeps offline do.
+
+**Every Tuesday** (05:17 UTC, or Actions → *CLIProxyAPI watch* → *Run workflow*),
+`cliproxy-watch.yml` compares the pin with router-for-me/CLIProxyAPI's newest stable release and
+keeps one issue (label `cliproxy-watch`) open while a newer one exists — renamed to the newest,
+closed once the pin is the newest. It never moves the pin: a person reads the release notes (the
+config file, the management calls in `gateway/cliproxy-management.ts`, `-codex-device-login`),
+moves both pins by pull request, and the real-binary suites (`model-gateway-real`) decide.
+
 ## The download page (`site/`, GitHub Pages)
 
 **https://twuijri.github.io/core-hub/** — one static page, English first (owner, 2026-09-26) with an Arabic toggle,

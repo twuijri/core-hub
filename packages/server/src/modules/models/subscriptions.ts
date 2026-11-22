@@ -43,6 +43,12 @@ export interface SubscriptionBackend {
   codexDeviceLogin(): CodexDeviceLogin | null;
   /** The models CLIProxyAPI serves under one prefix (`h<row>/…`), without the prefix. */
   models(prefix: string): Promise<SubscriptionModel[]>;
+  /**
+   * How long the CLIProxyAPI now answering has run, or null when none runs (nothing is started to
+   * find out). Its catalogue is refreshed in its first minute, so a list read earlier may still be
+   * the one its release shipped with.
+   */
+  runningForMs?(): number | null;
 }
 
 export interface SubscriptionModel {

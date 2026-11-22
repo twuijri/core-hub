@@ -824,15 +824,17 @@ export const modelsModule = defineModule({
       // any starts it now and reads them every minute — in the background, never holding boot.
       if (!gateway.available()) return;
       // Hermes answers through it, so it starts now either way. After each read, a row whose
-      // accounts came or went outside a sign-in is brought up to date, and Hermes with it.
+      // accounts came or went outside a sign-in is brought up to date, and Hermes with it; and a
+      // row whose models CLIProxyAPI's refreshed catalogue changed gets the new list.
       const scope = { id: row.id, slug: row.slug, name: row.name, isDefault: row.isDefault };
       const read = () =>
-        service.subscriptions.refresh(true).then((result) => {
+        service.subscriptions.refresh(true).then(async (result) => {
           if (!result.ok) {
             app.log.warn({ reason: result.reason }, 'gateway: subscriptions not read');
             return;
           }
           service.syncSubscriptionRows(scope, { userId: owner.id });
+          await service.followSubscriptionCatalogues({ userId: owner.id });
         });
       void read();
       subscriptionTimer = setInterval(() => {

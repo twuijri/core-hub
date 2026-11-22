@@ -106,6 +106,8 @@ export class CodexDeviceLogin {
           cwd: spawnOptions.cwd,
           stdio: ['ignore', 'pipe', 'pipe'],
         }));
+    // `-local-model`: this process only signs in and exits; it serves no model, so it fetches no
+    // catalogue (the running translator does, `cliproxy.ts`).
     const child = spawn(
       this.options.binary,
       ['-config', configPath, '-codex-device-login', '-no-browser', '-local-model'],

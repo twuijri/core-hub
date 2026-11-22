@@ -10,6 +10,9 @@
  *   call itself; renew (a refresh against the stand-in); turn off and on; sign out;
  * - ChatGPT's short code, which CLIProxyAPI offers only as `-codex-device-login`: run as a child
  *   process, its code read from what it prints, the account landing in the running process's store;
+ * - CLIProxyAPI's own model catalogue, which it fetches when it starts (owner, 2026-11-22: the hub
+ *   ran it with `-local-model`, so a subscription listed the pinned release's models forever): a
+ *   stand-in catalogue names a model no release ships, and the ChatGPT row lists it;
  * - Claude's link sign-in: CLIProxyAPI's own authorisation link (its callback address and state),
  *   and a pasted-back address from another sign-in refused by CLIProxyAPI. The code exchange itself
  *   is not driven: CLIProxyAPI makes it with its own TLS client for Anthropic, which takes no proxy.
@@ -37,6 +40,45 @@ const binary = process.env.COREHUB_CLIPROXY_BIN
   : devCliproxyPath();
 
 const XAI_ACCESS = 'xai-access-token-never-in-the-hub';
+/** A model only the stand-in catalogue names: listed only if CLIProxyAPI fetched it. */
+const REFRESHED_MODEL = 'gpt-corehub-refreshed';
+
+/** The catalogue CLIProxyAPI fetches at start, as `router-for-me/models` publishes it. */
+function standInCatalogue(): Record<string, unknown[]> {
+  const codex = [
+    {
+      id: REFRESHED_MODEL,
+      object: 'model',
+      created: 1794942000,
+      owned_by: 'openai',
+      type: 'openai',
+      display_name: 'GPT Core Hub Refreshed',
+      version: REFRESHED_MODEL,
+      context_length: 272000,
+      max_completion_tokens: 128000,
+      supported_parameters: ['tools'],
+    },
+  ];
+  const xai = [
+    {
+      id: 'grok-4.5',
+      object: 'model',
+      created: 1789948800,
+      owned_by: 'xai',
+      type: 'xai',
+      display_name: 'Grok 4.5',
+      context_length: 256000,
+      max_completion_tokens: 64000,
+    },
+  ];
+  return {
+    'codex-free': codex,
+    'codex-team': codex,
+    'codex-plus': codex,
+    'codex-pro': codex,
+    xai,
+  };
+}
 const CODEX_ACCESS = 'codex-access-token-never-in-the-hub';
 
 interface SignIn {
@@ -173,6 +215,12 @@ describe.skipIf(!enabled)('subscription sign-ins with the real CLIProxyAPI', () 
             },
           };
         }
+      }
+      if (
+        request.host === 'raw.githubusercontent.com' &&
+        request.path === '/router-for-me/models/refs/heads/main/models.json'
+      ) {
+        return { status: 200, body: standInCatalogue() };
       }
       if (request.host === 'platform.claude.com' && request.path.startsWith('/v1/oauth/token')) {
         return {
@@ -362,6 +410,20 @@ describe.skipIf(!enabled)('subscription sign-ins with the real CLIProxyAPI', () 
     const first = (dialog.json() as { accounts: { plan: string | null }[] }).accounts[0];
     expect(first?.plan).toBe('plus');
     expect(dialog.body).not.toContain(CODEX_ACCESS);
+
+    // The row lists CLIProxyAPI's fetched catalogue, not the one its release shipped with.
+    await drainJobs(hub.app);
+    expect(
+      mitm.seen.some(
+        (seen) => seen.host === 'raw.githubusercontent.com' && seen.path.endsWith('/models.json'),
+      ),
+    ).toBe(true);
+    const list = await api('GET', '/api/v1/models/providers');
+    const row = (
+      list.json() as { items: { id: string; models: { model: string }[] }[] }
+    ).items.find((item) => item.id === provider)!;
+    expect(row.models.map((model) => model.model)).toContain(REFRESHED_MODEL);
+    expect(row.models.map((model) => model.model)).not.toContain('gpt-5.5');
   }, 180_000);
 
   it('signs in to Claude by a link whose landing address is pasted back', async () => {

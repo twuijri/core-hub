@@ -4,6 +4,10 @@
  * loopback port it picks, restarted with a backoff when it dies, its lines in the hub's log under
  * `cliproxy`, stopped with the hub.
  *
+ * It keeps its own model catalogue current (owner, 2026-11-22): it fetches CLIProxyAPI's published
+ * catalogue at start and every three hours, so a subscription lists the models its vendor offers
+ * now, not those of the day the pinned release was built. Offline, it keeps the one it ships with.
+ *
  * The providers change while the hub runs. CLIProxyAPI 8.0.4 does not reliably reload its file, so
  * a change starts a **new** process on a new port with the new file, moves the gateway to it once it
  * answers, and stops the old one when its last request has ended (at most `DRAIN_MAX_MS` later) —
@@ -56,6 +60,8 @@ interface Instance {
   inflight: number;
   retired: boolean;
   exited: boolean;
+  /** When it first answered (`Date.now()`); 0 until then. */
+  readyAt: number;
 }
 
 /** One request's hold on a running process; `done()` exactly once. */
@@ -95,6 +101,17 @@ export class CliproxySupervisor {
 
   status(): { state: CliproxyState; error: string | null; port: number | null } {
     return { state: this.state, error: this.lastError, port: this.current?.port ?? null };
+  }
+
+  /**
+   * How long the process now answering has run, or null when none does. Its startup catalogue
+   * refresh lands within its first minute (two addresses, 30 s each), so a list read earlier may
+   * still be the one the release shipped with.
+   */
+  runningForMs(now: number = Date.now()): number | null {
+    const current = this.current;
+    if (!current || current.exited || current.readyAt === 0) return null;
+    return Math.max(0, now - current.readyAt);
   }
 
   /**
@@ -181,7 +198,9 @@ export class CliproxySupervisor {
     );
     chmodSync(configPath, 0o600);
     if (this.state !== 'running') this.setState('starting', this.lastError);
-    const child = spawn(this.options.binary!, ['-config', configPath, '-local-model'], {
+    // No `-local-model` (DECISIONS §140 as amended 2026-11-22): with it CLIProxyAPI never fetched
+    // its catalogue, and a ChatGPT subscription listed the pinned release's models forever.
+    const child = spawn(this.options.binary!, ['-config', configPath], {
       cwd: dir,
       env: this.options.env ?? {},
       stdio: ['ignore', 'pipe', 'pipe'],
@@ -194,6 +213,7 @@ export class CliproxySupervisor {
       inflight: 0,
       retired: false,
       exited: false,
+      readyAt: 0,
     };
     this.pipe(child.stdout, 'info');
     this.pipe(child.stderr, 'warn');
@@ -216,6 +236,7 @@ export class CliproxySupervisor {
       this.terminate(instance);
       throw new Error(`no answer on 127.0.0.1:${port} within ${this.readyTimeout()} ms`);
     }
+    instance.readyAt = Date.now();
     return instance;
   }
 

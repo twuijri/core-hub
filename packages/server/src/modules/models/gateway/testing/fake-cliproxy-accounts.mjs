@@ -8,6 +8,8 @@
 //                                POST /fake/approve?state= approves)
 //   FAKE_CLIPROXY_EMAIL          the account e-mail a sign-in gets (default person@example.com)
 //   FAKE_CLIPROXY_ERRORS         1: the first usage-queue read carries one failed call
+//   FAKE_CLIPROXY_CATALOGUE      a JSON file, read at each listing, whose vendors' model lists
+//                                replace `VENDOR_MODELS` — CLIProxyAPI's catalogue refreshed
 import { randomBytes } from 'node:crypto';
 import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
@@ -88,12 +90,20 @@ export function readAccounts(authDir) {
     .map((name) => ({ name, ...JSON.parse(readFileSync(path.join(authDir, name), 'utf8')) }));
 }
 
+/** The catalogue now: `VENDOR_MODELS`, or what `FAKE_CLIPROXY_CATALOGUE` says it became. */
+function catalogue() {
+  const file = process.env.FAKE_CLIPROXY_CATALOGUE;
+  if (!file || !existsSync(file)) return VENDOR_MODELS;
+  return { ...VENDOR_MODELS, ...JSON.parse(readFileSync(file, 'utf8')) };
+}
+
 /** The prefixed models every account serves: `h<row>/<model>`. */
 export function accountModels(authDir) {
   const out = [];
+  const vendors = catalogue();
   for (const account of readAccounts(authDir)) {
     if (!account.prefix || account.disabled) continue;
-    for (const model of VENDOR_MODELS[account.type] ?? []) {
+    for (const model of vendors[account.type] ?? []) {
       out.push({ ...model, id: `${account.prefix}/${model.id}`, vendor: account.type });
     }
   }
