@@ -9,15 +9,25 @@
  * - `/hermes <message>` and the `corehub_ask_agent` tool: the hub's agent from inside the
  *   harness (§6).
  *
- * The settings below are the row's config: the harness's Plugins page shows them as this
- * plugin's settings, and changes apply without a restart. The link itself (hub, token) is never
- * part of them.
+ * The settings below are the row's config; changes apply without a restart. The harness shows no
+ * form for a plugin's config by itself: the plugin's browser half (`src/client/`) registers a
+ * "Core Hub" page on the Plugins page that edits them, links and unlinks through the endpoints in
+ * `panel.ts`. Its chat cards render `/corehub` and `/hermes` results. The link itself (hub,
+ * token) is never part of the config.
  */
 import Schema from '@deepseek-ai/schemastery';
 import { CoreHub, dataDirOf, type Settings } from './core.js';
-import type { CommandRuntime, ConfigEditor, HostContext, ToolRegistry } from './host.js';
+import type {
+  CommandRuntime,
+  ConfigEditor,
+  HostConnection,
+  HostContext,
+  ToolRegistry,
+} from './host.js';
 import { translator, pickLanguage } from './i18n.js';
 import { AGENT_COMMAND_NAME, ASK_AGENT_TOOL, COMMAND_NAME, PLUGIN_NAME } from './names.js';
+import { encodeOutcome } from './outcome.js';
+import { PANEL_ENDPOINTS, PANEL_PREFIX, panelResponse } from './panel.js';
 
 export const name = PLUGIN_NAME;
 
@@ -138,6 +148,7 @@ export function apply(ctx: HostContext & { configEditor: ConfigEditor }, config:
     settings,
     log,
     hostHasComputerUse: () => !!ctx.get?.('computerUse'),
+    hostService: (service) => ctx.get?.(service),
   });
   core.configEditor = ctx.configEditor;
 
@@ -174,6 +185,23 @@ export function apply(ctx: HostContext & { configEditor: ConfigEditor }, config:
       core.mcpManager = null;
     });
   });
+  // The settings page's endpoints: exact Fetch routes on the harness's authenticated `/api`
+  // channel, which only the harness's owner reaches.
+  ctx.inject(['connection'], (c) => {
+    const connection = c.connection as HostConnection;
+    for (const endpoint of PANEL_ENDPOINTS)
+      c.effect(() => {
+        const dispose = connection.fetch.register({
+          path: `/api/${PANEL_PREFIX}${endpoint}`,
+          methods: ['POST'],
+          requestBody: 'buffered',
+          fetch: (request) => panelResponse(core, endpoint, request),
+        });
+        return () => {
+          void dispose().catch(() => undefined);
+        };
+      });
+  });
   ctx.inject(['userQuestions'], (c) => {
     core.userQuestions = c.userQuestions ?? null;
     c.effect(() => () => {
@@ -184,6 +212,14 @@ export function apply(ctx: HostContext & { configEditor: ConfigEditor }, config:
 
 function registerCommands(commands: CommandRuntime, core: CoreHub): void {
   const t = () => translator(pickLanguage(core.settings().language));
+  // The result text carries which sub-command ran and the language (outcome.ts): the plugin's
+  // chat card reads it, since `/corehub` does not record its input.
+  const answer = (command: string, sub: string, ok: boolean, text: string) => {
+    const result = encodeOutcome({ command, sub, language: core.language() }, text);
+    return ok
+      ? { kind: 'success' as const, text: result }
+      : { kind: 'error' as const, text: result };
+  };
   commands.register({
     name: COMMAND_NAME,
     description: t()('command.corehub'),
@@ -192,29 +228,42 @@ function registerCommands(commands: CommandRuntime, core: CoreHub): void {
     recordInput: false,
     handler: async ({ rawInput }) => {
       const text = rawInput.trim();
-      const sub = text.split(/\s+/)[0] ?? '';
+      const sub = (text.split(/\s+/)[0] ?? '').toLowerCase();
       const arg = text.slice(sub.length).trim();
       try {
-        switch (sub.toLowerCase()) {
-          case 'link':
-            return { kind: 'success', text: await core.linkWith(arg) };
+        switch (sub) {
+          case 'link': {
+            const outcome = await core.linkWith(arg);
+            return answer(COMMAND_NAME, 'link', outcome.ok, outcome.text);
+          }
           case 'status':
           case '':
-            return { kind: 'success', text: core.statusText() };
-          case 'models':
-            return { kind: 'success', text: await core.refreshModels() };
-          case 'unlink':
-            return { kind: 'success', text: await core.unlink() };
+            return answer(COMMAND_NAME, 'status', true, core.statusText());
+          case 'models': {
+            const outcome = await core.refreshModels();
+            return answer(COMMAND_NAME, 'models', outcome.ok, outcome.text);
+          }
+          case 'unlink': {
+            const outcome = await core.unlink();
+            return answer(COMMAND_NAME, 'unlink', outcome.ok, outcome.text);
+          }
           case 'help':
-            return { kind: 'success', text: core.help() };
+            return answer(COMMAND_NAME, 'help', true, core.help());
           default:
             // `/corehub {"type":"corehub.pairing",…}` links too.
-            if (text.startsWith('{') || /:\/\//.test(text))
-              return { kind: 'success', text: await core.linkWith(text) };
-            return { kind: 'error', text: core.help() };
+            if (text.startsWith('{') || /:\/\//.test(text)) {
+              const outcome = await core.linkWith(text);
+              return answer(COMMAND_NAME, 'link', outcome.ok, outcome.text);
+            }
+            return answer(COMMAND_NAME, 'help', false, core.help());
         }
       } catch (error) {
-        return { kind: 'error', text: error instanceof Error ? error.message : String(error) };
+        return answer(
+          COMMAND_NAME,
+          sub === 'link' || text.startsWith('{') ? 'link' : sub || 'status',
+          false,
+          error instanceof Error ? error.message : String(error),
+        );
       }
     },
   });
@@ -225,11 +274,14 @@ function registerCommands(commands: CommandRuntime, core: CoreHub): void {
     handler: async ({ agent, rawInput, signal }) => {
       const message = rawInput.trim();
       if (!message)
-        return { kind: 'error', text: t()('agent.usage', { agentCommand: AGENT_COMMAND_NAME }) };
-      const answer = await core.askAgent(agent.id, message, signal);
-      return answer.ok
-        ? { kind: 'success', text: answer.text }
-        : { kind: 'error', text: answer.text };
+        return answer(
+          AGENT_COMMAND_NAME,
+          'ask',
+          false,
+          t()('agent.usage', { agentCommand: AGENT_COMMAND_NAME }),
+        );
+      const reply = await core.askAgent(agent.id, message, signal);
+      return answer(AGENT_COMMAND_NAME, 'ask', reply.ok, reply.text);
     },
   });
 }

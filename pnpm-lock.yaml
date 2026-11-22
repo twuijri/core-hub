@@ -312,6 +312,9 @@ importers:
       '@types/node':
         specifier: ^26.6.2
         version: 26.6.2
+      '@types/react':
+        specifier: ^19.3.0
+        version: 19.3.0
       esbuild:
         specifier: ^0.28.2
         version: 0.28.2

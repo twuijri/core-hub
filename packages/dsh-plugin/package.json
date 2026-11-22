@@ -7,6 +7,7 @@
   "main": "dist/index.js",
   "exports": {
     ".": "./dist/index.js",
+    "./client": "./dist/client.js",
     "./screen-consent": "./dist/screen-consent.js",
     "./package.json": "./package.json"
   },
@@ -21,10 +22,13 @@
   "dsh": {
     "bundle": {
       "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "platform": "web"
     }
   },
   "scripts": {
-    "typecheck": "pnpm --filter @corehub/contracts build && tsc --noEmit -p tsconfig.json && tsc --noEmit -p tsconfig.test.json",
+    "typecheck": "pnpm --filter @corehub/contracts build && tsc --noEmit -p tsconfig.json && tsc --noEmit -p tsconfig.client.json && tsc --noEmit -p tsconfig.test.json",
     "build": "pnpm --filter @corehub/contracts build && node scripts/build.mjs",
     "test": "pnpm --filter @corehub/contracts build && vitest run",
     "pack:harness": "pnpm build && pnpm pack"
@@ -36,6 +40,7 @@
     "@corehub/contracts": "workspace:*",
     "@deepseek-ai/schemastery": "~3.19.0",
     "@types/node": "^26.6.2",
+    "@types/react": "^19.3.0",
     "esbuild": "^0.28.2",
     "socket.io-client": "^4.8.3",
     "typescript": "^5.9.3",

@@ -25,6 +25,7 @@ import {
   AGENT_COMMAND_NAME,
   COMMAND_NAME,
   HARNESS_ROWS,
+  PLUGIN_NAME,
   PRODUCT_NAME,
   SCREEN_CAPABILITY,
 } from './names.js';
@@ -69,12 +70,65 @@ export interface Settings {
   language: string;
 }
 
+/** A command's or the page's answer: whether it did what was asked, and the sentence. */
+export interface Outcome {
+  ok: boolean;
+  text: string;
+}
+
+/** The settings the page may change (each a live field of the plugin's row). */
+export interface SettingsPatch {
+  folders?: Array<{ path: string; write: boolean }>;
+  allowOpen?: boolean;
+  programs?: Record<string, string[]>;
+  agentProfile?: string;
+  screenTasks?: boolean;
+  screenModel?: string;
+  language?: 'auto' | 'en' | 'ar';
+}
+
+/** What the settings page shows: the link, the computer's offer, the activity. Never the token. */
+export interface StatusView {
+  version: string;
+  language: string;
+  resolvedLanguage: Language;
+  linked: boolean;
+  link: {
+    hub: string;
+    user: string;
+    deviceId: string;
+    profiles: string[];
+    defaultProfile: string;
+    tokenExpires: string | null;
+    linkedAt: string;
+    status: LinkStatus | 'unlinked';
+    detail: string | null;
+    degraded: string | null;
+  } | null;
+  models: { ok: true; ids: string[] } | { ok: false; reason: string; detail: string } | null;
+  folders: Array<{ path: string; write: boolean }>;
+  allowOpen: boolean;
+  servers: Array<{ name: string; state: string; profiles: string[] }>;
+  agentProfile: string;
+  screen: {
+    enabled: boolean;
+    model: string;
+    available: boolean;
+    why: string | null;
+  };
+  activity: Activity[];
+  canPickFolder: boolean;
+  linkFileOpen: boolean;
+}
+
 export interface CoreOptions {
   dataDir: string;
   settings(): Settings;
   log: { info(...a: unknown[]): void; warn(...a: unknown[]): void };
   /** Whether the host composes Computer Use (its `computerUse` service). */
   hostHasComputerUse(): boolean;
+  /** A harness service by name, when the profile composes it (`directoryPicker`). */
+  hostService?(name: string): unknown;
   fetch?: typeof fetch;
 }
 
@@ -254,13 +308,17 @@ export class CoreHub {
 
   // ------------------------------------------------------------------ link / unlink
 
-  async linkWith(raw: string): Promise<string> {
+  async linkWith(raw: string): Promise<Outcome> {
     const t = this.t();
     const parsed = parsePairing(raw, this.connection?.hub ?? null);
     if (!parsed.ok)
-      return parsed.error === 'empty'
-        ? t('link.usage', { command: COMMAND_NAME, scheme: COMMAND_NAME })
-        : t(`link.parse.${parsed.error}`, { command: COMMAND_NAME });
+      return {
+        ok: false,
+        text:
+          parsed.error === 'empty'
+            ? t('link.usage', { command: COMMAND_NAME, scheme: COMMAND_NAME })
+            : t(`link.parse.${parsed.error}`, { command: COMMAND_NAME }),
+      };
     let stored;
     try {
       stored = await claimPairing({
@@ -272,20 +330,25 @@ export class CoreHub {
         ...(this.options.fetch ? { fetch: this.options.fetch } : {}),
       });
     } catch (error) {
-      return t('link.failed', { reason: claimReason(error, t) });
+      return { ok: false, text: t('link.failed', { reason: claimReason(error, t) }) };
     }
     // A link to another hub replaces this one; the old token is revoked there.
     if (this.connection && this.connection.hub !== stored.hub) await this.connection.revoke();
     this.store.saveLink(stored);
     this.useLink(new HubConnection(stored, this.connectionOptions()));
     const models = await this.refreshModels();
-    return [t('link.done', { hub: stored.hub, user: stored.user.display_name }), models].join('\n');
+    return {
+      ok: true,
+      text: [t('link.done', { hub: stored.hub, user: stored.user.display_name }), models.text].join(
+        '\n\n',
+      ),
+    };
   }
 
-  async unlink(): Promise<string> {
+  async unlink(): Promise<Outcome> {
     const t = this.t();
     const connection = this.connection;
-    if (!connection) return t('unlink.none');
+    if (!connection) return { ok: false, text: t('unlink.none') };
     this.link?.stop();
     this.link = null;
     await connection.revoke();
@@ -293,35 +356,45 @@ export class CoreHub {
     this.linkState = { status: 'unlinked', detail: null };
     this.store.forgetLink();
     await this.editProvider((current) => withoutProvider(current)).catch(() => undefined);
-    return t('unlink.done', { hub: connection.hub });
+    return { ok: true, text: t('unlink.done', { hub: connection.hub }) };
   }
 
   // ------------------------------------------------------------------ models
 
   /** Asks the gateway for the models and writes the provider row; the person's sentence. */
-  async refreshModels(): Promise<string> {
+  async refreshModels(): Promise<Outcome> {
     const t = this.t();
     const connection = this.connection;
-    if (!connection) return t('status.unlinked', { command: COMMAND_NAME });
+    if (!connection) return { ok: false, text: t('status.unlinked', { command: COMMAND_NAME }) };
     const state = await gatewayModels(connection);
     this.lastModels = state;
     if (!state.ok) {
-      if (state.reason === 'refused') return t('models.refused', { command: COMMAND_NAME });
-      if (state.reason === 'unreachable') return t('models.unreachable', { detail: state.detail });
-      return t(state.reason === 'off' ? 'models.off' : 'models.missing', { detail: state.detail });
+      if (state.reason === 'refused')
+        return { ok: false, text: t('models.refused', { command: COMMAND_NAME }) };
+      if (state.reason === 'unreachable')
+        return { ok: false, text: t('models.unreachable', { detail: state.detail }) };
+      return {
+        ok: false,
+        text: t(state.reason === 'off' ? 'models.off' : 'models.missing', {
+          detail: state.detail,
+        }),
+      };
     }
-    if (state.models.length === 0) return t('models.none');
+    if (state.models.length === 0) return { ok: true, text: t('models.none') };
     const row = providerRow(connection.hub, state.models);
     try {
       await this.editProvider((current) =>
         sameProvider(current, row) ? current : withProvider(current, row),
       );
     } catch (error) {
-      return t('models.not_written', {
-        detail: error instanceof Error ? error.message : String(error),
-      });
+      return {
+        ok: false,
+        text: t('models.not_written', {
+          detail: error instanceof Error ? error.message : String(error),
+        }),
+      };
     }
-    return t('models.ready', { count: state.models.length });
+    return { ok: true, text: t('models.ready', { count: state.models.length }) };
   }
 
   private async editProvider(
@@ -425,10 +498,12 @@ export class CoreHub {
     return [...this.activity];
   }
 
+  /** `/corehub status` as Markdown: one bullet per fact, then the recent activity. */
   statusText(): string {
     const t = this.t();
     const connection = this.connection;
-    if (!connection) return t('status.unlinked', { command: COMMAND_NAME });
+    const where = t('status.settings');
+    if (!connection) return `${t('status.unlinked', { command: COMMAND_NAME })}\n\n${where}`;
     const stored = connection.stored;
     const lines = [
       t('status.linked', {
@@ -449,7 +524,7 @@ export class CoreHub {
     lines.push(
       folders.length > 0
         ? t('status.folders', {
-            folders: folders.map((f) => `${f.path}${f.write ? ' (rw)' : ''}`).join(', '),
+            folders: folders.map((f) => `\`${f.path}\`${f.write ? ' (rw)' : ''}`).join(', '),
           })
         : t('status.folders_none'),
     );
@@ -469,18 +544,111 @@ export class CoreHub {
     );
     if (this.store.linkFileTooOpen())
       lines.push(t('status.file_open', { file: this.store.linkFile }));
+    const out = lines.map((line) => `- ${line}`);
     if (this.activity.length > 0) {
-      lines.push(t('status.activity'));
+      out.push('', `**${t('status.activity')}**`, '');
       for (const a of this.activity.slice(0, 10))
-        lines.push(
-          `  ${a.at} ${a.ok ? '✓' : '✗'} ${a.kind} ${a.tool}${a.target ? ` ${a.target}` : ''}${a.detail ? ` — ${a.detail}` : ''}`,
+        out.push(
+          `- ${a.ok ? '✓' : '✗'} \`${a.at.slice(0, 19).replace('T', ' ')}\` ${a.kind} · ${a.tool}${a.target ? ` \`${a.target}\`` : ''}${a.detail ? ` — ${a.detail}` : ''}`,
         );
     }
-    return lines.join('\n');
+    out.push('', where);
+    return out.join('\n');
   }
 
+  /** The settings page's view of everything (never the token). */
+  statusView(): StatusView {
+    const connection = this.connection;
+    const stored = connection?.stored ?? null;
+    const settings = this.settings();
+    const chosen = cleanProgramProfiles(settings.programs);
+    const servers = safe(
+      () =>
+        (this.mcpManager?.list() ?? [])
+          .filter((s) => s.configured)
+          .map((s) => ({
+            name: s.name,
+            state: s.status?.state ?? 'unknown',
+            profiles: chosen[s.name] ?? [],
+          })),
+      [],
+    );
+    const screen = this.screenAvailable();
+    const models = this.lastModels;
+    return {
+      version: PLUGIN_VERSION,
+      language: settings.language,
+      resolvedLanguage: this.language(),
+      linked: !!stored,
+      link: stored
+        ? {
+            hub: stored.hub,
+            user: stored.user.display_name,
+            deviceId: stored.device_id,
+            profiles: stored.profiles,
+            defaultProfile: stored.default_profile,
+            tokenExpires: stored.token_expires_at ?? null,
+            linkedAt: stored.linked_at,
+            status: this.linkState.status,
+            detail: this.linkState.detail,
+            degraded: this.link?.state().degraded ?? null,
+          }
+        : null,
+      models: !stored
+        ? null
+        : models === null
+          ? null
+          : models.ok
+            ? { ok: true, ids: models.models.map((m) => m.id) }
+            : { ok: false, reason: models.reason, detail: models.detail },
+      folders: this.folders().folders.map((f) => ({ path: f.path, write: f.write })),
+      allowOpen: this.folders().allowOpen,
+      servers,
+      agentProfile: settings.agentProfile,
+      screen: {
+        enabled: settings.screenTasks,
+        model: settings.screenModel,
+        available: screen.ok,
+        why: screen.ok ? null : screen.why,
+      },
+      activity: this.activity.slice(0, 20),
+      canPickFolder: this.folderPicker() !== null,
+      linkFileOpen: this.store.linkFileTooOpen(),
+    };
+  }
+
+  /** Writes the page's changes into the plugin's row (live fields: no restart). */
+  async updateSettings(patch: SettingsPatch): Promise<void> {
+    const editor = this.configEditor;
+    if (!editor) throw new Error('the harness has no configuration editor here');
+    const entry = editor.entries().find((e) => rowIs(e, PLUGIN_NAME));
+    if (!entry) throw new Error(`the profile has no "${PLUGIN_NAME}" row`);
+    await editor.edit(entry, (current) => ({ ...current, ...patch }));
+    this.settingsChanged();
+  }
+
+  /** The harness's own folder chooser on this computer, when the profile composes one. */
+  private folderPicker(): { pick(signal: AbortSignal): Promise<string | null> } | null {
+    const service = this.options.hostService?.('directoryPicker') as
+      { capability?: () => { kind?: string; pick?: unknown } } | undefined;
+    const capability = safe(() => service?.capability?.() ?? null, null);
+    if (capability?.kind !== 'native' || typeof capability.pick !== 'function') return null;
+    return capability as { pick(signal: AbortSignal): Promise<string | null> };
+  }
+
+  /** Opens the operating system's folder chooser; null when cancelled or unavailable. */
+  async pickFolder(signal: AbortSignal): Promise<string | null> {
+    const picker = this.folderPicker();
+    return picker ? picker.pick(signal) : null;
+  }
+
+  /** The commands as a Markdown list, then where the settings page is. */
   help(): string {
-    return this.t()('help', { command: COMMAND_NAME, agentCommand: AGENT_COMMAND_NAME });
+    const t = this.t();
+    const lines = t('help', { command: COMMAND_NAME, agentCommand: AGENT_COMMAND_NAME })
+      .split('\n')
+      .map((line) => `- ${line}`);
+    return [...lines, '', t('status.settings')].join('\n');
   }
 
   // ------------------------------------------------------------------ harness glue

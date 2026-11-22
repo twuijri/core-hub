@@ -40,7 +40,9 @@ const en = {
     'The hub is older than this plugin and does not know “{what}” yet; it was left out of the report.',
   'status.token': 'Token valid until {expires}.',
   'status.folders': 'Shared folders: {folders}.',
-  'status.folders_none': 'No folder is shared (Plugins → {product} → Shared folders).',
+  'status.folders_none': 'No folder is shared.',
+  'status.settings':
+    'Change the folders, programs, screen tasks and language on the harness’s Plugins page → {product} (Settings), or link and unlink there.',
   'status.programs': 'Programs on for the hub: {programs}.',
   'status.programs_none': 'No harness MCP server is switched on for the hub.',
   'status.screen_on': 'Screen tasks: available.',
@@ -114,7 +116,9 @@ const ar: Record<Key, string> = {
   'status.degraded': 'الهب أقدم من هذه الإضافة وما يعرف «{what}» بعد، فتُرك من التقرير.',
   'status.token': 'المفتاح صالح حتى ‎{expires}‎.',
   'status.folders': 'المجلدات المشاركة: {folders}.',
-  'status.folders_none': 'ما فيه مجلد مشارك (الإضافات ← {product} ← المجلدات المشاركة).',
+  'status.folders_none': 'ما فيه مجلد مشارك.',
+  'status.settings':
+    'غيّر المجلدات والبرامج ومهام الشاشة واللغة من صفحة الإضافات في الهارنس ← {product} (الإعدادات)، ومنها تقدر تربط وتفك الربط.',
   'status.programs': 'البرامج المفتوحة للهب: {programs}.',
   'status.programs_none': 'ما فيه خادم ‏MCP‏ من الهارنس مفتوح للهب.',
   'status.screen_on': 'مهام الشاشة: متاحة.',

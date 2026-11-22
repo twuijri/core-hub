@@ -1,7 +1,8 @@
 /**
  * The small part of the harness's plugin API this plugin uses, written down from its published
  * documentation and interface declarations (DeepSeek Harness 0.2.2-rc.5, MIT): docs/architecture.md,
- * docs/subsystems/{commands,mcp,tools}.md, packages/mcp/mcp-manager/README.md,
+ * docs/subsystems/{commands,mcp,tools}.md, packages/mcp/mcp-manager/README.md, the connection
+ * and directory-picker declarations,
  * packages/interaction/user-questions/README.md, the config-editor and llm-pi-ai declarations.
  * Narrow on purpose: the plugin imports none of the harness's runtime packages (only its
  * Schemastery, as a peer), so a breaking change shows up here, in one file.
@@ -121,6 +122,22 @@ export interface AgentDefaultModel {
   currentSelection(): { provider: string; model: string };
 }
 
+/**
+ * `ctx.connection` (dsh-client-connection's Host half): exact Fetch routes on the harness's
+ * authenticated `/api` channel. Only the harness's owner reaches them; the plugin's settings page
+ * calls its own.
+ */
+export interface HostConnection {
+  fetch: {
+    register(route: {
+      path: string;
+      methods: ReadonlyArray<'GET' | 'HEAD' | 'POST'>;
+      requestBody: 'buffered' | 'streaming';
+      fetch: (request: Request) => Promise<Response>;
+    }): () => Promise<void>;
+  };
+}
+
 /** The Cordis context, as far as the plugin reads it. */
 export interface HostContext {
   effect(execute: () => (() => void) | void): unknown;
@@ -137,5 +154,6 @@ export interface HostContext {
   mcpManager?: McpServerManager;
   configEditor?: ConfigEditor;
   userQuestions?: UserQuestions;
+  connection?: HostConnection;
   computerUse?: unknown;
 }

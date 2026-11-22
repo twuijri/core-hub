@@ -42,10 +42,40 @@ the range widened by a change record (`docs/changes/`), never by hope.
    reserved profile (`desktop`) and manages its plugins with its bundled CLI; install there the
    same way with that CLI and `--profile desktop` (not tried yet — see Limits).
 
-3. Restart the harness. `/corehub` now answers in the chat.
+3. Restart the harness. `/corehub` now answers in the chat, and the plugin's page is on the
+   harness's **Plugins** page (open `@corehub/dsh-plugin`; the same page sits behind the
+   **Configure** control of its `corehub` row).
+
+   To install a newer build of the same version, remove the plugin first (`dsh plugin --profile
+   <profile> remove @corehub/dsh-plugin`, or **Uninstall** on its page): a harness with live
+   reload refuses to install over an installed package. The link survives (it is in the profile's
+   `corehub/` folder).
 
 To remove it: `dsh plugin --profile <profile> remove @corehub/dsh-plugin`. Run `/corehub unlink`
 first if you also want the hub to forget this computer's token.
+
+## The Core Hub page
+
+The harness draws no form for a plugin's config by itself: a plugin that wants a settings page
+registers one from its browser half. This plugin's browser half (`dist/client.js`, declared as
+`dsh.client`) adds:
+
+- **The Core Hub page** on the Plugins page: paste the pairing and press **Link** (the result,
+  success or the hub's reason for refusing, is shown on the page); the link (hub, user, device,
+  connection, token expiry, how many models the hub offers) with **Refresh models**, **Link again**
+  and **Unlink**; the shared folders (choose a folder with the harness's own folder chooser when it
+  has one, or type an absolute path; writable or read-only; remove); "open files and links"; each
+  MCP server of the harness profile with an on/off switch and the hub profiles it serves; the hub
+  profile `/hermes` talks in; screen tasks on/off and their model; the language; the recent
+  activity. Every change is saved at once.
+- **Chat cards** for its two commands: `/hermes` answers read like a chat reply (rendered
+  Markdown, each paragraph in its own direction, so Arabic reads right to left, labelled "Hermes ·
+  Core Hub"); `/corehub` results say plainly whether they worked, with a visible
+  `/corehub link ••••` echo (the pairing code is never recorded or shown).
+
+The page talks to the plugin through exact routes on the harness's authenticated `/api` channel
+(`/api/corehub/state`, `link`, `unlink`, `models`, `settings`, `pick-folder`), which only the
+harness's owner reaches. The token never reaches the page.
 
 ## Link to your hub
 
@@ -54,7 +84,8 @@ first if you also want the hub to forget this computer's token.
    models from the hub.
 2. In Core Hub, link a device: it shows a QR code and the pairing as JSON
    (`{"type":"corehub.pairing",…}`).
-3. In the harness, paste it after `/corehub link`:
+3. In the harness, paste it into the Core Hub page's pairing field and press **Link**, or paste
+   it after `/corehub link`:
 
    ```text
    /corehub link {"type":"corehub.pairing","hub_url":"https://hub.example","pairing_id":"01J…","code":"ABCD-1234"}
@@ -91,7 +122,7 @@ on; a hub too old to have the entrance (404) is told to update.
 
 ## Settings
 
-The plugin's settings are its row's config (the harness's Plugins page shows them; they apply
+The plugin's settings are its row's config, edited on the Core Hub page (they apply
 without a restart). In `cordis.patch.yml` of the profile:
 
 ```yaml
@@ -135,7 +166,8 @@ without a restart). In `cordis.patch.yml` of the profile:
 Where you are asked: the harness's own question prompt when it has one for a question that
 belongs to no chat; otherwise the operating system's dialog (`osascript` on macOS, a PowerShell
 message box on Windows, `zenity`/`kdialog` on Linux). Without any of them the answer is Deny.
-Everything the hub asked is listed in `/corehub status`.
+Everything the hub asked is listed in `/corehub status` and under **Recent activity** on the Core
+Hub page.
 
 ## Limits (developer preview)
 
@@ -151,15 +183,24 @@ Everything the hub asked is listed in `/corehub status`.
   `/corehub status` says so.
 - Screen tasks run one at a time; the session is a separate process, so it does not appear in the
   harness's chat list.
+- The Core Hub page and the chat cards were tried in `dsh web` (Linux, headless Chromium) with a
+  stand-in hub; not yet in the desktop app on macOS. The folder chooser appears only where the
+  harness composes a native one on the same computer; elsewhere type the path.
+- The chat cards replace the harness's generic row for `/corehub` and `/hermes` only while the
+  plugin's browser half is loaded; another client shows the plain Markdown result text (its first
+  line is a Markdown comment the card reads).
 
 ## Development
 
 ```sh
 pnpm --filter @corehub/dsh-plugin typecheck
 pnpm --filter @corehub/dsh-plugin test        # vitest, the pure logic
-pnpm --filter @corehub/dsh-plugin build       # dist/index.js, dist/screen-consent.js
+pnpm --filter @corehub/dsh-plugin build       # dist/index.js, dist/client.js, dist/screen-consent.js
 ```
 
 The plugin imports none of the harness's runtime packages: `src/host.ts` writes down the small
 part of the harness's plugin API it uses (from the harness's published documentation and
 interface declarations), so a breaking change in a new release candidate shows up in one file.
+The browser half (`src/client/`) likewise takes only React from the page's shared module table;
+its slot names and props are written down from the harness's published declarations
+(`dsh-client-ui-chat`, `dsh-client-ui-plugin-manager`, `dsh-client-modules`).
