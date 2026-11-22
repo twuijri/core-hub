@@ -16,7 +16,7 @@
  */
 import { existsSync, mkdirSync, readFileSync } from 'node:fs';
 import path from 'node:path';
-import { afterAll, describe, expect, it } from 'vitest';
+import { afterAll, describe, expect, it, vi } from 'vitest';
 import { authed, signedInHub, type TestHub } from '../../../../tests/unit/helpers.js';
 import { runLeasesFor } from '../index.js';
 
@@ -440,5 +440,91 @@ describe('channel identities: a message on a channel acts for the person who lin
       url: '/api/v1/auth/me/channel-identities',
     });
     expect(left.json().items).toEqual([]);
+  });
+
+  // The owner's live hub, 2026-11-22: from Hermes v0.22.2 the hub's own conversations run inside
+  // the gateway, and its hook reports their turns too — platform `local`, the gateway's local
+  // user, `dm`, the Hermes session id (observed on v0.22.5). Each call a fresh hub chat
+  // announced was refused as `hub_tools_run_ambiguous`, beside its own "channel turn of nobody".
+  it("treats a gateway turn of a hub run's own Hermes session as that run's, and still refuses a stranger's beside it", async () => {
+    const { hub: h, root } = await boot();
+    const key = keyOf(root);
+    const workspace = (await authed(h, h.token, { method: 'GET', url: '/api/v1/profiles' }))
+      .json()
+      .items.find((p: { slug: string }) => p.slug === 'default').id as string;
+    const leases = runLeasesFor(h.app);
+    const local = (kind: string, session: string) =>
+      event(h, key, {
+        event: kind,
+        platform: 'local',
+        sender_id: 'uid:1000',
+        session_id: session,
+        chat_type: 'dm',
+      });
+
+    leases.open({
+      runId: 'RUNGW',
+      sessionId: 'SESGW',
+      workspaceId: workspace,
+      userId: h.userId,
+      agentSessionId: 'local-hub-1',
+    });
+    await local('turn_started', 'local-hub-1');
+    expect(leases.live(workspace).map((lease) => lease.kind)).toEqual(['run']);
+    await event(h, key, {
+      event: 'turn_step',
+      platform: 'local',
+      sender_id: 'uid:1000',
+      session_id: 'local-hub-1',
+    });
+    leases.toolStarted('RUNGW', 'mcp__corehub__tasks_list');
+    const own = await call(h, key, 'gateway', 'tasks.list');
+    expect(own.isError, JSON.stringify(own.body)).toBe(false);
+
+    // A stranger writes on Telegram meanwhile: the two cannot be told apart, so nobody is acted
+    // for, and the log says what was live.
+    const info = vi.spyOn(h.app.log, 'info');
+    await event(h, key, {
+      event: 'turn_started',
+      platform: 'telegram',
+      sender_id: '9999',
+      session_id: 'tg-beside',
+      chat_type: 'dm',
+    });
+    expect((await call(h, key, 'gateway', 'tasks.list')).body.code).toBe('hub_tools_run_ambiguous');
+    const logged = info.mock.calls.find(
+      (args) => args[1] === 'agents: a call to the hub tools acted for nobody',
+    )?.[0] as { reason: string; origin: string; live: Record<string, unknown> } | undefined;
+    info.mockRestore();
+    expect(logged).toMatchObject({
+      reason: 'hub_tools_run_ambiguous',
+      origin: 'gateway',
+      live: { runs: 1, announced: 1, channels: 1, channels_for_nobody: 1 },
+    });
+    // Ids and kinds, never a sender's id.
+    expect(JSON.stringify(logged)).not.toContain('9999');
+    await event(h, key, {
+      event: 'turn_ended',
+      platform: 'telegram',
+      sender_id: '9999',
+      session_id: 'tg-beside',
+    });
+
+    // A local turn of a session that is not a live run's (another client of the gateway) is
+    // nobody's, as before.
+    await local('turn_started', 'local-somebody-else');
+    expect((await call(h, key, 'gateway', 'tasks.list')).body.code).toBe('hub_tools_run_ambiguous');
+    await local('turn_ended', 'local-somebody-else');
+
+    await local('turn_ended', 'local-hub-1');
+    leases.toolEnded('RUNGW', 'mcp__corehub__tasks_list');
+    leases.close('RUNGW');
+    // Once the run is over, a turn Hermes starts on that session by itself is nobody's.
+    await local('turn_started', 'local-hub-1');
+    expect((await call(h, key, 'gateway', 'tasks.list')).body.code).toBe(
+      'hub_tools_sender_not_linked',
+    );
+    await local('turn_ended', 'local-hub-1');
+    expect(leases.live(workspace)).toEqual([]);
   });
 });

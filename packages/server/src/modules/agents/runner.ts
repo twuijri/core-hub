@@ -191,6 +191,9 @@ export class AgentRunner implements AgentRunnerPort {
       sessionId: request.sessionId,
       workspaceId: request.workspace,
       userId: request.userId ?? null,
+      // Hermes's session id: inside its gateway, the hub's hook reports this conversation's turns
+      // under it, and they are this run's, not a channel's (`hub-tools/leases.ts`).
+      agentSessionId: live.session.id,
     });
 
     // On the hub's models (ADR 0029) the agent names an alias; the gateway serves this turn's

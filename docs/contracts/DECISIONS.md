@@ -2384,6 +2384,18 @@ Rejected: typing an account id (anyone could claim anyone's); per-profile links 
 proving the same phone once per profile); acting as the profile's owner for every channel
 message (a stranger would act as the owner); guessing among concurrent senders.
 
+*Amendment (2026-11-22): the hub's own conversations inside the gateway.* From Hermes v0.22.2 the
+hub's conversations attach to the gateway (ADR 0013, amendment 2026-11-05), and inside it they are
+turns like a channel's: the hook reports them too (observed on v0.22.5: platform `local`, the
+gateway's local user as the sender, `dm`, and the Hermes session id `session.create` gave the
+hub). Each became a "channel turn of nobody" beside its own run, and every hub tool call the run
+announced was refused as `hub_tools_run_ambiguous` (the owner's live hub, `devices.list`). A run's
+lease now remembers its Hermes session, and a `turn_started` of a live run's session opens no
+channel lease: the call is attributed as the run's, as above. A `local` turn of any other session
+(another client of the gateway, or one Hermes starts after the run ended) is still a turn of
+nobody, and a stranger's channel turn beside an announced run is still refused. No contract
+change.
+
 ## 80. The relay, presets and hub peers stay in the contract, parked
 
 The owner, 2026-09-25, on the rest of the 501 inventory:
