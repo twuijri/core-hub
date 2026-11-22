@@ -68,9 +68,9 @@ registers one from its browser half. This plugin's browser half (`dist/client.js
   MCP server of the harness profile with an on/off switch and the hub profiles it serves; the hub
   profile `/hermes` talks in; screen tasks on/off and their model; the language; the recent
   activity. Every change is saved at once.
-- **Chat cards** for its two commands: `/hermes` answers read like a chat reply (rendered
-  Markdown, each paragraph in its own direction, so Arabic reads right to left, labelled "Hermes ·
-  Core Hub"); `/corehub` results say plainly whether they worked, with a visible
+- **Chat cards** for its two commands: `/hermes` answers read like a chat reply (the question in
+  the harness's own message bubble, the answer in its own Markdown renderer with each paragraph in
+  its own direction, so Arabic reads right to left, labelled "Hermes · Core Hub"); `/corehub` results say plainly whether they worked, with a visible
   `/corehub link ••••` echo (the pairing code is never recorded or shown).
 
 The page talks to the plugin through exact routes on the harness's authenticated `/api` channel
@@ -201,6 +201,11 @@ pnpm --filter @corehub/dsh-plugin build       # dist/index.js, dist/client.js, d
 The plugin imports none of the harness's runtime packages: `src/host.ts` writes down the small
 part of the harness's plugin API it uses (from the harness's published documentation and
 interface declarations), so a breaking change in a new release candidate shows up in one file.
-The browser half (`src/client/`) likewise takes only React from the page's shared module table;
-its slot names and props are written down from the harness's published declarations
-(`dsh-client-ui-chat`, `dsh-client-ui-plugin-manager`, `dsh-client-modules`).
+The browser half (`src/client/`) takes React and the harness's shared UI library
+(`@deepseek-ai/dsh-client-ui-primitives`: Button, Input, Switch, Checkbox, Menu, Modal, Toast,
+StateDot, Tag, PathLabel, CommandText, UserMessageBubble, MarkdownText) from the page's shared
+module table, so its controls are the harness's own in light and dark; its few layout rules use
+only the theme's `--dsw-*` tokens (`src/client/styles.ts`). Slot names and props, and those
+components' props, are written down from the harness's published declarations
+(`dsh-client-ui-chat`, `dsh-client-ui-plugin-manager`, `dsh-client-modules`,
+`dsh-client-ui-primitives`; `src/client/harness-ui.d.ts`).

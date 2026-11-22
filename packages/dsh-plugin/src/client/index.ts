@@ -8,14 +8,16 @@
  *   (`plugins.bundle.config`) and behind the row's Configure control (`plugins.row.config`).
  *
  * Slots and their props are written down from the harness's published declarations (0.2.2-rc.5,
- * dsh-client-ui-chat and dsh-client-ui-plugin-manager); only React comes from the page's shared
- * module table.
+ * dsh-client-ui-chat and dsh-client-ui-plugin-manager). React and the harness's shared UI
+ * library (dsh-client-ui-primitives) come from the page's shared module table, so every control
+ * is the harness's own.
  */
 import { createElement as h } from 'react';
 import { PanelApi } from './api.js';
 import { CoreHubCard, HermesCard, type CommandRowNode } from './chat.js';
 import { CoreHubPage } from './page.js';
 import { COMMANDS, PLUGIN_PACKAGE, PLUGIN_ROW } from './product.js';
+import { installStyles } from './styles.js';
 
 export const name = 'corehub-client';
 export const inject = ['slots'];
@@ -33,10 +35,13 @@ interface ClientContext {
     register(options: SlotOptions, component: (props: never) => unknown): () => void;
   };
   get?(service: string): unknown;
+  effect?(execute: () => () => void): unknown;
 }
 
 export function apply(ctx: ClientContext): void {
   const api = new PanelApi();
+  if (ctx.effect) ctx.effect(() => installStyles());
+  else installStyles();
   const openSettings = () => {
     const nav = ctx.get?.('pluginNavigation') as { openBundle?(pkg: string): void } | undefined;
     nav?.openBundle?.(PLUGIN_PACKAGE);

@@ -4,6 +4,10 @@
  * the pairing, the link's state, the shared folders, the harness MCP servers offered to the hub,
  * Hermes's profile, screen tasks, the language, and the recent activity. Every change is written
  * at once through the plugin's host half (`panel.ts`), which keeps the token to itself.
+ *
+ * Its controls are the harness's own (buttons, inputs, switches, checkboxes, menus, the dialog,
+ * the toast, state dots), laid out like its own settings pages: a section title, the control, a
+ * hint under it; groups of facts sit in the settings-card material (`styles.ts`).
  */
 import {
   createElement as h,
@@ -13,133 +17,124 @@ import {
   useState,
   type ReactNode,
 } from 'react';
+import {
+  Button,
+  Checkbox,
+  IconChevronDownOutlineRegular,
+  IconFolderOpenOutlineRegular,
+  IconRefreshOutlineRegular,
+  IconTrashOutlineRegular,
+  Input,
+  Menu,
+  Modal,
+  PathLabel,
+  StateDot,
+  Switch,
+  Tag,
+  Toast,
+  type StateDotState,
+} from '@deepseek-ai/dsh-client-ui-primitives';
 import { uiLanguage, uiTranslator, type UiTranslate } from '../ui-strings.js';
 import type { PanelApi, SettingsPatch, StatusView } from './api.js';
 import { PRODUCT_NAMES } from './product.js';
 
 const POLL_MS = 5000;
-const GREEN = '#16a34a';
-const RED = '#dc2626';
-const AMBER = '#d97706';
-const BLUE = '#2563eb';
-
-const s = {
-  page: {
-    display: 'flex',
-    flexDirection: 'column' as const,
-    gap: 14,
-    fontSize: 14,
-    lineHeight: 1.5,
-  },
-  section: {
-    border: '1px solid rgba(127,127,127,0.25)',
-    borderRadius: 12,
-    padding: '12px 14px',
-    display: 'flex',
-    flexDirection: 'column' as const,
-    gap: 8,
-  },
-  title: { margin: 0, fontSize: 15, fontWeight: 600 },
-  hint: { margin: 0, fontSize: 13, opacity: 0.7 },
-  row: { display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' as const },
-  grid: {
-    display: 'grid',
-    gridTemplateColumns: 'max-content 1fr',
-    justifyItems: 'start',
-    gap: '4px 12px',
-    fontSize: 13,
-  },
-  input: {
-    flex: '1 1 240px',
-    minWidth: 0,
-    padding: '6px 10px',
-    borderRadius: 8,
-    border: '1px solid rgba(127,127,127,0.4)',
-    background: 'transparent',
-    color: 'inherit',
-    font: 'inherit',
-  },
-  mono: { fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Consolas, monospace', fontSize: 12 },
-  button: {
-    padding: '6px 12px',
-    borderRadius: 8,
-    border: '1px solid rgba(127,127,127,0.45)',
-    background: 'transparent',
-    color: 'inherit',
-    cursor: 'pointer',
-    font: 'inherit',
-  },
-  primary: {
-    padding: '6px 14px',
-    borderRadius: 8,
-    border: `1px solid ${BLUE}`,
-    background: BLUE,
-    color: '#fff',
-    cursor: 'pointer',
-    font: 'inherit',
-  },
-  danger: {
-    padding: '6px 12px',
-    borderRadius: 8,
-    border: `1px solid ${RED}`,
-    background: 'transparent',
-    color: RED,
-    cursor: 'pointer',
-    font: 'inherit',
-  },
-};
 
 function browserLanguages(): readonly string[] {
   return typeof navigator === 'undefined' ? [] : (navigator.languages ?? [navigator.language]);
 }
 
-function notice(ok: boolean, text: string): ReactNode {
+function section(title: string, ...children: ReactNode[]): ReactNode {
+  return h(
+    'section',
+    { className: 'corehub-section' },
+    h('h4', { className: 'corehub-section-title' }, title),
+    ...children,
+  );
+}
+
+function hint(text: string): ReactNode {
+  return h('p', { className: 'corehub-hint', dir: 'auto' }, text);
+}
+
+function result(ok: boolean, text: string): ReactNode {
   return h(
     'div',
-    {
-      role: ok ? 'status' : 'alert',
-      dir: 'auto',
-      style: {
-        border: `1px solid ${ok ? GREEN : RED}`,
-        background: ok ? 'rgba(22,163,74,0.08)' : 'rgba(220,38,38,0.08)',
-        color: 'inherit',
-        borderRadius: 8,
-        padding: '8px 10px',
-        whiteSpace: 'pre-wrap',
-        unicodeBidi: 'plaintext',
-      },
-    },
-    h('strong', { style: { color: ok ? GREEN : RED } }, ok ? '✓ ' : '✕ '),
-    text,
+    { className: 'corehub-result', 'data-ok': String(ok), role: ok ? 'status' : 'alert' },
+    h(StateDot, { state: ok ? 'done' : 'error' }),
+    h('span', null, text),
   );
 }
 
-function dot(color: string, label: string): ReactNode {
+function fact(label: string, value: ReactNode): ReactNode {
   return h(
-    'span',
-    { style: { display: 'inline-flex', alignItems: 'center', gap: 6 } },
-    h('span', {
-      style: { width: 8, height: 8, borderRadius: 4, background: color, display: 'inline-block' },
-    }),
-    label,
+    'div',
+    { className: 'corehub-card-row' },
+    h('span', { className: 'corehub-fact-label' }, label),
+    h('span', { className: 'corehub-fact-value' }, value),
   );
 }
 
-function section(title: string, ...children: ReactNode[]): ReactNode {
-  return h('section', { style: s.section }, h('h4', { style: s.title }, title), ...children);
-}
-
-function toggle(label: string, checked: boolean, onChange: (v: boolean) => void, disabled = false) {
+function switchRow(
+  label: string,
+  checked: boolean,
+  onChange: (v: boolean) => void,
+  disabled = false,
+) {
   return h(
-    'label',
-    { style: { ...s.row, cursor: disabled ? 'default' : 'pointer', opacity: disabled ? 0.6 : 1 } },
-    h('input', {
-      type: 'checkbox',
-      checked,
-      disabled,
-      onChange: (e: { target: { checked: boolean } }) => onChange(e.target.checked),
-    }),
+    'div',
+    { className: 'corehub-switch-row' },
     h('span', { dir: 'auto' }, label),
+    h(Switch, { label, checked, onChange, disabled }),
+  );
+}
+
+/** A selector like the harness's own settings pages: a field-shaped trigger and its menu. */
+function Select(props: {
+  label: string;
+  value: string;
+  options: Array<[string, string]>;
+  disabled: boolean;
+  onChange: (value: string) => void;
+}): ReactNode {
+  const [open, setOpen] = useState(false);
+  const current = props.options.find(([v]) => v === props.value)?.[1] ?? props.value;
+  return h(Menu, {
+    open,
+    portal: true,
+    minWidthFromAnchor: true,
+    autoFocus: true,
+    selectedId: props.value,
+    items: props.options.map(([id, label]) => ({ id, label })),
+    onSelect: (id: string) => {
+      setOpen(false);
+      if (id !== props.value) props.onChange(id);
+    },
+    onClose: () => setOpen(false),
+    anchor: h(
+      'button',
+      {
+        type: 'button',
+        className: 'corehub-select',
+        'aria-label': props.label,
+        'aria-haspopup': 'menu',
+        'aria-expanded': open,
+        disabled: props.disabled,
+        onClick: () => setOpen((v) => !v),
+      },
+      h('span', { dir: 'auto' }, current),
+      h(IconChevronDownOutlineRegular, { size: 14 }),
+    ),
+  });
+}
+
+function field(label: string, control: ReactNode, note?: ReactNode): ReactNode {
+  return h(
+    'div',
+    { className: 'corehub-section' },
+    h('span', { className: 'corehub-fact-label', style: { flex: 'none' } }, label),
+    h('div', null, control),
+    note ?? null,
   );
 }
 
@@ -172,15 +167,25 @@ export function CoreHubPage({ api, view }: CoreHubPageProps): ReactNode {
   return h(CoreHubSettings, { api });
 }
 
+const CONNECTION_DOT: Record<string, StateDotState> = {
+  connected: 'done',
+  connecting: 'ongoing',
+  offline: 'warning',
+  refused: 'error',
+  stopped: 'idle',
+  unlinked: 'idle',
+};
+
 function CoreHubSettings({ api }: { api: PanelApi }): ReactNode {
   const [state, setState] = useState<StatusView | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
-  const [result, setResult] = useState<{ ok: boolean; text: string } | null>(null);
+  const [outcome, setOutcome] = useState<{ ok: boolean; text: string } | null>(null);
   const [saveNote, setSaveNote] = useState<{ ok: boolean; text: string } | null>(null);
   const [pairing, setPairing] = useState('');
   const [newFolder, setNewFolder] = useState('');
   const [relink, setRelink] = useState(false);
+  const [confirmUnlink, setConfirmUnlink] = useState(false);
   const live = useRef(true);
 
   const lang = uiLanguage(state?.language, browserLanguages());
@@ -208,12 +213,6 @@ function CoreHubSettings({ api }: { api: PanelApi }): ReactNode {
     };
   }, [load]);
 
-  useEffect(() => {
-    if (!saveNote?.ok) return;
-    const timer = setTimeout(() => setSaveNote(null), 2500);
-    return () => clearTimeout(timer);
-  }, [saveNote]);
-
   const save = async (patch: SettingsPatch) => {
     setBusy('save');
     try {
@@ -235,164 +234,191 @@ function CoreHubSettings({ api }: { api: PanelApi }): ReactNode {
     run: () => Promise<{ outcome: { ok: boolean; text: string }; state: StatusView }>,
   ) => {
     setBusy(name);
-    setResult(null);
+    setOutcome(null);
     try {
-      const { outcome, state: next } = await run();
+      const { outcome: answer, state: next } = await run();
       setState(next);
-      setResult(outcome);
-      if (name === 'link' && outcome.ok) {
+      setOutcome(answer);
+      if (name === 'link' && answer.ok) {
         setPairing('');
         setRelink(false);
       }
     } catch (e) {
-      setResult({ ok: false, text: e instanceof Error ? e.message : String(e) });
+      setOutcome({ ok: false, text: e instanceof Error ? e.message : String(e) });
     } finally {
       setBusy(null);
     }
   };
 
+  const dir = lang === 'ar' ? 'rtl' : 'ltr';
   if (!state)
     return h(
       'div',
-      { style: s.page, dir: lang === 'ar' ? 'rtl' : 'ltr' },
+      { className: 'corehub-page', dir },
       error
         ? h(
             'div',
-            { style: s.row },
-            notice(false, t('page.error', { reason: error })),
+            { className: 'corehub-row' },
+            result(false, t('page.error', { reason: error })),
             h(
-              'button',
-              { type: 'button', style: s.button, onClick: () => void load() },
+              Button,
+              { variant: 'outline', size: 'sm', type: 'button', onClick: () => void load() },
               t('page.retry'),
             ),
           )
-        : h('p', { style: s.hint }, t('page.loading')),
+        : hint(t('page.loading')),
     );
 
   const link = state.link;
   const connection = link?.status ?? 'unlinked';
-  const connColor =
-    connection === 'connected'
-      ? GREEN
-      : connection === 'refused'
-        ? RED
-        : connection === 'connecting'
-          ? AMBER
-          : 'gray';
 
-  // ---------------------------------------------------------------- link section
-  const pasteForm = [
-    h(
-      'label',
-      { key: 'l', htmlFor: 'corehub-pairing', style: { fontWeight: 600, fontSize: 13 } },
-      t('link.paste'),
-    ),
-    h('p', { key: 'h', style: s.hint, dir: 'auto' }, t('link.paste.hint')),
+  // ---------------------------------------------------------------- link
+  const pasteForm = h(
+    'div',
+    { className: 'corehub-section' },
+    h('label', { htmlFor: 'corehub-pairing', className: 'corehub-section-title' }, t('link.paste')),
     h(
       'div',
-      { key: 'r', style: s.row },
-      h('textarea', {
+      { className: 'corehub-row' },
+      h(Input, {
         id: 'corehub-pairing',
+        className: 'corehub-grow',
         value: pairing,
-        rows: 2,
         dir: 'ltr',
         spellCheck: false,
         autoComplete: 'off',
         placeholder: '{"type":"corehub.pairing",…}',
-        style: { ...s.input, ...s.mono, resize: 'vertical' },
-        onChange: (e: { target: { value: string } }) => setPairing(e.target.value),
+        onChange: (e) => setPairing(e.target.value),
+        onKeyDown: (e) => {
+          if (e.key === 'Enter' && pairing.trim() && !busy)
+            void act('link', () => api.link(pairing.trim()));
+        },
       }),
       h(
-        'button',
+        Button,
         {
+          variant: 'primary',
           type: 'button',
-          style: { ...s.primary, opacity: !pairing.trim() || busy ? 0.6 : 1 },
           disabled: !pairing.trim() || !!busy,
           onClick: () => void act('link', () => api.link(pairing.trim())),
         },
         busy === 'link' ? t('link.busy') : t('link.button'),
       ),
     ),
-  ];
+    hint(t('link.paste.hint')),
+  );
+
+  const modelsValue =
+    state.models === null
+      ? '—'
+      : state.models.ok
+        ? t('link.models.count', { count: state.models.ids.length })
+        : h(Tag, { tone: 'danger' }, state.models.detail || state.models.reason);
 
   const linkSection = section(
     t('link.title'),
     link
       ? h(
           'div',
-          { style: s.grid },
-          h('span', { style: { opacity: 0.7 } }, t('link.connection')),
-          h('span', null, dot(connColor, t(`conn.${connection}` as never))),
-          h('span', { style: { opacity: 0.7 } }, t('link.hub')),
-          h('bdi', { style: s.mono }, link.hub),
-          h('span', { style: { opacity: 0.7 } }, t('link.user')),
-          h('bdi', null, link.user),
-          h('span', { style: { opacity: 0.7 } }, t('link.device')),
-          h('bdi', { style: s.mono }, link.deviceId),
-          ...(link.tokenExpires
-            ? [
-                h('span', { key: 'te', style: { opacity: 0.7 } }, t('link.token')),
+          { className: 'corehub-card' },
+          fact(t('link.connection'), [
+            h(StateDot, { key: 'd', state: CONNECTION_DOT[connection] ?? 'idle' }),
+            h('span', { key: 't' }, t(`conn.${connection}` as never)),
+          ]),
+          fact(t('link.hub'), h('span', { className: 'corehub-mono' }, link.hub)),
+          fact(t('link.user'), h('bdi', null, link.user)),
+          fact(t('link.device'), h('span', { className: 'corehub-mono' }, link.deviceId)),
+          link.tokenExpires
+            ? fact(
+                t('link.token'),
                 h(
-                  'bdi',
-                  { key: 'tv', style: s.mono },
+                  'span',
+                  { className: 'corehub-mono' },
                   link.tokenExpires.slice(0, 16).replace('T', ' '),
                 ),
-              ]
-            : []),
-          h('span', { style: { opacity: 0.7 } }, t('link.models')),
-          h(
-            'span',
-            { dir: 'auto' },
-            state.models === null
-              ? '—'
-              : state.models.ok
-                ? t('link.models.count', { count: state.models.ids.length })
-                : h('span', { style: { color: RED } }, state.models.detail || state.models.reason),
-          ),
+              )
+            : null,
+          fact(t('link.models'), modelsValue),
         )
-      : h('p', { style: { margin: 0 } }, dot('gray', t('link.unlinked'))),
-    result ? notice(result.ok, result.text) : null,
+      : h(
+          'div',
+          { className: 'corehub-result', 'data-ok': 'true' },
+          h(StateDot, { state: 'idle' }),
+          h('span', null, t('link.unlinked')),
+        ),
+    outcome ? result(outcome.ok, outcome.text) : null,
     link
       ? h(
           'div',
-          { style: s.row },
+          { className: 'corehub-row' },
           h(
-            'button',
+            Button,
             {
+              variant: 'outline',
+              size: 'sm',
               type: 'button',
-              style: s.button,
+              icon: h(IconRefreshOutlineRegular, { size: 14 }),
               disabled: !!busy,
               onClick: () => void act('models', () => api.models()),
             },
             t('link.models.refresh'),
           ),
           h(
-            'button',
+            Button,
             {
+              variant: 'outline',
+              size: 'sm',
               type: 'button',
-              style: s.button,
               disabled: !!busy,
               onClick: () => setRelink((v) => !v),
             },
             t('link.relink'),
           ),
           h(
-            'button',
+            Button,
             {
+              variant: 'outline',
+              size: 'sm',
               type: 'button',
-              style: s.danger,
+              className: 'corehub-danger',
               disabled: !!busy,
-              onClick: () => {
-                if (globalThis.confirm?.(t('link.unlink.confirm', { hub: link.hub })) ?? true)
-                  void act('unlink', () => api.unlink());
-              },
+              onClick: () => setConfirmUnlink(true),
             },
             t('link.unlink'),
           ),
         )
       : null,
-    !link || relink
-      ? h('div', { style: { display: 'flex', flexDirection: 'column', gap: 6 } }, ...pasteForm)
+    !link || relink ? pasteForm : null,
+    link
+      ? h(Modal, {
+          open: confirmUnlink,
+          onClose: () => setConfirmUnlink(false),
+          title: t('link.unlink'),
+          tone: 'warning',
+          description: t('link.unlink.confirm', { hub: link.hub }),
+          closeLabel: t('close'),
+          footer: h(
+            'div',
+            { className: 'corehub-row', style: { justifyContent: 'flex-end' } },
+            h(
+              Button,
+              { variant: 'outline', type: 'button', onClick: () => setConfirmUnlink(false) },
+              t('cancel'),
+            ),
+            h(
+              Button,
+              {
+                variant: 'primary',
+                type: 'button',
+                onClick: () => {
+                  setConfirmUnlink(false);
+                  void act('unlink', () => api.unlink());
+                },
+              },
+              t('link.unlink'),
+            ),
+          ),
+        })
       : null,
   );
 
@@ -406,41 +432,32 @@ function CoreHubSettings({ api }: { api: PanelApi }): ReactNode {
   };
   const foldersSection = section(
     t('folders.title'),
-    h('p', { style: s.hint, dir: 'auto' }, t('folders.hint')),
+    hint(t('folders.hint')),
     folders.length === 0
-      ? h('p', { style: { margin: 0, opacity: 0.7 } }, t('folders.empty'))
+      ? hint(t('folders.empty'))
       : h(
-          'ul',
-          {
-            style: {
-              listStyle: 'none',
-              margin: 0,
-              padding: 0,
-              display: 'flex',
-              flexDirection: 'column',
-              gap: 6,
-            },
-          },
+          'div',
+          { className: 'corehub-card' },
           folders.map((f, i) =>
             h(
-              'li',
-              { key: f.path, style: { ...s.row, justifyContent: 'space-between' } },
-              h(
-                'bdi',
-                { style: { ...s.mono, overflowWrap: 'anywhere', flex: '1 1 200px' } },
-                f.path,
-              ),
-              toggle(
-                t('folders.writable'),
-                f.write,
-                (v) =>
+              'div',
+              { key: f.path, className: 'corehub-card-row' },
+              h(PathLabel, { path: f.path, className: 'corehub-grow', dir: 'ltr' }),
+              h(Checkbox, {
+                label: t('folders.writable'),
+                checked: f.write,
+                disabled: !!busy,
+                onChange: (v: boolean) =>
                   void save({ folders: folders.map((g, j) => (j === i ? { ...g, write: v } : g)) }),
-              ),
+              }),
               h(
-                'button',
+                Button,
                 {
+                  variant: 'ghost',
+                  size: 'sm',
                   type: 'button',
-                  style: s.danger,
+                  className: 'corehub-danger',
+                  icon: h(IconTrashOutlineRegular, { size: 14 }),
                   disabled: !!busy,
                   onClick: () => void save({ folders: folders.filter((_, j) => j !== i) }),
                 },
@@ -451,13 +468,14 @@ function CoreHubSettings({ api }: { api: PanelApi }): ReactNode {
         ),
     h(
       'div',
-      { style: s.row },
+      { className: 'corehub-row' },
       state.canPickFolder
         ? h(
-            'button',
+            Button,
             {
+              variant: 'outline',
               type: 'button',
-              style: s.button,
+              icon: h(IconFolderOpenOutlineRegular, { size: 16 }),
               disabled: !!busy,
               onClick: async () => {
                 setBusy('pick');
@@ -474,30 +492,29 @@ function CoreHubSettings({ api }: { api: PanelApi }): ReactNode {
             t('folders.pick'),
           )
         : null,
-      h('input', {
-        type: 'text',
+      h(Input, {
+        className: 'corehub-grow',
         dir: 'ltr',
         value: newFolder,
         placeholder: t('folders.path'),
         'aria-label': t('folders.path'),
-        style: { ...s.input, ...s.mono },
-        onChange: (e: { target: { value: string } }) => setNewFolder(e.target.value),
-        onKeyDown: (e: { key: string }) => {
+        onChange: (e) => setNewFolder(e.target.value),
+        onKeyDown: (e) => {
           if (e.key === 'Enter') addFolder(newFolder);
         },
       }),
       h(
-        'button',
+        Button,
         {
+          variant: 'outline',
           type: 'button',
-          style: s.button,
           disabled: !newFolder.trim() || !!busy,
           onClick: () => addFolder(newFolder),
         },
         t('folders.add'),
       ),
     ),
-    toggle(t('folders.allowOpen'), state.allowOpen, (v) => void save({ allowOpen: v })),
+    switchRow(t('folders.allowOpen'), state.allowOpen, (v) => void save({ allowOpen: v }), !!busy),
   );
 
   // ---------------------------------------------------------------- programs
@@ -507,166 +524,147 @@ function CoreHubSettings({ api }: { api: PanelApi }): ReactNode {
     void save({ programs: { ...programsNow, [server]: profiles } });
   const programsSection = section(
     t('programs.title'),
-    h('p', { style: s.hint, dir: 'auto' }, t('programs.hint')),
+    hint(t('programs.hint')),
     state.servers.length === 0
-      ? h('p', { style: { margin: 0, opacity: 0.7 } }, t('programs.empty'))
+      ? hint(t('programs.empty'))
       : h(
-          'ul',
-          {
-            style: {
-              listStyle: 'none',
-              margin: 0,
-              padding: 0,
-              display: 'flex',
-              flexDirection: 'column',
-              gap: 8,
-            },
-          },
+          'div',
+          { className: 'corehub-card' },
           state.servers.map((sv) =>
             h(
-              'li',
-              { key: sv.name, style: { display: 'flex', flexDirection: 'column', gap: 4 } },
-              h(
-                'div',
-                { style: s.row },
-                toggle(
-                  '',
-                  sv.profiles.length > 0,
-                  (on) =>
-                    setProgram(
-                      sv.name,
-                      on ? [link?.defaultProfile ?? hubProfiles[0] ?? 'default'] : [],
-                    ),
-                  !link,
-                ),
-                h('bdi', { style: { ...s.mono, fontWeight: 600 } }, sv.name),
-                h('span', { style: { opacity: 0.6, fontSize: 12 } }, sv.state),
-              ),
+              'div',
+              { key: sv.name, className: 'corehub-card-row' },
+              h('span', { className: 'corehub-grow', dir: 'ltr' }, sv.name),
+              h(Tag, { tone: 'neutral' }, sv.state),
+              h(Switch, {
+                label: `${t('programs.on')}: ${sv.name}`,
+                checked: sv.profiles.length > 0,
+                disabled: !link || !!busy,
+                onChange: (on: boolean) =>
+                  setProgram(
+                    sv.name,
+                    on ? [link?.defaultProfile ?? hubProfiles[0] ?? 'default'] : [],
+                  ),
+              }),
               sv.profiles.length > 0 && hubProfiles.length > 0
                 ? h(
                     'div',
-                    { style: { ...s.row, paddingInlineStart: 26 } },
+                    { className: 'corehub-row', style: { flexBasis: '100%' } },
                     hubProfiles.map((p) =>
-                      h(
-                        'span',
-                        { key: p },
-                        toggle(p, sv.profiles.includes(p), (on) => {
-                          const next = on
-                            ? [...sv.profiles, p]
-                            : sv.profiles.filter((x) => x !== p);
-                          setProgram(sv.name, next);
-                        }),
-                      ),
+                      h(Checkbox, {
+                        key: p,
+                        label: p,
+                        checked: sv.profiles.includes(p),
+                        disabled: !!busy,
+                        onChange: (on: boolean) =>
+                          setProgram(
+                            sv.name,
+                            on ? [...sv.profiles, p] : sv.profiles.filter((x) => x !== p),
+                          ),
+                      }),
                     ),
                   )
                 : null,
             ),
           ),
         ),
-    link ? null : h('p', { style: s.hint }, t('programs.noProfiles')),
+    link ? null : hint(t('programs.noProfiles')),
   );
 
   // ---------------------------------------------------------------- hermes, screen, language
-  const select = (
-    label: string,
-    value: string,
-    options: Array<[string, string]>,
-    onChange: (v: string) => void,
-  ) =>
-    h(
-      'label',
-      { style: s.row },
-      h('span', { style: { minWidth: 90 } }, label),
-      h(
-        'select',
-        {
-          value,
-          disabled: !!busy,
-          style: { ...s.input, flex: '0 1 280px' },
-          onChange: (e: { target: { value: string } }) => onChange(e.target.value),
-        },
-        options.map(([v, l]) => h('option', { key: v, value: v }, l)),
-      ),
-    );
-
   const hermesSection = section(
     t('hermes.title'),
-    select(
+    field(
       t('hermes.profile'),
-      state.agentProfile,
-      [['', t('hermes.default')], ...hubProfiles.map((p): [string, string] => [p, p])],
-      (v) => void save({ agentProfile: v }),
+      h(Select, {
+        label: t('hermes.profile'),
+        value: state.agentProfile,
+        disabled: !!busy,
+        options: [['', t('hermes.default')], ...hubProfiles.map((p): [string, string] => [p, p])],
+        onChange: (v) => void save({ agentProfile: v }),
+      }),
     ),
   );
 
   const modelIds = state.models?.ok ? state.models.ids : [];
   const screenSection = section(
     t('screen.title'),
-    toggle(t('screen.toggle'), state.screen.enabled, (v) => void save({ screenTasks: v })),
-    select(
-      t('screen.model'),
-      state.screen.model,
-      [
-        ['', t('screen.model.auto')],
-        ...[...new Set([...(state.screen.model ? [state.screen.model] : []), ...modelIds])].map(
-          (m): [string, string] => [m, m],
-        ),
-      ],
-      (v) => void save({ screenModel: v }),
+    switchRow(
+      t('screen.toggle'),
+      state.screen.enabled,
+      (v) => void save({ screenTasks: v }),
+      !!busy,
     ),
-    h(
-      'p',
-      { style: s.hint },
-      state.screen.available
-        ? dot(GREEN, t('screen.available'))
-        : dot(
-            'gray',
-            t('screen.unavailable', {
-              why: t(`screen.why.${state.screen.why ?? 'platform'}` as never),
-            }),
+    field(
+      t('screen.model'),
+      h(Select, {
+        label: t('screen.model'),
+        value: state.screen.model,
+        disabled: !!busy,
+        options: [
+          ['', t('screen.model.auto')],
+          ...[...new Set([...(state.screen.model ? [state.screen.model] : []), ...modelIds])].map(
+            (m): [string, string] => [m, m],
           ),
+        ],
+        onChange: (v) => void save({ screenModel: v }),
+      }),
+      h(
+        'div',
+        { className: 'corehub-result', 'data-ok': 'true' },
+        h(StateDot, { state: state.screen.available ? 'done' : 'idle' }),
+        h(
+          'span',
+          { className: 'corehub-hint' },
+          state.screen.available
+            ? t('screen.available')
+            : t('screen.unavailable', {
+                why: t(`screen.why.${state.screen.why ?? 'platform'}` as never),
+              }),
+        ),
+      ),
     ),
   );
 
   const languageSection = section(
     t('language.title'),
-    select(
-      t('language.title'),
-      state.language || 'auto',
-      [
+    h(Select, {
+      label: t('language.title'),
+      value: state.language || 'auto',
+      disabled: !!busy,
+      options: [
         ['auto', t('language.auto')],
         ['en', 'English'],
         ['ar', 'العربية'],
       ],
-      (v) => void save({ language: v as 'auto' | 'en' | 'ar' }),
-    ),
+      onChange: (v) => void save({ language: v as 'auto' | 'en' | 'ar' }),
+    }),
   );
 
   const activitySection = section(
     t('activity.title'),
     state.activity.length === 0
-      ? h('p', { style: { margin: 0, opacity: 0.7 } }, t('activity.empty'))
+      ? hint(t('activity.empty'))
       : h(
-          'ul',
-          { style: { listStyle: 'none', margin: 0, padding: 0, fontSize: 13 } },
+          'div',
+          { className: 'corehub-card' },
           state.activity.map((a, i) =>
             h(
-              'li',
-              {
-                key: `${a.at}-${i}`,
-                dir: 'auto',
-                style: { padding: '3px 0', borderBottom: '1px solid rgba(127,127,127,0.15)' },
-              },
+              'div',
+              { key: `${a.at}-${i}`, className: 'corehub-card-row', dir: 'auto' },
+              h(StateDot, { state: a.ok ? 'done' : 'error' }),
               h(
                 'span',
-                { style: { color: a.ok ? GREEN : RED, fontWeight: 700 } },
-                a.ok ? '✓ ' : '✕ ',
+                { className: 'corehub-activity-time corehub-mono' },
+                a.at.slice(0, 19).replace('T', ' '),
               ),
-              h('bdi', { style: { ...s.mono, opacity: 0.7 } }, a.at.slice(0, 19).replace('T', ' ')),
-              ' ',
-              h('bdi', null, `${a.kind} · ${a.tool}`),
-              a.target ? h('bdi', { style: { ...s.mono, opacity: 0.8 } }, ` ${a.target}`) : null,
-              a.detail ? h('span', { style: { opacity: 0.7 } }, ` — ${a.detail}`) : null,
+              h(
+                'span',
+                { className: 'corehub-fact-value' },
+                h('bdi', null, `${a.kind} · ${a.tool}`),
+                a.target ? h('span', { className: 'corehub-mono' }, a.target) : null,
+                a.detail ? h('span', { className: 'corehub-hint' }, a.detail) : null,
+              ),
             ),
           ),
         ),
@@ -674,9 +672,17 @@ function CoreHubSettings({ api }: { api: PanelApi }): ReactNode {
 
   return h(
     'div',
-    { style: s.page, dir: lang === 'ar' ? 'rtl' : 'ltr', 'data-corehub-page': '' },
-    h('p', { style: { ...s.hint, opacity: 0.8 } }, t('page.intro')),
-    saveNote ? notice(saveNote.ok, saveNote.text) : null,
+    { className: 'corehub-page', dir, 'data-corehub-page': '' },
+    h('p', { className: 'corehub-intro' }, t('page.intro')),
+    saveNote && !saveNote.ok ? result(false, saveNote.text) : null,
+    saveNote?.ok
+      ? h(Toast, {
+          text: saveNote.text,
+          tone: 'success',
+          holdMs: 1500,
+          onDone: () => setSaveNote(null),
+        })
+      : null,
     linkSection,
     foldersSection,
     programsSection,
@@ -684,6 +690,6 @@ function CoreHubSettings({ api }: { api: PanelApi }): ReactNode {
     screenSection,
     languageSection,
     activitySection,
-    h('p', { style: { ...s.hint, ...s.mono, fontSize: 11 } }, `v${state.version}`),
+    h('p', { className: 'corehub-version corehub-mono' }, `v${state.version}`),
   );
 }

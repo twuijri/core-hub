@@ -40,8 +40,8 @@ await build({
 // The browser half (`./client`, `dsh.client`): the harness's client module system loads one
 // classic script that registers the package's factory with the page's module loader
 // (`window.__ModuleLoader__.load({ id, factory })`, dsh-client-modules' published
-// declarations). React comes from the page's shared module table through the factory's
-// `require`; everything else is bundled in.
+// declarations). React and the harness's shared UI library come from the page's shared module
+// table through the factory's `require`; everything else is bundled in.
 const { PRODUCT } = await import('@corehub/contracts');
 const client = await build({
   entryPoints: [path.join(here, 'src/client/index.ts')],
@@ -52,7 +52,7 @@ const client = await build({
   format: 'cjs',
   legalComments: 'none',
   logLevel: 'warning',
-  external: ['react', 'react/*'],
+  external: ['react', 'react/*', '@deepseek-ai/dsh-client-ui-primitives'],
   define: {
     __PRODUCT_NAME__: JSON.stringify(PRODUCT.name),
     __PRODUCT_NAME_AR__: JSON.stringify(PRODUCT.nameAr),

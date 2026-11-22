@@ -87,6 +87,15 @@ const en = {
   'activity.empty': 'Nothing yet.',
   saved: 'Saved.',
   'save.failed': 'Not saved: {reason}',
+  'chat.command': 'Command',
+  'md.copy': 'Copy',
+  'md.copied': 'Copied',
+  'md.code': 'Code',
+  'md.wrap': 'Wrap lines',
+  'md.unwrap': 'Keep columns',
+  'md.footnotes': 'Footnotes',
+  cancel: 'Cancel',
+  close: 'Close',
 } as const;
 
 export type UiKey = keyof typeof en;
@@ -170,6 +179,15 @@ const ar: Record<UiKey, string> = {
   'activity.empty': 'ما فيه شي بعد.',
   saved: 'انحفظ.',
   'save.failed': 'ما انحفظ: {reason}',
+  'chat.command': 'الأمر',
+  'md.copy': 'نسخ',
+  'md.copied': 'تم النسخ',
+  'md.code': 'كود',
+  'md.wrap': 'لف الأسطر',
+  'md.unwrap': 'بدون لف',
+  'md.footnotes': 'الحواشي',
+  cancel: 'إلغاء',
+  close: 'إغلاق',
 };
 
 export const UI_CATALOGUES: Record<UiLanguage, Record<UiKey, string>> = { en, ar };
