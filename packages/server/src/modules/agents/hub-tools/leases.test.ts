@@ -93,4 +93,56 @@ describe("a gateway's call to the hub's tools, with the hub's Hermes conversatio
       reason: 'hub_tools_run_ambiguous',
     });
   });
+
+  it('finds the live run of a Hermes session, and nothing for any other', () => {
+    const leases = new RunLeases();
+    leases.open({
+      runId: 'R1',
+      sessionId: 's-R1',
+      workspaceId: WS,
+      userId: 'alice',
+      agentSessionId: 'local-abc',
+    });
+    run(leases, 'R2', 'bob');
+    leases.openChannel({ key: 'telegram:4', workspaceId: WS, userId: null, refusal: null });
+    expect(leases.runOfAgentSession(WS, 'local-abc')?.runId).toBe('R1');
+    expect(leases.runOfAgentSession(WS, 'local-other')).toBeNull();
+    expect(leases.runOfAgentSession(WS, null)).toBeNull();
+    expect(leases.runOfAgentSession(WS, '')).toBeNull();
+    // Another profile's run, or one that ended, is not this turn's.
+    expect(leases.runOfAgentSession('ws-2', 'local-abc')).toBeNull();
+    leases.close('R1');
+    expect(leases.runOfAgentSession(WS, 'local-abc')).toBeNull();
+  });
+
+  it('describes what is live for the log, without a sender', () => {
+    let now = 1_000_000;
+    const leases = new RunLeases(() => now);
+    run(leases, 'R1', 'alice');
+    leases.openChannel({
+      key: 'channel:ws-1:telegram:+966500000000',
+      workspaceId: WS,
+      userId: null,
+      refusal: 'hub_tools_sender_not_linked',
+      platform: 'telegram',
+    });
+    leases.toolStarted('R1', HUB_CALL);
+    now += 5000;
+    const summary = leases.describe(WS);
+    expect(summary).toMatchObject({ runs: 1, announced: 1, channels: 1, channels_for_nobody: 1 });
+    expect(summary.leases).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ kind: 'run', run_id: 'R1', user_id: 'alice', pending: 1 }),
+        expect.objectContaining({
+          kind: 'channel',
+          run_id: null,
+          user_id: null,
+          platform: 'telegram',
+          refusal: 'hub_tools_sender_not_linked',
+          age_s: 5,
+        }),
+      ]),
+    );
+    expect(JSON.stringify(summary)).not.toContain('+966500000000');
+  });
 });

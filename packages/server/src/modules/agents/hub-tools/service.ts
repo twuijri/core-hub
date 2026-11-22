@@ -420,8 +420,26 @@ export class HubToolsService {
         return { handled: true, message: both(outcome.kind) };
       }
       case 'turn_started': {
+        // The hub's own conversation, run inside the gateway (Hermes v0.22.2 and later): a turn
+        // of a live run's Hermes session is that run's, and its calls are attributed as the
+        // run's (`leases.ts`). A channel lease for it would stand beside the run as "somebody
+        // else" and refuse every call the run announced.
+        const own = this.deps.leases.runOfAgentSession(workspace.id, input.session_id);
+        if (own) {
+          this.deps.app.log.debug(
+            { profile: workspace.slug, platform: input.platform, run: own.runId },
+            "agents: a gateway turn is the hub's own run, not a channel's",
+          );
+          return unhandled;
+        }
         const refuse = (refusal: ChannelRefusal) =>
-          this.deps.leases.openChannel({ key, workspaceId: workspace.id, userId: null, refusal });
+          this.deps.leases.openChannel({
+            key,
+            workspaceId: workspace.id,
+            userId: null,
+            refusal,
+            platform: input.platform,
+          });
         // Others in a group steer the conversation too: a group turn acts for nobody.
         const chat = input.chat_type ?? '';
         if (chat !== '' && chat !== 'dm') {
@@ -447,6 +465,7 @@ export class HubToolsService {
           workspaceId: workspace.id,
           userId: person.id,
           refusal: null,
+          platform: input.platform,
         });
         links?.touch(linked.identityId);
         return unhandled;
@@ -486,6 +505,17 @@ export class HubToolsService {
     }
     const attribution = await this.deps.leases.attribute(workspace.id, undefined, origin);
     if (!attribution.ok) {
+      // What was live when it acted for nobody, so a refusal can be explained from the log.
+      this.deps.app.log.info(
+        {
+          profile: workspace.slug,
+          tool: name,
+          origin,
+          reason: attribution.reason,
+          live: this.deps.leases.describe(workspace.id),
+        },
+        'agents: a call to the hub tools acted for nobody',
+      );
       record(false, attribution.reason, null);
       return refusal(attribution.reason, REFUSALS[attribution.reason] ?? attribution.reason);
     }
