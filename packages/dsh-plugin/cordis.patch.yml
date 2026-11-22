@@ -1,0 +1,7 @@
+# The Core Hub plugin's layer (ADR 0033): one row, mounted in every profile that lists
+# this bundle. Its settings (shared folders, programs, the hub agent's profile) are the
+# row's config and are edited on the harness's Plugins page; the link itself (the hub's
+# address and the person's token) is never written here (see README).
+- insert:
+    - id: corehub
+      name: '@corehub/dsh-plugin'

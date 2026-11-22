@@ -1,0 +1,44 @@
+{
+  "name": "@corehub/dsh-plugin",
+  "version": "1.1.10",
+  "description": "Core Hub plugin for DeepSeek Harness: links the harness to a Core Hub, gives it the hub's models, answers the hub's device requests and talks to the hub's agent (ADR 0033).",
+  "license": "Apache-2.0",
+  "type": "module",
+  "main": "dist/index.js",
+  "exports": {
+    ".": "./dist/index.js",
+    "./screen-consent": "./dist/screen-consent.js",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "dist",
+    "cordis.patch.yml",
+    "README.md"
+  ],
+  "engines": {
+    "dsh": "0.2.2-rc.5"
+  },
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    }
+  },
+  "scripts": {
+    "typecheck": "pnpm --filter @corehub/contracts build && tsc --noEmit -p tsconfig.json && tsc --noEmit -p tsconfig.test.json",
+    "build": "pnpm --filter @corehub/contracts build && node scripts/build.mjs",
+    "test": "pnpm --filter @corehub/contracts build && vitest run",
+    "pack:harness": "pnpm build && pnpm pack"
+  },
+  "peerDependencies": {
+    "@deepseek-ai/schemastery": "~3.19.0"
+  },
+  "devDependencies": {
+    "@corehub/contracts": "workspace:*",
+    "@deepseek-ai/schemastery": "~3.19.0",
+    "@types/node": "^26.6.2",
+    "esbuild": "^0.28.2",
+    "socket.io-client": "^4.8.3",
+    "typescript": "^5.9.3",
+    "vitest": "^5.0.1"
+  }
+}
