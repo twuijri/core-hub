@@ -66,6 +66,10 @@ export function screenPrompt(request: ScreenRequest): string {
     request.app
       ? `Work only in the application "${request.app}". Do not open or touch any other application.`
       : 'Use only the applications the task needs.',
+    // The owner's first task (2026-11-22) was done with shell scripts: AppleScript, then a
+    // compiled program that posted key events. The task is permission to use the screen, not to
+    // script or build software on the computer.
+    'Do the task through the Computer Use API (`cua`): look at the screen, click and type as a person would. Do not automate applications from the shell (no osascript, AppleScript or JXA) and do not write, compile or run programs; use the shell only to read, never to act.',
     `Finish within about ${request.timeBudgetS} seconds. Do not ask questions: no one is watching to answer.`,
     'Do not enter passwords, payment details or other secrets, and do not send, buy, delete or publish anything the task does not explicitly ask for.',
     'When you are done (or cannot continue), reply with a short plain outcome: what you did and what is now on the screen.',
