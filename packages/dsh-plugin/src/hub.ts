@@ -14,7 +14,7 @@ import {
   type RawRequestInit,
   type components,
 } from '@corehub/contracts';
-import { DEVICE_PLATFORM, GATEWAY, HARNESS_NAME } from './names.js';
+import { DEVICE_PLATFORM, HARNESS_NAME } from './names.js';
 import type { PairingInput } from './pairing.js';
 import type { PluginStore, StoredLink } from './store.js';
 
@@ -239,7 +239,8 @@ export function wireMessage(body: unknown): string | null {
  */
 export async function gatewayModels(connection: HubConnection): Promise<GatewayState> {
   try {
-    const { data } = await connection.client.raw('get', `${GATEWAY.openai}/models`, {
+    // `gateway.openaiListModels` (DECISIONS §156); the path equals `${GATEWAY.openai}/models`.
+    const { data } = await connection.client.request('get', '/gateway/openai/v1/models', {
       signal: AbortSignal.timeout(15_000),
     });
     const rows = (data as { data?: unknown })?.data;
