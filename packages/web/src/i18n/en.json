@@ -937,7 +937,8 @@
       "ipados": "iPadOS",
       "macos": "macOS",
       "windows": "Windows",
-      "linux": "Linux"
+      "linux": "Linux",
+      "dsh": "DeepSeek Harness"
     },
     "push_state": {
       "on": "Push on · {provider}",
@@ -1315,6 +1316,18 @@
       "download": "Download",
       "download_any": "Download another model",
       "download_any_hint": "A name from the Ollama library, like qwen3:8b, or a Hugging Face path."
+    },
+    "external_gateway": {
+      "title": "Your models in your own apps",
+      "hint": "Lets the people of this hub use its models from programs on their own computers, such as DeepSeek Harness with the Core Hub plugin. Each person signs in with their own app token, sees only the models they may pick here, and their use is counted under their name. Provider keys never leave the hub.",
+      "switch": "Open the model gateway to people's own apps",
+      "switch_hint": "Off by default. Each app token may make up to {limit} calls a minute.",
+      "openai": "OpenAI address",
+      "anthropic": "Anthropic address",
+      "key_hint": "As the key, use an app token of the person (hub_at_…): the Core Hub plugin uses the one it got when it was linked.",
+      "copy": "Copy",
+      "copied": "Copied",
+      "copy_named": "Copy the {name}"
     }
   },
   "working_dir": {
@@ -2796,7 +2809,7 @@
       "notifications": "Tell the person something: a notice in their inbox.",
       "workflows": "List workflows; with changes allowed, run one.",
       "files": "Read the files in this profile's folder; with changes allowed, write them.",
-      "devices": "Use the shared folders and the programs on the person's own computers that run the Core Hub app (each computer asks its person first). With changes allowed, write files and run programs there."
+      "devices": "Use the shared folders and the programs on the person's own computers that run the Core Hub app or the Core Hub plugin of DeepSeek Harness (each computer asks its person first). With changes allowed, write files, run programs there, and hand a computer a task to do on its screen."
     },
     "unavailable": {
       "runtime_absent": "There is no Hermes beside this hub to give the tools to.",

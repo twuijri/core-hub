@@ -76,7 +76,7 @@
         "notifications": "Tell the person something: a notice in their inbox.",
         "workflows": "List workflows; with changes allowed, run one.",
         "files": "Read the files in this profile's folder; with changes allowed, write them.",
-        "devices": "Use the shared folders and the programs on the person's own computers that run the Core Hub app (each computer asks its person first). With changes allowed, write files and run programs there."
+        "devices": "Use the shared folders and the programs on the person's own computers that run the Core Hub app or the Core Hub plugin of DeepSeek Harness (each computer asks its person first). With changes allowed, write files, run programs there, and hand a computer a task to do on its screen."
       },
       "unavailable": {
         "runtime_absent": "There is no Hermes beside this hub to give the tools to.",
