@@ -17,7 +17,7 @@
  */
 import { spawn, type ChildProcess } from 'node:child_process';
 import { randomBytes } from 'node:crypto';
-import { existsSync, mkdirSync, readFileSync, rmSync } from 'node:fs';
+import { appendFileSync, existsSync, mkdirSync, readFileSync, rmSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import path from 'node:path';
 import { API_BASE, GATEWAY, PROVIDER_ID, SCREEN_PROFILE, TOKEN_ENV } from './names.js';
@@ -386,6 +386,17 @@ export class ScreenRunner {
       windowsHide: true,
     });
     job.child = child;
+    // The last run's events and errors, for the person to read or send (the session is a
+    // separate process and shows in no chat): `screen-last.log` beside the link, owner-only.
+    const logFile = path.join(this.deps.workDir, 'screen-last.log');
+    writePrivate(logFile, `# ${new Date().toISOString()} ${request.task.slice(0, 300)}\n`);
+    const log = (line: string) => {
+      try {
+        appendFileSync(logFile, `${line.slice(0, 2000)}\n`);
+      } catch {
+        // A log that cannot be written never stops the task.
+      }
+    };
     let buffer = '';
     let stderr = '';
     child.stdout?.setEncoding('utf8');
@@ -395,13 +406,17 @@ export class ScreenRunner {
       while (nl >= 0) {
         const line = buffer.slice(0, nl).trim();
         buffer = buffer.slice(nl + 1);
-        if (line) job.fold = foldEvent(job.fold, line);
+        if (line) {
+          log(line);
+          job.fold = foldEvent(job.fold, line);
+        }
         nl = buffer.indexOf('\n');
       }
     });
     child.stderr?.setEncoding('utf8');
     child.stderr?.on('data', (chunk: string) => {
       stderr = `${stderr}${chunk}`.slice(-4000);
+      for (const line of chunk.split('\n')) if (line.trim()) log(`[stderr] ${line}`);
     });
     const budget = setTimeout(() => child.kill('SIGTERM'), request.timeBudgetS * 1000 + 15_000);
     const code = await new Promise<number | null>((resolve) => {
