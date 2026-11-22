@@ -33,6 +33,11 @@ export interface RouteDefinition {
    */
   logLevel?: 'warn' | 'error';
   /**
+   * The largest body this route reads, in bytes, when it is larger than the hub's default (a
+   * model call through the gateway's external entrance carries a whole conversation, §156).
+   */
+  bodyLimit?: number;
+  /**
    * The reply is passed as well for the handful of operations whose response is not JSON
    * (`models.synthesize` answers audio bytes with a `Content-Type` the provider chose).
    * Such a handler sends on the reply itself and returns it; every other handler ignores
@@ -73,6 +78,7 @@ export function defineRoute(
     url,
     ...(preHandler.length > 0 ? { preHandler } : {}),
     ...(definition.logLevel ? { logLevel: definition.logLevel } : {}),
+    ...(definition.bodyLimit ? { bodyLimit: definition.bodyLimit } : {}),
     handler: async (request: FastifyRequest, reply: FastifyReply) => {
       const params = operation.validateParams(request.params) as Record<string, unknown>;
       const query = operation.validateQuery(request.query) as Record<string, unknown>;

@@ -40,7 +40,7 @@ import {
   requireWorkspace,
   type WorkspaceScope,
 } from '../auth/index.js';
-import { auditFor, jobRunnerFor } from '../audit/index.js';
+import { EXTERNAL_USAGE_AGENT_ID, auditFor, jobRunnerFor } from '../audit/index.js';
 import {
   agentRunnerFor,
   hermesDashboardFor,
@@ -73,6 +73,13 @@ import type { SpeechFormat } from './adapters/types.js';
 import { CliproxySupervisor } from './gateway/cliproxy.js';
 import { LocalRuntimeService } from './local-runtime/service.js';
 import { ModelGateway } from './gateway/gateway.js';
+import {
+  DEFAULT_EXTERNAL_RATE_LIMIT,
+  ExternalGatewaySettings,
+  TokenRateLimiter,
+  registerExternalGatewayRoutes,
+} from './gateway/external.js';
+import { newUlid } from '../../db/ids.js';
 import { locateCliproxy } from './gateway/locate.js';
 import type { SessionOpener } from './gemini-desktop/transport.js';
 
@@ -255,6 +262,30 @@ export function modelGatewayFor(app: FastifyInstance): ModelGateway {
           ...(usage.costMicroUsd === undefined ? {} : { costMicroUsd: usage.costMicroUsd }),
           costSource: usage.costSource,
           accumulate: true,
+        });
+      },
+      // A call through the external entrance (DECISIONS §156): one ledger row per call, under the
+      // person, with the source `external` and the app token it came with; it has no run,
+      // conversation or agent of the hub's, so those name the entrance and the token instead.
+      recordExternal: (grant, usage) => {
+        if (!grant.userId || !grant.external) return;
+        auditFor(app).recordUsage({
+          workspace: grant.workspace,
+          ownerId: grant.userId,
+          runId: newUlid(),
+          sessionId: grant.external.tokenId,
+          agentId: EXTERNAL_USAGE_AGENT_ID,
+          providerId: usage.providerId,
+          modelLabel: usage.modelLabel,
+          inputTokens: usage.inputTokens,
+          outputTokens: usage.outputTokens,
+          cacheReadTokens: usage.cacheReadTokens,
+          cacheWriteTokens: usage.cacheWriteTokens,
+          reasoningTokens: usage.reasoningTokens,
+          ...(usage.costMicroUsd === undefined ? {} : { costMicroUsd: usage.costMicroUsd }),
+          costSource: usage.costSource,
+          originKind: 'external',
+          originId: grant.external.tokenId,
         });
       },
     },
@@ -962,6 +993,16 @@ export const modelsModule = defineModule({
           ...(query.limit !== undefined ? { limit: query.limit as number } : {}),
         });
       },
+    });
+
+    // ------------------------------------- the gateway's external entrance (DECISIONS §156)
+
+    registerExternalGatewayRoutes(app, deps, {
+      gateway: () => modelGatewayFor(app),
+      settings: new ExternalGatewaySettings(path.join(app.hub.config.dataDir, 'gateway')),
+      limiter: new TokenRateLimiter(
+        app.hub.config.modelGateway?.externalRateLimitPerMinute ?? DEFAULT_EXTERNAL_RATE_LIMIT,
+      ),
     });
 
     // ---------------------------------------------------------------- defaults

@@ -19,6 +19,7 @@
 import type { FastifyInstance, FastifyRequest } from 'fastify';
 import type { Server as SocketServer } from 'socket.io';
 import { loadOpenApiDocument } from '@corehub/contracts';
+import { t } from '../../i18n/index.js';
 import { requireSqlite } from '../../lib/db.js';
 import { HubError, notFound } from '../../lib/errors.js';
 import { createContractIndex } from '../../lib/contract.js';
@@ -65,7 +66,7 @@ export type {
 } from './background.js';
 export { ReportService, isoDate, moneyOf, windowOf } from './reports.js';
 export type { Report, ReportKind, ReportRequest } from './reports.js';
-export { UsageAnalytics, calendarPeriod } from './analytics.js';
+export { EXTERNAL_USAGE_AGENT_ID, UsageAnalytics, calendarPeriod } from './analytics.js';
 export type {
   AnalyticsProfile,
   AnalyticsQuery,
@@ -341,6 +342,7 @@ export const auditModule = defineModule({
       days: (query.days as number | undefined) ?? 30,
       agentId: query.agent_id as string | undefined,
       utcOffsetMinutes: (query.utc_offset_minutes as number | undefined) ?? 0,
+      externalName: t('models.external_gateway.usage_name', request.uiLanguage),
     });
 
     defineRoute(app, deps, {

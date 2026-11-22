@@ -121,6 +121,7 @@ describe('hub tools: the protocol', () => {
       'devices.fetch_file',
       'devices.run',
       'devices.locate',
+      'devices.screen_task',
       'devices.run_status',
     ]);
     for (const tool of HUB_TOOLS) {
@@ -453,5 +454,133 @@ describe('hub tools: a schedule says why its last run failed', () => {
       expect(schedule).not.toHaveProperty('prompt');
       expect(schedule).not.toHaveProperty('external_id');
     }
+  });
+});
+
+describe("hub tools: a task on a computer's screen (§157)", () => {
+  const computer = (id: string, over: Record<string, unknown> = {}) => ({
+    id,
+    name: `Mac ${id}`,
+    kind: 'computer',
+    platform: 'dsh',
+    online: true,
+    profiles: null,
+    helper: null,
+    capabilities: [{ kind: 'screen_task', enabled: true }],
+    ...over,
+  });
+
+  /** A device that answers each request with the next of `answers`; the requests it got. */
+  function scripted(answers: Record<string, unknown>[], handed: { id: string; kind: string }[]) {
+    const created: Array<Record<string, unknown>> = [];
+    const ctx: ToolContext = {
+      profile: 'work',
+      agentId: null,
+      filesRoot: '/tmp',
+      timezone: 'UTC',
+      sessionId: '01J8QK3ZR2W7M5N4P6T8V9X0SS',
+      notify: () => {},
+      sleep: async () => {},
+      handOver: (attachment) => {
+        handed.push(attachment);
+        return true;
+      },
+      async call(method, route, options) {
+        if (method === 'GET' && route === '/devices') {
+          return {
+            items: [
+              computer('m1'),
+              computer('m2', { capabilities: [{ kind: 'screen_task', enabled: false }] }),
+              computer('m3', { profiles: ['home'] }),
+            ],
+          };
+        }
+        if (method === 'POST') {
+          created.push(options?.body as Record<string, unknown>);
+          return { job_id: 'j', request_id: `r${created.length}` };
+        }
+        return {
+          id: 'r',
+          status: 'fulfilled',
+          result: answers[created.length - 1] ?? {},
+          error: null,
+        };
+      },
+    };
+    return { ctx, created };
+  }
+
+  it('devices.list says which computers take screen tasks, with or without a helper', async () => {
+    const { ctx } = scripted([], []);
+    const list = HUB_TOOLS.find((t) => t.name === 'devices.list')!;
+    const answer = (await list.run(ctx, {})) as {
+      devices: { id: string; screen_task: boolean; folders: unknown[] }[];
+    };
+    expect(answer.devices.map((d) => [d.id, d.screen_task])).toEqual([['m1', true]]);
+    expect(answer.devices[0]!.folders).toEqual([]);
+  });
+
+  it('is a write that hands the task in words, and puts the screenshot on the reply', async () => {
+    const tool = HUB_TOOLS.find((t) => t.name === 'devices.screen_task')!;
+    expect(tool.access).toBe('write');
+    const handed: { id: string; kind: string }[] = [];
+    const { ctx, created } = scripted(
+      [{ state: 'done', outcome: 'Saved the invoice as PDF.', screenshot_attachment_id: 'att1' }],
+      handed,
+    );
+    const answer = await tool.run(ctx, {
+      device_id: 'm1',
+      task: 'Save the open invoice as a PDF',
+      app: 'Preview',
+      time_budget_s: 120,
+    });
+    expect(created[0]).toMatchObject({
+      device_id: 'm1',
+      capability: 'screen_task',
+      purpose: 'Save the open invoice as a PDF',
+      params: { task: 'Save the open invoice as a PDF', app: 'Preview', time_budget_s: 120 },
+      timeout_ms: 180_000,
+    });
+    expect(answer).toEqual({
+      state: 'done',
+      outcome: 'Saved the invoice as PDF.',
+      screenshot_attached_to_reply: true,
+    });
+    expect(handed).toEqual([{ id: 'att1', kind: 'image' }]);
+    await expect(
+      tool.run(ctx, { device_id: 'm1', task: 'x', time_budget_s: 5 }),
+    ).rejects.toMatchObject({ code: 'validation_failed' });
+  });
+
+  it('a long task answers running, and devices.run_status asks the screen task how it stands', async () => {
+    const handed: { id: string; kind: string }[] = [];
+    const { ctx, created } = scripted(
+      [
+        { state: 'running', call_id: 'c7', progress: 'Opening Preview' },
+        { state: 'failed', outcome: 'The invoice was not open.', screenshot_attachment_id: 'att2' },
+      ],
+      handed,
+    );
+    const tool = HUB_TOOLS.find((t) => t.name === 'devices.screen_task')!;
+    const running = (await tool.run(ctx, { device_id: 'm1', task: 'Save it' })) as {
+      call_id: string;
+    };
+    expect(running).toMatchObject({
+      state: 'running',
+      call_id: 'screen:c7',
+      progress: 'Opening Preview',
+    });
+    const status = HUB_TOOLS.find((t) => t.name === 'devices.run_status')!;
+    const ended = await status.run(ctx, { device_id: 'm1', call_id: running.call_id });
+    expect(created[1]).toMatchObject({
+      capability: 'screen_task',
+      params: { op: 'status', call_id: 'c7' },
+    });
+    expect(ended).toEqual({
+      state: 'failed',
+      outcome: 'The invoice was not open.',
+      screenshot_attached_to_reply: true,
+    });
+    expect(handed).toEqual([{ id: 'att2', kind: 'image' }]);
   });
 });

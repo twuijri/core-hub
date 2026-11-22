@@ -224,6 +224,16 @@ const PROGRAM_TIMEOUT_MS = 120_000;
 const FILES_TIMEOUT_MS = 60_000;
 /** A phone asks its person before it tells where it is: long enough to read and answer (§105). */
 const LOCATION_TIMEOUT_MS = 90_000;
+/**
+ * A screen task (§157): the computer asks its person, starts a local session and works; one that
+ * takes longer answers `running` well before this, and `devices.run_status` follows it.
+ */
+const SCREEN_TASK_TIMEOUT_MS = 180_000;
+/**
+ * A running screen task's `call_id` as the agent is given it: `devices.run_status` takes it back
+ * and knows to ask the computer's screen task, not one of its programs, how it stands.
+ */
+const SCREEN_CALL = 'screen:';
 
 interface DeviceRequestView {
   id: string;
@@ -241,7 +251,7 @@ async function askDevice(
   ctx: ToolContext,
   input: {
     deviceId: string;
-    capability: 'files' | 'apps' | 'location';
+    capability: 'files' | 'apps' | 'location' | 'screen_task';
     purpose: string;
     params: Record<string, unknown>;
     timeoutMs: number;
@@ -316,6 +326,7 @@ interface DeviceView {
   platform: string;
   online: boolean;
   profiles?: string[] | null;
+  capabilities?: Array<{ kind: string; enabled: boolean }>;
   helper?: {
     folders: Array<{ path: string; write: boolean; default?: boolean }>;
     allow_open: boolean;
@@ -407,12 +418,14 @@ function deviceTools(): HubToolDefinition[] {
       group: 'devices',
       access: 'read',
       description:
-        "The person's own computers this profile may use, whether each is online, the folders shared on it (the one marked default is where program output goes unless the person says otherwise), and the programs on it with their tools. Device work stays on the device: nothing is copied to the hub unless the person asks (devices.fetch_file).",
+        "The person's own computers this profile may use, whether each is online, the folders shared on it (the one marked default is where program output goes unless the person says otherwise), the programs on it with their tools, and whether it takes screen tasks (devices.screen_task). Device work stays on the device: nothing is copied to the hub unless the person asks (devices.fetch_file).",
       inputSchema: { type: 'object', properties: {} },
       async run(ctx) {
         const body = await ctx.call('GET', '/devices', { query: { limit: 50 } });
+        const screen = (d: DeviceView) =>
+          (d.capabilities ?? []).some((c) => c.kind === 'screen_task' && c.enabled);
         const devices = (items(body) as DeviceView[]).filter(
-          (d) => d.helper && (!d.profiles || d.profiles.includes(ctx.profile)),
+          (d) => (d.helper || screen(d)) && (!d.profiles || d.profiles.includes(ctx.profile)),
         );
         return {
           devices: devices.map((d) => ({
@@ -420,11 +433,12 @@ function deviceTools(): HubToolDefinition[] {
             name: d.name,
             platform: d.platform,
             online: d.online,
-            folders: d.helper!.folders,
-            can_open: d.helper!.allow_open,
-            programs: d
-              .helper!.programs.filter((p) => p.profiles.includes(ctx.profile))
+            folders: d.helper?.folders ?? [],
+            can_open: d.helper?.allow_open ?? false,
+            programs: (d.helper?.programs ?? [])
+              .filter((p) => p.profiles.includes(ctx.profile))
               .map((p) => ({ id: p.id, name: p.name, tools: p.tools })),
+            screen_task: screen(d),
           })),
         };
       },
@@ -593,28 +607,135 @@ function deviceTools(): HubToolDefinition[] {
       },
     },
     {
+      name: 'devices.screen_task',
+      group: 'devices',
+      access: 'write',
+      description:
+        "Hand one of the person's computers a task to do on its own screen, in words (devices.list says which take screen tasks): the goal, not the clicks. The computer asks its person every time, does the task itself with a local session on one of the hub's models, and answers with the outcome and one final screenshot, which is attached to your reply. The screen is never streamed and you never click. A long task answers {state: running, call_id}: follow it with devices.run_status.",
+      inputSchema: {
+        type: 'object',
+        required: ['device_id', 'task'],
+        properties: {
+          device_id: DEVICE_ID,
+          task: {
+            type: 'string',
+            minLength: 1,
+            maxLength: 4000,
+            description: 'What to get done on the screen, in words the person will read first.',
+          },
+          app: {
+            type: 'string',
+            maxLength: 200,
+            description: 'An app to stay in (its name on that computer).',
+          },
+          time_budget_s: {
+            type: 'integer',
+            minimum: 10,
+            maximum: 3600,
+            description: 'How long the computer may work on it, in seconds.',
+          },
+          model: {
+            type: 'string',
+            maxLength: 300,
+            description:
+              "A hub model id for the computer's session; without it, the hub's default.",
+          },
+        },
+      },
+      async run(ctx, a) {
+        const task = need(a, 'task');
+        if (task.length > 4000) {
+          throw new ToolRefusal('validation_failed', 'task must be at most 4000 characters');
+        }
+        const budget = a.time_budget_s;
+        if (
+          budget !== undefined &&
+          budget !== null &&
+          (typeof budget !== 'number' || !Number.isInteger(budget) || budget < 10 || budget > 3600)
+        ) {
+          throw new ToolRefusal(
+            'validation_failed',
+            'time_budget_s must be a whole number of seconds from 10 to 3600',
+          );
+        }
+        const app = str(a, 'app');
+        const model = str(a, 'model');
+        const result = await askDevice(ctx, {
+          deviceId: need(a, 'device_id'),
+          capability: 'screen_task',
+          purpose: task,
+          params: {
+            task,
+            ...(app ? { app } : {}),
+            ...(typeof budget === 'number' ? { time_budget_s: budget } : {}),
+            ...(model ? { model } : {}),
+          },
+          timeoutMs: SCREEN_TASK_TIMEOUT_MS,
+        });
+        return screenTaskResult(ctx, result);
+      },
+    },
+    {
       name: 'devices.run_status',
       group: 'devices',
       access: 'read',
       description:
-        'How a long program call (devices.run answered state: running) stands, and its result when it is done.',
+        'How a long program call (devices.run answered state: running) or screen task (devices.screen_task answered state: running) stands, and its result when it is done.',
       inputSchema: {
         type: 'object',
         required: ['device_id', 'call_id'],
         properties: { device_id: DEVICE_ID, call_id: { type: 'string', minLength: 1 } },
       },
       async run(ctx, a) {
+        const callId = need(a, 'call_id');
+        if (callId.startsWith(SCREEN_CALL) && callId.length > SCREEN_CALL.length) {
+          const result = await askDevice(ctx, {
+            deviceId: need(a, 'device_id'),
+            capability: 'screen_task',
+            purpose: 'devices.run_status',
+            params: { op: 'status', call_id: callId.slice(SCREEN_CALL.length) },
+            timeoutMs: FILES_TIMEOUT_MS,
+          });
+          return screenTaskResult(ctx, result);
+        }
         const result = await askDevice(ctx, {
           deviceId: need(a, 'device_id'),
           capability: 'apps',
           purpose: 'devices.run_status',
-          params: { op: 'status', call_id: need(a, 'call_id') },
+          params: { op: 'status', call_id: callId },
           timeoutMs: FILES_TIMEOUT_MS,
         });
         return programResult(result);
       },
     },
   ];
+}
+
+/**
+ * A screen task's answer for the agent (§157): still running (its call to follow, marked as a
+ * screen task's), or done or failed with the outcome — and the one screenshot the computer
+ * uploaded, put on the reply the run is writing, as `devices.fetch_file` puts a file there.
+ */
+function screenTaskResult(
+  ctx: ToolContext,
+  result: Record<string, unknown>,
+): Record<string, unknown> {
+  const text = (value: unknown) => (typeof value === 'string' && value.trim() ? value : null);
+  if (result.state === 'running') {
+    return {
+      state: 'running',
+      call_id: `${SCREEN_CALL}${String(result.call_id)}`,
+      progress: text(result.progress),
+      next: 'call devices.run_status with this call_id in a little while',
+    };
+  }
+  const shot = text(result.screenshot_attachment_id);
+  const attached = shot ? (ctx.handOver?.({ id: shot, kind: 'image' }) ?? false) : false;
+  return {
+    state: result.state === 'failed' ? 'failed' : 'done',
+    outcome: text(result.outcome),
+    screenshot_attached_to_reply: attached,
+  };
 }
 
 function programResult(result: Record<string, unknown>): Record<string, unknown> {

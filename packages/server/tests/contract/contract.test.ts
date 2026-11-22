@@ -120,7 +120,11 @@ describe.skipIf(!doc)('contract: every OpenAPI operation answers per the documen
       const documented =
         responses[String(status)] ?? responses[`${String(status)[0]}XX`] ?? responses.default;
       expect(documented, `status ${status} is not documented for ${op.operationId}`).toBeDefined();
-      if (status >= 400) expect(schemas.validate(ENVELOPE, data)).toEqual([]);
+      // The model gateway's external entrance answers OpenAI and Anthropic clients in their own
+      // wire's envelope (`x-error-envelope: wire`, DECISIONS §156); its schema is checked below.
+      if (status >= 400 && op.operation['x-error-envelope'] !== 'wire') {
+        expect(schemas.validate(ENVELOPE, data)).toEqual([]);
+      }
       const schema = documented?.content?.['application/json']?.schema;
       if (schema) expect(schemas.validate(schema, data)).toEqual([]);
     },

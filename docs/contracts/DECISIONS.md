@@ -5762,3 +5762,89 @@ CLIProxyAPI).
   whole subscription engine for every account, Linux only, and still one chat per message);
   emulating tool calls in text (unreliable); a callback listener on the hub (its `localhost` is not
   the person's).
+
+## 156. The model gateway's external entrance: the hub's models for a person's own programs
+
+Status: the owner's decision of 2026-11-22 (ADR 0033 §3, «كمل كل المراحل»). The details the owner
+did not name — the paths, the switch's home, the rate limit and its default, how the ledger names
+these calls — are the implementer's choices. Additive only (ADR 0027).
+
+- **What.** The model gateway (ADR 0029) also served on the hub's own API port, for programs on a
+  person's own computer — DeepSeek Harness through the Core Hub plugin (`packages/dsh-plugin`):
+  `GET /api/v1/gateway/openai/v1/models`, `POST …/openai/v1/chat/completions`,
+  `POST …/openai/v1/responses`, `GET /api/v1/gateway/anthropic/v1/models`,
+  `POST …/anthropic/v1/messages` (operations `gateway.*`, tag `models`). The loopback gateway and its
+  session tokens are unchanged and still never reachable from outside.
+- **Off until an admin switches it on.** `models.getExternalGateway` / `models.updateExternalGateway`
+  (owner and admin; `ExternalGateway.enabled`), one switch for the hub, kept in
+  `<DATA_DIR>/gateway/external.json` (`0600`) beside the gateway's port and secret, so no migration.
+  The web's Settings → Models (chat providers) has the card: the switch, and once it is on the
+  OpenAI and Anthropic base addresses with the hub's origin, each with a copy button. Where the hub
+  has no gateway (`COREHUB_MODEL_GATEWAY=off`, no CLIProxyAPI) the switch is disabled and `reason`
+  says why. Switching it is an audit event (`gateway.external_switched`).
+- **Who may call.** Only a person's own app token: `hub_at_…` of kind `personal` or `device` (the
+  plugin's comes from the pairing claim, §15). A web session (JWT), an agent's run token and a
+  loopback session token (`chgw_…`) are refused; the models list needs the `read` scope, a call
+  `write`. Anthropic clients send the key as `x-api-key`: on `/api/v1/gateway/` paths only, auth's
+  hook reads it as the bearer. `X-Hub-Profile` is not required (`x-scope: global`); when sent, that
+  profile is asked first.
+- **Models.** Every model the person may pick in the hub that the gateway can serve, by its hub id
+  (`Model.key`, `"<provider slug>/<model>"`): each profile they may enter in turn (the named one,
+  else the default first), its shared and profile-only providers, deduplicated. A call names its
+  model by that id and runs on it — there is no turn and no alias (`corehub-main` means nothing
+  here); a profile-only provider is reached in its own profile. Hermes-held subscriptions are never
+  offered (ADR 0029), and Gemini Desktop refuses as it does for the hub's own agents (§155).
+- **The road.** The same as the hub's agents take (`ModelGateway.serveExternal` → `forward`):
+  CLIProxyAPI translates, keys never leave the hub, a provider's refusal, its waits and its
+  internal-name scrubbing apply as they do; there is no fallback chain (no turn to fall back in).
+- **Usage.** Each call is one ledger row under the person: `origin_kind` `external` (a new value,
+  migration 0035), `origin_id` and `session_id` the app token's id, `agent_id` the fixed
+  `00000000000000000000EXTERN` (`EXTERNAL_USAGE_AGENT_ID`), which the Usage screen names
+  «Your own apps (through the gateway)» / «تطبيقاتك الخاصة (عبر البوابة)».
+- **Limits.** `COREHUB_EXTERNAL_GATEWAY_RATE_LIMIT` calls a minute per token (120 when unset; a
+  sliding minute in the hub's memory); over it, `429` with `retry-after`. A body up to 64 MB (the
+  loopback gateway's own limit).
+- **Errors in the caller's own wire.** OpenAI's `{error: {message, type, code}}`, Anthropic's
+  `{type: error, error: {type, message}}` (`OpenAIWireError`, `AnthropicWireError`), declared on the
+  operations with `x-error-envelope: wire`; the generic contract test checks those against their
+  schemas instead of the hub's `{error, code}`. Two refusals still come from the hub's own stack in
+  its envelope: a body that is not JSON at all, and no body.
+- **Rejected:** opening `hub-mcp` (§79 trusts loopback and per-run tokens); a second listener on its
+  own port (a reverse proxy would have to learn it); resolving a model per turn as the loopback
+  gateway does (an outside program has no turn and names the model it wants).
+
+## 157. Screen tasks: an agent hands a computer a task in words, the computer does it
+
+Status: the owner's decision of 2026-11-22 (ADR 0033 §5: «اوافق على هالطريقة»). The field names,
+the waits and how `run_status` tells a screen task from a program call are the implementer's
+choices. Additive only (ADR 0027); amends ADR 0025 §11 (screen control was left out).
+
+- **Capability.** `CapabilityKind` gains `screen_task`. A device declares it (old devices never do):
+  the DeepSeek Harness plugin on macOS now, Windows when the harness supports Computer Use there.
+  Like `files` and `apps` it is live only (an offline computer answers "offline" at once) and an
+  agent's run may ask it (§89's list grows by one); its own wait is 180 s.
+- **Request.** `params` `{task, app?, time_budget_s?, model?}`: the task in words, an app to stay in,
+  a time budget in seconds, a hub model id for the computer's local session (else the hub's
+  default) — or `{op: status, call_id}` for a running one. `purpose` is the task, which the
+  computer shows its person.
+- **Answer.** `{state: done | failed | running, outcome?, screenshot_attachment_id?, call_id?,
+  progress?}`, checked by the hub (`not_a_screen_task_result` otherwise; `running` needs `call_id`).
+  The screenshot is an attachment the device uploaded with the contract's resumable upload in the
+  request's profile; the hub tool puts it on the reply the run is writing, as `devices.fetch_file`
+  does (§89).
+- **The agent's side.** `devices.screen_task` in the «Your computers» group (§89), a write, so it
+  needs that group's "allow changes": `{device_id, task, app?, time_budget_s? (10–3600), model?}`,
+  answering `{state, outcome, screenshot_attached_to_reply}` or `{state: running, call_id, progress}`.
+  The `call_id` it hands the agent is the device's prefixed `screen:`; `devices.run_status` asks a
+  `screen:` call of the computer's `screen_task` (`op: status`) and any other of its `apps`, so one
+  tool follows both. `devices.list` lists computers that take screen tasks (with or without a
+  helper) and says so per computer (`screen_task: true`).
+- **Platform.** `DevicePlatform` gains `dsh`: a computer linked through the plugin rather than the
+  Core Hub app (migration 0035 widens the CHECK; the web labels it «DeepSeek Harness»).
+- **What never happens:** the screen streamed to the hub, or clicks sent from it. The computer asks
+  its person every task (Allow / Deny) and runs the task itself (ADR 0033 §5).
+- **Migration 0035** copies `devices`, `device_requests` and `usage_records` to widen their CHECKs.
+  The migrator runs in one transaction, where `PRAGMA foreign_keys=OFF` does nothing, so the new
+  requests table points at `__new_devices`, the old requests table is dropped before the old devices
+  table, and renaming `__new_devices` rewrites the reference to `devices` — no request is lost to
+  the cascade (`tests/unit/device-screen-tasks-migration.test.ts`).

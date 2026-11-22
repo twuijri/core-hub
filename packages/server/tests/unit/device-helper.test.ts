@@ -35,7 +35,11 @@ async function hub(): Promise<Hub> {
   return made;
 }
 
-async function pairComputer(h: Hub, capabilities = ['notifications', 'files', 'apps']) {
+async function pairComputer(
+  h: Hub,
+  capabilities = ['notifications', 'files', 'apps'],
+  platform = 'macos',
+) {
   const created = await authed(h, h.token, {
     method: 'POST',
     url: '/api/v1/auth/pairings',
@@ -50,7 +54,7 @@ async function pairComputer(h: Hub, capabilities = ['notifications', 'files', 'a
       device: {
         device_key: 'studio-mac',
         name: 'Studio Mac',
-        platform: 'macos',
+        platform,
         kind: 'computer',
         capabilities,
       },
@@ -309,6 +313,73 @@ describe('devices: a computer’s helper and who may ask it', () => {
     });
     expect(done.statusCode, done.body).toBe(200);
     expect(done.json().result.state).toBe('done');
+  });
+});
+
+describe('devices: a task on a computer’s screen (§157, ADR 0033 §5)', () => {
+  it('a DeepSeek Harness computer offers screen_task: a run may ask it, it waits 180 s, and answers done, failed or running', async () => {
+    const h = await hub();
+    const mac = await pairComputer(h, ['files', 'apps', 'screen_task'], 'dsh');
+    const listed = await authed(h, h.token, {
+      method: 'GET',
+      url: `/api/v1/devices/${mac.deviceId}`,
+    });
+    expect(listed.json()).toMatchObject({
+      platform: 'dsh',
+      capabilities: expect.arrayContaining([expect.objectContaining({ kind: 'screen_task' })]),
+    });
+    const run = issueRunToken({
+      userId: h.userId,
+      workspaceId: await workspaceId(h),
+      runId: '01J8QK3ZR2W7M5N4P6T8V9X0RN',
+      sessionId: null,
+    });
+    const ask = () =>
+      authed(h, run, {
+        method: 'POST',
+        url: '/api/v1/device-requests',
+        payload: {
+          device_id: mac.deviceId,
+          capability: 'screen_task',
+          purpose: 'Save the invoice as PDF',
+          params: { task: 'Save the invoice as PDF', app: 'Preview' },
+        },
+      });
+    // Not connected: "offline" at once, as for files and programs.
+    const away = await ask();
+    expect(away.statusCode, away.body).toBe(202);
+    const failed = await authed(h, h.token, {
+      method: 'GET',
+      url: `/api/v1/device-requests/${away.json().request_id}`,
+    });
+    expect(failed.json()).toMatchObject({ status: 'failed', error: { code: 'unavailable' } });
+
+    await online(h, mac.appToken);
+    const respond = (id: string, result: Json) =>
+      authed(h, mac.appToken, {
+        method: 'POST',
+        url: `/api/v1/device-requests/${id}/respond`,
+        payload: { status: 'fulfilled', result },
+      });
+    const first = (await ask()).json().request_id as string;
+    const row = (
+      await authed(h, h.token, { method: 'GET', url: `/api/v1/device-requests/${first}` })
+    ).json() as { created_at: string; expires_at: string; status: string };
+    expect(row.status).toBe('pending');
+    expect(Date.parse(row.expires_at) - Date.parse(row.created_at)).toBe(180_000);
+    const wrong = await respond(first, { state: 'running' });
+    expect(wrong.statusCode).toBe(400);
+    expect(wrong.json().details.reason).toBe('not_a_screen_task_result');
+    const running = await respond(first, { state: 'running', call_id: 'c1', progress: 'Opening' });
+    expect(running.statusCode, running.body).toBe(200);
+    const second = (await ask()).json().request_id as string;
+    const done = await respond(second, {
+      state: 'done',
+      outcome: 'Saved.',
+      screenshot_attachment_id: '01J8QK3ZR2W7M5N4P6T8V9X0AT',
+    });
+    expect(done.statusCode, done.body).toBe(200);
+    expect(done.json().result).toMatchObject({ state: 'done', outcome: 'Saved.' });
   });
 });
 

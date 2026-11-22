@@ -87,7 +87,8 @@
         "apps",
         "calendar",
         "reminders",
-        "health"
+        "health",
+        "screen_task"
       ]
     },
     "DeviceRequest": {

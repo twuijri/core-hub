@@ -39,6 +39,7 @@ export const ENV_KEYS = [
   'COREHUB_CLIPROXY_BIN',
   'COREHUB_AGENT_MODEL_SOURCE',
   'COREHUB_LOCAL_MODELS',
+  'COREHUB_EXTERNAL_GATEWAY_RATE_LIMIT',
 ] as const;
 export type EnvKey = (typeof ENV_KEYS)[number];
 export type EnvSource = Partial<Record<EnvKey, string | undefined>> & {
@@ -239,6 +240,16 @@ const envSchema = z.object({
    */
   COREHUB_CLIPROXY_BIN: z.string().trim().min(1).optional(),
   /**
+   * Calls a minute one app token may make through the model gateway's external entrance
+   * (DECISIONS §156). Absent: 120.
+   */
+  COREHUB_EXTERNAL_GATEWAY_RATE_LIMIT: z.coerce
+    .number({ message: 'COREHUB_EXTERNAL_GATEWAY_RATE_LIMIT must be a whole number' })
+    .int('COREHUB_EXTERNAL_GATEWAY_RATE_LIMIT must be a whole number')
+    .min(1, 'COREHUB_EXTERNAL_GATEWAY_RATE_LIMIT must be at least 1')
+    .max(100_000, 'COREHUB_EXTERNAL_GATEWAY_RATE_LIMIT must be at most 100000')
+    .optional(),
+  /**
    * Retired (DECISIONS §144): was an agent's automatic model source (ADR 0029). Every coding
    * agent now goes through the gateway wherever the hub runs; still accepted, so a stack that
    * sets it starts as before, and ignored.
@@ -419,6 +430,8 @@ export interface ModelGatewayConfig {
   cliproxyBin: string | null;
   /** `COREHUB_AGENT_MODEL_SOURCE`: retired and ignored (§144); read for older stacks only. */
   defaultSource: 'hub' | 'auto';
+  /** `COREHUB_EXTERNAL_GATEWAY_RATE_LIMIT` (§156); absent: the entrance's default. */
+  externalRateLimitPerMinute?: number;
 }
 
 export interface WebTerminalConfig {
@@ -499,6 +512,9 @@ export function loadConfig(
       enabled: !['off', '0', 'false'].includes(env.COREHUB_MODEL_GATEWAY ?? 'on'),
       cliproxyBin: env.COREHUB_CLIPROXY_BIN ? path.resolve(env.COREHUB_CLIPROXY_BIN) : null,
       defaultSource: env.COREHUB_AGENT_MODEL_SOURCE ?? 'auto',
+      ...(env.COREHUB_EXTERNAL_GATEWAY_RATE_LIMIT === undefined
+        ? {}
+        : { externalRateLimitPerMinute: env.COREHUB_EXTERNAL_GATEWAY_RATE_LIMIT }),
     },
     localModels: env.COREHUB_LOCAL_MODELS ?? 'auto',
   };

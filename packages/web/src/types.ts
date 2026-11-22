@@ -15,6 +15,7 @@ export type ModelDefaults = Schemas['ModelDefaults'];
 export type RuntimeReport = Schemas['RuntimeReport'];
 export type RuntimeCheck = Schemas['RuntimeCheck'];
 export type LocalRuntime = Schemas['LocalRuntime'];
+export type ExternalGateway = Schemas['ExternalGateway'];
 export type LocalModels = Schemas['LocalModels'];
 export type LocalModel = Schemas['LocalModel'];
 export type LocalModelSuggestion = Schemas['LocalModelSuggestion'];

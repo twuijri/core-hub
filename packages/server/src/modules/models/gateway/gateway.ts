@@ -114,7 +114,26 @@ export interface GatewaySource {
   modelKeys(workspace: string): string[];
   /** A call that ended after its turn did: added to that run's ledger row. */
   recordLate(grant: GatewayGrantRecord, runId: string, usage: GatewayTurnUsage): void;
+  /**
+   * One call through the external entrance (DECISIONS §156): its usage, in the ledger under the
+   * person with the source `external`. Absent: not recorded (tests of the gateway alone).
+   */
+  recordExternal?(grant: GatewayGrantRecord, usage: GatewayTurnUsage): void;
 }
+
+/** A person's own program calling through the external entrance (DECISIONS §156). */
+export interface ExternalCaller {
+  userId: string;
+  /** The app token they called with (`app_tokens` row): the ledger's origin. */
+  tokenId: string;
+  /** The profiles (workspace ids) they may enter, the one they named first. */
+  workspaces: readonly string[];
+}
+
+/** The external entrance's routes: the wire and what is asked of it. */
+export type ExternalRoute =
+  | { wire: 'openai'; call: 'models' | 'chat/completions' | 'responses' }
+  | { wire: 'anthropic'; call: 'models' | 'messages' };
 
 export interface ModelGatewayOptions {
   cliproxy: CliproxySupervisor;
@@ -717,29 +736,121 @@ export class ModelGateway {
           return key && key.providerId === row ? [key.model] : [];
         })
       : this.modelIds(grant);
-    response.writeHead(200, { 'content-type': 'application/json' });
-    if (wire === 'anthropic') {
-      response.end(
-        JSON.stringify({
-          data: ids.map((id) => ({
-            type: 'model',
-            id,
-            display_name: id,
-            created_at: '1970-01-01T00:00:00Z',
-          })),
-          has_more: false,
-          first_id: ids[0] ?? null,
-          last_id: ids.at(-1) ?? null,
-        }),
+    writeModelList(response, wire, ids);
+  }
+
+  /**
+   * The external entrance of the gateway (DECISIONS §156, ADR 0033 §3), on the hub's own port: a
+   * person's own program (DeepSeek Harness through the Core Hub plugin) with their app token,
+   * which the hub's auth has already checked. The model is named by its hub id (`Model.key`) and
+   * served as named — there is no turn to resolve an alias for. Every model the person may pick
+   * in any profile they may enter is offered; a profile-only provider is reached in its own
+   * profile. The call then takes the loopback gateway's own road to CLIProxyAPI, its refusals and
+   * waits included; its usage goes to the ledger under the person (`external`).
+   */
+  async serveExternal(
+    request: IncomingMessage,
+    response: ServerResponse,
+    route: ExternalRoute,
+    body: unknown,
+    caller: ExternalCaller,
+  ): Promise<void> {
+    const { wire } = route;
+    if (!this.available()) {
+      fail(response, wire, 503, 'api_error', 'the model gateway is off on this hub');
+      return;
+    }
+    if (route.call === 'models') {
+      writeModelList(response, wire, this.externalModelIds(caller));
+      return;
+    }
+    if (!body || typeof body !== 'object' || Array.isArray(body)) {
+      fail(response, wire, 400, 'invalid_request_error', 'the request body is not a JSON object');
+      return;
+    }
+    const call = body as Record<string, unknown>;
+    const asked = typeof call.model === 'string' ? call.model.trim() : '';
+    if (!asked) {
+      fail(
+        response,
+        wire,
+        400,
+        'invalid_request_error',
+        'name a model: one of the ids GET …/v1/models lists',
       );
       return;
     }
-    response.end(
-      JSON.stringify({
-        object: 'list',
-        data: ids.map((id) => ({ id, object: 'model', created: 0, owned_by: 'corehub' })),
-      }),
+    const found = this.externalTarget(caller, asked);
+    if ('refusal' in found) {
+      fail(response, wire, 400, 'invalid_request_error', found.refusal);
+      return;
+    }
+    const { workspace, target } = found;
+    const upstreams = this.upstreamsWith(target.providerId);
+    if (!upstreams.some((upstream) => upstream.providerId === target.providerId)) {
+      fail(
+        response,
+        wire,
+        400,
+        'invalid_request_error',
+        `${target.modelLabel} is not available through Core Hub: its provider has no key or signed-in account the hub can use`,
+      );
+      return;
+    }
+    const upstream = ROUTES[`/gateway/${wire}/v1/${route.call}`]!.upstream;
+    const grant = this.tokens.external({
+      workspace,
+      userId: caller.userId,
+      tokenId: caller.tokenId,
+    });
+    await this.forward(
+      request,
+      response,
+      {
+        wire,
+        call: (chosen) => ({
+          path: upstream,
+          body: { ...call, model: upstreamModel(chosen.providerId, chosen.model) },
+        }),
+      },
+      grant,
+      target,
+      upstreams,
     );
+  }
+
+  /** Every hub model id a person may call from outside: each of their profiles' gateway models. */
+  externalModelIds(caller: ExternalCaller): string[] {
+    const ids = new Set<string>();
+    for (const workspace of caller.workspaces) {
+      for (const key of this.options.source.modelKeys(workspace)) ids.add(key);
+    }
+    return [...ids];
+  }
+
+  /** The profile and row a hub model id runs in for this person, the first profile that has it. */
+  private externalTarget(
+    caller: ExternalCaller,
+    asked: string,
+  ): { workspace: string; target: GatewayTarget } | { refusal: string } {
+    const { source } = this.options;
+    let refusal: string | null = null;
+    for (const workspace of caller.workspaces) {
+      if (!source.modelKeys(workspace).includes(asked)) continue;
+      const key = source.resolveKey(workspace, asked);
+      if (!key) continue;
+      const target = source.target(workspace, key.providerId, key.model);
+      if ('refusal' in target) {
+        refusal ??= target.refusal;
+        continue;
+      }
+      return { workspace, target };
+    }
+    return {
+      refusal:
+        refusal ??
+        `${asked} is not a model you may use through Core Hub; GET …/v1/models lists the ones you may`,
+    };
   }
 
   private async forward(
@@ -1089,7 +1200,7 @@ export class ModelGateway {
           }
           finish();
           const used = tap.result();
-          if (used && runId) this.account(grant, turn, runId, target, used);
+          if (used) this.account(grant, turn, runId, target, used);
         });
         answer.on('error', () => {
           finish();
@@ -1109,7 +1220,7 @@ export class ModelGateway {
         response.end();
         finish();
         const used = tap.result();
-        if (used && runId) this.account(grant, turn, runId, target, used);
+        if (used) this.account(grant, turn, runId, target, used);
       });
       answer.on('error', () => {
         finish();
@@ -1410,11 +1521,15 @@ export class ModelGateway {
     }
   }
 
-  /** One call's usage into its turn's totals (or, the turn over, straight into the ledger). */
+  /**
+   * One call's usage into its turn's totals (or, the turn over, straight into the ledger). A call
+   * through the external entrance goes to the ledger under its person; a call with no run at all
+   * (a Hermes profile's) is not recorded here.
+   */
   private account(
     grant: GatewayGrantRecord,
     turn: GatewayTurn | null,
-    runId: string,
+    runId: string | null,
     target: GatewayTarget,
     used: CallUsage,
   ): void {
@@ -1424,6 +1539,15 @@ export class ModelGateway {
       ...usage,
       ...target.price(usage),
     });
+    if (grant.external) {
+      try {
+        this.options.source.recordExternal?.(grant, priced(used));
+      } catch (error) {
+        this.options.log.warn({ err: error }, 'gateway: could not record an external call');
+      }
+      return;
+    }
+    if (!runId) return;
     const live = turn && grant.turn === turn && !grant.revoked;
     if (live) {
       const previous = grant.totals.get(target.modelLabel);
@@ -1443,6 +1567,33 @@ export class ModelGateway {
       this.options.log.warn({ err: error, runId }, 'gateway: could not record a late call');
     }
   }
+}
+
+/** A model list in the wire's own shape (OpenAI's or Anthropic's). */
+function writeModelList(response: ServerResponse, wire: Wire, ids: string[]): void {
+  response.writeHead(200, { 'content-type': 'application/json' });
+  if (wire === 'anthropic') {
+    response.end(
+      JSON.stringify({
+        data: ids.map((id) => ({
+          type: 'model',
+          id,
+          display_name: id,
+          created_at: '1970-01-01T00:00:00Z',
+        })),
+        has_more: false,
+        first_id: ids[0] ?? null,
+        last_id: ids.at(-1) ?? null,
+      }),
+    );
+    return;
+  }
+  response.end(
+    JSON.stringify({
+      object: 'list',
+      data: ids.map((id) => ({ id, object: 'model', created: 0, owned_by: 'corehub' })),
+    }),
+  );
 }
 
 /** Whether a peer address is this computer's own (IPv4, IPv6, IPv4-mapped IPv6). */
@@ -1570,6 +1721,26 @@ function fail(
         : { error: { message, type, code: type } };
   response.writeHead(status, { 'content-type': 'application/json' });
   response.end(JSON.stringify(body));
+}
+
+/**
+ * An error in the envelope of the caller's own wire, for the external entrance's own refusals
+ * (DECISIONS §156): the entrance off, no app token, too many calls (`retry-after`).
+ */
+export function wireError(
+  response: ServerResponse,
+  wire: 'openai' | 'anthropic',
+  status: number,
+  type: string,
+  message: string,
+  headers: Record<string, string> = {},
+): void {
+  if (response.headersSent) {
+    response.destroy();
+    return;
+  }
+  for (const [name, value] of Object.entries(headers)) response.setHeader(name, value);
+  fail(response, wire, status, type, message);
 }
 
 /** The Gemini API's `status` word for an error (its `google.rpc.Code` names). */

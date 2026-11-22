@@ -162,12 +162,24 @@ export function bearerOf(header: string | string[] | undefined): string | null {
   return match?.[1]?.trim() || null;
 }
 
+/**
+ * The model gateway's external entrance (DECISIONS §156) is called by OpenAI and Anthropic
+ * clients, and Anthropic's send their key as `x-api-key`: on those paths only, it counts as the
+ * bearer.
+ */
+function gatewayKeyOf(request: FastifyRequest): string | null {
+  if (!request.url.startsWith('/api/v1/gateway/')) return null;
+  const value = request.headers['x-api-key'];
+  const key = (Array.isArray(value) ? value[0] : value)?.trim();
+  return key || null;
+}
+
 /** The `onRequest` hook: never throws; records the failure reason for the guards. */
 export function authenticateHook(ctx: AuthContext) {
   return async (request: FastifyRequest): Promise<void> => {
     request.principal = null;
     request.authError = null;
-    const bearer = bearerOf(request.headers.authorization);
+    const bearer = bearerOf(request.headers.authorization) ?? gatewayKeyOf(request);
     if (!bearer) return;
     try {
       request.principal = await resolvePrincipal(ctx, bearer, request.ip);
