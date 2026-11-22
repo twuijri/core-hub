@@ -8,7 +8,11 @@
   served by the hub's model gateway (its external entrance). Provider keys never leave the hub.
 - **Hermes from inside the harness.** `/hermes <message>`, and a tool the harness's own agent can
   call (`corehub_ask_agent`), both answered by the hub's agent with its memory and MCP tools.
-  One hub conversation follows one harness session.
+  One hub conversation follows one harness session. Hermes often needs minutes: a slow answer
+  arrives as a harness background job (its completion notice, or `job_output`), or, where the
+  harness offers no jobs, through `corehub_agent_result`. One question per harness session runs
+  at a time; asking again while it runs sends nothing new. Messages the harness's agent writes
+  start with `↪ DeepSeek Harness:` in the hub conversation.
 - **Your computer, for the hub's agents.** The hub reaches the folders you share, the MCP servers
   of your harness profile you switch on, and (macOS) screen tasks — each as you allow it.
 

@@ -165,3 +165,63 @@
 - **انحلّت:** `dsh` انضافت لـ`DeviceProgram.source`. الهب اللي فيه هذا الفرع يقبل برامج الهارنس، والهب الأقدم يرفضها، فترسل الإضافة التقرير بدونها.
 - **مخالفة للقرار مكتوبة:** جلسة الشاشة تشتغل كعملية منفصلة بالمشغّل الأحادي (`dsh-headless`) لأن الهارنس ما يعطي الإضافة طريقة موثّقة تبدأ جلسة ⁨PTC⁩ داخل العملية؛ والموافقة في الغالب نافذة النظام لأن سؤال الهارنس مربوط بمحادثة.
 - **الخطوة التالية:** طلب دمج واحد لـ⁨feat/dsh-plugin⁩. بعده يجرّب المالك على الماك: يشغّل الباب الخارجي، ويثبّت الإضافة، ويربط بكود الربط، ثم يجرّب الموديلات و⁨/hermes⁩ والملفات ومهمة شاشة.
+
+## إصلاح منفصل: سؤال وكيل الهب الطويل (`corehub_ask_agent`) — فرع ⁨feat/dsh-plugin-ask⁩
+المسؤول: twuijri · الفرع: feat/dsh-plugin-ask · الحالة: review · 2026-11-22
+
+### المشكلة (تجربة حقيقية على ماك المالك، الهارنس بوضع ⁨PTC⁩، والهب الحقيقي)
+- المالك سأل مرة وحدة، وموديل الهارنس نادى `corehub_ask_agent` داخل `run_code`.
+- ⁨Hermes⁩ في الهب احتاج ٢٫٥ إلى ٤ دقايق (٢٨ خطوة أدوات).
+- مهلة `run_code` الافتراضية ١٢٠ ثانية (‏README حق `dsh-tool-executor-ptc` و`dsh-ptc-runtime-node`: ‏`timeoutMs` ‏120,000 وسقفه 600,000) قطعت النداء، فسأل الموديل سؤال أقصر.
+- النتيجة: رسالتين في محادثة الهب وجوابين كاملين من ⁨Hermes⁩، والهارنس عرض الثاني بس. شغل مضاعف وجواب ضايع.
+
+### الإصلاح
+- **السؤال يُتابَع بعيد عن النداء** (`src/ask-runs.ts`): الإضافة ترسل الرسالة مرة وحدة، وتتابع التشغيل في حلقة ما يوقفها إلغاء الهارنس (حتى ٣٠ دقيقة، مع إعادة محاولة لو فشل استعلام)، وتحفظ الجواب لين يوصل لموديل الهارنس.
+- **الآلية المختارة: مهام الهارنس الخلفية (`ctx.jobs`)**، من وثائقه:
+  - `docs/subsystems/jobs.md`: ‏`ctx.jobs.start({ kind, label, owner, run })`، ومعرّف الجلسة هو `Agent.id` (`SessionId` في تعريفات `dsh-agent`)، و`wait` اللي يلقط التسوية يخليها `awaited`.
+  - `packages/jobs/tool-jobs/README.md`: لما تخلص مهمة يملكها وكيل يوصله إشعار فيه `result`، ويقرأها `job_output`، والتسوية اللي لقطها `wait` ما يجي لها إشعار.
+  - السؤال يصير مهمة باسم الجلسة: لو الجواب جا خلال ٤٥ ثانية يرجع في النداء نفسه (والمهمة تنشال بدون إشعار)، ولا يرجع النداء فوراً بـ`running` ومعرّف المهمة، والجواب يوصل بإشعار المهمة أو بـ`job_output`.
+  - **البديل لو الهارنس رفض المهمة** (ما فيه `tool-jobs` أو ما فيه وكيل): النداء ينتظر حتى ٩٠ ثانية ثم يرجع `running` مع `run_id`، وأداة جديدة `corehub_agent_result(run_id, wait?, wait_seconds?)` تجيب الجواب (تنتظر ٦٠ ثانية افتراضياً، وحدها ٥٤٠).
+- **منع التكرار:** سؤال واحد شغّال لكل جلسة هارنس. نداء جديد وهو شغّال ما يرسل رسالة: يرجع المهمة الشغّالة (أو ينتظر جوابها لو ما فيه مهمة). والجواب اللي ما وصل للموديل (نداؤه انقطع) يُعطى للنداء اللي بعده بدل ما يُسأل الهب من جديد. `force_new: true` بس لسؤال مختلف بوضوح.
+- **إلغاء المهمة** (`job_kill` أو إغلاق الجلسة) يوقف المهمة بس، وتشغيل الهب يكمل، وجوابه يبقى في محادثة كور هب ويقدر `corehub_agent_result` يجيبه.
+- **وصف الأداتين:** ⁨Hermes⁩ ياخذ دقايق؛ لا تعيد السؤال؛ ولو تنتظر داخل `run_code` ارفع `timeoutMs` لين ٦٠٠٠٠٠.
+- **علامة الهارنس:** العقد ما فيه حقل مصدر أو بيانات إضافية في `RunCreate`، و`Message.author` دايماً الشخص لرسالة المستخدم، فما غيّرنا العقد. الرسالة اللي يكتبها موديل الهارنس تبدأ بـ `↪ DeepSeek Harness:` ثم سطر فاضي. رسائل `/hermes` اللي يكتبها المالك بنفسه تبقى بدون علامة.
+
+### الملفات
+- جديد: `packages/dsh-plugin/src/ask-runs.ts`، `packages/dsh-plugin/src/ask-tool.ts`، `packages/dsh-plugin/tests/ask-runs.test.ts`.
+- تعديل: `src/hermes.ts` (فصل `start` و`follow`، والعلامة، وتباعد الاستعلام من ١٫٥ إلى ٥ ثواني)، `src/host.ts` (نوع `JobRegistry` الضيق و`rootCallId`)، `src/index.ts` (حقن `jobs` وتسجيل الأداتين)، `src/names.ts`، `src/i18n.ts` (شلنا مفتاحي وصف الأداة؛ الوصف صار في `ask-tool.ts` بالإنجليزي لأنه للموديل)، `tests/hermes.test.ts`، `README.md`.
+- ما لمسنا ملفات صفحة الإعدادات ولا رد `/corehub` ولا عرض `/hermes`.
+
+### الفحوص (محلياً على لينكس، 2026-11-22)
+```
+$ pnpm --filter @corehub/dsh-plugin typecheck        # exit=0
+$ (packages/dsh-plugin) npx vitest run --maxWorkers=2
+ Test Files  12 passed (12)
+      Tests  83 passed (83)
+$ npx eslint packages/dsh-plugin                     # exit=0
+$ npx prettier --check packages/dsh-plugin
+All matched files use Prettier code style!
+```
+- **تجربة حقيقية مع الهارنس ⁨0.2.2-rc.5⁩** بوضع ⁨PTC⁩ (`tool-executor-ptc` مفعّل و`native` مطفي)، ⁨DSH_HOME⁩ معزول في `~/.cache/dsh-dev/home-ask`، بالمشغّل الأحادي `dsh --profile askptc --json`، وهب بديل محلي يجاوب بعد ١٥٠ ثانية وموديل مبرمج على بوابته:
+```
+04:37:15 → 04:39:49   exit 0
+hub: HUB MESSAGE R1 "↪ DeepSeek Harness:\n\nWhat did I work on last week? Use your memory."
+tool_result (≈45 s): {"ok":true,"state":"running","answer":"… background job corehub-b5c03c108bba4386 …"}
+tool_result: {"text":"HUB-ANSWER-OK for R1 after 150 s","job":{…,"status":"completed",…}}
+final: "Final: the hub answered (HUB-ANSWER-OK for R1 after 150 s)."
+GET /hub-messages → {"posted":["↪ DeepSeek Harness:\n\nWhat did I work on last week? Use your memory."]}
+```
+- **تجربة إعادة السؤال** (الموديل المبرمج يسأل سؤال أقصر بعد `running`، والهب يجاوب بعد ١٣٠ ثانية):
+```
+04:40:11 → 04:42:25   exit 0
+tool_result: {"ok":true,"state":"running","answer":"This is your earlier question “What did I work on last week? Use your memory.”; no new message was sent to the hub. …"}
+final: "Final: the hub answered (HUB-ANSWER-OK for R1 after 130 s)."
+GET /hub-messages → {"posted":["↪ DeepSeek Harness:\n\nWhat did I work on last week? Use your memory."]}
+```
+  رسالة وحدة في الهب في التجربتين، والجواب وصل. (نداء `job_output` واحد في التجربة الأولى فشل لأن الموديل المبرمج قص المعرّف مع فاصلة منقوطة؛ خطأ في البديل، مو في الإضافة.)
+
+### ما ما جرّبناه والحدود
+- ما جرّبنا على ماك المالك ولا مع هب حقيقي ولا ⁨Hermes⁩ حقيقي.
+- ما جرّبنا إيقاظ وكيل خامل بإشعار المهمة في `dsh web` (المشغّل الأحادي يخلص بعد الدور؛ جرّبنا وصول الجواب بـ`job_output`). وما جرّبنا المسار البديل (`corehub_agent_result`) في الهارنس الحقيقي، بس في اختبارات الوحدة.
+- حالة الأسئلة في الذاكرة بس: إعادة تشغيل الهارنس تنسى الأسئلة الشغّالة، والجواب يبقى في محادثة كور هب.
+- **الخطوة التالية:** المالك يجرّب على الماك نفس السؤال الطويل، ويتأكد إن محادثة الهب فيها رسالة وحدة بعلامة الهارنس.

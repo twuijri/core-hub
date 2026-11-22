@@ -6,18 +6,26 @@
  *   models as a provider of the harness, and unlinking (§2, §3).
  * - The device link: the hub's agents reach this computer's shared folders, the harness's MCP
  *   servers and (on macOS) screen tasks, each as the person allowed (§4, §5).
- * - `/hermes <message>` and the `corehub_ask_agent` tool: the hub's agent from inside the
- *   harness (§6).
+ * - `/hermes <message>` and the `corehub_ask_agent` / `corehub_agent_result` tools: the hub's
+ *   agent from inside the harness (§6); a slow answer arrives as a harness background job.
  *
  * The settings below are the row's config: the harness's Plugins page shows them as this
  * plugin's settings, and changes apply without a restart. The link itself (hub, token) is never
  * part of them.
  */
 import Schema from '@deepseek-ai/schemastery';
+import { AskRuns } from './ask-runs.js';
+import { registerAskTools } from './ask-tool.js';
 import { CoreHub, dataDirOf, type Settings } from './core.js';
-import type { CommandRuntime, ConfigEditor, HostContext, ToolRegistry } from './host.js';
+import type {
+  CommandRuntime,
+  ConfigEditor,
+  HostContext,
+  JobRegistry,
+  ToolRegistry,
+} from './host.js';
 import { translator, pickLanguage } from './i18n.js';
-import { AGENT_COMMAND_NAME, ASK_AGENT_TOOL, COMMAND_NAME, PLUGIN_NAME } from './names.js';
+import { AGENT_COMMAND_NAME, ASK_JOB_KIND, COMMAND_NAME, PLUGIN_NAME } from './names.js';
 
 export const name = PLUGIN_NAME;
 
@@ -159,13 +167,29 @@ export function apply(ctx: HostContext & { configEditor: ConfigEditor }, config:
   // Live settings changed (the Plugins page): the hub hears the new folders and programs.
   ctx.on('loader/volatile-update', () => core.settingsChanged());
 
+  // The hub agent's questions outlive the tool calls that asked them (see ask-runs.ts); a slow
+  // answer becomes a background job of the asking session when the harness has `ctx.jobs`.
+  let jobs: JobRegistry | null = null;
+  const asks = new AskRuns({
+    bridge: core.agent,
+    jobs: () => jobs,
+    jobKind: ASK_JOB_KIND,
+    log,
+  });
+  ctx.inject(['jobs'], (c) => {
+    jobs = (c.jobs as JobRegistry | undefined) ?? null;
+    c.effect(() => () => {
+      jobs = null;
+    });
+  });
+
   ctx.inject(['commands'], (c) => registerCommands(c.commands as CommandRuntime, core));
   ctx.inject(['tools'], (c) => {
     core.tools = c.tools as ToolRegistry;
     c.effect(() => () => {
       core.tools = null;
     });
-    registerAskTool(c.tools as ToolRegistry, core);
+    registerAskTools(c.tools as ToolRegistry, asks);
   });
   ctx.inject(['mcpManager'], (c) => {
     core.mcpManager = c.mcpManager ?? null;
@@ -230,38 +254,6 @@ function registerCommands(commands: CommandRuntime, core: CoreHub): void {
       return answer.ok
         ? { kind: 'success', text: answer.text }
         : { kind: 'error', text: answer.text };
-    },
-  });
-}
-
-function registerAskTool(tools: ToolRegistry, core: CoreHub): void {
-  const t = translator('en');
-  // The registry's disposer is an effect of this (injected) context: unloading withdraws it.
-  tools.register({
-    name: ASK_AGENT_TOOL,
-    description: t('tool.description'),
-    parameters: {
-      type: 'object',
-      properties: { message: { type: 'string', description: t('tool.message') } },
-      required: ['message'],
-      additionalProperties: false,
-    },
-    output: {
-      schema: {
-        type: 'object',
-        properties: { ok: { type: 'boolean' }, answer: { type: 'string' } },
-        required: ['ok', 'answer'],
-      },
-      render: (_args, value) => {
-        const v = value as { ok?: boolean; answer?: string };
-        return [{ type: 'text', text: `${v.ok ? '' : '[not answered] '}${v.answer ?? ''}` }];
-      },
-    },
-    async execute(args, exec) {
-      const message = String((args as { message?: unknown })?.message ?? '').trim();
-      if (!message) return { ok: false, answer: 'message is empty' };
-      const answer = await core.askAgent(exec.agent?.id ?? 'no-session', message, exec.signal);
-      return { ok: answer.ok, answer: answer.text };
     },
   });
 }

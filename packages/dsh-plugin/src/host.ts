@@ -1,7 +1,8 @@
 /**
  * The small part of the harness's plugin API this plugin uses, written down from its published
  * documentation and interface declarations (DeepSeek Harness 0.2.2-rc.5, MIT): docs/architecture.md,
- * docs/subsystems/{commands,mcp,tools}.md, packages/mcp/mcp-manager/README.md,
+ * docs/subsystems/{commands,mcp,tools,jobs}.md, packages/jobs/tool-jobs/README.md,
+ * packages/mcp/mcp-manager/README.md,
  * packages/interaction/user-questions/README.md, the config-editor and llm-pi-ai declarations.
  * Narrow on purpose: the plugin imports none of the harness's runtime packages (only its
  * Schemastery, as a peer), so a breaking change shows up here, in one file.
@@ -41,8 +42,11 @@ export interface ToolDefinition {
     args: unknown,
     exec: {
       callId: string;
+      /** The model-requested call that owns this one (a `run_code` program's, under PTC). */
+      rootCallId?: string;
       name: string;
       arguments: unknown;
+      /** The calling agent; its id is the harness session's id (`SessionId`). */
       agent?: { id: string };
       signal: AbortSignal;
       concludeTurn?: () => void;
@@ -121,6 +125,38 @@ export interface AgentDefaultModel {
   currentSelection(): { provider: string; model: string };
 }
 
+/**
+ * `ctx.jobs` (dsh-jobs, the background job registry; docs/subsystems/jobs.md). A job owned by
+ * a session is reported to that session's agent when it settles (dsh-tool-jobs: a completion
+ * notice carrying the job's `result`), unless a `wait` collected the settlement first. `start`
+ * throws when no job controller serves the owner (no dsh-tool-jobs in that composition).
+ */
+export interface JobRegistry {
+  start(spec: {
+    kind: string;
+    label: string;
+    owner?: string;
+    toolCall?: { callId: string; rootCallId: string };
+    outputLimitBytes?: number;
+    run(job: { readonly id: string; updateProgress(line: string): void }): {
+      cancel(reason?: string): void;
+      done: Promise<{
+        status: 'completed' | 'killed' | 'failed';
+        detail?: string;
+        result?: string;
+      }>;
+    };
+  }): string;
+  get(id: string, caller?: string): { id: string; status: string };
+  wait(
+    id: string,
+    timeoutMs: number,
+    caller?: string,
+    signal?: AbortSignal,
+  ): Promise<{ id: string; status: string }>;
+  remove(id: string, caller?: string): void;
+}
+
 /** The Cordis context, as far as the plugin reads it. */
 export interface HostContext {
   effect(execute: () => (() => void) | void): unknown;
@@ -138,4 +174,5 @@ export interface HostContext {
   configEditor?: ConfigEditor;
   userQuestions?: UserQuestions;
   computerUse?: unknown;
+  jobs?: JobRegistry;
 }

@@ -2,7 +2,7 @@ import { mkdtempSync, rmSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
-import { AgentBridge, messageText, pickAgent } from '../src/hermes.js';
+import { AgentBridge, HARNESS_MARK, hubText, messageText, pickAgent } from '../src/hermes.js';
 import { HubConnection } from '../src/hub.js';
 import { PluginStore, type StoredLink } from '../src/store.js';
 import { fakeFetch, type Seen } from './fake-hub.js';
@@ -124,6 +124,41 @@ describe('AgentBridge', () => {
       settings: () => ({ profile: null, agent: 'hermes' }),
     });
     expect(await b.ask('h', 'x')).toMatchObject({ state: 'failed', message: 'not_linked' });
+  });
+
+  it('marks a message the harness’s agent wrote, and leaves the person’s own unmarked', async () => {
+    const { fetch, seen } = hub(['succeeded']);
+    const b = bridge(fetch);
+    const started = await b.start('harness-1', 'What is on my calendar?', {
+      fromHarnessAgent: true,
+    });
+    expect(started).toEqual({
+      ok: true,
+      target: { session_id: 'S1', run_id: 'R1', profile: 'work' },
+    });
+    const sent = seen.find((s) => s.method === 'POST' && /\/runs$/.test(s.path))!;
+    expect(sent.body).toMatchObject({
+      content: [{ type: 'text', text: `${HARNESS_MARK}\n\nWhat is on my calendar?` }],
+    });
+    expect(HARNESS_MARK).toBe('↪ DeepSeek Harness:');
+    // The conversation's title is the question itself.
+    const create = seen.find((s) => s.method === 'POST' && s.path === '/sessions')!;
+    expect(create.body).toMatchObject({ title: 'DeepSeek Harness: What is on my calendar?' });
+    await b.ask('harness-1', 'typed by me');
+    const typed = seen.filter((s) => s.method === 'POST' && /\/runs$/.test(s.path))[1]!;
+    expect(typed.body).toMatchObject({ content: [{ type: 'text', text: 'typed by me' }] });
+    expect(hubText('x', false)).toBe('x');
+  });
+
+  it('follows through an approval wait when asked to, reporting each status once', async () => {
+    const { fetch } = hub(['queued', 'running', 'waiting', 'waiting', 'running', 'succeeded']);
+    const statuses: string[] = [];
+    const result = await bridge(fetch).follow(
+      { session_id: 'S1', run_id: 'R1', profile: 'work' },
+      { stopOnWaiting: false, onStatus: (s) => statuses.push(s) },
+    );
+    expect(result).toMatchObject({ state: 'answered', text: 'Hello\nthere' });
+    expect(statuses).toEqual(['queued', 'running', 'waiting', 'running', 'succeeded']);
   });
 
   it('picks the agent and reads text blocks', () => {
