@@ -1,5 +1,5 @@
 # إضافة كور هب لـ DeepSeek Harness: الهارنس في جهاز الشخص، مربوط بالهب
-المسؤول: twuijri · الفرع: feat/dsh-plugin · الحالة: in-progress
+المسؤول: twuijri · الفرع: feat/dsh-plugin · الحالة: review
 
 ## المشكلة والهدف
 - **الحاجة:** المالك (2026-11-22) ما يبي يكبّر تطبيق سطح المكتب ويسكّر ثغراته، وفيه هارنس قوي جاهز اسمه ⁨DeepSeek Harness⁩ (⁨MIT⁩)، يشتغل على الماك وويندوز، وفيه ⁨Computer Use⁩. جرّبه المالك على الماك، واشتغل معه.
@@ -33,6 +33,10 @@
   - **قيم جديدة:** `screen_task` في `CapabilityKind`، و`dsh` في `DevicePlatform`. ووصف `params` و`result` لـ`screen_task` في `DeviceRequest`، ومهلته 180 ثانية.
   - **أداة الهب** `devices.screen_task`، و`devices.run_status` يتابع المهمة الجارية. والأدوات ما هي في العقد، لكن سجلّها في `DECISIONS` §157.
   - **القرارات:** §156 للباب الخارجي، و§157 لمهام الشاشة.
+
+- **بعد الدمج (⁨feat/dsh-plugin⁩):**
+  - قيمة `dsh` في `DeviceProgram.source`، عشان الهب يقبل برامج الهارنس في تقرير الجهاز.
+  - مخططات الأحداث (`packages/contracts/events/`) فيها الحين القيم الجديدة: `dsh` للمنصة والمصدر، و`screen_task` للقدرة. كانت ناقصة من جهة الهب.
 
 ## الملفات والتأثير
 - `docs/adr/0033-deepseek-harness-plugin.md` (جديد).
@@ -125,6 +129,30 @@
     ```
   - **ما جرّبناه:** هب حقيقي مع الباب الخارجي، وتشغيل ⁨Computer Use⁩ على ماك، وبروفايل تطبيق الهارنس المكتبي، ونافذة الموافقة في ويندوز وماك.
 
+- **بعد الدمج (⁨feat/dsh-plugin⁩)، 2026-11-22، محلياً:**
+
+    ```
+    $ pnpm contracts:lint
+    contracts:lint  validating 98 event schema file(s)
+    contracts:lint  OK
+    $ pnpm contracts:compat
+    contracts:compat  OK — no breaking change against v1.1.10
+    $ pnpm contracts:check-clients
+    check-clients  OK — 1189 client file(s) scanned, 289 contract path(s) known.
+    $ pnpm i18n:check
+    i18n:check  OK
+    $ pnpm typecheck   # exit=0
+    $ pnpm lint        # exit=0
+    $ pnpm change-record:check
+    change-record  OK — 1 record(s) valid
+    $ vitest --project contract tests/contract/contract.test.ts
+     Test Files  1 passed (1)
+          Tests  398 passed (398)
+    $ (packages/dsh-plugin) vitest run
+     Test Files  11 passed (11)
+          Tests  64 passed (64)
+    ```
+
 ## المخاطر والرجوع
 - **الهارنس معاينة للمطورين:** نسخة كل يوم إلى خمسة أيام، وفيها تغييرات كاسرة. الإضافة مثبّتة على النسخ المجرَّبة.
 - **الباب الخارجي سطح جديد على منفذ الهب:** مطفي افتراضياً، ومربوط بمفتاح شخص، ومحدود، ومسجَّل.
@@ -134,5 +162,6 @@
 - **الحين:** كتابة القرار، ثم تنفيذ جهة الهب وجهة الإضافة.
 
 - **جهة الإضافة (⁨feat/dsh-plugin-pkg⁩):** الحزمة جاهزة وما انرفعت. الخطوة التالية: تجربتها على ماك المالك مع هب فيه الباب الخارجي مفتوح، ثم مهمة شاشة حقيقية.
-- **مفتوح لجهة الهب:** `DeviceProgram.source` ما فيه قيمة للهارنس، فالهب يرفض البرامج في تقرير الجهاز؛ الإضافة ترسل التقرير بدونها وتقول هذا في `/corehub status`. نقترح إضافة `dsh` للقائمة.
+- **انحلّت:** `dsh` انضافت لـ`DeviceProgram.source`. الهب اللي فيه هذا الفرع يقبل برامج الهارنس، والهب الأقدم يرفضها، فترسل الإضافة التقرير بدونها.
 - **مخالفة للقرار مكتوبة:** جلسة الشاشة تشتغل كعملية منفصلة بالمشغّل الأحادي (`dsh-headless`) لأن الهارنس ما يعطي الإضافة طريقة موثّقة تبدأ جلسة ⁨PTC⁩ داخل العملية؛ والموافقة في الغالب نافذة النظام لأن سؤال الهارنس مربوط بمحادثة.
+- **الخطوة التالية:** طلب دمج واحد لـ⁨feat/dsh-plugin⁩. بعده يجرّب المالك على الماك: يشغّل الباب الخارجي، ويثبّت الإضافة، ويربط بكود الربط، ثم يجرّب الموديلات و⁨/hermes⁩ والملفات ومهمة شاشة.

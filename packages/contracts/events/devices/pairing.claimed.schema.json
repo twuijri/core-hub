@@ -106,7 +106,8 @@
         "apps",
         "calendar",
         "reminders",
-        "health"
+        "health",
+        "screen_task"
       ]
     },
     "Device": {
@@ -291,7 +292,7 @@
     },
     "DevicePlatform": {
       "type": "string",
-      "enum": ["android", "ios", "web", "macos", "windows", "linux"]
+      "enum": ["android", "ios", "web", "macos", "windows", "linux", "dsh"]
     },
     "Locale": {
       "type": "string",
@@ -460,7 +461,8 @@
             "claude_code",
             "codex",
             "cursor",
-            "windsurf"
+            "windsurf",
+            "dsh"
           ]
         },
         "profiles": {

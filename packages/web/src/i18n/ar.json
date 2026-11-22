@@ -4306,7 +4306,8 @@
       "claude_code": "Claude Code",
       "codex": "Codex",
       "cursor": "Cursor",
-      "windsurf": "Windsurf"
+      "windsurf": "Windsurf",
+      "dsh": "DeepSeek Harness"
     },
     "status": {
       "ready": "جاهز",

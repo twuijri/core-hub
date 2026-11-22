@@ -267,7 +267,13 @@ export interface DesktopProgramField {
 }
 
 export type DesktopProgramSource =
-  'claude_desktop' | 'claude_desktop_extension' | 'claude_code' | 'codex' | 'cursor' | 'windsurf';
+  | 'claude_desktop'
+  | 'claude_desktop_extension'
+  | 'claude_code'
+  | 'codex'
+  | 'cursor'
+  | 'windsurf'
+  | 'dsh';
 
 export interface DesktopProgram {
   id: string;

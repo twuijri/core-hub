@@ -29707,7 +29707,8 @@ components:
           maxLength: 120
         source:
           type: string
-          enum: [claude_desktop, claude_desktop_extension, claude_code, codex, cursor, windsurf]
+          enum:
+            [claude_desktop, claude_desktop_extension, claude_code, codex, cursor, windsurf, dsh]
         profiles:
           type: array
           minItems: 1
