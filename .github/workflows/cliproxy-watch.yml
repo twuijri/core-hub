@@ -1,0 +1,95 @@
+name: CLIProxyAPI watch
+
+# Once a week, compare the CLIProxyAPI release the hub pins (scripts/cliproxy/pin.json, ADR 0029)
+# with router-for-me/CLIProxyAPI's newest stable release, and keep one open issue while a newer one
+# exists (docs/RELEASING.md "The CLIProxyAPI watch"). Its model catalogue follows the published one
+# at run time (DECISIONS §140, amended 2026-11-22), but its code, its management API and the
+# catalogue it falls back to offline are the pinned release's. The watch never moves the pin,
+# never pushes and never publishes: a person reads the release notes, moves the pin by pull request
+# and lets the real-binary suites (CI's `model-gateway-real` job) say whether the hub still works
+# with it. No secrets: every source is public.
+
+on:
+  schedule:
+    - cron: '17 5 * * 2'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+concurrency:
+  group: cliproxy-watch
+  cancel-in-progress: false
+
+jobs:
+  watch:
+    name: A CLIProxyAPI release newer than the pin?
+    if: github.repository == 'twuijri/core-hub'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Open, update or close the one issue
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          pinned="$(jq -r .version scripts/cliproxy/pin.json)"
+          upstream="$(jq -r .repository scripts/cliproxy/pin.json)"
+          # `releases/latest` is the newest release that is neither a draft nor a pre-release.
+          latest="$(gh api "repos/$upstream/releases/latest" --jq .tag_name)"
+          latest="${latest#v}"
+          echo "Pinned: $pinned; newest stable release: $latest"
+          label=cliproxy-watch
+          if ! gh label list --limit 200 --json name --jq '.[].name' | grep -qx "$label"; then
+            gh label create "$label" --color 5319e7 \
+              --description 'A CLIProxyAPI release newer than the pin (scripts/cliproxy/pin.json)' || label=enhancement
+          fi
+          number="$(gh issue list --state open --label "$label" --limit 50 --json number \
+            --jq 'sort_by(.number) | .[0].number // empty')"
+          newest="$(printf '%s\n%s\n' "$pinned" "$latest" | sort -V | tail -n1)"
+          if [ "$latest" = "$pinned" ] || [ "$newest" = "$pinned" ]; then
+            if [ -n "$number" ]; then
+              gh issue close "$number" --comment "The hub pins CLIProxyAPI $pinned, the newest release; closing."
+            else
+              echo 'The pin is the newest release; no open issue.'
+            fi
+            exit 0
+          fi
+          behind="$(gh api --paginate "repos/$upstream/releases?per_page=100" \
+            --jq '.[] | select(.draft == false and .prerelease == false) | .tag_name' \
+            | sed 's/^v//' | while read -r tag; do
+                [ "$tag" != "$pinned" ] || continue
+                [ "$(printf '%s\n%s\n' "$pinned" "$tag" | sort -V | head -n1)" = "$pinned" ] || continue
+                [ "$(printf '%s\n%s\n' "$tag" "$latest" | sort -V | tail -n1)" = "$latest" ] || continue
+                echo "$tag"
+              done | wc -l | tr -d ' ')"
+          title="CLIProxyAPI $latest is newer than the pin ($pinned)"
+          body="$RUNNER_TEMP/body.md"
+          {
+            echo "The hub pins CLIProxyAPI **$pinned** (\`scripts/cliproxy/pin.json\`); the newest stable release is **$latest** ($behind releases later)."
+            echo
+            echo "- Release notes: https://github.com/$upstream/releases"
+            echo "- Changes: https://github.com/$upstream/compare/v$pinned...v$latest"
+            echo
+            echo "Moving the pin is a pull request (ADR 0027: nothing that works may break):"
+            echo
+            echo "1. Read the release notes since $pinned for changes to the config file, the management API the hub calls (\`gateway/cliproxy-management.ts\`) and \`-codex-device-login\`."
+            echo "2. Move \`scripts/cliproxy/pin.json\` (every asset's SHA-256) and \`CLIPROXY_VERSION\` in \`packages/server/src/modules/models/gateway/locate.ts\` together (a unit test checks)."
+            echo "3. Run the real-binary suites (\`COREHUB_REAL_GATEWAY=1\`; CI's \`model-gateway-real\` job)."
+            echo
+            echo "The models a subscription lists do not wait for this: CLIProxyAPI fetches its published catalogue at start and every three hours (DECISIONS §140, amended 2026-11-22)."
+            echo
+            echo "_Kept up to date by \`.github/workflows/cliproxy-watch.yml\`; closed once the pin is the newest release._"
+          } > "$body"
+          cat "$body" >> "$GITHUB_STEP_SUMMARY"
+          if [ -n "$number" ]; then
+            gh issue edit "$number" --title "$title" --body-file "$body"
+            echo "Updated issue #$number"
+          else
+            gh issue create --title "$title" --label "$label" --body-file "$body"
+          fi
