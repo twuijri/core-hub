@@ -173,6 +173,12 @@ describe.skipIf(!doc)('contract: the model gateway’s external entrance', () =>
   it('openaiListModels: the hub ids for an app token; 401 without one; 403 for a web session', async () => {
     const { data } = await call('gateway.openaiListModels', 200, { as: program });
     expect((data as { data: { id: string }[] }).data.map((m) => m.id)).toContain(MODEL);
+    // Each entry says what the model takes in (amendment 2026-11-23): Anthropic's models take
+    // images, so the harness may send one.
+    expect((data as { data: { id: string }[] }).data.find((m) => m.id === MODEL)).toMatchObject({
+      context_window: null,
+      input_modalities: ['text', 'image'],
+    });
     const none = await call('gateway.openaiListModels', 401, { as: anonymous });
     expect(none.data).toMatchObject({ error: { type: 'authentication_error' } });
     await call('gateway.openaiListModels', 403, { as: admin });
@@ -184,6 +190,9 @@ describe.skipIf(!doc)('contract: the model gateway’s external entrance', () =>
       headers: { 'x-api-key': appToken! },
     });
     expect((data as { data: { id: string }[] }).data.map((m) => m.id)).toContain(MODEL);
+    expect((data as { data: { id: string }[] }).data.find((m) => m.id === MODEL)).toMatchObject({
+      input_modalities: ['text', 'image'],
+    });
     const wrong = await call('gateway.anthropicListModels', 401, {
       as: anonymous,
       headers: { 'x-api-key': 'hub_at_not-a-token-of-this-hub' },

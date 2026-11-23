@@ -10,7 +10,7 @@ import { TOKEN_PLACEHOLDER } from '../src/names.js';
 
 describe('the Core Hub provider row', () => {
   const row = providerRow('https://hub.example', [
-    { id: 'm1', name: 'Model 1', context_window: 1000 },
+    { id: 'm1', name: 'Model 1', context_window: 1000, image: false },
   ]);
 
   it('points at the gateway entrance with a placeholder header, never the token', () => {
@@ -19,9 +19,24 @@ describe('the Core Hub provider row', () => {
       api: 'openai-completions',
       baseURL: 'https://hub.example/api/v1/gateway/openai/v1',
       headers: { Authorization: TOKEN_PLACEHOLDER },
-      models: [{ id: 'm1', name: 'Model 1', contextWindow: 1000 }],
+      models: [{ id: 'm1', name: 'Model 1', contextWindow: 1000, input: ['text'] }],
     });
     expect(JSON.stringify(row)).not.toContain('hub_at_');
+  });
+
+  it('declares images per model, only for the models the hub says take them', () => {
+    // Owner, 2026-11-23: an image to chatgpt-subscription/gpt-6.2-sol was refused by the harness
+    // ("the current model does not support images"): with no `input`, pi-ai assumes text only.
+    const both = providerRow('https://hub.example', [
+      { id: 'chatgpt-subscription/gpt-6.2-sol', name: null, context_window: null, image: true },
+      { id: 'kimi-subscription/kimi-k2', name: null, context_window: null, image: false },
+    ]);
+    expect(both.models).toEqual([
+      { id: 'chatgpt-subscription/gpt-6.2-sol', input: ['text', 'image'] },
+      { id: 'kimi-subscription/kimi-k2', input: ['text'] },
+    ]);
+    // Never a provider-wide claim: a model that cannot see would be refused mid-turn.
+    expect(both).not.toHaveProperty('defaultInput');
   });
 
   it('keeps every other provider', () => {

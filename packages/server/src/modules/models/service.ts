@@ -2295,6 +2295,11 @@ export class ModelsService {
           reason: `no account signed in under ${row.label} serves a model yet`,
         };
       }
+      // Whether each takes images is CLIProxyAPI's catalogue's word (its `vision` capability);
+      // when it could not say, a model keeps what the row knew of it.
+      const held = new Map(
+        this.store.modelsOf(row.id).map((model) => [model.modelKey, model.capabilities]),
+      );
       return {
         supported: true,
         models: listed.map((model) => ({
@@ -2303,6 +2308,12 @@ export class ModelsService {
           kind: 'chat' as const,
           contextWindow: model.contextWindow,
           maxOutputTokens: model.maxOutputTokens,
+          capabilities:
+            model.vision === true
+              ? ['vision' as const]
+              : model.vision === false
+                ? []
+                : [...(held.get(model.id) ?? [])],
         })),
         source: 'provider',
         reason: null,
@@ -2491,14 +2502,23 @@ export class ModelsService {
         if (row.catalogueStatus === 'loading') continue;
         const result = await this.subscriptionModels(row);
         if (!result.supported) continue;
-        const held = new Set(
+        // A model taking images or no longer taking them (CLIProxyAPI's catalogue said so) is a
+        // change too, so a row whose ids stayed the same still learns it without "Refresh".
+        const held = new Map(
           this.store
             .modelsOf(row.id)
             .filter((model) => model.source !== 'manual')
-            .map((model) => model.modelKey),
+            .map((model) => [model.modelKey, model.capabilities.includes('vision')]),
         );
-        const served = new Set(result.models.map((model) => model.key));
-        if (held.size === served.size && [...served].every((key) => held.has(key))) continue;
+        const served = new Map(
+          result.models.map((model) => [model.key, !!model.capabilities?.includes('vision')]),
+        );
+        if (
+          held.size === served.size &&
+          [...served].every(([key, vision]) => held.has(key) && held.get(key) === vision)
+        ) {
+          continue;
+        }
         const fresh = this.store.providerById(row.id);
         if (!fresh || fresh.archivedAt || fresh.catalogueStatus === 'loading') continue;
         const report = this.storeCatalogue(fresh, actor, result.models, result, this.now());
@@ -4080,6 +4100,25 @@ export class ModelsService {
   gatewayServes(workspace: string, providerId: string): boolean {
     const row = this.effectiveFor(workspace, providerId);
     return !!row && this.gatewayRoute(row) !== null;
+  }
+
+  /**
+   * A model row's context window and whether it takes images (its `vision` capability), for the
+   * external entrance's model list (DECISIONS §156, amendment 2026-11-23).
+   */
+  gatewayModelFacts(
+    workspace: string,
+    providerId: string,
+    model: string,
+  ): { contextWindow: number | null; vision: boolean } | null {
+    const row = this.effectiveFor(workspace, providerId);
+    if (!row) return null;
+    const found = this.store.model(row.id, model);
+    if (!found) return null;
+    return {
+      contextWindow: found.contextWindow ?? null,
+      vision: found.capabilities.includes('vision'),
+    };
   }
 
   /** A model row's context window, for the agents that must be told it (Claude Code, Codex). */

@@ -57,6 +57,7 @@ function standInCatalogue(): Record<string, unknown[]> {
       context_length: 272000,
       max_completion_tokens: 128000,
       supported_parameters: ['tools'],
+      supportedInputModalities: ['text', 'image'],
     },
   ];
   const xai = [
@@ -424,6 +425,12 @@ describe.skipIf(!enabled)('subscription sign-ins with the real CLIProxyAPI', () 
     ).items.find((item) => item.id === provider)!;
     expect(row.models.map((model) => model.model)).toContain(REFRESHED_MODEL);
     expect(row.models.map((model) => model.model)).not.toContain('gpt-5.5');
+    // Which take images comes from CLIProxyAPI's Gemini-format list (owner, 2026-11-23).
+    const catalogue = await api('GET', '/api/v1/models');
+    const refreshed = (
+      catalogue.json() as { items: { key: string; capabilities: string[] }[] }
+    ).items.find((item) => item.key.endsWith(`/${REFRESHED_MODEL}`));
+    expect(refreshed?.capabilities).toContain('vision');
   }, 180_000);
 
   it('signs in to Claude by a link whose landing address is pasted back', async () => {

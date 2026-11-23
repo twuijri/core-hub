@@ -56,6 +56,12 @@ export interface SubscriptionModel {
   label: string | null;
   contextWindow: number | null;
   maxOutputTokens: number | null;
+  /**
+   * Whether the model takes images, as CLIProxyAPI's own catalogue says (its Gemini-format
+   * listing's `supportedInputModalities`; its OpenAI-format one carries no modalities). `null`
+   * when that listing could not be read: the row keeps what it knew. Never guessed from a name.
+   */
+  vision?: boolean | null;
 }
 
 /** The contract's `UsageWindow`. */

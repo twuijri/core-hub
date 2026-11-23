@@ -173,7 +173,17 @@ describe('gatewayModels', () => {
             status: 200,
             json: {
               object: 'list',
-              data: [{ id: 'claude-sonnet-4-5', context_window: 200000 }, { id: 'gpt-5' }],
+              data: [
+                {
+                  id: 'chatgpt-subscription/gpt-6.2-sol',
+                  context_window: 400000,
+                  input_modalities: ['text', 'image'],
+                },
+                { id: 'kimi-subscription/kimi-k2', input_modalities: ['text'] },
+                { id: 'openrouter/vl', architecture: { input_modalities: ['TEXT', 'Image'] } },
+                // An older hub: no modalities at all.
+                { id: 'gpt-5' },
+              ],
             },
           }
         : undefined,
@@ -182,8 +192,15 @@ describe('gatewayModels', () => {
     expect(await gatewayModels(conn)).toEqual({
       ok: true,
       models: [
-        { id: 'claude-sonnet-4-5', name: null, context_window: 200000 },
-        { id: 'gpt-5', name: null, context_window: null },
+        {
+          id: 'chatgpt-subscription/gpt-6.2-sol',
+          name: null,
+          context_window: 400000,
+          image: true,
+        },
+        { id: 'kimi-subscription/kimi-k2', name: null, context_window: null, image: false },
+        { id: 'openrouter/vl', name: null, context_window: null, image: true },
+        { id: 'gpt-5', name: null, context_window: null, image: false },
       ],
     });
     expect(seen[0]!.headers.authorization).toBe('Bearer hub_at_1');

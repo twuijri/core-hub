@@ -15418,6 +15418,8 @@ paths:
         pick in the hub — the shared providers and the profile-only providers of every profile
         they may enter — that the gateway can serve, by its hub id (`Model.key`, `"<provider
         slug>/<model>"`). Subscriptions signed in to through Hermes are never offered (ADR 0029).
+        Each entry also says its `context_window` and `input_modalities` (amendment 2026-11-23),
+        so a client does not refuse an image a model takes.
 
         **Who may call.** Only while an admin switched the entrance on
         (`models.updateExternalGateway`). The bearer is the person's own app token (`hub_at_…`: a
@@ -15447,6 +15449,8 @@ paths:
                     object: model
                     created: 0
                     owned_by: corehub
+                    context_window: 200000
+                    input_modalities: [text, image]
         '401':
           $ref: '#/components/responses/OpenAIWireUnauthorized'
         '403':
@@ -15589,6 +15593,8 @@ paths:
                     id: anthropic/claude-sonnet-4-5
                     display_name: anthropic/claude-sonnet-4-5
                     created_at: '1970-01-01T00:00:00Z'
+                    context_window: 200000
+                    input_modalities: [text, image]
                 has_more: false
                 first_id: anthropic/claude-sonnet-4-5
                 last_id: anthropic/claude-sonnet-4-5
@@ -29369,6 +29375,21 @@ components:
                 type: integer
               owned_by:
                 type: string
+              context_window:
+                type: [integer, 'null']
+                description: |
+                  Additive (DECISIONS §156, amendment 2026-11-23): the model's context window in
+                  tokens, null when the hub does not know it. Sent by the external entrance; absent
+                  from older hubs.
+              input_modalities:
+                type: array
+                items:
+                  type: string
+                  enum: [text, image]
+                description: |
+                  Additive (DECISIONS §156, amendment 2026-11-23): what the model takes in —
+                  `[text, image]` when its hub row has the `vision` capability, else `[text]`. Sent
+                  by the external entrance; absent from older hubs.
     AnthropicModelList:
       type: object
       required: [data, has_more, first_id, last_id]
@@ -29387,6 +29408,15 @@ components:
                 type: string
               created_at:
                 type: string
+              context_window:
+                type: [integer, 'null']
+                description: As `OpenAIModelList`'s (DECISIONS §156, amendment 2026-11-23).
+              input_modalities:
+                type: array
+                items:
+                  type: string
+                  enum: [text, image]
+                description: As `OpenAIModelList`'s (DECISIONS §156, amendment 2026-11-23).
         has_more:
           type: boolean
         first_id:

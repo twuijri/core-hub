@@ -281,3 +281,52 @@ GET /hub-messages → {"posted":["↪ DeepSeek Harness:\n\nWhat did I work on la
   - **ملاحظة من السجل:** الجلسة حاولت تنفّذ المهمة بأوامر ⁨shell⁩: ⁨AppleScript⁩ و⁨JXA⁩، ثم برنامج ⁨Objective-C⁩ يبنيه ويرسل ضغطات مفاتيح. وما استخدمت ⁨Computer Use⁩.
   - **التعديل:** تعليمات المهمة صارت تطلب `cua` بس، وتمنع أتمتة البرامج من ⁨shell⁩ وبناء أي برامج. وما ينسمح بـ ⁨shell⁩ إلا للقراءة.
   - **الفحوص:** `typecheck` exit 0، و`eslint` نظيف، و`vitest` ⁨15⁩/⁨99⁩ نجحوا.
+
+## إصلاح: الهارنس يرفض الصور لموديلات اشتراك تقبلها (2026-11-23، ⁨feat/dsh-plugin⁩)
+
+### المشكلة (لقطة شاشة من المالك، 2026-11-23)
+- في ⁨DeepSeek Harness⁩، مع مزوّد «⁨Core Hub⁩» اللي تكتبه الإضافة، اختار المالك `chatgpt-subscription/gpt-6.2-sol` وأرفق صورة، فطلع: «⁨The current model does not support images; switch to a model that does⁩». والموديل يقبل الصور.
+
+### السبب
+- الإضافة كانت تكتب كل موديل بـ`{id, name?, contextWindow?}` بدون `input`. ومحوّل ⁨pi-ai⁩ في الهارنس (⁨0.2.2-rc.5⁩) يعتبر الموديل اللي ما فيه `input` نص بس.
+- قائمة موديلات البوابة الخارجية في الهب (`gateway.openaiListModels`) كانت ترجع `{id, object, created, owned_by}` بس، بلا نافذة سياق ولا أنواع مدخلات.
+- والهب نفسه ما كان يعرف إن موديلات الاشتراكات تقبل الصور: يقرا قائمتها من `/v1/models` في ⁨CLIProxyAPI⁩، وهذي القائمة في ⁨8.0.4⁩ ما فيها أنواع المدخلات، فما تاخذ صفوفها قدرة `vision` أبداً.
+
+### الإصلاح (إضافة فقط، ما ينكسر شي)
+- **الهب يعرف من ⁨CLIProxyAPI⁩:** مع `/v1/models` صار يقرا قائمته بصيغة ⁨Gemini⁩ (`GET /v1beta/models`، بنفس المفتاح). أي موديل فيها `supportedInputModalities` يحتوي `image` (بأي حالة أحرف) ياخذ `vision`. إذا فشلت القراءة، يبقى كل موديل على اللي يعرفه الصف، والتحديث ما يفشل. وما نستنتج شي من اسم الموديل.
+- **الصيغة اللي تحققنا منها بالملف التنفيذي الحقيقي ⁨8.0.4⁩** (حساب ⁨codex⁩ وحساب ⁨xai⁩ بملفات وهمية، `force-model-prefix: true`، مفتاح ⁨Bearer⁩):
+  - `{"models":[{"name":"models/h01row/gpt-5.6-sol","displayName":"…","supportedInputModalities":["text","image"],"supportedOutputModalities":["text"],"supportedGenerationMethods":["generateContent"],"version":"…","description":"…"}]}`
+  - موديلات ⁨xAI⁩ (ومثلها ⁨Meta⁩ و⁨Antigravity⁩ و⁨Gemini⁩) لها اسم خاص في الكتالوج، فيطلع اسمها بدون البادئة: `models/grok-4.7`. فالاسم المجرد ينحسب للموديل بس إذا كل المدخلات اللي بنفس الاسم متفقة على `image`.
+  - موديلات الصور (`gpt-image-*`، `grok-imagine-*`) ما لها `supportedInputModalities`، فما تاخذ `vision`.
+  - بدون مفتاح يرد ⁨401⁩. ويقبل `Authorization: Bearer` و`x-goog-api-key`.
+- **بدون «تحديث الموديلات»:** متابعة الكتالوج كل دقيقة (`followSubscriptionCatalogues`) صارت تعيد كتابة الصف إذا تغيّر `vision` لموديل، حتى لو المعرّفات نفسها.
+- **قائمة البوابة الخارجية:** كل موديل في `gateway.openaiListModels` و`gateway.anthropicListModels` صار فيه `context_window` (أو ⁨null⁩) و`input_modalities` (`["text","image"]` إذا الصف فيه `vision`، وإلا `["text"]`). وانضافت في العقد (`OpenAIModelList` و`AnthropicModelList`)، ومعها تعديل على ⁨DECISIONS §156⁩. قوائم البوابة الداخلية لوكلاء الهب ما تغيّرت.
+- **الإضافة:** `GatewayModel` صار يقرا `input_modalities` (ويقبل `architecture.input_modalities` حق ⁨OpenRouter⁩). و`providerRow()` يكتب `input: ["text","image"]` للموديل اللي يقبل صور، و`["text"]` لغيره. لكل موديل لحاله، وما نستخدم `defaultInput` للمزوّد كله، لأن إعلان صور لموديل ما يقبلها يخلي المزوّد يرفض في نص الدور. مع هب أقدم ما فيه هالحقول، يبقى كل شي نص مثل قبل.
+
+### الملفات
+- العقد: `packages/contracts/openapi.yaml`. والعملاء المولّدة ما تنحفظ في المستودع، وتنولّد وقت البناء.
+- الهب: `packages/server/src/modules/models/gateway/gateway.ts` (`imageInputOf`، `externalModelFacts`، `writeModelList`)، و`subscriptions.ts`، و`service.ts` (`subscriptionModels`، `followSubscriptionCatalogues`، `gatewayModelFacts`)، و`index.ts`.
+- البديل الوهمي: `gateway/testing/fake-cliproxy.mjs` (صار فيه `GET /v1beta/models` و`FAKE_CLIPROXY_NO_V1BETA`)، و`fake-cliproxy-accounts.mjs` (أنواع المدخلات، واسم ⁨xAI⁩ المجرد).
+- الاختبارات: `gateway/subscriptions.test.ts`، و`gateway/subscriptions.real.test.ts`، و`tests/contract/external-gateway.contract.test.ts`.
+- الإضافة: `packages/dsh-plugin/src/hub.ts`، و`src/provider.ts`، و`tests/hub.test.ts`، و`tests/provider.test.ts`.
+- الوثائق: `docs/contracts/DECISIONS.md` (تعديل §156) وهذا السجل.
+
+### الفحوص (محلياً على لينكس، ⁨Node 24⁩)
+- `pnpm contracts:lint`: الوصف صالح، وفيه تحذير واحد قديم في السطر ⁨7898⁩ ما له علاقة.
+- `pnpm contracts:compat`: «⁨OK — no breaking change against v1.1.10⁩».
+- `pnpm contracts:check-clients`: «⁨OK — 1189 client file(s) scanned⁩».
+- `pnpm typecheck` (الجذر): ⁨exit 0⁩.
+- `eslint` و`prettier --check` على الملفات المعدّلة: نظيفة.
+- `vitest` في الهب (`--maxWorkers=2`):
+  - `src/modules/models/gateway` + `codex-subscription` + `models` + `models-api`: ⁨12⁩ ملف و⁨131⁩ اختبار نجحت، و⁨2⁩ ملف حقيقي اتخطّت.
+  - `gemini-desktop.api.test.ts`: ⁨2/2⁩.
+  - العقد: `external-gateway.contract.test.ts` ⁨10/10⁩، و`contract.test.ts` ⁨398/398⁩.
+- **مع ⁨CLIProxyAPI 8.0.4⁩ الحقيقي:** `COREHUB_REAL_GATEWAY=1 vitest subscriptions.real.test.ts` نجحت ⁨4/4⁩. الكتالوج البديل يعلن الصور لموديل ⁨ChatGPT⁩، والصف أخذ `vision`.
+- الإضافة: `typecheck` ⁨exit 0⁩، و`vitest` ⁨15⁩ ملف و⁨100⁩ اختبار نجحوا.
+
+### الحدود
+- ما جرّبنا في ⁨DeepSeek Harness⁩ الحقيقي ولا على ماك المالك، ولا تأكدنا إن الهارنس يرسل الصورة للموديل بعد ما تغيّر الصف.
+- ما جرّبنا حساب ⁨ChatGPT⁩ حقيقي. اللي تحققنا منه: الملف التنفيذي الحقيقي بحسابات وهمية، وكتالوجه المضمّن يعلن `gpt-5.6-sol` و`gpt-6-sol` وغيرها بـ`["text","image"]`.
+- الاسم المجرد (⁨xAI⁩ وغيرها) ما يفرّق بين صفين من نفس النوع. لو اختلفوا، ما ينعلن `vision`.
+- صفوف ⁨Gemini Desktop⁩ (اللي يمسكها الهب نفسه) ما تغيّرت.
+- **الخطوة التالية:** المالك يبني الصورة، ويحدّث الهب، ويثبّت الإضافة ⁨1.1.10⁩ من جديد. بعدها يعيد إرفاق صورة مع `chatgpt-subscription/gpt-6.2-sol`.

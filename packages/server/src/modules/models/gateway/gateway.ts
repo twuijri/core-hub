@@ -112,6 +112,11 @@ export interface GatewaySource {
   target(workspace: string, providerId: string, model: string): GatewayTarget | { refusal: string };
   /** The catalogue keys a profile's coding agents can run, for `/v1/models`. */
   modelKeys(workspace: string): string[];
+  /**
+   * A catalogue key's context window and whether it takes images, for the external entrance's
+   * model list (DECISIONS §156, amendment 2026-11-23). Absent or null: not said.
+   */
+  modelFacts?(workspace: string, key: string): ExternalModelFacts | null;
   /** A call that ended after its turn did: added to that run's ledger row. */
   recordLate(grant: GatewayGrantRecord, runId: string, usage: GatewayTurnUsage): void;
   /**
@@ -396,6 +401,19 @@ export class ModelGateway {
               maxOutputTokens: count(entry.max_completion_tokens),
             });
           }
+          // Which take images: only the Gemini-format listing says (CLIProxyAPI 8.0.4's OpenAI
+          // one has no modalities). Unreadable, it says nothing and the rows keep what they knew.
+          let images: ((model: string) => boolean) | null = null;
+          try {
+            const gemini = await fetchImpl(`http://127.0.0.1:${held.port}/v1beta/models`, {
+              headers: { authorization: `Bearer ${held.key}` },
+              signal: AbortSignal.timeout(15_000),
+            });
+            if (gemini.ok) images = imageInputOf(await gemini.json(), prefix);
+          } catch {
+            images = null;
+          }
+          for (const model of out) model.vision = images ? images(model.id) : null;
           return out;
         } finally {
           held.done();
@@ -761,7 +779,8 @@ export class ModelGateway {
       return;
     }
     if (route.call === 'models') {
-      writeModelList(response, wire, this.externalModelIds(caller));
+      const facts = this.externalModelFacts(caller);
+      writeModelList(response, wire, [...facts.keys()], facts);
       return;
     }
     if (!body || typeof body !== 'object' || Array.isArray(body)) {
@@ -826,6 +845,28 @@ export class ModelGateway {
       for (const key of this.options.source.modelKeys(workspace)) ids.add(key);
     }
     return [...ids];
+  }
+
+  /**
+   * The external list's ids, each with its context window and whether it takes images (from the
+   * first profile that has it, as a call would run it there), in `externalModelIds`'s order.
+   */
+  externalModelFacts(caller: ExternalCaller): Map<string, ExternalModelFacts | null> {
+    const { source } = this.options;
+    const facts = new Map<string, ExternalModelFacts | null>();
+    for (const workspace of caller.workspaces) {
+      for (const key of source.modelKeys(workspace)) {
+        if (facts.has(key)) continue;
+        let known: ExternalModelFacts | null;
+        try {
+          known = source.modelFacts?.(workspace, key) ?? null;
+        } catch {
+          known = null;
+        }
+        facts.set(key, known);
+      }
+    }
+    return facts;
   }
 
   /** The profile and row a hub model id runs in for this person, the first profile that has it. */
@@ -1569,8 +1610,61 @@ export class ModelGateway {
   }
 }
 
-/** A model list in the wire's own shape (OpenAI's or Anthropic's). */
-function writeModelList(response: ServerResponse, wire: Wire, ids: string[]): void {
+/**
+ * Which of a prefix's models take images, from CLIProxyAPI's Gemini-format model list
+ * (`GET /v1beta/models`, 8.0.4: `{models: [{name: "models/<name>", supportedInputModalities?}]}`).
+ * A model's `name` is its prefixed id (`models/h<row>/<model>`) unless its catalogue entry has a
+ * Gemini-style name of its own (xAI's, Meta's, Antigravity's, Gemini's), which keeps no prefix:
+ * such a bare name answers for a model only when every entry of that name agrees it takes images.
+ * A model the list does not name, or names without `image`, does not.
+ */
+export function imageInputOf(body: unknown, prefix: string): (model: string) => boolean {
+  const own = new Map<string, boolean>();
+  const bare = new Map<string, boolean>();
+  const lead = `${prefix}/`.toLowerCase();
+  const list = (body as { models?: unknown } | null)?.models;
+  for (const entry of Array.isArray(list) ? list : []) {
+    if (!entry || typeof entry !== 'object') continue;
+    const raw = (entry as { name?: unknown }).name;
+    if (typeof raw !== 'string' || !raw) continue;
+    const name = raw.startsWith('models/') ? raw.slice('models/'.length) : raw;
+    const modalities = (entry as { supportedInputModalities?: unknown }).supportedInputModalities;
+    const image =
+      Array.isArray(modalities) &&
+      modalities.some((m) => typeof m === 'string' && m.trim().toLowerCase() === 'image');
+    if (name.toLowerCase().startsWith(lead)) {
+      own.set(name.slice(lead.length), image);
+    } else if (!name.includes('/')) {
+      bare.set(name, (bare.get(name) ?? true) && image);
+    }
+  }
+  return (model) => own.get(model) ?? bare.get(model) ?? false;
+}
+
+/** What the external entrance says of a model beyond its id (DECISIONS §156, amendment). */
+export interface ExternalModelFacts {
+  contextWindow: number | null;
+  vision: boolean;
+}
+
+/**
+ * A model list in the wire's own shape (OpenAI's or Anthropic's). With `facts` (the external
+ * entrance), each entry also carries `context_window` and `input_modalities`.
+ */
+function writeModelList(
+  response: ServerResponse,
+  wire: Wire,
+  ids: string[],
+  facts?: ReadonlyMap<string, ExternalModelFacts | null>,
+): void {
+  const extra = (id: string) => {
+    if (!facts) return {};
+    const known = facts.get(id) ?? null;
+    return {
+      context_window: known?.contextWindow ?? null,
+      input_modalities: known?.vision ? ['text', 'image'] : ['text'],
+    };
+  };
   response.writeHead(200, { 'content-type': 'application/json' });
   if (wire === 'anthropic') {
     response.end(
@@ -1580,6 +1674,7 @@ function writeModelList(response: ServerResponse, wire: Wire, ids: string[]): vo
           id,
           display_name: id,
           created_at: '1970-01-01T00:00:00Z',
+          ...extra(id),
         })),
         has_more: false,
         first_id: ids[0] ?? null,
@@ -1591,7 +1686,13 @@ function writeModelList(response: ServerResponse, wire: Wire, ids: string[]): vo
   response.end(
     JSON.stringify({
       object: 'list',
-      data: ids.map((id) => ({ id, object: 'model', created: 0, owned_by: 'corehub' })),
+      data: ids.map((id) => ({
+        id,
+        object: 'model',
+        created: 0,
+        owned_by: 'corehub',
+        ...extra(id),
+      })),
     }),
   );
 }

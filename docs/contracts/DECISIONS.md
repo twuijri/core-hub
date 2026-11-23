@@ -5813,6 +5813,33 @@ these calls — are the implementer's choices. Additive only (ADR 0027).
   own port (a reverse proxy would have to learn it); resolving a model per turn as the loopback
   gateway does (an outside program has no turn and names the model it wants).
 
+*Amendment (2026-11-23): what each listed model takes in.* The owner attached an image in DeepSeek
+Harness to `chatgpt-subscription/gpt-6.2-sol` and the harness refused it ("the current model does
+not support images"): the list said nothing of modalities, and the harness takes a model it is told
+nothing about as text only. Additive (ADR 0027):
+
+- **The list says it.** Each entry of `gateway.openaiListModels` (and, the same two fields,
+  `gateway.anthropicListModels`) also carries `context_window` (the model row's, or null) and
+  `input_modalities`: `[text, image]` when the hub's model row has the `vision` capability, else
+  `[text]` (`OpenAIModelList` / `AnthropicModelList`). The loopback gateway's own lists, which the
+  hub's agents read, are unchanged.
+- **Subscriptions learn it from CLIProxyAPI.** A subscription signed in to through the gateway
+  (§143) lists its models from CLIProxyAPI's OpenAI-format `/v1/models`, which in 8.0.4 has no
+  modalities. The hub now also reads its Gemini-format `GET /v1beta/models` (same key):
+  `{models: [{name: "models/<name>", supportedInputModalities?: [...]}]}`, where `name` is the
+  prefixed id `h<row>/<model>`, or — for a catalogue entry with a Gemini-style name of its own
+  (xAI, Meta, Antigravity, Gemini) — that bare name. A model whose entry lists `image` (any case)
+  gets `vision`; a bare name counts only when every entry of that name agrees. That list unreadable,
+  a model keeps what its row knew. Never inferred from a model's name.
+- **Without "Refresh".** The minute's follow of the subscriptions' catalogues
+  (`followSubscriptionCatalogues`) also rewrites a row whose ids stayed the same when a model's
+  `vision` changed.
+- **The plugin** (`packages/dsh-plugin`) reads `input_modalities` (or OpenRouter's
+  `architecture.input_modalities`) and writes `input: [text, image]` or `[text]` on each model of
+  its provider row — per model, never the provider-wide `defaultInput`, since claiming images for a
+  model that cannot take them makes the provider refuse mid-turn. An older hub's list has no
+  modalities: every model stays text only there, as before.
+
 ## 157. Screen tasks: an agent hands a computer a task in words, the computer does it
 
 Status: the owner's decision of 2026-11-22 (ADR 0033 §5: «اوافق على هالطريقة»). The field names,

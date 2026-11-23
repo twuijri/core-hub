@@ -218,6 +218,25 @@ export interface GatewayModel {
   id: string;
   name: string | null;
   context_window: number | null;
+  /**
+   * Whether the model takes images: the hub's `input_modalities` (DECISIONS §156, amendment
+   * 2026-11-23), or OpenRouter's `architecture.input_modalities`. False when neither says so
+   * (an older hub): the harness then refuses images for it, as it did.
+   */
+  image: boolean;
+}
+
+/** Whether a model list entry says it takes images (`input_modalities` includes `image`). */
+export function takesImages(row: Record<string, unknown>): boolean {
+  const architecture = row.architecture;
+  const modalities = Array.isArray(row.input_modalities)
+    ? row.input_modalities
+    : architecture &&
+        typeof architecture === 'object' &&
+        Array.isArray((architecture as { input_modalities?: unknown }).input_modalities)
+      ? (architecture as { input_modalities: unknown[] }).input_modalities
+      : [];
+  return modalities.some((m) => typeof m === 'string' && m.trim().toLowerCase() === 'image');
 }
 
 /** The message of an OpenAI or Anthropic wire error (`{error: {message}}`). */
@@ -259,6 +278,7 @@ export async function gatewayModels(connection: HubConnection): Promise<GatewayS
             : typeof row.context_length === 'number'
               ? row.context_length
               : null,
+        image: takesImages(row),
       }));
     return { ok: true, models };
   } catch (error) {

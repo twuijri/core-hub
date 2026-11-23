@@ -81,6 +81,35 @@ createServer((request, response) => {
       );
       return;
     }
+    // The Gemini-format list, as 8.0.4 shapes it: `name` is `models/` and the model's own
+    // Gemini-style name, else its (prefixed) id; `supportedInputModalities` only when known.
+    if (request.method === 'GET' && url.pathname === '/v1beta/models') {
+      if (process.env.FAKE_CLIPROXY_NO_V1BETA === '1') {
+        response.writeHead(500, { 'content-type': 'application/json' });
+        response.end('{"error":"no Gemini listing"}');
+        return;
+      }
+      response.writeHead(200, { 'content-type': 'application/json' });
+      response.end(
+        JSON.stringify({
+          models: [
+            ...[...served].map((id) => ({
+              name: `models/${id}`,
+              supportedGenerationMethods: ['generateContent'],
+            })),
+            ...accountModels(authDir).map((model) => ({
+              name: `models/${model.name ?? model.id}`,
+              displayName: model.name ?? model.id,
+              supportedGenerationMethods: ['generateContent'],
+              ...(model.supportedInputModalities
+                ? { supportedInputModalities: model.supportedInputModalities }
+                : {}),
+            })),
+          ],
+        }),
+      );
+      return;
+    }
     const body = JSON.parse(raw || '{}');
     // The Gemini wire names its model in the path: `/v1beta/models/<model>:<method>`.
     const gemini =

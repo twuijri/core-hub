@@ -242,6 +242,10 @@ export function modelGatewayFor(app: FastifyInstance): ModelGateway {
       target: (workspace, providerId, model) =>
         contextOf(app).gatewayTarget(workspace, providerId, model),
       modelKeys: (workspace) => contextOf(app).gatewayModelKeys(workspace),
+      modelFacts: (workspace, key) => {
+        const ref = contextOf(app).resolveModelKey(workspace, key);
+        return ref ? contextOf(app).gatewayModelFacts(workspace, ref.provider_id, ref.model) : null;
+      },
       // A call that ended after its turn: added to that run's row (the ledger keeps one row per
       // run and model, so the per-call counts are summed rather than replacing the turn's).
       recordLate: (grant, runId, usage) => {

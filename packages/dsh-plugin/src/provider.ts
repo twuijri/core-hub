@@ -14,13 +14,16 @@
 import { API_BASE, GATEWAY, PRODUCT_NAME, PROVIDER_ID, TOKEN_PLACEHOLDER } from './names.js';
 import type { GatewayModel } from './hub.js';
 
+/** pi-ai's per-model `input` (`PiAiModelProfile.input`): a model without it is text only. */
+export type ModelInput = 'text' | 'image';
+
 export interface ProviderRow {
   displayName: string;
   api: 'openai-completions';
   baseURL: string;
   headers: { Authorization: string };
   compat: { supportsDeveloperRole: boolean; maxTokensField: 'max_tokens' };
-  models: Array<{ id: string; name?: string; contextWindow?: number }>;
+  models: Array<{ id: string; name?: string; contextWindow?: number; input: ModelInput[] }>;
 }
 
 export function gatewayBase(hub: string): string {
@@ -39,6 +42,9 @@ export function providerRow(hub: string, models: readonly GatewayModel[]): Provi
       id: m.id,
       ...(m.name ? { name: m.name } : {}),
       ...(m.context_window ? { contextWindow: m.context_window } : {}),
+      // Per model, never the provider's `defaultInput`: claiming images for a model that cannot
+      // take them makes the provider refuse mid-turn (the hub says which can, §156 amendment).
+      input: m.image ? (['text', 'image'] as ModelInput[]) : (['text'] as ModelInput[]),
     })),
   };
 }

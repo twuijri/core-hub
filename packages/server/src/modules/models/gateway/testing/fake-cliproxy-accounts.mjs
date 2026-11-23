@@ -10,6 +10,7 @@
 //   FAKE_CLIPROXY_ERRORS         1: the first usage-queue read carries one failed call
 //   FAKE_CLIPROXY_CATALOGUE      a JSON file, read at each listing, whose vendors' model lists
 //                                replace `VENDOR_MODELS` — CLIProxyAPI's catalogue refreshed
+//   FAKE_CLIPROXY_NO_V1BETA      1: the Gemini-format model list (`GET /v1beta/models`) fails
 import { randomBytes } from 'node:crypto';
 import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
@@ -17,19 +18,34 @@ import path from 'node:path';
 export const DEVICE_VENDORS = new Set(['xai', 'kimi', 'kimi-ai', 'meta']);
 export const LINK_VENDORS = new Set(['claude', 'codex', 'antigravity', 'devin']);
 
-/** What each vendor's accounts serve, as CLIProxyAPI's own catalogue would. */
+/**
+ * What each vendor's accounts serve, as CLIProxyAPI's own catalogue would: `supportedInputModalities`
+ * shows only in its Gemini-format listing, and a `name` of its own (a Gemini-style name, as xAI's
+ * entries have) is listed there without the account's prefix.
+ */
 export const VENDOR_MODELS = {
   codex: [
-    { id: 'gpt-5.5', context_length: 400000 },
-    { id: 'gpt-5.5-codex', context_length: 400000 },
+    { id: 'gpt-5.5', context_length: 400000, supportedInputModalities: ['text', 'image'] },
+    { id: 'gpt-5.5-codex', context_length: 400000, supportedInputModalities: ['text'] },
   ],
   claude: [
-    { id: 'claude-sonnet-4-5', context_length: 200000 },
-    { id: 'claude-opus-4-1', context_length: 200000 },
+    {
+      id: 'claude-sonnet-4-5',
+      context_length: 200000,
+      supportedInputModalities: ['text', 'image'],
+    },
+    { id: 'claude-opus-4-1', context_length: 200000, supportedInputModalities: ['text', 'image'] },
   ],
-  xai: [{ id: 'grok-4.5', context_length: 256000 }],
-  kimi: [{ id: 'kimi-k2.6', context_length: 262144 }],
-  'kimi-ai': [{ id: 'kimi-k2.6', context_length: 262144 }],
+  xai: [
+    {
+      id: 'grok-4.5',
+      name: 'grok-4.5',
+      context_length: 256000,
+      supportedInputModalities: ['TEXT', 'IMAGE'],
+    },
+  ],
+  kimi: [{ id: 'kimi-k2.6', context_length: 262144, supportedInputModalities: ['text'] }],
+  'kimi-ai': [{ id: 'kimi-k2.6', context_length: 262144, supportedInputModalities: ['text'] }],
   meta: [{ id: 'muse-1', context_length: 128000 }],
   antigravity: [{ id: 'gemini-3-pro', context_length: 1000000 }],
   devin: [{ id: 'devin-1', context_length: 128000 }],

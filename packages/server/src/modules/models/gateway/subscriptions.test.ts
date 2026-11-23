@@ -16,6 +16,7 @@ import { authed, drainJobs, signedInHub, type TestHub } from '../../../../tests/
 import { modelsServiceFor } from '../index.js';
 import { models as modelRows, providers as providerRows } from '../schema.js';
 import { upstreamPrefix } from './cliproxy-config.js';
+import { imageInputOf } from './gateway.js';
 import { newUlid } from '../../../db/ids.js';
 
 const FAKE = path.join(
@@ -34,6 +35,7 @@ afterEach(async () => {
   delete process.env.FAKE_CLIPROXY_LOGIN;
   delete process.env.FAKE_CLIPROXY_ERRORS;
   delete process.env.FAKE_CLIPROXY_CATALOGUE;
+  delete process.env.FAKE_CLIPROXY_NO_V1BETA;
 });
 
 async function hub(gateway: 'on' | 'off' = 'on'): Promise<Hub> {
@@ -95,6 +97,38 @@ function authDir(h: Hub): string {
 function accountFile(h: Hub, name: string): Record<string, unknown> {
   return JSON.parse(readFileSync(path.join(authDir(h), name), 'utf8')) as Record<string, unknown>;
 }
+
+describe('which subscription models take images (CLIProxyAPI 8.0.4 `GET /v1beta/models`)', () => {
+  it('reads the prefix’s own names, and a bare Gemini-style name only when every entry agrees', () => {
+    const images = imageInputOf(
+      {
+        models: [
+          { name: 'models/h01row/gpt-6.2-sol', supportedInputModalities: ['text', 'image'] },
+          { name: 'models/h01row/gpt-image-2', supportedGenerationMethods: ['generateContent'] },
+          { name: 'models/h01row/kimi-k2', supportedInputModalities: ['text'] },
+          // Another row's model of the same id says nothing of this row's.
+          { name: 'models/h02row/kimi-k2', supportedInputModalities: ['text', 'image'] },
+          // Names of their own keep no prefix; the upper case is CLIProxyAPI's doc's.
+          { name: 'models/grok-4.7', supportedInputModalities: ['TEXT', 'IMAGE'] },
+          { name: 'models/grok-4.7', supportedInputModalities: ['text', 'image'] },
+          { name: 'models/grok-3-mini', supportedInputModalities: ['text'] },
+          { name: 'models/muse', supportedInputModalities: ['text', 'image'] },
+          { name: 'models/muse', supportedInputModalities: ['text'] },
+        ],
+      },
+      'h01row',
+    );
+    expect(images('gpt-6.2-sol')).toBe(true);
+    expect(images('gpt-image-2')).toBe(false);
+    expect(images('kimi-k2')).toBe(false);
+    expect(images('grok-4.7')).toBe(true);
+    expect(images('grok-3-mini')).toBe(false);
+    expect(images('muse')).toBe(false);
+    expect(images('not-listed')).toBe(false);
+    expect(imageInputOf({ error: 'x' }, 'h01row')('gpt-6.2-sol')).toBe(false);
+    expect(imageInputOf(null, 'h01row')('gpt-6.2-sol')).toBe(false);
+  });
+});
 
 describe('subscriptions through the gateway', () => {
   it('lists the vendors the gateway signs in to, and keeps them out of the preset list', async () => {
@@ -196,6 +230,13 @@ describe('subscriptions through the gateway', () => {
       catalogue.json() as { items: { key: string; agent_gateway?: boolean }[] }
     ).items.find((item) => item.key === 'xai-subscription/grok-4.5');
     expect(model?.agent_gateway).toBe(true);
+    // CLIProxyAPI's Gemini-format list names xAI's model by its own name (no prefix) and says it
+    // takes images: the row learns it.
+    expect(
+      (catalogue.json() as { items: { key: string; capabilities: string[] }[] }).items.find(
+        (item) => item.key === 'xai-subscription/grok-4.5',
+      )?.capabilities,
+    ).toContain('vision');
     // The hub's own agent reaches the account the same way, through the gateway's translator.
     const workspace = (
       requireSqlite(h.app.hub.database)
@@ -284,6 +325,16 @@ describe('subscriptions through the gateway', () => {
         .sort();
     };
     expect(await listed()).toEqual(['gpt-5.5', 'gpt-5.5-codex']);
+    // Which take images is CLIProxyAPI's catalogue's word, read from its Gemini-format list.
+    const vision = async () => {
+      const catalogue = await authed(h, h.token, { method: 'GET', url: '/api/v1/models' });
+      return (catalogue.json() as { items: { key: string; capabilities: string[] }[] }).items
+        .filter((item) => item.key.startsWith('chatgpt-subscription/'))
+        .filter((item) => item.capabilities.includes('vision'))
+        .map((item) => item.key)
+        .sort();
+    };
+    expect(await vision()).toEqual(['chatgpt-subscription/gpt-5.5']);
 
     writeFileSync(
       file,
@@ -303,8 +354,44 @@ describe('subscriptions through the gateway', () => {
       provider.id,
     ]);
     expect(await listed()).toEqual(['gpt-5.5-codex', 'gpt-5.6-terra', 'gpt-6.2-sol']);
+    expect(await vision()).toEqual([]);
     // Nothing changed since: nothing is written.
     expect(await service.followSubscriptionCatalogues({ userId: h.userId }, 0)).toEqual([]);
+
+    // Owner, 2026-11-23: gpt-6.2-sol takes images. The same ids, the catalogue now says so: the
+    // row learns it without "Refresh models".
+    const imageInput = (id: string) => ({
+      id,
+      context_length: 400000,
+      supportedInputModalities: ['text', 'image'],
+    });
+    writeFileSync(
+      file,
+      JSON.stringify({
+        codex: [
+          imageInput('gpt-6.2-sol'),
+          imageInput('gpt-5.6-terra'),
+          { id: 'gpt-5.5-codex', context_length: 400000, supportedInputModalities: ['text'] },
+        ],
+      }),
+    );
+    expect(await service.followSubscriptionCatalogues({ userId: h.userId }, 0)).toEqual([
+      provider.id,
+    ]);
+    expect(await vision()).toEqual([
+      'chatgpt-subscription/gpt-5.6-terra',
+      'chatgpt-subscription/gpt-6.2-sol',
+    ]);
+    expect(await service.followSubscriptionCatalogues({ userId: h.userId }, 0)).toEqual([]);
+    // A Gemini-format list that cannot be read says nothing: the rows keep what they knew, and
+    // nothing is rewritten.
+    process.env.FAKE_CLIPROXY_NO_V1BETA = '1';
+    expect(await service.followSubscriptionCatalogues({ userId: h.userId }, 0)).toEqual([]);
+    expect(await vision()).toEqual([
+      'chatgpt-subscription/gpt-5.6-terra',
+      'chatgpt-subscription/gpt-6.2-sol',
+    ]);
+    delete process.env.FAKE_CLIPROXY_NO_V1BETA;
     // "Refresh models" reads the same list.
     const refreshed = await authed(h, h.token, {
       method: 'POST',
