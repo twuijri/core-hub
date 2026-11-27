@@ -5,9 +5,12 @@
  * (Hermes's `default`) and a named profile `b` that Hermes itself created. Each has its own
  * `SOUL.md` and `memories/MEMORY.md` with a fact nobody else knows. A scripted
  * OpenAI-compatible model on this machine reports which of those facts reached it, so the
- * test sees exactly what Hermes put in front of the model — no key, no network beyond the
- * loopback. The provider key is only in the process environment, never in a profile's
- * `.env`: that is how the hub's shared keys reach every profile (ADR 0010).
+ * test sees exactly what Hermes put in front of the model — no real key, no network beyond the
+ * loopback. The provider key is where the hub's propagation puts it (ADR 0010,
+ * `models/service.ts` §prepareProfileWith): in the process environment and the root's `.env`,
+ * and in every named profile's own `.env`. A named profile reads keys only from its own `.env`
+ * (Hermes v2026.9.21 on), and from v0.22.6 Hermes refuses a turn whose provider declares a
+ * `key_env` it cannot find there instead of sending it without a key.
  *
  *   COREHUB_HERMES_IMAGE=corehub:local pnpm --filter @corehub/server test hermes-profile.real
  */
@@ -23,6 +26,9 @@ import { HermesTuiSession, stdioTuiChannel, type TuiChannel } from './hermes-tui
 import type { AgentEvent } from './types.js';
 
 const image = process.env.COREHUB_HERMES_IMAGE;
+
+/** The provider key as propagation writes it into a `.env` (a fake; the model checks none). */
+const KEY_LINE = 'COREHUB_FAKE_KEY=fake-key-000000000000\n';
 
 const FACTS = {
   soulDefault: 'heron-soul-1203',
@@ -67,7 +73,7 @@ function reportingModel(): http.Server {
   });
 }
 
-/** What the hub's propagation writes into every profile: the route, never the key. */
+/** What the hub's propagation writes into every profile's `config.yaml`: the route. */
 function configFor(port: number): string {
   return [
     'providers:',
@@ -149,15 +155,19 @@ describe.skipIf(!image)(
         path.join(home, 'SOUL.md'),
         `You are the default agent. ${FACTS.soulDefault}\n`,
       );
+      // The root's `.env` as propagation writes it; a copy of `default` takes it along.
+      writeFileSync(path.join(home, '.env'), KEY_LINE);
       mkdirSync(path.join(home, 'memories'));
       chmodSync(path.join(home, 'memories'), 0o777);
       writeFileSync(path.join(home, 'memories', 'MEMORY.md'), `${FACTS.memoryDefault}\n`);
 
       // Profile `b`, made by Hermes the way the hub makes one (`hermes-profiles.ts`), then
-      // given its own soul and memory — and the provider route, as propagation writes it.
+      // given its own soul and memory — and the provider route and key, as propagation writes
+      // them (the key in b's own `.env`).
       const profiles = createHermesProfiles({ home, run: hermes });
       await profiles.create('b', { kind: 'blank' });
       await put('profiles/b/config.yaml', configFor(port));
+      await put('profiles/b/.env', KEY_LINE);
       await put('profiles/b/SOUL.md', `You are the B agent. ${FACTS.soulB}\n`);
       await put('profiles/b/memories/MEMORY.md', `${FACTS.memoryB}\n`);
       await put('work/b/.keep', '');
@@ -174,7 +184,7 @@ describe.skipIf(!image)(
           `${home}:/hh`,
           '-e',
           'HERMES_HOME=/hh',
-          // The key lives in the process environment only, as the hub hands it over.
+          // The key in the process environment too, as the hub hands it to the root.
           '-e',
           'COREHUB_FAKE_KEY=fake-key-000000000000',
           '--entrypoint',

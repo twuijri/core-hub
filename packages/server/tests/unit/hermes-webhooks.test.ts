@@ -245,6 +245,20 @@ describe('Hermes incoming webhooks (§97)', () => {
       details: { reason: 'hermes_refused', hermes_status: 401, hermes_error: 'Invalid signature' },
     });
 
+    // From Hermes v0.23.2 a wrong signature gets the answer an unknown route gets: passed on as
+    // it came, so the hub's door does not tell an outside caller which route names exist.
+    fake.answer = { status: 404, body: { error: 'Unknown route: github-issues' } };
+    const hidden = await h.app.inject({ method: 'POST', url: made.path, payload: '{}' });
+    expect(hidden.statusCode).toBe(404);
+    expect(hidden.json()).toMatchObject({
+      code: 'not_found',
+      details: {
+        reason: 'hermes_refused',
+        hermes_status: 404,
+        hermes_error: 'Unknown route: github-issues',
+      },
+    });
+
     // No such profile; and no listener at all.
     const nowhere = await h.app.inject({
       method: 'POST',

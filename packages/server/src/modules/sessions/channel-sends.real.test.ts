@@ -415,9 +415,13 @@ for (const isolation of ISOLATIONS)
         ] as const) {
           mkdirSync(dir, { recursive: true });
           writeFileSync(path.join(dir, 'config.yaml'), configFor(modelPort, telegramPort));
+          // The provider key too, as the hub's propagation writes it into every profile's `.env`
+          // (`models/service.ts` §prepareProfileWith): a named profile reads keys only from its own
+          // file, and from v0.22.6 Hermes refuses its turn rather than send it without the key.
           writeFileSync(
             path.join(dir, '.env'),
-            `TELEGRAM_BOT_TOKEN=${token}\nTELEGRAM_ALLOWED_USERS=${String(allowed)}\n`,
+            `TELEGRAM_BOT_TOKEN=${token}\nTELEGRAM_ALLOWED_USERS=${String(allowed)}\n` +
+              'COREHUB_FAKE_KEY=fake-key-000000000000\n',
           );
         }
 

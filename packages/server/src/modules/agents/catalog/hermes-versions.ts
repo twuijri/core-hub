@@ -14,4 +14,4 @@
  * shape.
  */
 export const HERMES_FLOOR = { ref: 'v2026.9.14', version: '0.21.3' } as const;
-export const HERMES_TESTED = { ref: 'v0.22.5', version: '0.22.5' } as const;
+export const HERMES_TESTED = { ref: 'v0.23.4', version: '0.23.4' } as const;
