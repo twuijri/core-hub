@@ -7,7 +7,8 @@
  * secret reaches **the hub's public door** (`/api/v1/hermes-webhooks/default/<route>`), which passes
  * it to Hermes. Hermes answers `202 accepted` and runs the agent with the route's prompt, the
  * posted values filled in — the scripted model here sees that prompt. A POST with a wrong
- * signature is refused by Hermes, in the hub's envelope; `agents.testWebhook` is accepted too.
+ * signature is refused by Hermes, in the hub's envelope — `401` before Hermes v0.23.2, `404` (the
+ * same answer as an unknown route) from it; `agents.testWebhook` is accepted too.
  *
  * Name the image to run it; without one it is skipped:
  *
@@ -24,6 +25,7 @@ import { userInfo } from 'node:os';
 import path from 'node:path';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { authed, signedInHub, type TestHub } from '../../../tests/unit/helpers.js';
+import { wrongWebhookSignatureStatus } from '../../../tests/unit/hermes-real.js';
 
 const image = process.env.COREHUB_HERMES_IMAGE;
 
@@ -234,7 +236,9 @@ describe.skipIf(!image)(
         hint(),
       ).toBe(true);
 
-      // A wrong signature is Hermes's refusal, in the hub's envelope.
+      // A wrong signature is Hermes's refusal, in the hub's envelope: `401 Invalid signature`,
+      // or from v0.23.2 the `404` an unknown route gets, so a signature cannot probe route names.
+      const refusal = wrongWebhookSignatureStatus(image!);
       const forged = await hub.app.inject({
         method: 'POST',
         url: route.path,
@@ -245,10 +249,10 @@ describe.skipIf(!image)(
         },
         payload: body,
       });
-      expect(forged.statusCode).toBe(401);
+      expect(forged.statusCode, forged.body).toBe(refusal);
       expect(forged.json()).toMatchObject({
-        code: 'unauthorized',
-        details: { reason: 'hermes_refused', hermes_status: 401 },
+        code: refusal === 401 ? 'unauthorized' : 'not_found',
+        details: { reason: 'hermes_refused', hermes_status: refusal },
       });
 
       // The page's Test button: accepted by the same listener.

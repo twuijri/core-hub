@@ -18,6 +18,7 @@ import {
   topologyForVersion,
   type GatewayRuntimeRecord,
 } from '../../src/modules/agents/hermes-gateways.js';
+import { compareVersions } from '../../src/modules/agents/update-policy.js';
 
 const versions = new Map<string, string | null>();
 
@@ -160,4 +161,20 @@ export function gatewayRecordFor(
     if (key.startsWith(`${profile}:`)) platforms[key.slice(profile.length + 1)] = value;
   }
   return { ...record, platforms };
+}
+
+/**
+ * The first Hermes release that answers a webhook POST with a wrong signature as it answers an
+ * unknown route, `404 Unknown route: <name>`, so a signature cannot be used to find out which
+ * route names exist (`gateway/platforms/webhook.py` §_read_authenticated_body). Before it, the
+ * answer was `401 Invalid signature`. The hub passes either on as Hermes said it.
+ */
+export const WRONG_WEBHOOK_SIGNATURE_AS_UNKNOWN_ROUTE_SINCE = '0.23.2';
+
+/** What the image's Hermes answers a webhook POST with a wrong signature: 401, or 404 from 0.23.2. */
+export function wrongWebhookSignatureStatus(image: string): 401 | 404 {
+  const version = imageHermesVersion(image);
+  return version && compareVersions(version, WRONG_WEBHOOK_SIGNATURE_AS_UNKNOWN_ROUTE_SINCE) >= 0
+    ? 404
+    : 401;
 }

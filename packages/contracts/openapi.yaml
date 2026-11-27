@@ -8707,7 +8707,9 @@ paths:
         when the event was ignored by the route's filter or was a repeat of a delivery already
         taken. Hermes's refusals come back in the hub's error envelope with Hermes's words:
         `401` a missing or wrong signature, `404` no such route, `413` too large, `429` more than
-        the route's rate. `503` when the profile's listener is not up.
+        the route's rate. From Hermes v0.23.2 a wrong signature is answered `404`, as a route
+        that does not exist is, so a signature cannot probe which routes exist. `503` when the
+        profile's listener is not up.
       security: []
       x-scope: global
       requestBody:

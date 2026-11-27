@@ -7,8 +7,11 @@
  * the hub and Hermes share files exactly as in the image. One `python -m tui_gateway.entry`
  * serves the default profile and a profile `b` that Hermes itself created. A scripted
  * OpenAI-compatible model on this machine reports which facts reached it, and — asked to
- * remember something — calls Hermes's `memory` tool the way a model does. No key, no network
- * beyond the loopback. Name the image to run it; without one it is skipped:
+ * remember something — calls Hermes's `memory` tool the way a model does. No real key, no
+ * network beyond the loopback; the fake key sits where the hub's propagation puts it (the
+ * process environment and every profile's own `.env`, `models/service.ts` §prepareProfileWith),
+ * because a named profile reads keys only from its own `.env` and from v0.22.6 Hermes refuses a
+ * turn whose `key_env` it cannot find there. Name the image to run it; without one it is skipped:
  *
  *   docker build -f packages/server/Dockerfile -t core-hub:local .
  *   COREHUB_HERMES_IMAGE=corehub:local pnpm --filter @corehub/server exec \
@@ -116,8 +119,11 @@ function scriptedModel(): http.Server {
   });
 }
 
+/** The provider key as propagation writes it into a profile's `.env` (a fake). */
+const KEY_LINE = 'COREHUB_FAKE_KEY=fake-key-000000000000\n';
+
 /**
- * A route of the shape the hub's provider propagation writes into every profile, never the key.
+ * A route of the shape the hub's provider propagation writes into every profile's config.
  * Not named `corehub-…`: the hub owns those blocks and takes out one it has no provider for when
  * the profile is made below (that is what failed here on every Hermes before 2026-09-28).
  */
@@ -240,11 +246,13 @@ describe.skipIf(!image)('the Memory page and the real Hermes (set COREHUB_HERMES
     mkdirSync(root, { recursive: true });
     writeFileSync(path.join(root, 'config.yaml'), configFor(port));
     writeFileSync(path.join(root, 'SOUL.md'), 'You are the default agent.\n');
+    writeFileSync(path.join(root, '.env'), KEY_LINE);
 
-    // Profile b, made by Hermes the way the hub makes one, with the provider route; and the
-    // hub's workspace of the same slug, so the routes can name it.
+    // Profile b, made by Hermes the way the hub makes one, with the provider route and key; and
+    // the hub's workspace of the same slug, so the routes can name it.
     await createHermesProfiles({ home: root, run: hermes }).create('b', { kind: 'blank' });
     writeFileSync(path.join(root, 'profiles', 'b', 'config.yaml'), configFor(port));
+    writeFileSync(path.join(root, 'profiles', 'b', '.env'), KEY_LINE);
     const made = await authed(hub, hub.token, {
       method: 'POST',
       url: '/api/v1/profiles',
